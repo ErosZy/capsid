@@ -35,6 +35,8 @@
 #   * a multi-argument set() forms a semicolon list; joining JSON fragments
 #     must therefore happen inside ONE quoted argument.
 
+cmake_policy(SET CMP0057 NEW)
+
 foreach(CAPSID_GPA_REQUIRED
         CAPSID_SBOM_NAME CAPSID_SBOM_VERSION CAPSID_SBOM_BUILD_ID
         CAPSID_SBOM_COMPAT_ID CAPSID_SBOM_COMMIT CAPSID_SBOM_COMMIT_DATE
@@ -47,9 +49,14 @@ foreach(CAPSID_GPA_REQUIRED
     # Fail closed against the install(CODE) quoting hazard: a quoted -D value
     # arrives with literal quote characters, and string(JSON) SET truncates
     # double-quoted JSON to its first valid value instead of erroring — an
-    # empty documentNamespace/created would silently ship. Any quote, space
-    # or control character in a required value is a hard failure.
-    if("${${CAPSID_GPA_REQUIRED}}" MATCHES "[\"\n\r\t ]")
+    # empty documentNamespace/created would silently ship. The install prefix
+    # is a filesystem path, not a JSON identity scalar; spaces are valid there.
+    if(CAPSID_GPA_REQUIRED STREQUAL "CAPSID_SBOM_PREFIX")
+        set(CAPSID_GPA_INVALID "[\"\n\r\t;]")
+    else()
+        set(CAPSID_GPA_INVALID "[\"\n\r\t ]")
+    endif()
+    if("${${CAPSID_GPA_REQUIRED}}" MATCHES "${CAPSID_GPA_INVALID}")
         message(FATAL_ERROR "GeneratePackageArtifacts: ${CAPSID_GPA_REQUIRED} "
             "contains quoting/whitespace (install(CODE) quoting violated): "
             "[${${CAPSID_GPA_REQUIRED}}]")
@@ -184,6 +191,26 @@ string(JSON CAPSID_GPA_PKG_LWS SET "${CAPSID_GPA_PKG_LWS}"
 string(CONCAT CAPSID_GPA_PACKAGES
     "${CAPSID_GPA_PKG_CAPSID},${CAPSID_GPA_PKG_TXIKI},"
     "${CAPSID_GPA_PKG_QUICKJS},${CAPSID_GPA_PKG_LWS}")
+set(CAPSID_PACKAGE_RUNTIME_FILES)
+if(EXISTS "${CAPSID_SBOM_PREFIX}/share/capsid/asan-runtime.json")
+    include("${CMAKE_CURRENT_LIST_DIR}/ReadPackageAsanRuntime.cmake")
+    capsid_read_package_asan_runtime("${CAPSID_SBOM_PREFIX}")
+    set(CAPSID_GPA_PKG_MSVC "{}")
+    foreach(pair
+            "SPDXID|SPDXRef-Package-MsvcRuntime"
+            "name|msvc-runtime"
+            "versionInfo|${CAPSID_PACKAGE_RUNTIME_COMPILER_VERSION}"
+            "licenseConcluded|NOASSERTION"
+            "downloadLocation|NOASSERTION"
+            "copyrightText|NOASSERTION"
+            "comment|${CAPSID_PACKAGE_RUNTIME_COMMENT}")
+        string(REPLACE "|" ";" parts "${pair}")
+        list(GET parts 0 key)
+        list(GET parts 1 value)
+        string(JSON CAPSID_GPA_PKG_MSVC SET "${CAPSID_GPA_PKG_MSVC}" "${key}" "\"${value}\"")
+    endforeach()
+    string(APPEND CAPSID_GPA_PACKAGES ",${CAPSID_GPA_PKG_MSVC}")
+endif()
 string(JSON CAPSID_GPA_SBOM_JSON SET "${CAPSID_GPA_SBOM_JSON}"
     "packages" "[${CAPSID_GPA_PACKAGES}]")
 
@@ -204,6 +231,12 @@ foreach(CAPSID_GPA_ENTRY IN LISTS CAPSID_GPA_ENTRIES)
         "fileName" "\"/${CAPSID_GPA_REL}\"")
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
         "licenseConcluded" "\"Apache-2.0\"")
+    string(REGEX REPLACE "^bin/" "" CAPSID_GPA_DLL "${CAPSID_GPA_REL}")
+    if(CAPSID_GPA_REL STREQUAL "bin/${CAPSID_GPA_DLL}" AND
+            CAPSID_GPA_DLL IN_LIST CAPSID_PACKAGE_RUNTIME_FILES)
+        string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
+            "licenseConcluded" "\"NOASSERTION\"")
+    endif()
     string(JSON CAPSID_GPA_FILE_OBJ SET "${CAPSID_GPA_FILE_OBJ}"
         "copyrightText" "\"NOASSERTION\"")
     string(JSON CAPSID_GPA_CHECKSUM SET "{}"
@@ -246,6 +279,12 @@ string(CONCAT CAPSID_GPA_DOC_RELS
     "\"relatedSpdxElement\":\"SPDXRef-Package-LibWebSockets\","
     "\"relationshipType\":\"DEPENDS_ON\"}")
 set(CAPSID_GPA_ALL_RELS "${CAPSID_GPA_DOC_RELS}")
+if(CAPSID_PACKAGE_RUNTIME_FILES)
+    string(APPEND CAPSID_GPA_ALL_RELS
+        ",{\"spdxElementId\":\"SPDXRef-Package-Capsid\","
+        "\"relatedSpdxElement\":\"SPDXRef-Package-MsvcRuntime\","
+        "\"relationshipType\":\"DEPENDS_ON\"}")
+endif()
 if(CAPSID_GPA_RELATIONSHIPS)
     string(APPEND CAPSID_GPA_ALL_RELS ",${CAPSID_GPA_RELATIONSHIPS}")
 endif()

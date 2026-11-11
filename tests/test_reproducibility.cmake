@@ -39,7 +39,7 @@
 #        [-DCAPSID_REPRO_BOOST_SYSTEM_LIBRARY=<effective Boost.System library>]
 #        -P tests/test_reproducibility.cmake
 #
-# The feature flags (worker/host/lto/asan/ubsan/tsan/mimalloc) and the build
+# The feature flags (worker/host/lto/asan/ubsan/tsan/mimalloc/sandbox_profile) and the build
 # type are parsed from the BASELINE build's build-info.txt so the second
 # build mirrors the first exactly. SOURCE_DATE_EPOCH is pinned to the capsid
 # commit date so CPack archive member timestamps are stable.
@@ -108,6 +108,12 @@ foreach(pair IN LISTS CAPSID_REPRO_FEATURE_PAIRS)
         set(flag_name "CAPSID_ENABLE_TSAN")
     elseif(feature_name STREQUAL "mimalloc")
         set(flag_name "CAPSID_USE_MIMALLOC")
+    elseif(feature_name STREQUAL "sandbox_profile")
+        if(NOT feature_value STREQUAL "production" AND
+           NOT feature_value STREQUAL "sanitizer")
+            message(FATAL_ERROR "invalid sandbox_profile feature flag: ${feature_value}")
+        endif()
+        set(flag_name "CAPSID_SANDBOX_PROFILE")
     else()
         message(FATAL_ERROR "unknown featureFlags entry: ${feature_name}")
     endif()
@@ -166,8 +172,16 @@ if(DEFINED CAPSID_REPRO_GENERATOR AND
 endif()
 if(DEFINED CAPSID_REPRO_PREFIX_PATH AND
    NOT CAPSID_REPRO_PREFIX_PATH STREQUAL "")
+    # execute_process expands a CMake list. Keep all prefix entries in the
+    # single -D argument instead of turning later entries into extra paths.
+    string(REPLACE ";" "\\;" CAPSID_REPRO_ESCAPED_PREFIX_PATH "${CAPSID_REPRO_PREFIX_PATH}")
     list(APPEND CAPSID_REPRO_CONFIGURE_ARGS
-        "-DCMAKE_PREFIX_PATH=${CAPSID_REPRO_PREFIX_PATH}")
+        "-DCMAKE_PREFIX_PATH=${CAPSID_REPRO_ESCAPED_PREFIX_PATH}")
+endif()
+if(DEFINED CAPSID_REPRO_ESBUILD_EXECUTABLE AND
+   NOT CAPSID_REPRO_ESBUILD_EXECUTABLE STREQUAL "")
+    list(APPEND CAPSID_REPRO_CONFIGURE_ARGS
+        "-DCAPSID_ESBUILD_EXECUTABLE=${CAPSID_REPRO_ESBUILD_EXECUTABLE}")
 endif()
 if(DEFINED CAPSID_REPRO_OPENSSL_ROOT_DIR AND
    NOT CAPSID_REPRO_OPENSSL_ROOT_DIR STREQUAL "")
@@ -203,6 +217,13 @@ execute_process(
 if(NOT configure_result EQUAL 0)
     message(FATAL_ERROR "reproducibility configure failed:\n"
         "${configure_out}\n${configure_err}")
+endif()
+if(DEFINED CAPSID_REPRO_PREFIX_PATH AND NOT CAPSID_REPRO_PREFIX_PATH STREQUAL "")
+    load_cache("${CAPSID_REPRO_BUILD_DIR}" READ_WITH_PREFIX CAPSID_REPRO_EFFECTIVE_ CMAKE_PREFIX_PATH)
+    if(NOT "${CAPSID_REPRO_EFFECTIVE_CMAKE_PREFIX_PATH}" STREQUAL "${CAPSID_REPRO_PREFIX_PATH}")
+        message(FATAL_ERROR "reproducibility CMAKE_PREFIX_PATH did not preserve all baseline hints: "
+            "expected [${CAPSID_REPRO_PREFIX_PATH}], got [${CAPSID_REPRO_EFFECTIVE_CMAKE_PREFIX_PATH}]")
+    endif()
 endif()
 
 execute_process(
@@ -268,152 +289,16 @@ capsid_repro_extract_root("${CAPSID_REPRO_ARCHIVE}"
 capsid_repro_extract_root("${CAPSID_REPRO_BASELINE_ARCHIVE}"
     "${CAPSID_WORK_DIR}/extracted-baseline" CAPSID_REPRO_BASELINE_ROOT)
 
-# ---- compare file NAME lists -------------------------------------------------
-# FILE-MANIFEST.txt lists every package file except itself and the SBOM
-# (both embed per-build binary hashes by design).
-file(STRINGS "${CAPSID_REPRO_ROOT}/share/capsid/FILE-MANIFEST.txt"
-    CAPSID_REPRO_MANIFEST_LINES)
-file(STRINGS "${CAPSID_REPRO_BASELINE_ROOT}/share/capsid/FILE-MANIFEST.txt"
-    CAPSID_REPRO_BASELINE_MANIFEST_LINES)
-set(CAPSID_REPRO_NAMES)
-foreach(manifest_line IN LISTS CAPSID_REPRO_MANIFEST_LINES)
-    string(REPLACE "\t" ";" manifest_parts "${manifest_line}")
-    list(GET manifest_parts 0 manifest_name)
-    list(APPEND CAPSID_REPRO_NAMES "${manifest_name}")
-endforeach()
-set(CAPSID_REPRO_BASELINE_NAMES)
-foreach(manifest_line IN LISTS CAPSID_REPRO_BASELINE_MANIFEST_LINES)
-    string(REPLACE "\t" ";" manifest_parts "${manifest_line}")
-    list(GET manifest_parts 0 manifest_name)
-    list(APPEND CAPSID_REPRO_BASELINE_NAMES "${manifest_name}")
-endforeach()
-list(LENGTH CAPSID_REPRO_NAMES repro_name_count)
-list(LENGTH CAPSID_REPRO_BASELINE_NAMES baseline_name_count)
-if(NOT repro_name_count EQUAL baseline_name_count)
-    message(FATAL_ERROR "package file counts differ: baseline "
-        "${baseline_name_count} vs repro ${repro_name_count}")
-endif()
-list(SORT CAPSID_REPRO_NAMES)
-list(SORT CAPSID_REPRO_BASELINE_NAMES)
-if(NOT CAPSID_REPRO_NAMES STREQUAL CAPSID_REPRO_BASELINE_NAMES)
-    message(FATAL_ERROR "package file name lists differ:\nbaseline: "
-        "${CAPSID_REPRO_BASELINE_NAMES}\nrepro: ${CAPSID_REPRO_NAMES}")
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/ComparePackageReproducibility.cmake")
+capsid_compare_package_trees("${CAPSID_REPRO_BASELINE_ROOT}"
+    "${CAPSID_REPRO_ROOT}" "${CAPSID_REPRO_DIFFS}")
 
-# ---- compare identity records ------------------------------------------------
-set(CAPSID_REPRO_RECORDS
-    version commit commitDate buildId compatibilityId featureFlags
-    cmakeBuildType)
-foreach(record IN LISTS CAPSID_REPRO_RECORDS)
-    set(baseline_value)
-    set(repro_value)
-    # cmakeBuildType may legitimately be empty; the other records never are.
-    if(record STREQUAL "cmakeBuildType")
-        set(record_regex "^${record}=(.*)$")
-    else()
-        set(record_regex "^${record}=(.+)$")
-    endif()
-    file(STRINGS "${CAPSID_REPRO_BASELINE_ROOT}/share/capsid/build-info.txt"
-        CAPSID_REPRO_BASELINE_INFO_LINES)
-    foreach(line IN LISTS CAPSID_REPRO_BASELINE_INFO_LINES)
-        if(line MATCHES "${record_regex}")
-            set(baseline_value "${CMAKE_MATCH_1}")
-        endif()
-    endforeach()
-    file(STRINGS "${CAPSID_REPRO_ROOT}/share/capsid/build-info.txt"
-        CAPSID_REPRO_INFO_LINES)
-    foreach(line IN LISTS CAPSID_REPRO_INFO_LINES)
-        if(line MATCHES "${record_regex}")
-            set(repro_value "${CMAKE_MATCH_1}")
-        endif()
-    endforeach()
-    # Quoted comparison: an unquoted empty value would collapse the STREQUAL
-    # expression into a truthy variable-name check.
-    if(NOT "${baseline_value}" STREQUAL "${repro_value}")
-        message(FATAL_ERROR "identity record ${record} differs: baseline "
-            "[${baseline_value}] vs repro [${repro_value}]")
-    endif()
-endforeach()
-
-# The whole file must also be byte-identical: this subsumes the field checks
-# and covers the bytecode-compatibility and build-provenance records too.
-file(SHA256 "${CAPSID_REPRO_BASELINE_ROOT}/share/capsid/build-info.txt"
-    CAPSID_REPRO_BASELINE_INFO_SHA)
-file(SHA256 "${CAPSID_REPRO_ROOT}/share/capsid/build-info.txt"
-    CAPSID_REPRO_INFO_SHA)
-if(NOT CAPSID_REPRO_BASELINE_INFO_SHA STREQUAL CAPSID_REPRO_INFO_SHA)
-    message(FATAL_ERROR "build-info.txt differs beyond the identity records:\n"
-        "baseline ${CAPSID_REPRO_BASELINE_INFO_SHA}\n"
-        "repro    ${CAPSID_REPRO_INFO_SHA}")
-endif()
-
-# ---- compare SBOM identity fields --------------------------------------------
-# The SBOM itself embeds per-build binary hashes (package verification code),
-# so only its identity fields are byte-compared.
-file(READ "${CAPSID_REPRO_ROOT}/share/capsid/SBOM.spdx.json"
-    CAPSID_REPRO_SBOM)
-file(READ "${CAPSID_REPRO_BASELINE_ROOT}/share/capsid/SBOM.spdx.json"
-    CAPSID_REPRO_BASELINE_SBOM)
-foreach(sbom_field IN ITEMS name spdxVersion documentNamespace)
-    string(JSON baseline_value GET "${CAPSID_REPRO_BASELINE_SBOM}"
-        "${sbom_field}")
-    string(JSON repro_value GET "${CAPSID_REPRO_SBOM}" "${sbom_field}")
-    if(NOT baseline_value STREQUAL repro_value)
-        message(FATAL_ERROR "SBOM field ${sbom_field} differs: baseline "
-            "[${baseline_value}] vs repro [${repro_value}]")
-    endif()
-endforeach()
-string(JSON baseline_created GET "${CAPSID_REPRO_BASELINE_SBOM}"
-    creationInfo created)
-string(JSON repro_created GET "${CAPSID_REPRO_SBOM}" creationInfo created)
-if(NOT baseline_created STREQUAL repro_created)
-    message(FATAL_ERROR "SBOM creationInfo.created differs: baseline "
-        "[${baseline_created}] vs repro [${repro_created}]")
-endif()
-
-# ---- deterministic text files must hash identically --------------------------
-# Everything except FILE-MANIFEST.txt and SBOM.spdx.json (self-listed binary
-# hash carriers).
-set(CAPSID_REPRO_TEXT_FILES)
-foreach(manifest_name IN LISTS CAPSID_REPRO_NAMES)
-    if(manifest_name MATCHES
-            "^(include/|share/doc/|share/licenses/|lib/cmake/)"
-            OR manifest_name STREQUAL "share/capsid/build-info.txt")
-        list(APPEND CAPSID_REPRO_TEXT_FILES "${manifest_name}")
-    endif()
-endforeach()
-foreach(text_file IN LISTS CAPSID_REPRO_TEXT_FILES)
-    file(SHA256 "${CAPSID_REPRO_ROOT}/${text_file}" repro_sha)
-    file(SHA256 "${CAPSID_REPRO_BASELINE_ROOT}/${text_file}" baseline_sha)
-    if(NOT repro_sha STREQUAL baseline_sha)
-        message(FATAL_ERROR "deterministic file differs: ${text_file}\n"
-            "baseline ${baseline_sha}\nrepro ${repro_sha}")
-    endif()
-endforeach()
-
-# ---- record binary differences -----------------------------------------------
-set(CAPSID_REPRO_DIFF_COUNT 0)
-foreach(manifest_name IN LISTS CAPSID_REPRO_NAMES)
-    if(manifest_name MATCHES
-            "^(include/|share/doc/|share/licenses/|lib/cmake/)"
-            OR manifest_name STREQUAL "share/capsid/build-info.txt")
-        continue()
-    endif()
-    file(SHA256 "${CAPSID_REPRO_ROOT}/${manifest_name}" repro_sha)
-    file(SHA256 "${CAPSID_REPRO_BASELINE_ROOT}/${manifest_name}"
-        baseline_sha)
-    if(NOT repro_sha STREQUAL baseline_sha)
-        math(EXPR CAPSID_REPRO_DIFF_COUNT "${CAPSID_REPRO_DIFF_COUNT} + 1")
-        file(SIZE "${CAPSID_REPRO_ROOT}/${manifest_name}" repro_size)
-        file(SIZE "${CAPSID_REPRO_BASELINE_ROOT}/${manifest_name}"
-            baseline_size)
-        string(APPEND CAPSID_REPRO_DIFFS
-            "${manifest_name}\n  baseline ${baseline_sha} (${baseline_size}B)\n"
-            "  repro    ${repro_sha} (${repro_size}B)\n")
-    endif()
-endforeach()
-
-message(STATUS "PASS: reproducibility — ${baseline_name_count} files, "
-    "identity and deterministic text identical; "
-    "${CAPSID_REPRO_DIFF_COUNT} binary hash differences recorded at "
-    "${CAPSID_REPRO_DIFFS}")
+# Matching document names alone do not establish valid metadata. Both builds
+# must independently describe their own actual files and locked dependencies.
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/ValidatePackageMetadata.cmake")
+get_filename_component(CAPSID_REPRO_BASENAME "${CAPSID_REPRO_BASELINE_ARCHIVE}" NAME)
+string(REGEX REPLACE "\\.(tar\\.gz|zip)$" "" CAPSID_REPRO_BASENAME "${CAPSID_REPRO_BASENAME}")
+capsid_validate_package_metadata("${CAPSID_REPRO_BASELINE_ROOT}"
+    "${CAPSID_SOURCE_DIR}" "${CAPSID_REPRO_BASENAME}")
+capsid_validate_package_metadata("${CAPSID_REPRO_ROOT}"
+    "${CAPSID_SOURCE_DIR}" "${CAPSID_REPRO_BASENAME}")

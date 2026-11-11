@@ -1,0 +1,265 @@
+{
+  "repository": "https://github.com/MattiasBuelens/web-streams-polyfill",
+  "tag": "v4.3.0",
+  "commit": "12b4fedec6c01503a137d837204ca0b85992461e",
+  "archiveSHA256": "ec8c246bd9dc45bb18c6c7c6af26ae8432199fde321760383ba476dadefa8597",
+  "archiveBytes": 113484,
+  "files": {
+    "LICENSE": {
+      "bytes": 1120,
+      "sha256": "08da29e331bf06ef511aff652e22de39a72a7e1547864bbc53d2686b5e045ef3"
+    },
+    "package.json": {
+      "bytes": 3326,
+      "sha256": "062b784ad6ff3b4ac4a69be45515b54eb2a562bd65a70313cd70260461f83ae4"
+    },
+    "rollup.config.mjs": {
+      "bytes": 3293,
+      "sha256": "fc61a7fec7fd3221f578e675ec2aa089a18e00e90bb62dc47b70dbffe06b18c2"
+    },
+    "src/global.d.ts": {
+      "bytes": 30,
+      "sha256": "185831dc20b49445755c2acd7327000f4a5aa18f801b73134e0c75deb272ff99"
+    },
+    "src/globals.ts": {
+      "bytes": 416,
+      "sha256": "97475788988f84a406c1341b391d8cdf41a048e0b97b4d693f8bcfb4cbd5082e"
+    },
+    "src/lib/abort-signal.ts": {
+      "bytes": 1731,
+      "sha256": "562ef98ed3b453e29d034c6cd50ff4f8ecdfeb76c844e3a66b7ad3ef4846f2d0"
+    },
+    "src/lib/abstract-ops/ecmascript.ts": {
+      "bytes": 7550,
+      "sha256": "1761cc9d74801827170176a3d597fd1001fd2ef3d2c3680ee78bce6007be73ca"
+    },
+    "src/lib/abstract-ops/internal-methods.ts": {
+      "bytes": 328,
+      "sha256": "f405b94394f2a200ee0883b3329a25dff6d7b8b7a3e0beab57bfff3f9900d8d3"
+    },
+    "src/lib/abstract-ops/miscellaneous.ts": {
+      "bytes": 533,
+      "sha256": "5dea6131697d8c0e8f870cd3c528e7ba738cf91fbb8c1f0dd7c444a1f1b344ba"
+    },
+    "src/lib/abstract-ops/queue-with-sizes.ts": {
+      "bytes": 1531,
+      "sha256": "66efd0d7c93e4a12fe89b8c714ef0dbc09c4f017efc101b1d0384ce1c1dd9c3d"
+    },
+    "src/lib/abstract-ops/queuing-strategy.ts": {
+      "bytes": 670,
+      "sha256": "96c27b830e10cb64af12a2ff970b5bc0b719e1c9542cea731953e49e72baa4d8"
+    },
+    "src/lib/byte-length-queuing-strategy.ts": {
+      "bytes": 2507,
+      "sha256": "ecfd570ed4f6522dcbd611a5231a899c4a79f1f3240c1c472105f67fd1ec50f2"
+    },
+    "src/lib/count-queuing-strategy.ts": {
+      "bytes": 2372,
+      "sha256": "61f2e709fc0bbfe61658f852010c0bc9d87e43de3e9d9fe3c1979bc20e5c052e"
+    },
+    "src/lib/helpers/array-buffer-view.ts": {
+      "bytes": 1105,
+      "sha256": "41d35987318d662dfebf057a615124aa03561d07ebf7ce115305e4ceb2245e9c"
+    },
+    "src/lib/helpers/miscellaneous.ts": {
+      "bytes": 1181,
+      "sha256": "f78cfafb44ba7b8b9c00c49b4ffc6126a7a5042c2dcda645573adbdb40b5ca71"
+    },
+    "src/lib/helpers/webidl.ts": {
+      "bytes": 3950,
+      "sha256": "07ab8ecb159c333305de754861c2f5360e50d552dd59798bee9f5f4b1deac82d"
+    },
+    "src/lib/queuing-strategy.ts": {
+      "bytes": 658,
+      "sha256": "66972720df37cbfd0b18835d573e87d2aa369455bbe5cbe4641c5d22b106758f"
+    },
+    "src/lib/readable-stream.ts": {
+      "bytes": 21105,
+      "sha256": "5ad12d0cd55f66273cfb8135ee32851f8c256a6ba5df33e18d6f28fb6ee5b996"
+    },
+    "src/lib/readable-stream/async-iterator.ts": {
+      "bytes": 6909,
+      "sha256": "cf408da47eaeb0e02ea7084337c449b8f551f6e9540eccec771ec78158e3fc23"
+    },
+    "src/lib/readable-stream/byob-reader.ts": {
+      "bytes": 12614,
+      "sha256": "20dff2bc0f84fc8a431c846b71d56829a98811ed07ab812cba3b1a805360de25"
+    },
+    "src/lib/readable-stream/byte-stream-controller.ts": {
+      "bytes": 41594,
+      "sha256": "ae5560fee6cad80be0eb9dd6dd5f1a37594a14a4a2991563b23c60082e3151f7"
+    },
+    "src/lib/readable-stream/default-controller.ts": {
+      "bytes": 12766,
+      "sha256": "381ec3f3bffdec12d0db7db87fb91fe7a4e55685f1303f5133935f835329abb3"
+    },
+    "src/lib/readable-stream/default-reader.ts": {
+      "bytes": 10071,
+      "sha256": "7aa7a43e64c88946242c4a8ae2638de16037c0fc06541b95d671e1fd832bbe28"
+    },
+    "src/lib/readable-stream/from.ts": {
+      "bytes": 3897,
+      "sha256": "cdb684b652d5f304cbcb3852a79a730bd2e24d8d0a18de8cd195b4bc1a898a27"
+    },
+    "src/lib/readable-stream/generic-reader.ts": {
+      "bytes": 3737,
+      "sha256": "eb22027e05f2cdaac9f485018449aee9cbb985365d6d1229b8bec7974084dddf"
+    },
+    "src/lib/readable-stream/iterator-options.ts": {
+      "bytes": 268,
+      "sha256": "547fac825525bd0e697c141ca4cc11bc20a2950a6b833f6699f4487bd0cf13eb"
+    },
+    "src/lib/readable-stream/pipe-options.ts": {
+      "bytes": 1159,
+      "sha256": "6525abae68515196f1df1133648c874f0cd942b94a267656909aadaf7fcd02e7"
+    },
+    "src/lib/readable-stream/pipe.ts": {
+      "bytes": 9703,
+      "sha256": "bbbdfba3631a901d5ee9239796c02cb8e91b22e4e2baeee7f364aa62304cd68f"
+    },
+    "src/lib/readable-stream/readable-stream-like.ts": {
+      "bytes": 859,
+      "sha256": "20177069e7de142ce90d842cbebba8df79aff06e34733fa62d4f0c775b3dd93a"
+    },
+    "src/lib/readable-stream/readable-writable-pair.ts": {
+      "bytes": 401,
+      "sha256": "e4654fc4945ccfd35377f33ed52b1c2518c1f1f9a419a97ee757244cbd358c02"
+    },
+    "src/lib/readable-stream/reader-options.ts": {
+      "bytes": 477,
+      "sha256": "5ec6219649ce3de34225b84515472a0c1eb95479b7012855d77fd5e5745baa2d"
+    },
+    "src/lib/readable-stream/tee.ts": {
+      "bytes": 14987,
+      "sha256": "ffbba2e8c217b669ba063a47d7675309a92b513a736a2e93df86e9418288ee96"
+    },
+    "src/lib/readable-stream/underlying-source.ts": {
+      "bytes": 4540,
+      "sha256": "c7bb1755d23eeb22685b7c8129ba5510db6b6259f6d758a70d2035fe01c4a76f"
+    },
+    "src/lib/simple-queue.ts": {
+      "bytes": 4129,
+      "sha256": "76f77f295f7472db248d5a9e92c81870da473b3a5c960580c9822dec04489fc6"
+    },
+    "src/lib/transform-stream.ts": {
+      "bytes": 24463,
+      "sha256": "c3dc98a4011be8bf4b4fc2e463af61aa5c7d6214b51b2de8a69ecfd2e9b6fdd5"
+    },
+    "src/lib/transform-stream/transformer.ts": {
+      "bytes": 1824,
+      "sha256": "6df3a997fe30396b960a37ad153a22f53c17e4b23e28a88011bb7435e99ddec3"
+    },
+    "src/lib/validators/basic.ts": {
+      "bytes": 2702,
+      "sha256": "283553f6f05aae31572c8879bb81e74013406efbf778f96b2afbd46b7b438f26"
+    },
+    "src/lib/validators/iterator-options.ts": {
+      "bytes": 482,
+      "sha256": "46c68999d843d826129b37bc3f50666f5d218a5f9b78c21ee3235f9ee2c80ad5"
+    },
+    "src/lib/validators/pipe-options.ts": {
+      "bytes": 1014,
+      "sha256": "f88794f5ab16baf852bf30d0e797097bdc9015623486c9301710919d2f9b0f5c"
+    },
+    "src/lib/validators/queuing-strategy-init.ts": {
+      "bytes": 528,
+      "sha256": "e728ca025a360a28fcb4d1ce92b700e3a7151c88b18fa720b6cf1c86336e11c9"
+    },
+    "src/lib/validators/queuing-strategy.ts": {
+      "bytes": 872,
+      "sha256": "ac2e75dd7648bf712115fb847255139bfdcd06bd83f6f867767c15527b20b7ec"
+    },
+    "src/lib/validators/readable-stream.ts": {
+      "bytes": 269,
+      "sha256": "ab39252f4f720ce9796816dea04e22cd57a4de5b7180ffd24a87bdedb3fd1631"
+    },
+    "src/lib/validators/readable-writable-pair.ts": {
+      "bytes": 931,
+      "sha256": "5a157dcafe328937e1303dd8513fa680d5cf7dbb7ff416d72890e3b2c4099c62"
+    },
+    "src/lib/validators/reader-options.ts": {
+      "bytes": 1255,
+      "sha256": "b15bf33ce26ca38e1306d7951ca25da258a346242185091c7a10b7a9197870b8"
+    },
+    "src/lib/validators/transformer.ts": {
+      "bytes": 2759,
+      "sha256": "5f63ce7f544d324a51e62394ece65e293584e466da7944b095fb31197dc80f2d"
+    },
+    "src/lib/validators/underlying-sink.ts": {
+      "bytes": 2520,
+      "sha256": "dece3b5056300d876bc02052808c0899d040ff954dff2c8c784d5bacb7900a7e"
+    },
+    "src/lib/validators/underlying-source.ts": {
+      "bytes": 3038,
+      "sha256": "9f85844799a9d16bd98d1eba861d923df9f374f94997a62b81d6b671a0d132ff"
+    },
+    "src/lib/validators/writable-stream.ts": {
+      "bytes": 269,
+      "sha256": "e44dbc62ac915df7351da37f7c691ef8d3a1ccaf3f6e31e5d9b63ebfe75c5758"
+    },
+    "src/lib/writable-stream.ts": {
+      "bytes": 49335,
+      "sha256": "b6590bebbda1dd6b24d5834cbd25d949b901f931278a71cc492bcdb719857853"
+    },
+    "src/lib/writable-stream/underlying-sink.ts": {
+      "bytes": 2849,
+      "sha256": "ec3629ed4a45dfd25d3360ebbd36046670b602f8babb649b7a2d3c5806e58caa"
+    },
+    "src/polyfill.ts": {
+      "bytes": 1102,
+      "sha256": "3da6056f70bb266438a9e04ce9b9799eaa9e51e679d04568a4485fb26f30ceb9"
+    },
+    "src/ponyfill.ts": {
+      "bytes": 1732,
+      "sha256": "dffc777e3b958b47c8e5901ec815aa70bc3ca0a6641e30f38e5df9beb903e00a"
+    },
+    "src/stub/assert.ts": {
+      "bytes": 549,
+      "sha256": "ef03d276c059c7b773e174478df4d438a1d766885e96b1e24e3e8ad1f691fd37"
+    },
+    "src/stub/dom-exception.ts": {
+      "bytes": 1984,
+      "sha256": "607b05842f25a1a52b327e9f606975f1e79d898cf18d69fc9b605e70acd6f0a8"
+    },
+    "src/stub/math-trunc.ts": {
+      "bytes": 247,
+      "sha256": "039d3e8dfaf0b3a17396ca65f3064afcc2e59402b9bcfd3d80802f3e142d24a7"
+    },
+    "src/stub/number-isfinite.ts": {
+      "bytes": 272,
+      "sha256": "476acc25e358235de3ca67fdb15b2c9283a6c2a283c86e34b29242cc1d05b4bf"
+    },
+    "src/stub/number-isinteger.ts": {
+      "bytes": 328,
+      "sha256": "773d2f8e3b7025fce7368941eb94f0a5b03021006811be5bb26cda5cd68411e2"
+    },
+    "src/stub/number-isnan.ts": {
+      "bytes": 274,
+      "sha256": "b83ee5f4ef78292385609bbcb89aa5221cf6cc56663d83e56647ae1a4a18d2fb"
+    },
+    "src/stub/symbol.ts": {
+      "bytes": 236,
+      "sha256": "cc6ba1d8c7f2986f8bc6e36e7acb6c47e9bf328554505b648c4cd445e192381d"
+    },
+    "src/utils.ts": {
+      "bytes": 58,
+      "sha256": "6273744550bd419f8ac31d610398440d83d3f99ca116439aea6d5d43c19ca7a5"
+    },
+    "tsconfig.json": {
+      "bytes": 559,
+      "sha256": "98579f77d8217611501f30b470eef835ca19c7a818542d60f636c6fde5affb78"
+    }
+  },
+  "schema": 1,
+  "archiveURL": "https://codeload.github.com/MattiasBuelens/web-streams-polyfill/tar.gz/12b4fedec6c01503a137d837204ca0b85992461e",
+  "esbuild": "0.28.1",
+  "patch": {
+    "path": "patches/web-streams/0001-workerd-byte-profile.patch",
+    "sha256": "29e4bf3850e4e342eb782883b86bde957a6a727d11449b5cc6a35a68b3c0157c"
+  },
+  "license": {
+    "path": "licenses/web-streams-polyfill/LICENSE",
+    "sha256": "08da29e331bf06ef511aff652e22de39a72a7e1547864bbc53d2686b5e045ef3"
+  },
+  "profile": "Pinned workerd default byte-stream behavior. Native fetch controllers retain the original adapter protocol."
+}

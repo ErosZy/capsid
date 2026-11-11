@@ -30,14 +30,15 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
 namespace {
 
 void fail(const std::string &message) {
-    std::cerr << "FAIL: " << message << std::endl;
-    std::exit(1);
+    throw std::runtime_error(message);
 }
 
 void require_result(capsid_result result, const char *operation) {
@@ -62,12 +63,14 @@ public:
           client_(-1),
           port_(0),
           accepted_(false),
-          closed_(false) {
+          closed_(false),
+          receive_finished_(false),
+          idle_timeouts_(0),
+          receive_error_(0) {
         listener_ = capsid::win32::create_tcp_socket_fd();
         if (listener_ < 0) {
             fail("cannot create hanging server");
         }
-        const int reuse = 1;
         capsid::win32::setsockopt_reuseaddr_fd(listener_);
         struct sockaddr_in address = {};
         address.sin_family = AF_INET;
@@ -119,9 +122,16 @@ public:
 
     bool accepted() const { return accepted_.load(); }
     bool closed() const { return closed_.load(); }
+    bool receive_finished() const { return receive_finished_.load(); }
+    unsigned idle_timeouts() const { return idle_timeouts_.load(); }
+    int receive_error() const { return receive_error_.load(); }
 
 private:
     void serve() {
+        struct Completion {
+            std::atomic<bool> &finished;
+            ~Completion() { finished.store(true); }
+        } completion{receive_finished_};
         capsid_pollfd descriptor = {};
         descriptor.fd = listener_;
         descriptor.events = POLLIN;
@@ -137,7 +147,10 @@ private:
         // Blocking recv with a receive timeout: WSAPoll cannot be trusted
         // to report a peer FIN, but a blocking recv returns 0 the moment
         // the close lands.
-        capsid::win32::setsockopt_recv_timeout_fd(client, 500);
+        if (capsid::win32::setsockopt_recv_timeout_fd(client, 500) != 0) {
+            receive_error_ = errno;
+            return;
+        }
         char buffer[2048];
         for (;;) {
 #if defined(_WIN32)
@@ -153,11 +166,24 @@ private:
                 return;
             }
             if (count < 0) {
-#if defined(_WIN32)
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                const int read_error = errno;
+                if (read_error == EINTR) {
                     continue;
                 }
+#if defined(_WIN32)
+                // SO_RCVTIMEO reports WSAETIMEDOUT, which the shared shim
+                // currently maps to EIO. An idle read is not peer closure
+                // and must not permanently stop observing cancellation.
+                const bool idle = WSAGetLastError() == WSAETIMEDOUT ||
+                                  read_error == EAGAIN || read_error == EWOULDBLOCK;
+#else
+                const bool idle = read_error == EAGAIN || read_error == EWOULDBLOCK;
 #endif
+                if (idle) {
+                    ++idle_timeouts_;
+                    continue;
+                }
+                receive_error_ = read_error;
                 return;
             }
         }
@@ -168,6 +194,9 @@ private:
     uint16_t port_;
     std::atomic<bool> accepted_;
     std::atomic<bool> closed_;
+    std::atomic<bool> receive_finished_;
+    std::atomic<unsigned> idle_timeouts_;
+    std::atomic<int> receive_error_;
     std::thread thread_;
 };
 
@@ -217,15 +246,13 @@ void wait_ready(capsid_worker *worker) {
 
 }  // namespace
 
-int main(int argc, char **argv) {
-    if (argc != 3) {
-        fail("expected worker path and fixture path");
-    }
+void exercise_cancellation(const char *worker_path, const char *fixture_path,
+                           bool wait_for_idle_timeout) {
     HangingServer server;
-    const std::string bundle = read_file(argv[2]);
+    const std::string bundle = read_file(fixture_path);
     capsid_worker_config config;
     capsid_worker_config_init(&config);
-    config.worker_path = argv[1];
+    config.worker_path = worker_path;
     config.strict_sandbox = 0;
     config.request_timeout_ms = 5000;
     LoopbackEgressPolicy egress_policy;
@@ -233,6 +260,8 @@ int main(int argc, char **argv) {
 
     capsid_worker *worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn");
+    const std::unique_ptr<capsid_worker, decltype(&capsid_worker_destroy)>
+        worker_owner(worker, capsid_worker_destroy);
     require_result(
         capsid_worker_load_bundle(
             worker,
@@ -267,6 +296,25 @@ int main(int argc, char **argv) {
         fail("txiki fetch did not connect to hanging target");
     }
 
+    if (wait_for_idle_timeout) {
+        const auto idle_deadline = std::chrono::steady_clock::now() +
+                                   std::chrono::seconds(3);
+        while (server.idle_timeouts() == 0 && !server.receive_finished() &&
+               std::chrono::steady_clock::now() < idle_deadline) {
+            pump(worker);
+            capsid_event event;
+            while (next_event(worker, &event)) {
+                if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
+                    fail("fetch failed before the receive-timeout barrier");
+                }
+            }
+        }
+        if (server.idle_timeouts() == 0 || server.receive_finished() || server.closed()) {
+            fail("receive monitor did not survive an actual idle timeout: errno=" +
+                 std::to_string(server.receive_error()));
+        }
+    }
+
     require_result(capsid_worker_cancel(worker, 61), "cancel fetch");
     require_result(capsid_worker_cancel(worker, 61), "repeat fetch cancel");
     const std::chrono::steady_clock::time_point close_deadline =
@@ -282,7 +330,9 @@ int main(int argc, char **argv) {
         }
     }
     if (!server.closed()) {
-        fail("cancel did not close txiki outbound fetch connection");
+        fail("cancel did not close txiki outbound fetch connection: receive_errno=" +
+             std::to_string(server.receive_error()) + ", receive_finished=" +
+             std::to_string(server.receive_finished()));
     }
 
     require_result(
@@ -320,6 +370,20 @@ int main(int argc, char **argv) {
     if (!completed) {
         fail("worker was not reusable after fetch cancellation");
     }
-    capsid_worker_destroy(worker);
+    std::cout << "PASS fetch cancellation " <<
+        (wait_for_idle_timeout ? "after-receive-timeout" : "immediate") << std::endl;
+}
+
+int main(int argc, char **argv) {
+    try {
+        if (argc != 3) {
+            fail("expected worker path and fixture path");
+        }
+        exercise_cancellation(argv[1], argv[2], false);
+        exercise_cancellation(argv[1], argv[2], true);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL: " << error.what() << std::endl;
+        return 1;
+    }
     return 0;
 }

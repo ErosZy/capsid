@@ -119,6 +119,7 @@ function(capsid_generate_build_identity)
         ASAN
         UBSAN
         TSAN
+        SANDBOX_PROFILE
         MIMALLOC
         HOST
         WORKER
@@ -137,6 +138,14 @@ function(capsid_generate_build_identity)
             "one-value argument")
     endif()
 
+
+    if(NOT DEFINED CGBI_SANDBOX_PROFILE OR CGBI_SANDBOX_PROFILE STREQUAL "")
+        set(CGBI_SANDBOX_PROFILE "production")
+    endif()
+    if(NOT CGBI_SANDBOX_PROFILE STREQUAL "production" AND
+       NOT CGBI_SANDBOX_PROFILE STREQUAL "sanitizer")
+        message(FATAL_ERROR "Unknown build identity sandbox profile")
+    endif()
     capsid_load_locked_build_identity(
         JSON_PATH "${CGBI_LOCKED_MANIFEST}"
         OUT_VENDOR_COMMIT CGBI_VENDOR_COMMIT
@@ -306,7 +315,7 @@ function(capsid_generate_build_identity)
     # is the SHA-256 of the record WITHOUT the final buildId line, so the
     # digest stays recomputable by any holder of the exposed fields.
     set(CGBI_FEATURE_FLAGS
-        "lto=${CGBI_LTO} asan=${CGBI_ASAN} ubsan=${CGBI_UBSAN} tsan=${CGBI_TSAN} mimalloc=${CGBI_MIMALLOC} host=${CGBI_HOST} worker=${CGBI_WORKER}")
+        "lto=${CGBI_LTO} asan=${CGBI_ASAN} ubsan=${CGBI_UBSAN} tsan=${CGBI_TSAN} mimalloc=${CGBI_MIMALLOC} host=${CGBI_HOST} worker=${CGBI_WORKER} sandbox_profile=${CGBI_SANDBOX_PROFILE}")
     set(CGBI_PROV_RECORD "schema=capsid-build-provenance-v1\n")
     string(APPEND CGBI_PROV_RECORD "capsidCommit=${CGBI_CAPSID_COMMIT}\n")
     string(APPEND CGBI_PROV_RECORD "capsidTreeClean=${CGBI_TREE_CLEAN}\n")

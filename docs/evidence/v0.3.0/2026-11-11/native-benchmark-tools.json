@@ -1,0 +1,126 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 315,
+  "formalBenchmarkEnvironment": "same-machine-WSL",
+  "externalSshHostRequired": false,
+  "steps": [
+    {
+      "label": "refresh-official-package-indices",
+      "command": [
+        "apt-get",
+        "update"
+      ],
+      "exitCode": 0,
+      "seconds": 7.2140635930000006,
+      "stdoutSHA256": "d67b2e623246ecb8e97c1e11c6eff5c28f54d8b5f964eafe5749524025bff2bb",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "simulate-missing-benchmark-packages",
+      "command": [
+        "apt-get",
+        "-s",
+        "install",
+        "--no-install-recommends",
+        "nginx",
+        "php8.3-fpm",
+        "php8.3-opcache"
+      ],
+      "exitCode": 0,
+      "seconds": 0.7260413500000009,
+      "stdoutSHA256": "0bb080448a3046b944ad67365ed30c4c2618ebb26f87aa597219c0195658c775",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "install-missing-benchmark-packages",
+      "command": [
+        "apt-get",
+        "install",
+        "-y",
+        "--no-install-recommends",
+        "nginx",
+        "php8.3-fpm",
+        "php8.3-opcache"
+      ],
+      "exitCode": 0,
+      "seconds": 10.770400202999998,
+      "stdoutSHA256": "9e2c61818d2de050520e3a8cfc245d51de195facb2e9257c78c3a39c22b9c678",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "disable-new-global-benchmark-services",
+      "command": [
+        "systemctl",
+        "disable",
+        "nginx.service",
+        "php8.3-fpm.service"
+      ],
+      "exitCode": 0,
+      "seconds": 0.7227199799999973,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "98bb03ff3fba1f3ccbfd61f47135cc021552e13cd3290dea0b776453e8aa9707"
+    },
+    {
+      "label": "nginx-version",
+      "command": [
+        "/usr/sbin/nginx",
+        "-v"
+      ],
+      "exitCode": 0,
+      "seconds": 0.00520113900000041,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "c605210199127d9b009ebe71ad530504435d8bc46cd40996776dcdcebebe26a3"
+    },
+    {
+      "label": "php-fpm-version",
+      "command": [
+        "/usr/sbin/php-fpm8.3",
+        "-v"
+      ],
+      "exitCode": 0,
+      "seconds": 0.03802355399999868,
+      "stdoutSHA256": "7724639700e1b03a70778ebbe99aeb2aa2caca8d524c190989d2d45242ab852a",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "onlyMissingBenchmarkPackagesRequested": true,
+  "noSystemUpgradeRequested": true,
+  "noExistingServiceStopped": true,
+  "formalMeasurementNotStarted": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/usr/sbin/php-fpm8.3",
+    "-v"
+  ],
+  "activeCommandPid": 7114,
+  "newPackages": {
+    "nginx": "1.24.0-2ubuntu7.19",
+    "nginx-common": "1.24.0-2ubuntu7.19",
+    "php-common": "2:93ubuntu2",
+    "php8.3-cli": "8.3.6-0ubuntu0.24.04.13",
+    "php8.3-common": "8.3.6-0ubuntu0.24.04.13",
+    "php8.3-fpm": "8.3.6-0ubuntu0.24.04.13",
+    "php8.3-opcache": "8.3.6-0ubuntu0.24.04.13",
+    "php8.3-readline": "8.3.6-0ubuntu0.24.04.13"
+  },
+  "upgradedPackages": {},
+  "removedPackages": [],
+  "globalServices": {
+    "nginx.service": "inactive",
+    "php8.3-fpm.service": "inactive"
+  },
+  "globalNginxAndFpmNotRunning": true,
+  "newGlobalServicesDisabled": true,
+  "phpRuntime": {
+    "version": "8.3.6",
+    "opcacheLoaded": true
+  },
+  "executables": {
+    "/usr/sbin/nginx": "5bfff15e0a9e0bce5c71be8179d77880f9b17c3f575194ff93c912a415756eed",
+    "/usr/sbin/php-fpm8.3": "58df25cae6fcf7e48c0d7c568047d7061b1c0f9c7785ff5ff1995395e822c13e",
+    "/usr/bin/php8.3": "7f1ac2fe89d267364311651c0e7e6651d32ea006c9a701c0cab68eb2394a67d7"
+  },
+  "denoAndIsolatedPythonSutEnvironmentStillRequired": true,
+  "temporaryServiceStartPolicyRemoved": true
+}

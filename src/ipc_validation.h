@@ -19,6 +19,10 @@ struct WorkerStartupConfig {
     // zero capabilities.
     uint16_t protocol_version = 3;
     uint32_t host_capabilities = 0;
+    // A2 amendment (v4.1): parsed limits extension, present only when
+    // the Hello announced CAP_CHANNEL_LAYOUT_A2.
+    bool channel_limits_present = false;
+    capsid::protocol::ChannelLimits channel_limits;
     uint32_t js_stack_size;
     uint32_t max_inflight;
     uint32_t initial_window;
@@ -60,6 +64,14 @@ struct WorkerBindingDescriptor {
     std::vector<std::string> env;
     std::vector<std::string> stdio;
 };
+
+// Decodes and validates a HELLO frame (v3 or v4, A2 extension
+// included) into a startup config. Exported for the conformance
+// harness; the worker runtime reaches it through
+// WorkerStartupState::consume.
+bool decode_hello(const protocol::Frame &frame,
+                  WorkerStartupConfig *output,
+                  std::string *error);
 
 class WorkerStartupState {
 public:
@@ -113,6 +125,8 @@ struct WorkerRequestHead {
     // body, so no request-direction credit is granted and the request
     // direction ends immediately.
     bool bodyless = false;
+    uint32_t upgrade_channel_id = 0;
+    uint64_t upgrade_max_message_bytes = 0;
 };
 
 bool decode_worker_request_head(const protocol::Frame &frame,

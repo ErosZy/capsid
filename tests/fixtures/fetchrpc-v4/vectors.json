@@ -1,99 +1,1940 @@
 {
- "$schema": "fetchrpc-v4 golden vectors v1 (hex bytes, expected outcome per docs/fetchrpc-v4.md; frozen with the contract)",
+ "schema_version": 2,
+ "schema": "FetchRPC v4 golden vectors schema v2; complete head encodings, executable sequence replay and negotiated v4.2 confirmation payloads (2026-10-13). The object schema is unchanged. Two-peer order is tested separately by test_channel_races.cc.",
  "frames": [
   {
-   "name": "hello-v4-no-caps",
-   "hex": "5752544304000100000000000000000000000000800000000700000000001000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-   "expect": "v3-parser-reject; v4-parser-ok"
+   "name": "hello-v4-carriage",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "hello-final-all-capabilities",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040003f00000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-ok",
+   "a2_limits": true
+  },
+  {
+   "name": "hello-final-without-confirm",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040002f00000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities",
+   "a2_limits": true
+  },
+  {
+   "name": "hello-a2-full",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040000f00000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-ok",
+   "a2_limits": true
   },
   {
    "name": "hello-v4-unknown-cap-bit",
-   "hex": "5752544304000100000000000000000000000000800000000700000000001000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000",
-   "expect": "v3-parser-reject; v4-parser-error:invalid hello capabilities"
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
   },
   {
    "name": "hello-v4-reserved-nonzero",
-   "hex": "5752544304000100000000000000000000000000800000000700000000001000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009000000",
-   "expect": "v3-parser-reject; v4-parser-error:invalid hello capabilities"
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
   },
   {
-   "name": "channel-open-inbound",
-   "hex": "57525443040013000000000000000000000000000d00000007000000010000100000000000",
-   "expect": "v3-parser-reject; v4-parser-ok"
+   "name": "hello-duplex-without-a2",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
   },
   {
-   "name": "channel-data-start-text",
-   "hex": "57525443040016000500000000000000000000000500000068656c6c6f",
-   "expect": "v3-parser-reject; v4-parser-ok(flag text)"
+   "name": "hello-a2-without-duplex",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
   },
   {
-   "name": "channel-close-code-reason",
-   "hex": "57525443040019000000000000000000000000000a00000007000000e803646f6e65",
-   "expect": "v3-parser-reject; v4-parser-ok"
+   "name": "hello-upgrade-without-duplex",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a00000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
   },
   {
-   "name": "channel-credit",
+   "name": "hello-a2-ext-bad-size",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000290000000100000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040000900000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello extension"
+  },
+  {
+   "name": "hello-a2-ext-bad-version",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000200000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040000900000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello extension"
+  },
+  {
+   "name": "hello-a2-ext-reserved",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100010080000000000010000000000000000001000000000000000100000000881300001027000000000000000040000900000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello extension"
+  },
+  {
+   "name": "hello-a2-ext-bad-limits",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100000080000000000200000000000000000001000000000000000100000000881300001027000000000000000040000900000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello extension"
+  },
+  {
+   "name": "hello-a2-ext-missing",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000900000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello extension"
+  },
+  {
+   "name": "hello-a2-ext-without-cap",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040000000000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:trailing HELLO payload"
+  },
+  {
+   "name": "ready-final-capabilities",
+   "ftype": 3,
+   "hex": "57525443040003000000000000000000000000001c00000001000000000000000000000000000000000000003b00000000000000",
+   "decode": "ready-tail",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ready-final-without-confirm",
+   "ftype": 3,
+   "hex": "57525443040003000000000000000000000000001c00000001000000000000000000000000000000000000002b00000000000000",
+   "decode": "ready-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
+  },
+  {
+   "name": "ready-a2-full",
+   "ftype": 3,
+   "hex": "57525443040003000000000000000000000000001c00000001000000000000000000000000000000000000000f00000000000000",
+   "decode": "ready-tail",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ready-unknown-cap",
+   "ftype": 3,
+   "hex": "57525443040003000000000000000000000000001c00000001000000000000000000000000000000000000000002000000000000",
+   "decode": "ready-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
+  },
+  {
+   "name": "ready-tail-short",
+   "ftype": 3,
+   "hex": "5752544304000300000000000000000000000000050000000000000000",
+   "decode": "ready-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
+  },
+  {
+   "name": "open-dial",
+   "ftype": 19,
+   "hex": "5752544304001300000000000000000000000000490000000000000001000000000000000400000000000000000000000000100000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "open-bad-owner",
+   "ftype": 19,
+   "hex": "5752544304001300000000000000000000000000490000000000000001000000000000000600000000000000000000000000100000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "open-bad-kind",
+   "ftype": 19,
+   "hex": "5752544304001300000000000000000000000000490000000000000001000000000000000401000000000000000000000000100000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "open-host-id",
+   "ftype": 19,
+   "hex": "5752544304001300000000000000000000000000490000000900000001000000000000000400000000000000000000000000100000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "open-zero-dial",
+   "ftype": 19,
+   "hex": "5752544304001300000000000000000000000000490000000000000000000000000000000400000000000000000000000000100000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "open-small-message-cap",
+   "ftype": 19,
+   "hex": "5752544304001300000000000000000000000000490000000000000001000000000000000400000000000000000000000002000000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "accept-dial",
+   "ftype": 20,
+   "hex": "57525443040014000000000000000000000000001a0000000100000000000000070000000000100000000000040063686174",
+   "decode": "accept",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "accept-zero-channel",
+   "ftype": 20,
+   "hex": "57525443040014000000000000000000000000001a0000000100000000000000000000000000100000000000040063686174",
+   "decode": "accept",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "reject-dial",
+   "ftype": 21,
+   "hex": "575254430400150000000000000000000000000021000000020000000000000000000000030000000f00636f6e6e6563742072656675736564",
+   "decode": "reject",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "data-single-text",
+   "ftype": 22,
+   "hex": "5752544304001600070000000000000000000000090000000700000068656c6c6f",
+   "decode": "data",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "data-start",
+   "ftype": 22,
+   "hex": "57525443040016000500000000000000000000000700000007000000616263",
+   "decode": "data",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "data-cont",
+   "ftype": 22,
+   "hex": "57525443040016000400000000000000000000000700000007000000646566",
+   "decode": "data",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "data-cont-binary",
+   "ftype": 22,
+   "hex": "57525443040016000000000000000000000000000700000007000000646566",
+   "decode": "data",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "data-end",
+   "ftype": 22,
+   "hex": "57525443040016000600000000000000000000000700000007000000676869",
+   "decode": "data",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "data-truncated",
+   "ftype": 22,
+   "hex": "5752544304001600030000000000000000000000020000000700",
+   "decode": "data",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "credit-add",
+   "ftype": 23,
    "hex": "57525443040017000000000000000000000000000c000000070000000000010000000000",
-   "expect": "v3-parser-reject; v4-parser-ok"
+   "decode": "credit",
+   "expect": "v4-parser-ok"
   },
   {
-   "name": "channel-halfclose",
+   "name": "credit-max",
+   "ftype": 23,
+   "hex": "57525443040017000000000000000000000000000c00000007000000fffffeffffffffff",
+   "decode": "credit",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "credit-trailing",
+   "ftype": 23,
+   "hex": "57525443040017000000000000000000000000002500000057525443040017000000000000000000000000000c00000007000000010000000000000000",
+   "decode": "credit",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "halfclose-7",
+   "ftype": 24,
    "hex": "57525443040018000000000000000000000000000400000007000000",
-   "expect": "v3-parser-reject; v4-parser-ok"
+   "decode": "halfclose",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "close-1000",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000001e8030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "close-transport-1006",
+   "ftype": 25,
+   "hex": "575254430400190000000000000000000000000012000000070000000201ee03080061626e6f726d616c",
+   "decode": "close",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "close-observed-1000",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000101e803040070656572",
+   "decode": "close",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "close-synthetic-1005",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000001ed030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid close code"
+  },
+  {
+   "name": "close-code-without-flag",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000000e8030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid close code"
+  },
+  {
+   "name": "close-final-1000",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000301e8030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "close-final-no-code",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000a00000007000000030000000000",
+   "decode": "close",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "close-final-synthetic-1006",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000301ee030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid close code"
+  },
+  {
+   "name": "close-bad-kind",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000401e8030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid close code"
+  },
+  {
+   "name": "close-transport-sendable",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e000000070000000201e8030400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid close code"
+  },
+  {
+   "name": "close-reason-oversize",
+   "ftype": 25,
+   "hex": "575254430400190000000000000000000000000086000000070000000001e8037c0078787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "cancel-7",
+   "ftype": 26,
+   "hex": "5752544304001a00000000000000000000000000080000000700000001000000",
+   "decode": "cancel",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "cancel-bad-reason",
+   "ftype": 26,
+   "hex": "5752544304001a00000000000000000000000000080000000700000009000000",
+   "decode": "cancel",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "upgrade-request-7",
+   "ftype": 4,
+   "hex": "57525443040004002000000001000000000000002b00000003004745541400000068747470733a2f2f756e69742e746573742f77730000070000000000100000000000",
+   "decode": "upgrade-tail",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "upgrade-accept-7",
+   "ftype": 7,
+   "hex": "575254430400070020000000010000000000000012000000650000000000070000000000100000000000",
+   "decode": "upgrade-tail",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "upgrade-reject-404",
+   "ftype": 7,
+   "hex": "575254430400070000000000010000000000000006000000940100000000",
+   "decode": "none",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "upgrade-101-no-flag",
+   "ftype": 7,
+   "hex": "575254430400070000000000010000000000000012000000650000000000070000000000100000000000",
+   "decode": "upgrade-tail",
+   "expect": "v4-parser-error:invalid upgrade response"
+  },
+  {
+   "name": "upgrade-101-fixed-body",
+   "ftype": 7,
+   "hex": "575254430400070021000000010000000000000012000000650000000000070000000000100000000000",
+   "decode": "upgrade-tail",
+   "expect": "v4-parser-error:invalid upgrade response"
+  },
+  {
+   "name": "hello-reserved-cap-bit-5",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000740000000700000000000004000000000000000000000000400000008813000000000000000010000400000000040000000001000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-error:invalid hello capabilities"
+  },
+  {
+   "name": "cancel-zero-without-dial",
+   "ftype": 26,
+   "hex": "5752544304001a00000000000000000000000000080000000000000000000000",
+   "decode": "cancel",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "upgrade-request-bad-prefix",
+   "ftype": 4,
+   "hex": "57525443040004002000000001000000000000002b000000030047455460ea000068747470733a2f2f756e69742e746573742f77730000070000000000100000000000",
+   "decode": "upgrade-tail",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "open-dial-reserved-flag",
+   "ftype": 19,
+   "hex": "5752544304001300010000000000000000000000490000000000000001000000000000000400000000000000000000000000100000000000170000007773733a2f2f6578616d706c652e746573742f6563686f020004006368617404006a736f6e",
+   "decode": "open",
+   "expect": "v4-parser-error:invalid frame flags"
+  },
+  {
+   "name": "channel-header-request-id-nonzero",
+   "ftype": 22,
+   "hex": "5752544304001600070000000100000000000000090000000700000068656c6c6f",
+   "decode": "data",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "close-reason-without-code",
+   "ftype": 25,
+   "hex": "57525443040019000000000000000000000000000e00000007000000000000000400646f6e65",
+   "decode": "close",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "cancel-pending-u64",
+   "ftype": 26,
+   "hex": "5752544304001a000000000000000000000000001000000000000000000000000700000001000000",
+   "decode": "cancel",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "cancel-pending-zero-dial",
+   "ftype": 26,
+   "hex": "5752544304001a000000000000000000000000001000000000000000000000000000000000000000",
+   "decode": "cancel",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "cancel-assigned-trailing-dial",
+   "ftype": 26,
+   "hex": "5752544304001a000000000000000000000000001000000007000000000000000700000001000000",
+   "decode": "cancel",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "ack-accepted-result",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000007000000070000000100000000000000",
+   "decode": "ack",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ack-rejected-result",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000000000000070000000100000000000000",
+   "decode": "ack",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ack-pending-cancel",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000000000000070000000100000001000000",
+   "decode": "ack",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ack-assigned-cancel",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000007000000000000000000000001000000",
+   "decode": "ack",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ack-transport-close",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000007000000000000000000000002000000",
+   "decode": "ack",
+   "expect": "v4-parser-ok"
+  },
+  {
+   "name": "ack-zero-result-dial",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000007000000000000000000000000000000",
+   "decode": "ack",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "ack-ambiguous-cancel-id",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000007000000070000000100000001000000",
+   "decode": "ack",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "ack-unknown-kind",
+   "ftype": 27,
+   "hex": "5752544304001b000000000000000000000000001000000007000000000000000000000003000000",
+   "decode": "ack",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "ack-header-request-id",
+   "ftype": 27,
+   "hex": "5752544304001b000000000001000000000000001000000007000000000000000000000001000000",
+   "decode": "ack",
+   "expect": "v4-parser-error:invalid channel payload"
+  },
+  {
+   "name": "hello-v42-confirm",
+   "ftype": 1,
+   "hex": "5752544304000100000000000000000000000000a8000000070000000000000400000000000000000000000040000000881300000000000000001000040000000004000000000100000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000100000080000000000010000000000000000001000000000000000100000000881300001027000000000000000040001f00000000000000",
+   "decode": "hello-tail",
+   "expect": "v4-parser-ok",
+   "a2_limits": true
   }
  ],
  "sequences": [
   {
+   "name": "negotiation-carriage",
+   "initial": {
+    "host": 0,
+    "worker": 0
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-v4-carriage",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 0
+     },
+     "expect": "ok"
+    }
+   ]
+  },
+  {
+   "name": "negotiation-intersection-narrows",
+   "initial": {
+    "host": 15,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "upgrade-request-7",
+     "expect": "error:channel frame without capability"
+    }
+   ]
+  },
+  {
+   "name": "negotiation-a2",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    }
+   ]
+  },
+  {
+   "name": "negotiation-first-frame-not-hello",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "open-dial",
+     "expect": "error:first frame must be HELLO"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "error:first frame must be HELLO"
+    }
+   ]
+  },
+  {
+   "name": "negotiation-duplicate-hello",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "error:duplicate HELLO"
+    }
+   ]
+  },
+  {
+   "name": "negotiation-mixed-version",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 15
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data-v3",
+      "channel": 7,
+      "single": "legacy",
+      "text": true
+     },
+     "expect": "error:unsupported protocol version"
+    }
+   ]
+  },
+  {
    "name": "upgrade-accept",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
    "steps": [
-    "hello(cap=UPGRADE|DUPLEX)",
-    "requesthead(upgrade flag)",
-    "responsehead(101,upgrade,channel 7)",
-    "channel-open-inbound",
-    "channel-data-start-text",
-    "channel-close-code-reason"
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "upgrade-request-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "upgrade-accept-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "close-1000",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "close-observed-1000",
+     "expect": "ok"
+    }
    ]
   },
   {
-   "name": "upgrade-reject",
+   "name": "upgrade-reject-releases",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
    "steps": [
-    "hello",
-    "requesthead(upgrade flag)",
-    "responsehead(404)"
-   ],
-   "note": "no channel frames follow"
-  },
-  {
-   "name": "credit-exhaustion",
-   "steps": [
-    "open(1MiB)",
-    "credit(65536)",
-    "data(65536) ok",
-    "data(1) violation:channel credit underflow"
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "upgrade-request-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "upgrade-reject-404",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "error:unknown channel"
+    }
    ]
   },
   {
-   "name": "unknown-channel",
+   "name": "upgrade-data-before-commit",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
    "steps": [
-    "data(channel 99)",
-    "violation:unknown channel"
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "upgrade-request-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "error:channel sequence"
+    }
+   ]
+  },
+  {
+   "name": "upgrade-101-without-flag",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "upgrade-request-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "upgrade-101-no-flag",
+     "expect": "error:invalid upgrade response"
+    }
+   ]
+  },
+  {
+   "name": "upgrade-101-fixed-body-exclusive",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "upgrade-request-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "upgrade-101-fixed-body",
+     "expect": "error:invalid upgrade response"
+    }
+   ]
+  },
+  {
+   "name": "dial-out-of-order",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 2,
+      "url": "wss://two.test/"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 2,
+      "channel": 7
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 1,
+      "channel": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 9,
+      "text": true,
+      "single": "first-on-nine"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "ok"
+    }
+   ]
+  },
+  {
+   "name": "dial-rejected",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 5,
+      "url": "wss://five.test/"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "reject-dial",
+     "expect": "error:unknown channel"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "reject",
+      "dial_id": 5
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 5,
+      "channel_id": 3
+     },
+     "expect": "error:unknown channel"
+    }
+   ]
+  },
+  {
+   "name": "open-direction-rules",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-host-id",
+     "expect": "error:channel open direction"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-zero-dial",
+     "expect": "error:channel open direction"
+    },
+    {
+     "dir": "h2w",
+     "frame": "open-dial",
+     "expect": "error:channel open direction"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "error:unknown channel"
+    }
+   ]
+  },
+  {
+   "name": "credit-window",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 65532,
+      "text": true,
+      "first": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 4,
+      "last": true,
+      "text": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 1,
+      "single": "x",
+      "text": true
+     },
+     "expect": "error:channel credit underflow"
+    },
+    {
+     "dir": "h2w",
+     "frame": "credit-add",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 65532,
+      "text": true,
+      "first": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 4,
+      "last": true,
+      "text": true
+     },
+     "expect": "ok"
+    }
+   ]
+  },
+  {
+   "name": "credit-overflow",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "credit-max",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "credit",
+      "channel": 7,
+      "amount": 1
+     },
+     "expect": "error:channel credit overflow"
+    }
+   ]
+  },
+  {
+   "name": "message-cap-exceeded",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 1,
+      "url": "wss://one.test/",
+      "max_message": 1024
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 1,
+      "channel": 7,
+      "max_message": 1024
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 1024,
+      "text": true,
+      "first": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "bytes": 1,
+      "last": true,
+      "text": true
+     },
+     "expect": "error:message size exceeded"
+    }
+   ]
+  },
+  {
+   "name": "fragmentation-legal",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-start",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-cont",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-end",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "ok"
+    }
+   ]
+  },
+  {
+   "name": "fragmentation-missing-start",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-cont",
+     "expect": "error:fragmentation"
+    }
+   ]
+  },
+  {
+   "name": "fragmentation-nested-start",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-start",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-start",
+     "expect": "error:fragmentation"
+    }
+   ]
+  },
+  {
+   "name": "fragmentation-type-change",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-start",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-cont-binary",
+     "expect": "error:fragmentation"
+    }
+   ]
+  },
+  {
+   "name": "half-close",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "halfclose-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "error:channel sequence"
+    },
+    {
+     "dir": "w2h",
+     "frame": "halfclose-7",
+     "expect": "error:channel sequence"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "data",
+      "channel": 7,
+      "single": "still-ok",
+      "text": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "halfclose",
+      "channel": 7
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "close",
+      "channel": 7,
+      "kind_name": "observed",
+      "code": 1000
+     },
+     "expect": "error:unknown channel"
+    }
+   ]
+  },
+  {
+   "name": "simultaneous-close",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "close",
+      "channel": 7,
+      "kind_name": "initiated",
+      "code": 1000
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "close",
+      "channel": 7,
+      "kind_name": "initiated",
+      "code": 1000
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "error:unknown channel"
+    }
    ]
   },
   {
    "name": "duplicate-close",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
    "steps": [
-    "close(7)",
-    "close(7)",
-    "violation:channel sequence"
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "close",
+      "channel": 7,
+      "kind_name": "initiated",
+      "code": 1000
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "close",
+      "channel": 7,
+      "kind_name": "initiated",
+      "code": 1000
+     },
+     "expect": "error:channel sequence"
+    }
    ]
   },
   {
-   "name": "fragmentation-mid-fragment",
+   "name": "unknown-channel",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
    "steps": [
-    "data(start)",
-    "data(no start)",
-    "data(end)",
-    "violation:fragmentation"
+    {
+     "dir": "h2w",
+     "frame": "hello-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "ready-a2-full",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 99,
+      "single": "nope",
+      "text": true
+     },
+     "expect": "error:unknown channel"
+    }
+   ]
+  },
+  {
+   "name": "cancel-terminal",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "cancel-7",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "data-single-text",
+     "expect": "error:unknown channel"
+    },
+    {
+     "dir": "h2w",
+     "frame": "cancel-7",
+     "expect": "error:unknown channel"
+    }
+   ]
+  },
+  {
+   "name": "capability-gate-carriage",
+   "initial": {
+    "host": 0,
+    "worker": 0
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "frame": "hello-v4-carriage",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 0
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "error:channel frame without capability"
+    }
+   ]
+  },
+  {
+   "name": "capability-gate-halfclose",
+   "initial": {
+    "host": 9,
+    "worker": 9
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 9
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "open-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "frame": "accept-dial",
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "frame": "halfclose-7",
+     "expect": "error:channel frame without capability"
+    }
+   ]
+  },
+  {
+   "name": "channel-credit-and-fragment-directions-independent",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 15
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 15
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 1,
+      "url": "wss://dial.test/"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 2,
+      "url": "wss://dial.test/"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 1,
+      "channel": 1
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 2,
+      "channel": 2
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 1,
+      "bytes": 65532,
+      "first": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "data",
+      "channel": 1,
+      "bytes": 4,
+      "first": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 1,
+      "bytes": 4,
+      "last": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "data",
+      "channel": 1,
+      "bytes": 0,
+      "last": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 2,
+      "bytes": 65532,
+      "first": true
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 2,
+      "bytes": 4,
+      "last": true
+     },
+     "expect": "ok"
+    }
+   ]
+  },
+  {
+   "name": "independent-wide-dial-id",
+   "initial": {
+    "host": 15,
+    "worker": 15
+   },
+   "steps": [
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "hello",
+      "caps": 15
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "ready",
+      "caps": 15
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 1,
+      "url": "wss://one.test/"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "open",
+      "dial_id": 4294967297,
+      "url": "wss://wide.test/"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 4294967297,
+      "channel": 1
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "h2w",
+     "make": {
+      "kind": "accept",
+      "dial_id": 1,
+      "channel": 2
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 1,
+      "single": "wide"
+     },
+     "expect": "ok"
+    },
+    {
+     "dir": "w2h",
+     "make": {
+      "kind": "data",
+      "channel": 2,
+      "single": "original"
+     },
+     "expect": "ok"
+    }
    ]
   }
  ]

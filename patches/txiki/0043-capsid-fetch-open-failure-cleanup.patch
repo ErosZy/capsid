@@ -1,0 +1,62 @@
+--- a/src/js/polyfills/fetch/fetch.js
++++ b/src/js/polyfills/fetch/fetch.js
+@@ -111,6 +111,36 @@
+ 
+         function abortClient() {
+             client.abort();
++        }
++
++        // A synchronous open failure does not deliver oncomplete. Release
++        // the same roots/listener as normal completion before rejecting.
++        function failRequest(error) {
++            activeClients.delete(client);
++
++            if (request.signal) {
++                request.signal.removeEventListener('abort', abortClient);
++            }
++
++            client.abort();
++
++            if (streamController) {
++                try {
++                    streamController.error(error);
++                } catch (_e) { /* already errored/closed */ }
++
++                streamController = null;
++            }
++
++            reject(error);
++        }
++
++        function openClient(body) {
++            try {
++                client.open(request.method, request.url, body);
++            } catch (error) {
++                failRequest(error);
++            }
+         }
+ 
+         // Create ReadableStream for response body
+@@ -261,18 +291,15 @@
+                 });
+             };
+ 
+-            client.open(request.method, request.url);
++            openClient();
+         } else if (request._bodySize > 0) {
+             // Known-size body - read it all and pass to open
+             request.arrayBuffer().then(function(buf) {
+-                client.open(request.method, request.url, new Uint8Array(buf));
+-            }).catch(function(err) {
+-                activeClients.delete(client);
+-                reject(err);
+-            });
++                openClient(new Uint8Array(buf));
++            }).catch(failRequest);
+         } else {
+             // No body
+-            client.open(request.method, request.url);
++            openClient();
+         }
+     });
+ }

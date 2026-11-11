@@ -365,6 +365,31 @@ void test_enforces_total_parser_buffer_limit() {
         "total parser buffer limit enforced");
 }
 
+void test_connection_lifetime_wire() {
+    namespace p=capsid::protocol;
+    require(p::capabilities_satisfy_closure(127),"previous capability closure remains valid");
+    require(p::capabilities_satisfy_closure(155) && p::capabilities_satisfy_closure(251),"lifetime capability closure");
+    require(!p::capabilities_satisfy_closure(128) && !p::capabilities_satisfy_closure(139) &&
+            !p::capabilities_satisfy_closure(153) && !p::capabilities_satisfy_closure(256),"lifetime dependencies and unknown bit rejected");
+    p::ConnectionLifetimePayload value;value.channel_id=0x04030201;value.retained=1;
+    std::vector<uint8_t> bytes;require(p::encode_connection_lifetime(value,&bytes),"lifetime payload encodes");
+    require(bytes==std::vector<uint8_t>({1,2,3,4,1,0,0,0}),"literal lifetime payload bytes");
+    p::ConnectionLifetimePayload decoded;std::string error;
+    require(p::decode_connection_lifetime(bytes.data(),bytes.size(),&decoded,&error) && decoded.channel_id==value.channel_id && decoded.retained==1,"lifetime payload decodes");
+    for(size_t size=0;size<8;++size)require(!p::decode_connection_lifetime(bytes.data(),size,&decoded,&error),"every truncated lifetime payload rejected");
+    bytes.push_back(0);require(!p::decode_connection_lifetime(bytes.data(),bytes.size(),&decoded,&error),"extra lifetime byte rejected");bytes.pop_back();
+    bytes[4]=2;require(!p::decode_connection_lifetime(bytes.data(),bytes.size(),&decoded,&error),"non-boolean lifetime state rejected");
+    value.channel_id=0;require(!p::encode_connection_lifetime(value,&bytes),"zero lifetime channel refused");
+    value.channel_id=1;value.retained=2;require(!p::encode_connection_lifetime(value,&bytes),"invalid lifetime state refused");
+    value.retained=0;require(p::encode_connection_lifetime(value,&bytes),"release payload encodes");
+    p::Frame frame;frame.version=4;frame.type=p::kConnectionLifetime;frame.payload=bytes;
+    std::vector<uint8_t> wire;require(p::encode_versioned(4,frame,&wire),"v4 lifetime frame encodes");
+    p::Parser v4(4);p::Frame output;require(v4.append(wire.data(),wire.size()) && v4.next(&output)==p::kParseFrame && output.type==28,"v4 lifetime frame parses");
+    require(!p::encode(frame,&wire),"legacy encoder never emits lifetime frames");
+    require(!p::encode_versioned(3,frame,&wire),"v3 never encodes lifetime frame");
+    frame.flags=1;require(!p::encode_versioned(4,frame,&wire),"lifetime flags rejected");frame.flags=0;
+    frame.request_id=1;require(!p::encode_versioned(4,frame,&wire),"lifetime cannot borrow request header identity");
+}
 }  // namespace
 
 int main() {
@@ -385,5 +410,6 @@ int main() {
     test_rejects_unknown_type_and_version();
     test_memory_metrics_frame_types();
     test_enforces_total_parser_buffer_limit();
+    test_connection_lifetime_wire();
     return 0;
 }

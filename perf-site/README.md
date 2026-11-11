@@ -13,27 +13,46 @@ Static GitHub Pages site presenting the release-line benchmark record
 
 ## Producing a data point
 
-From a tagged, clean-tree Release build on the canonical benchmark machine:
+Cold-start and density implement the sealed lane contract. QPS producer
+integration and actual same-session release measurements are still pending.
+The checked-in point remains an unverified historical observation. See
+[the measurement protocol](../bench/SPEC.md) and
+[the archive contract](../bench/perf-evidence.md).
+
+For the cold lane, use a clean measured Release build, all required binaries
+and actual build/session metadata prepared by the release controller:
 
 ```sh
-# 1. fixtures (cold-start lane) + trusted bytecode
-python3 bench/gen-cold-start-apps.py /tmp/cold-start-apps
-
-# 2. cold-start + warm + PSS (capsid source/bytecode, node, deno, workerd)
-ROUNDS=5 WARM=50 BUILD_DIR=build-release \
-  WORKERD_BIN=/path/to/workerd \
+# Generate into a new fixture directory; the lane verifies and snapshots it.
+python3 bench/gen-cold-start-apps.py /path/new-cold-apps
+OUT=bench/results/COLD APPS=/path/new-cold-apps BUILD_DIR=/path/release-build \
+  NODE_BIN=/path/node DENO_BIN=/path/deno WORKERD_BIN=/path/workerd \
+  CAPSID_BENCH_METADATA=/path/actual-run-metadata.json \
   bash bench/cold-start.sh
-
-# 3. QPS lane (capsid-host vs workerd vs node, frozen loadgen protocol)
-OUT=<dir> HOST_BIN=build-release/capsid-host \
-  WORKER=build-release/capsid-worker WORKERD_BIN=/path/to/workerd \
-  bash bench/qps-lane.sh
-
-# 4. merge into the site data
-python3 bench/collect-perf-point.py \
-  --cold-start <cold-start-out-dir> --qps <qps-out-dir> \
-  --version "0.2.x" --release "v0.2.2"
 ```
+
+The complete cold protocol is one discarded run plus five measured rounds per
+stack/size, with 50 validated warm requests per run. Restricted observation
+output cannot be collected as a published point. The future QPS lane must also
+produce the complete contract before the collection step can succeed.
+
+Once the real required lanes pass their same-session acceptance checks, use
+their sealed archives and the actual measured version/release. Choose and retain
+an explicit UTC generation timestamp for reproducible collection:
+
+```sh
+python3 bench/collect-perf-point.py \
+  --cold-start bench/results/COLD --qps bench/results/QPS \
+  --density bench/results/DENSITY \
+  --version "$MEASURED_VERSION" --release "$MEASURED_RELEASE" \
+  --generated-at "$GENERATED_AT"
+```
+
+Do not manufacture metadata for old/dirty binaries or combine independent
+sessions. The collector verifies origins, raw/correctness records, discarded
+cold runs, process/memory evidence and every sealed file. Stage with
+`bench/prepare-perf-site.py` so qualified links include the actual evidence.
+Four-viewport visual review and the user's publishing action remain separate.
 
 ## Publishing via GitHub Pages
 

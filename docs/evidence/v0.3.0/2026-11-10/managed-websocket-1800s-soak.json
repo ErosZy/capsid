@@ -1,0 +1,102 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 333,
+  "snapshotCommit": "54e274fc511502d3ccc2902aff4adf04ee0f7a02",
+  "inputs": {
+    "/mnt/e/capsid/build-v030-dev/evidence/fetch-encoded-layer-20261107/sdk78-managed-ws-soak-proposal-r6/run_managed_websocket_soak.mjs": "9ef4add551e5f6db17194ee792fb06feea6fbeee7ef5ca7edf4a3ab6f4f1dfd6",
+    "/root/capsid-verification-20261109/build-production/capsid-host": "752e8396b8b452263099ccddf97e1da21101226547fa6928b8087506abecb9c6",
+    "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node": "e237a2839d0cbdc9a9a2adda1a184afc0f5b20306ffbe923af5686550472d8a8"
+  },
+  "sourceCount": 5062,
+  "sameHostContinuousRun": true,
+  "requiredSeconds": 1800,
+  "requiredMinimumRounds": 200,
+  "formalPerformanceEvidence": false,
+  "validatedControls": "sdk78-managed-soak-controls-r1/run.json",
+  "fullV030GoalComplete": false,
+  "command": [
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+    "/mnt/e/capsid/build-v030-dev/evidence/fetch-encoded-layer-20261107/sdk78-managed-ws-soak-proposal-r6/run_managed_websocket_soak.mjs",
+    "--source-root",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2",
+    "--host",
+    "/root/capsid-verification-20261109/build-production/capsid-host",
+    "--worker",
+    "/root/capsid-verification-20261109/build-production/capsid-worker",
+    "--runtime-dir",
+    "/tmp/c78soak1",
+    "--output",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-managed-websocket-soak-linux-r1",
+    "--seconds",
+    "1800",
+    "--min-rounds",
+    "200",
+    "--memory-mode",
+    "production"
+  ],
+  "activeCommandPid": 415,
+  "exitCode": 0,
+  "seconds": 1711.286146624,
+  "result": {
+    "schema": "capsid-managed-websocket-soak-v1",
+    "status": "passed",
+    "complete": true,
+    "durationSecondsRequired": 1800,
+    "minimumRoundsRequired": 200,
+    "memoryMode": "production",
+    "hostSHA256": "752e8396b8b452263099ccddf97e1da21101226547fa6928b8087506abecb9c6",
+    "workerSHA256": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "inputs": {
+      "/root/capsid-verification-20261109/build-production/capsid-host": "752e8396b8b452263099ccddf97e1da21101226547fa6928b8087506abecb9c6",
+      "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+      "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/helpers/ws_host_backend.mjs": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+      "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/helpers/ws_interop_node_sdk.mjs": "dafba2e5535b84e6dcf10b86e2a4bc01302984d7fcdef2c074be95bc2ff0a35a"
+    },
+    "client": {
+      "node": "v24.14.0",
+      "undici": "7.21.0",
+      "ws": "8.22.0",
+      "sourceFiles": 17,
+      "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+    },
+    "formalPerformanceEvidence": false,
+    "fullV030GoalComplete": false,
+    "rounds": 4140,
+    "echoes": 66240,
+    "outboundEchoes": 4140,
+    "pendingDialCancellations": 4140,
+    "deployments": 2070,
+    "workerReplacements": 2070,
+    "queueRefusals": 4140,
+    "pausedReaders": 4140,
+    "elapsedSeconds": 1800.244,
+    "deliberateRetainedChannelControl": false,
+    "hostPid": 423,
+    "handshakeTransportEofs": 2070,
+    "maximumHostRssKiB": 25180,
+    "finalHostSample": {
+      "rssKiB": 25064,
+      "threads": 10,
+      "descriptors": 23
+    },
+    "finalResources": {
+      "channels": 0,
+      "active": 0,
+      "dials": 0,
+      "queue": 0,
+      "http": 0,
+      "drains": 2070,
+      "queueRejected": 4140,
+      "queueHighWater": 385
+    },
+    "shutdown": {
+      "code": 0,
+      "signal": null,
+      "forced": false
+    }
+  },
+  "resultSHA256": "de706ff4e4be4f68b888629698a6d60e63ff94077fc80bcdede3262b47004ba5",
+  "sourceAndBinariesUnchanged": true
+}

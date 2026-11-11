@@ -1,0 +1,96 @@
+{
+  "status": "runner-error",
+  "complete": true,
+  "pid": 21516,
+  "pidNamespace": "Windows",
+  "source": "D:\\capsid-verification-20261108\\c78sp1",
+  "build": "D:\\capsid-verification-20261108\\c78a",
+  "privateDirectory": "D:\\capsid-verification-20261108\\w78q3",
+  "artifactDirectory": "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1",
+  "sourceCount": 5068,
+  "snapshotCommit": "d251e93756e2cf35afd86cde9bd4d0d489c472c6",
+  "buildRecordSHA256": "936967539703b4379bc2733a3979f819114594bc3b8ceae90d2c18808178b842",
+  "registered": 842,
+  "unfiltered": true,
+  "steps": [
+    {
+      "label": "unfiltered-full",
+      "command": [
+        "D:\\Microsoft Visual Studio\\18\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+        "--test-dir",
+        "D:\\capsid-verification-20261108\\c78a",
+        "--parallel",
+        "1",
+        "--no-tests=error",
+        "--output-on-failure",
+        "--output-junit",
+        "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\junit.xml"
+      ],
+      "exitCode": 8,
+      "seconds": 9590.686999999976,
+      "stdoutSHA256": "0f86a6a53db008cbd9a7b1f40cd0c8381c248db6f709640fd7d1893acc40bdc2",
+      "stderrSHA256": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+    }
+  ],
+  "frozenInputs": {
+    "D:\\capsid-verification-20261108\\r8-qualified-windows-asan-r3\\providers\\lib\\cares.lib": "36e402b9a49255085beaf41a025bf9b830abc22efacffb5ca193d5aee63a6254",
+    "D:\\capsid-verification-20261108\\r8-qualified-windows-asan-r3\\providers\\lib\\libcrypto.lib": "766b536fd30ba520432ce475179ed8a19d4b8baaeb9c97e8f0b3c5450109bdc3",
+    "D:\\capsid-verification-20261108\\r8-qualified-windows-asan-r3\\providers\\lib\\libssl.lib": "3715c678c95217487a5f3e8b7c17e4538da4d9553dd744fc29b74a4a2dbc28b4",
+    "E:\\capsid\\build-v030-native\\node-24.14.0-d35efba0525442d4965d66d55c035b6c\\node-v24.14.0-win-x64\\node.exe": "63c259c81e5d472b5f11c8d506070130cb04a1ecf84b80377a34ed6ec9048088",
+    "E:\\capsid\\build-v030-native\\reference-windows-v1.20261010.1\\workerd.exe": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "D:\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe": "5b0741ee910ac72235cc0b6cef1b1d0e79aeedf4fe761fa439a7d3b157747cd7",
+    "D:\\capsid-verification-20261108\\c78a\\clang_rt.asan_dynamic-x86_64.dll": "c6dd9859b1f23b22f522c1fe87c3cde715641e51425430bbb4eabae03eb404a8",
+    "D:\\capsid-verification-20261108\\c78a\\vcruntime140.dll": "9f473f22b9fc1fd3d47b55fce6f780942ab09c992e3723718414db53d5b6972e",
+    "D:\\capsid-verification-20261108\\c78a\\vcruntime140_1.dll": "86c365d21ff124932327985e7789692d9acb8a60b52064ccfec18cad533e7d2e",
+    "D:\\capsid-verification-20261108\\c78a\\capsid-host.exe": "37ac922e0573ddd6b5d2e8acfe984632fe38d724ff4cc9d2ca8e7581d9b8c643",
+    "D:\\capsid-verification-20261108\\c78a\\capsid-worker.exe": "34951af6a35b24440a5d3550b01912a33c31c347859a9056f09ba2079aeb3f66"
+  },
+  "rootIntegrated": true,
+  "fullV030GoalComplete": false,
+  "originalCommandsPropertiesAndPerTestBudgetsUnchanged": true,
+  "shortNativeReportPathsAvoidMaxPathChangesToTestSemantics": true,
+  "msVcAddressSanitizerOnlyLsanAndUbsanNotClaimed": true,
+  "qualificationEnvironment": {
+    "CAPSID_WORKERD_REF": "E:\\capsid\\build-v030-native\\reference-windows-v1.20261010.1\\workerd.exe",
+    "CAPSID_WORKERD_REQUIRED": "1",
+    "CAPSID_WS_INTEROP_NODE_PACKAGE": "E:/capsid/build-v030-native/node-ws-8.22.0",
+    "CAPSID_WS_INTEROP_PYTHON": "E:/capsid/build-v030-native/python-3.12.3-42f18952b712413bb2548464e4698b3c/python.exe",
+    "CAPSID_WS_REPORT_DIR": "D:\\capsid-verification-20261108\\w78q3\\reports",
+    "CAPSID_WS_RUN_ID": "sdk78-wpt-soak-msvc-asan-unfiltered-r1-full",
+    "ASAN_OPTIONS": "abort_on_error=1:strict_string_checks=1"
+  },
+  "activeCommand": [
+    "D:\\Microsoft Visual Studio\\18\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+    "--test-dir",
+    "D:\\capsid-verification-20261108\\c78a",
+    "--parallel",
+    "1",
+    "--no-tests=error",
+    "--output-on-failure",
+    "--output-junit",
+    "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\junit.xml"
+  ],
+  "all842ResolvedDefinitionsMatchCompletedBuild": true,
+  "activeCommandPid": 22688,
+  "executed": 842,
+  "passed": 829,
+  "failures": [
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+    "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+    "worker_wpt_fetch_api_headers_headers_basic_any_js",
+    "worker_wpt_fetch_api_headers_headers_errors_any_js"
+  ],
+  "skipped": [
+    "host_single_worker_ab_emits_complete_evidence",
+    "worker_binding_sandbox_write",
+    "worker_binding_sandbox_read",
+    "worker_binding_sandbox_watch",
+    "worker_binding_sandbox_sqlite",
+    "worker_binding_sandbox_network",
+    "worker_binding_sandbox_wasi",
+    "worker_binding_sandbox_union"
+  ],
+  "exitCode": 8,
+  "error": "Traceback (most recent call last):\n  File \"E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\qualify-sdk78-wpt-soak-msvc-asan-r1.py\", line 79, in <module>\n    guard()\n  File \"E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\qualify-sdk78-wpt-soak-msvc-asan-r1.py\", line 47, in guard\n    assert all(sha(Path(p))==h for p,h in {**files,**ctest_files}.items())\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+}

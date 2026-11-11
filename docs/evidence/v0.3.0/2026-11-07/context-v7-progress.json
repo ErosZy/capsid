@@ -1,0 +1,38 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-07T06:16:09.777386+00:00",
+  "scope": "Private v8 fixes the measured single-read branch context error/closed/release behavior; broader ownership remains open.",
+  "mainRuntimeSHA256": "e84a2e58510c027f2f8f6ddd4255d5253aa70729fc45663646d08d3f77b52ca6",
+  "originalV7SingleReadFailures": 36,
+  "targetedContextCases": 36,
+  "actualReferenceCases": 24,
+  "fullPublicStateMatches": 18,
+  "remainingGzipReadBoundaryDifferences": 18,
+  "rejectedControls": 1674,
+  "reviews": [
+    {
+      "file": "build-v030-dev/evidence/fetch-branch-context-20261107/native-v8-context-review.json",
+      "sha256": "75c5c5674e7615a971c8630766a9cca2263d7820dc09c3f2666133e72be65c5f"
+    },
+    {
+      "file": "build-v030-dev/evidence/fetch-branch-context-20261107/native-asan-v8-context-review.json",
+      "sha256": "4a58f589b0ac3e738d9f55f4d7e67891429c96f7e14b0df1a8ea9cb746848f64"
+    },
+    {
+      "file": "build-v030-dev/evidence/fetch-branch-context-20261107/linux-v8-context-review.json",
+      "sha256": "8483546bfadf68167636f1e204a2509c74196b0b82e93fec61193aeb5d325918"
+    }
+  ],
+  "broaderActionBaseline": {
+    "file": "build-v030-dev/evidence/fetch-branch-context-20261107/action-baseline-audit.json",
+    "sha256": "6c18217dcc55f6ae48664fc3edf039a5b14b8b12755361926fe1fbdbd943b1fd"
+  },
+  "broaderActionDifferences": 51,
+  "privateGcRegression": {
+    "file": "build-v030-dev/evidence/fetch-branch-lifetime-20261107/v8-progress-audit.json",
+    "sha256": "929aa377f8b6530386f427437c3c894cb147839bb8799cf5c8b08d6f31490ef6"
+  },
+  "privateJsIntegrated": false,
+  "fullBranchOwnershipRequirementComplete": false,
+  "fullV030GoalComplete": false
+}

@@ -8,6 +8,9 @@
 // stdout never carries readiness or logs; diagnostics go to stderr.
 
 #include <iostream>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 
 #include "host/single_worker_server.h"
 #include "host/static_pool_server.h"
@@ -20,14 +23,18 @@
 #include "host/config.h"
 #include "host/binding_registry.h"
 #include "host/generation_pool.h"
+#include "host/generation_reclaimer.h"
 #include "host/local_capsid_policy.h"
 #include "host/listener_cors.h"
 #if !defined(_WIN32)
 #include "host/host_config_model.h"
 #include "host/managed_admin_backend.h"
 #include "host/managed_listener.h"
+#include "host/managed_registry.h"
+#include "host/quarantine_dispatcher.h"
 #endif
 #include "host/metrics.h"
+#include "host/parent_stop_monitor.h"
 #include "host/process_snapshot.h"
 #include "host/request_normalization.h"
 #if !defined(_WIN32)
@@ -520,8 +527,7 @@ std::string read_host_config(const std::string& path) {
     // M2 item 7 (design §12): the process-wide structured log and metrics
     // registry. Created after the config is validated so their lifetime
     // covers every option object below; injected into the coordinator,
-    // supervisors and the Admin API. The worker-pid atomic tracks the
-    // currently active worker for the render-time process snapshot.
+    // supervisors and the Admin API.
     auto structured_log = std::make_unique<capsid::host::StructuredLog>(
         [](const std::string& line) {
             // One JSON object per line on stderr (design §12.2); a torn
@@ -532,9 +538,8 @@ std::string read_host_config(const std::string& path) {
             (void)written;
         });
     auto metrics = std::make_unique<capsid::host::MetricsRegistry>();
-    std::atomic<pid_t> worker_pid{0};
-    metrics->set_process_snapshot_provider(
-        capsid::host::default_process_snapshot_provider(&worker_pid));
+    auto channel_budget=std::make_shared<capsid::host::ServiceChannelBudget>(config.capacity.channels);
+    metrics->observe_channel_budget(channel_budget);
     const capsid::host::ResolvedRecoveryPolicy recovery_resolved =
         capsid::host::resolve_recovery_policy(config.recovery);
     if (!recovery_resolved.ok) {
@@ -547,6 +552,7 @@ std::string read_host_config(const std::string& path) {
     std::vector<capsid::host::ManagedHostOptions*> app_options;
     for (const std::string& application : applications) {
         auto options = std::make_unique<capsid::host::ManagedHostOptions>();
+        options->channels = config.channels;
         options->applications_root_fd = apps_fd;
         options->secret_root_template_fd = secrets_fd;
         options->state_root = config.state_root;
@@ -582,12 +588,15 @@ std::string read_host_config(const std::string& path) {
     // deploy/recover outcome — so replacements respawn the same artifact
     // and effective config, and the route identity survives replacement.
     auto routing = std::make_shared<capsid::host::RoutingTable>();
+    metrics->set_process_snapshot_provider(
+        capsid::host::process_snapshot_provider([routing] {
+            return static_cast<pid_t>(routing->worker_process_id());
+        }));
     // App -> ACTIVE pool (the only pool a new request may route to).
     std::map<std::string,
              std::shared_ptr<capsid::host::GenerationPool>> active_pools;
-    // Drained (retired or replaced) pools stay alive until shutdown: the
-    // pool destructor drains and joins, and holding the shared_ptr keeps
-    // that off the Admin worker thread.
+    // Retired/replaced pools stay pinned until their completion callback hands
+    // them to the reclaimer. Joining never runs on their own pump thread.
     std::vector<std::shared_ptr<capsid::host::GenerationPool>> draining_pools;
     // §9.6-6 retired Apps: the name keeps a route-level tombstone (no
     // pool) so the router answers 404 after retire — the durable retire
@@ -637,21 +646,14 @@ std::string read_host_config(const std::string& path) {
     // replacement factory is rejected (factory null) — §8.3 replacement is
     // not optional. The pool is not yet routed, so it has no in-flight
     // requests when the sink is installed.
-    // Active workers owned by this process: App -> worker. Direction A:
-    // this map is a PURE OBSERVER — entries are overwritten and erased by
-    // the pool's lifecycle callbacks, but never destroyed here. The
-    // executor's worker thread is the sole reaper (destroying a worker
-    // here while its old pool executor still holds it is the dual-engine
-    // UAF); the map only mirrors the pool's fleet for the metrics
-    // snapshot (worker_pid).
-    std::map<std::string, capsid_worker*> active_workers;
-    std::mutex workers_mutex;
     // M2 item 5b: the process-global fair startup-permit queue (design
     // §10.5.6). Both startup paths (deploy via the Admin backend,
     // replacement via the generation pools) share this single instance;
     // the queue decides order and fairness, capacity still decides
     // concurrency. The bound matches the Admin pending-queue bound.
     capsid::host::StartupPermitCoordinator startup_permits(&g_stop, 8);
+    capsid::host::GenerationReclaimer generation_reclaimer;
+    capsid::host::QuarantineDispatcher quarantine_dispatcher;
     const auto adopt_generation =
         [&](const std::string& application,
             const std::vector<capsid_worker*>& workers,
@@ -672,75 +674,95 @@ std::string read_host_config(const std::string& path) {
             pool_options.workers =
                 static_cast<std::uint32_t>(workers.size());
             pool_options.factory = factory;
+            pool_options.channel_budget = channel_budget;
             pool_options.recovery = recovery_resolved.policy;
             // Direction A: the pool is the only recovery engine, so it
             // owns the shared fair startup-permit queue for its
-            // replacement spawns, and it reports fleet lifecycle changes
-            // (started/exited/quarantine) through callbacks — the worker
-            // map is a pure observer and never destroys a worker.
+            // replacement spawns. Process metrics read the published
+            // routing snapshot and never borrow a worker handle.
             pool_options.startup_permits = &startup_permits;
             pool_options.log = structured_log.get();
             pool_options.metrics = metrics.get();
-            pool_options.on_worker_started =
-                [&, application](const capsid::host::WorkerExecutor* executor) {
-                    std::lock_guard<std::mutex> lock(workers_mutex);
-                    capsid_worker* worker = executor->worker();
-                    active_workers[application] = worker;
-                    // M2 item 7 (§12.1): the render-time process snapshot
-                    // reads the currently active worker's RSS.
-                    worker_pid.store(
-                        worker != nullptr
-                            ? static_cast<pid_t>(capsid_worker_pid(worker))
-                            : 0);
-                };
-            pool_options.on_worker_exited =
-                [&, application](const capsid::host::WorkerExecutor* executor) {
-                    std::lock_guard<std::mutex> lock(workers_mutex);
-                    const auto existing = active_workers.find(application);
-                    if (existing != active_workers.end() &&
-                        existing->second == executor->worker()) {
-                        active_workers.erase(existing);
-                        worker_pid.store(0);
-                    }
-                };
-            pool_options.on_quarantine = [&, application]() {
-                // The durable tombstone: write BEFORE the pool's drain
-                // signal (the pool issues it right after this callback),
-                // so a crash in the window leaves a quarantined document,
-                // which boot recovery honors (kKeepQuarantined never
-                // resurrects). A failed write is logged by the coordinator;
-                // the recovery is stopped either way.
-                capsid::host::ManagedHostOptions* target = nullptr;
-                for (capsid::host::ManagedHostOptions* options : app_options) {
-                    if (options->application == application) {
-                        target = options;
-                        break;
-                    }
-                }
-                if (target != nullptr) {
-                    capsid::host::OperationStatus status;
-                    (void)managed_quarantine(target, &status);
-                }
-                // The observer map is cleared without destroying anything:
-                // the pool's drain reaps the workers through their
-                // executors (the sole reaper).
-                std::lock_guard<std::mutex> lock(workers_mutex);
-                active_workers.erase(application);
-                worker_pid.store(0);
-            };
             const std::uint32_t pool_size = pool_options.workers;
+            const auto capacity = std::make_shared<capsid::host::WorkerPoolCapacityLease>(
+                &ledger, application, pool_size);
+            pool_options.capacity_lease = capacity;
+            // Links this drain hook to the pool created from the same
+            // prepare call (filled right after create_adopted). WEAK by
+            // design: create_adopted requires no self-held strong
+            // reference (see the pump-thread note there) — an aborted
+            // activation must be able to destroy its never-published
+            // pool through plain refcount, and a pool already under
+            // destruction must not re-arm itself.
+            const auto pool_box = std::make_shared<
+                std::weak_ptr<capsid::host::GenerationPool>>();
+            capsid::host::ManagedHostOptions* target = nullptr;
+            for (auto* options : app_options) {
+                if (options->application == application) { target = options; break; }
+            }
+            const std::weak_ptr<capsid::host::RoutingTable> observed_routes = routing;
+            const auto quarantine = std::make_shared<capsid::host::QuarantineRequest>(
+                target, generation_digest, [observed_routes, pool_box, application, &pools_mutex, capacity] {
+                    bool current_instance = false;
+                    {
+                        std::lock_guard<std::mutex> lock(pools_mutex);
+                        const auto table = observed_routes.lock();
+                        const auto snapshot = table ? table->load() : nullptr;
+                        const auto current = snapshot ? snapshot->find(application) : nullptr;
+                        // Ownership comparison does not pin an obsolete
+                        // pool whose destructor could join a waiting pump.
+                        current_instance = current && !pool_box->owner_before(current) &&
+                                           !current.owner_before(*pool_box);
+                    }
+                    // Still inside the App operation lock, before the
+                    // barrier releases quarantine shutdowns. Never hold
+                    // pools_mutex while settling capacity.
+                    if (current_instance) capacity->begin_drain();
+                    return current_instance;
+                });
+            pool_options.quarantine_completion =
+                std::shared_ptr<const std::atomic<bool>>(quarantine, &quarantine->completed);
+            pool_options.on_quarantine = [&quarantine_dispatcher, quarantine] {
+                (void)quarantine_dispatcher.enqueue(quarantine);
+            };
             // §9.4: the reaper-finished instant releases the pool's
-            // capacity count. The hook captures the size by value and
-            // touches only the ledger (never the pools map or the plan),
-            // so it is safe on the pool's pump thread.
+            // capacity count and (P1, review §12.2) hands the Host's
+            // parked reference from draining_pools to the reclaimer.
+            // Locking FIRST: if the weak box is gone the pool is under
+            // destruction on the abort path, where abort_reserve already
+            // settled the ledger — no release, no parking. The hook
+            // touches the ledger and pools_mutex only, never the pool
+            // itself (its destructor joins this very thread).
             pool_options.on_drain_complete =
-                [&ledger, application, pool_size] {
-                    ledger.release_drained(application, pool_size);
+                [&draining_pools,
+                 &generation_reclaimer, &pools_mutex, pool_box] {
+                    std::shared_ptr<capsid::host::GenerationPool> pool;
+                    {
+                        std::lock_guard<std::mutex> lock(pools_mutex);
+                        pool = pool_box->lock();
+                    }
+                    if (pool == nullptr) {
+                        return;
+                    }
+                    std::lock_guard<std::mutex> lock(pools_mutex);
+                    for (auto it = draining_pools.begin();
+                         it != draining_pools.end();) {
+                        if (*it == pool) {
+                            it = draining_pools.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                    generation_reclaimer.enqueue(pool);
                 };
             std::string pool_error;
             std::shared_ptr<capsid::host::GenerationPool> pool =
                 capsid::host::GenerationPool::create_adopted(
                     std::move(pool_options), workers, &pool_error);
+            {
+                std::lock_guard<std::mutex> lock(pools_mutex);
+                *pool_box = pool;
+            }
             if (pool == nullptr) {
                 return nullptr;
             }
@@ -836,9 +858,26 @@ std::string read_host_config(const std::string& path) {
                 active_pools.erase(entry);
             }
         }
-        // The plan (and with it the never-published pool) dies on return;
-        // the still-serving old pool stays parked in draining_pools until
-        // shutdown (harmless — stop_and_join is idempotent).
+        // Prepare parked the still-serving old pool in draining_pools for
+        // the commit that never came: undo that reference or repeated
+        // failed activations accumulate parked copies (review §2).
+        if (plan->old_pool != nullptr) {
+            for (auto it = draining_pools.begin();
+                 it != draining_pools.end();) {
+                if (*it == plan->old_pool) {
+                    it = draining_pools.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+        // The plan (and with it the never-published pool) dies on return:
+        // no strong self-hold exists (the drain hook's box is weak), so
+        // the plain refcount drop runs ~GenerationPool on THIS
+        // coordinator thread — request_drain + wait reap the fleet and
+        // join the pump without any parking. Its ledger count was
+        // already returned by abort_reserve, and the weak box makes the
+        // late drain hook a no-op instead of a second release.
     };
     // ---- §9.3 retire transaction callbacks ----
     const auto prepare_retire =
@@ -899,6 +938,16 @@ std::string read_host_config(const std::string& path) {
                 active_pools[plan->application] = plan->pool;
             }
             retired_apps.erase(plan->application);
+            // And undo prepare's parking reference for the same reason
+            // as the activation abort.
+            for (auto it = draining_pools.begin();
+                 it != draining_pools.end();) {
+                if (*it == plan->pool) {
+                    it = draining_pools.erase(it);
+                } else {
+                    ++it;
+                }
+            }
         } else {
             retired_apps.erase(plan->application);
         }
@@ -918,6 +967,9 @@ std::string read_host_config(const std::string& path) {
         for (const auto& pool : all) {
             pool->stop_and_join();
         }
+        // Every producer has left its completion hook. Drain queued joins
+        // before the ledger, observer maps, listener and log can disappear.
+        generation_reclaimer.stop_and_join();
     };
     // Wire the §9.3 transaction callbacks and the §9.4 ledger into every
     // App's coordinator options.
@@ -945,6 +997,9 @@ std::string read_host_config(const std::string& path) {
             fail("cannot recover active application " + options->application);
         }
         if (!recovered.workers.empty()) {
+            // Keep a recovered pool's publication in the same App lock
+            // domain as queued quarantine identity checks.
+            capsid::host::AppOperationLock recovery_activation(options->application);
             // The reserve was committed inside run_recover_operation
             // (reserve_fresh before any spawn); a fresh adoption has
             // nothing further to settle.
@@ -957,6 +1012,7 @@ std::string read_host_config(const std::string& path) {
                 fail("cannot activate the recovered pool for application " +
                      options->application);
             }
+            pool->capacity_lease()->activate_fresh();
             {
                 std::lock_guard<std::mutex> lock(pools_mutex);
                 active_pools[options->application] = pool;
@@ -990,6 +1046,8 @@ std::string read_host_config(const std::string& path) {
         listener_options.config = config.listeners[0];
         listener_options.routing = routing;
         listener_options.log = structured_log.get();
+        listener_options.metrics = metrics.get();
+        listener_options.channel_service_budget = channel_budget;
         data_plane = std::make_unique<capsid::host::ManagedListener>(
             std::move(listener_options));
         std::string listener_error;
@@ -1010,10 +1068,10 @@ std::string read_host_config(const std::string& path) {
         supervisor_options.policy = recovery_resolved.policy;
         supervisor_options.current_pool =
             [&, application = options->application]()
-            -> capsid::host::GenerationPool* {
+            -> std::shared_ptr<capsid::host::GenerationPool> {
                 std::lock_guard<std::mutex> lock(pools_mutex);
                 const auto existing = active_pools.find(application);
-                return existing != active_pools.end() ? existing->second.get()
+                return existing != active_pools.end() ? existing->second
                                                       : nullptr;
             };
         supervisor_options.stop_requested = &g_stop;
@@ -1095,6 +1153,7 @@ std::string read_host_config(const std::string& path) {
     for (const auto& supervisor : supervisors) {
         supervisor->join();
     }
+    quarantine_dispatcher.stop_and_join();
     close(state_fd);
     // M2 item 7 (§12.2): the shutdown event lands, then both lanes drain
     // (the supervisor join above already closed every observed channel).
@@ -1104,9 +1163,46 @@ std::string read_host_config(const std::string& path) {
     return 0;
 }
 #endif  // !defined(_WIN32) managed mode
+
+// Keep the watcher inside this call so it is joined before the caller's
+// server is destroyed, including when startup or run() throws.
+template <typename Server>
+int run_with_parent_stop(
+    Server& server, const std::vector<std::uint8_t>& bundle,
+    std::unique_ptr<capsid::host::ParentStopMonitor> monitor,
+    capsid::host::StructuredLog* log) {
+    std::string error;
+    if (monitor && !monitor->start([&server] { server.request_stop(); }, &error)) {
+        log->log(capsid::host::LogLane::kControl,
+                 {.event = capsid::host::log_events::kStartup,
+                  .result = "fail", .message = error});
+        return 1;
+    }
+    int result = server.run(bundle);
+    if (monitor) {
+        monitor->cancel();
+        if (!monitor->error().empty()) {
+            log->log(capsid::host::LogLane::kControl,
+                     {.event = capsid::host::log_events::kShutdown,
+                      .result = "fail", .message = monitor->error()});
+            result = 1;
+        }
+    }
+    return result;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
+#if defined(__GLIBC__)
+    // P1 follow-up (review §12.2): transient pool/replacement threads
+    // each parked a 64 MiB glibc malloc-arena reservation in the Host's
+    // address space for its whole lifetime. Retired generations are now
+    // destroyed promptly, so the thread population is small and stable;
+    // cap the arena count so address space does not creep per
+    // replacement burst. Threads beyond the cap share arenas (no
+    // failure mode), only allocation contention.
+    mallopt(M_ARENA_MAX, 8);
+#endif
     std::map<std::string, std::string> values;
     for (int index = 1; index < argc; index += 2) {
         const char* key = argv[index];
@@ -1160,7 +1256,45 @@ int main(int argc, char** argv) {
     if (mode != "single-worker" && mode != "static-pool") {
         fail("--mode must be single-worker, static-pool or managed");
     }
+    // Reject typos before source/config I/O, worker creation or listener bind.
+    // Managed mode above retains its own stricter three-key grammar.
+    static constexpr std::string_view known_arguments[] = {
+        "mode", "worker", "source-bundle",
+        "source-name", "application", "listen",
+        "routing", "routing-suffix", "routing-trusted",
+        "public-scheme", "public-authority", "request-timeout-ms",
+        "initial-stream-window", "strict-sandbox", "ready-fd",
+        "stop-fd", "workers", "max-inflight-per-worker",
+        "queue-requests", "queue-header-bytes", "queue-timeout",
+        "max-streaming-inflight", "stream-idle-timeout", "write-timeout",
+        "capsid-json", "secrets-root", "bindings-root",
+        "channels-total", "pending-dials-total", "channel-queue-bytes-total",
+        "listener-channels", "listener-channel-queue-bytes", "cors-origins",
+        "cors-methods", "cors-headers", "cors-max-age",
+    };
+    for (const auto& argument : values) {
+        bool known = false;
+        for (const auto name : known_arguments) {
+            if (argument.first == name) { known = true; break; }
+        }
+        if (!known) fail("unknown argument: --" + argument.first);
+    }
     capsid::host::SingleWorkerServerOptions options;
+    const auto channel_count = [&](const char *name, uint64_t fallback) {
+        const auto found=values.find(name);
+        return found==values.end() ? fallback : parse_positive_integer(found->second,name);
+    };
+    const auto channel_bytes = [&](const char *name, uint64_t fallback) {
+        const auto found=values.find(name); uint64_t parsed=0;
+        if(found==values.end()) return fallback;
+        if(!capsid::host::parse_size_bytes(found->second,&parsed) || !parsed) fail(std::string("invalid --")+name);
+        return parsed;
+    };
+    options.channel_service_limits.channels=channel_count("channels-total",1024);
+    options.channel_service_limits.pending_dials=channel_count("pending-dials-total",128);
+    options.channel_service_limits.queue_bytes=channel_bytes("channel-queue-bytes-total",16u*1024u*1024u);
+    options.channel_listener_limits.channels=channel_count("listener-channels",128);
+    options.channel_listener_limits.queue_bytes=channel_bytes("listener-channel-queue-bytes",16u*1024u*1024u);
     options.worker_path = require("worker");
     // The source bundle is either the explicit --source-bundle (with its
     // --source-name URL) or the capsid.json entry resolved after the local
@@ -1407,7 +1541,7 @@ int main(int argc, char** argv) {
 
     // Static pool: a positive worker count within the fixed practical limit,
     // each worker owning one shard (its own process and event loop) sharing
-    // one SO_REUSEPORT listener. The pool keeps the pool-level READY contract
+    // one pool-owned listener. The pool keeps the pool-level READY contract
     // and SIGTERM-bounded shutdown; single-worker mode is unchanged.
     std::uint32_t workers = 1;
     if (mode == "static-pool") {
@@ -1616,6 +1750,19 @@ int main(int argc, char** argv) {
     }
 #endif
 
+    std::unique_ptr<capsid::host::ParentStopMonitor> parent_stop;
+    if (const auto it = values.find("stop-fd"); it != values.end()) {
+        const std::uint64_t stop_fd = parse_positive_integer(it->second, "stop-fd");
+        if (stop_fd < 3 || stop_fd > static_cast<std::uint64_t>(
+                std::numeric_limits<short>::max()) || stop_fd == ready_fd) {
+            fail("--stop-fd must be a descriptor above 2, distinct from --ready-fd");
+        }
+        std::string error;
+        parent_stop = capsid::host::ParentStopMonitor::create(
+            static_cast<int>(stop_fd), &error);
+        if (!parent_stop) fail("--stop-fd: " + error);
+    }
+
     const std::vector<std::uint8_t> bundle =
         read_bundle(options.source_bundle_path);
 
@@ -1657,14 +1804,16 @@ int main(int argc, char** argv) {
         // managed-pool batch) and override the template when set.
         pool_options.worker_options = std::move(options);
         capsid::host::StaticPoolServer pool(std::move(pool_options));
-        const int exit_code = pool.run(bundle);
+        const int exit_code = run_with_parent_stop(
+            pool, bundle, std::move(parent_stop), structured_log.get());
         structured_log->log(capsid::host::LogLane::kControl,
                             {.event = capsid::host::log_events::kShutdown});
         structured_log->flush();
         return exit_code;
     }
     capsid::host::SingleWorkerServer server(std::move(options));
-    const int exit_code = server.run(bundle);
+    const int exit_code = run_with_parent_stop(
+        server, bundle, std::move(parent_stop), structured_log.get());
     structured_log->log(capsid::host::LogLane::kControl,
                         {.event = capsid::host::log_events::kShutdown});
     structured_log->flush();

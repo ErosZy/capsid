@@ -1,0 +1,212 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -50,6 +50,9 @@
+ 
+ typedef struct {
+     JSContext *ctx;
++    struct list_head link;
++    bool registered;
++    bool context_cancelled;
+     JSValue callbacks[HC_CALLBACK_MAX];
+     void *ctx_data; /* captured async context */
+     void *owner; /* immutable Binding resource owner */
+@@ -100,6 +103,7 @@
+ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
+     TJSHttpClient *h = JS_GetOpaque(val, tjs_httpclient_class_id);
+     if (h) {
++        if (h->registered) list_del(&h->link);
+         /* defensive: the synchronous tjs_httpclient_done() path releases
+            at completed=true; GC can still collect an abandoned client */
+         if (h->ctx_data && h->qrt->async_ctx_hooks.release) {
+@@ -161,7 +165,7 @@
+     TJSRuntime *qrt = TJS_GetRuntime(ctx);
+ 
+     JSValue func = h->callbacks[callback];
+-    if (qrt->freeing || !JS_IsFunction(ctx, func)) {
++    if (h->context_cancelled || qrt->freeing || !JS_IsFunction(ctx, func)) {
+         for (int i = 0; i < argc; i++) {
+             JS_FreeValue(ctx, argv[i]);
+         }
+@@ -176,6 +180,10 @@
+ }
+ 
+ static void tjs_httpclient_done(TJSHttpClient *h) {
++    if (h->registered) {
++        list_del(&h->link);
++        h->registered = false;
++    }
+     /* releases the captured async context exactly once, synchronously at
+        the completed=true transition point (never deferred to the GC
+        finalizer) — this is what lets a clean abort reuse the worker */
+@@ -1100,6 +1108,8 @@
+     }
+ 
+     JS_SetOpaque(obj, h);
++    list_add_tail(&h->link, &h->qrt->http_clients);
++    h->registered = true;
+     return obj;
+ }
+ 
+@@ -1265,6 +1275,9 @@
+     if (!h) {
+         return JS_EXCEPTION;
+     }
++    if (h->context_cancelled) {
++        return JS_ThrowTypeError(ctx, "HttpClient context has ended");
++    }
+ 
+     if (h->sent) {
+         return JS_ThrowTypeError(ctx, "Request already sent");
+@@ -1393,44 +1406,41 @@
+     return JS_UNDEFINED;
+ }
+ 
++static void tjs_httpclient_cancel(TJSHttpClient *h, bool notify) {
++    if (h->completed) return;
++    bool resolving = h->resolving || h->dns_timer_init || h->dns_results_pending;
++    struct lws *wsi = h->wsi;
++    /* Preserve abort() on a client which has not been opened. Owner teardown
++     * also retires constructed clients, so they cannot later start new I/O. */
++    if (notify && !resolving && !wsi) return;
++    h->completed = true;
++    h->context_cancelled = !notify;
++    if (resolving) h->resolve_cancelled = true;
++    if (wsi) lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
++    if (notify) {
++        JSValue error = JS_NewString(h->ctx, "ABORTED");
++        maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++    }
++    tjs_httpclient_done(h);
++    /* A protocol-state timeout may be overwritten by pending handshake
++     * progress. The independent timer closes outside any current callback. */
++    if (wsi) lws_set_timer_usecs(wsi, 1);
++}
++
++void tjs_cancel_context_httpclients(JSContext *ctx,
++    bool (*matches)(void *ctx_data, void *opaque), void *opaque) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    struct list_head *el, *next;
++    list_for_each_safe(el, next, &qrt->http_clients) {
++        TJSHttpClient *h = list_entry(el, TJSHttpClient, link);
++        if (matches(h->ctx_data, opaque)) tjs_httpclient_cancel(h, false);
++    }
++}
++
+ static JSValue tjs_httpclient_abort(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSHttpClient *h = tjs_httpclient_get(ctx, this_val);
+-    if (!h) {
+-        return JS_EXCEPTION;
+-    }
+-
+-    if (!h->completed) {
+-        if (h->resolving || h->dns_timer_init || h->dns_results_pending) {
+-            /* uv_getaddrinfo cannot be cancelled; the resolve callback
+-             * observes resolve_cancelled and releases the prevent-GC
+-             * reference instead of connecting */
+-            h->resolve_cancelled = true;
+-            h->completed = true;
+-
+-            JSValue error = JS_NewString(ctx, "ABORTED");
+-            maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+-            tjs_httpclient_done(h);
+-        } else if (h->wsi) {
+-            h->completed = true;
+-
+-            struct lws *wsi = h->wsi;
+-
+-            lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
+-
+-            JSValue error = JS_NewString(ctx, "ABORTED");
+-            maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+-            tjs_httpclient_done(h);
+-
+-            /* Use the independent application timer: queued connection or
+-             * handshake progress can overwrite the protocol-state timeout
+-             * after abort() returns, losing an asynchronous close set there.
+-             * TIMER sees completed=true, tears down and returns -1. It runs
+-             * outside the current lws callback, so aborts from ondata remain
+-             * safe as well. */
+-            lws_set_timer_usecs(wsi, 1);
+-        }
+-    }
+-
++    if (!h) return JS_EXCEPTION;
++    tjs_httpclient_cancel(h, true);
+     return JS_UNDEFINED;
+ }
+ 
+--- a/src/js/polyfills/fetch/fetch.js
++++ b/src/js/polyfills/fetch/fetch.js
+@@ -61,9 +61,9 @@
+     }));
+ }
+ 
+-// Keep strong references to active clients to prevent premature GC
+-const activeClients = new Set();
+-
++// NativeHttpClient holds itself while DNS/socket callbacks are outstanding.
++// Its callback closures retain the JS wrapper. A second module-global root
++// would keep silently cancelled connection resources alive indefinitely.
+ export function fetch(input, init) {
+     const rawUrl = typeof input === 'string' ? input : input?.url;
+ 
+@@ -102,8 +102,6 @@
+             client.setAllowInsecure(true);
+         }
+ 
+-        activeClients.add(client);
+-
+         let responseResolved = false;
+         let streamController = null;
+         let responseStatus, responseStatusText, responseUrl;
+@@ -116,8 +114,6 @@
+         // A synchronous open failure does not deliver oncomplete. Release
+         // the same roots/listener as normal completion before rejecting.
+         function failRequest(error) {
+-            activeClients.delete(client);
+-
+             if (request.signal) {
+                 request.signal.removeEventListener('abort', abortClient);
+             }
+@@ -195,8 +191,6 @@
+ 
+         // Called when request completes (success or error)
+         client.oncomplete = function(error, reason) {
+-            activeClients.delete(client);
+-
+             if (request.signal) {
+                 request.signal.removeEventListener('abort', abortClient);
+             }
+--- a/src/private.h
++++ b/src/private.h
+@@ -159,6 +159,7 @@
+         JSValue internal_core;
+         JSValue internal_message_pipe;
+     } builtins;
++    struct list_head http_clients; /* unfinished native clients, no JS roots */
+     struct list_head pending_rejections;
+     struct list_head outstanding_rejections;
+ };
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -180,6 +180,10 @@
+ void tjs_async_context_checkpoint(JSContext *ctx);
+ void tjs_cancel_context_timers(JSContext *ctx,
+     bool (*matches)(void *ctx_data, void *opaque), void *opaque);
++/* Cancel matching unfinished HTTP resources without invoking application JS.
++ * The native socket/DNS completion still releases its own prevent-GC root. */
++void tjs_cancel_context_httpclients(JSContext *ctx,
++    bool (*matches)(void *ctx_data, void *opaque), void *opaque);
+ /* Private cleanup tasks survive application timer cancellation. */
+ JSValue tjs_queue_async_cleanup(JSContext *ctx, JSValueConst callback);
+ 
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -567,6 +567,7 @@
+     /* unhandled promise rejection tracker */
+     /* Pending rejection tracking — must be initialized before the rejection
+      * tracker is installed and before any bootstrap code evaluates. */
++    init_list_head(&qrt->http_clients);
+     init_list_head(&qrt->pending_rejections);
+     init_list_head(&qrt->outstanding_rejections);
+ 

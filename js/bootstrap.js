@@ -3,6 +3,8 @@ import 'txiki-polyfills/self.js';
 import 'txiki-polyfills/timers.js';
 import 'txiki-polyfills/event-target-polyfill.js';
 import './dom-exception.js';
+import { ErrorEvent } from './events.js';
+import { dispatchTrustedEvent } from 'txiki-polyfills/event-target.js';
 import 'txiki-polyfills/structured-clone.js';
 import './message-channel.js';
 import 'txiki-polyfills/text-encoding.js';
@@ -26,12 +28,13 @@ import {
 import 'txiki-polyfills/crypto/crypto.js';
 import { CryptoKey } from 'txiki-polyfills/crypto/crypto-key.js';
 import { SubtleCrypto } from 'txiki-polyfills/crypto/subtle.js';
-import '../vendor/txiki.js/node_modules/web-streams-polyfill/dist/polyfill.js';
+import './streams.js';
 import 'txiki-polyfills/compression-streams.js';
 import 'txiki-polyfills/wasm.js';
 import './wasm.js';
 
 import core from 'tjs:internal/core';
+import { transferWebSocket } from './websocket.js';
 import { profileGlobalNames } from './profile-manifest.js';
 
 configureFetchLimits(
@@ -340,29 +343,10 @@ Object.defineProperty(globalThis, 'reportError', {
         } else {
             message = `Uncaught ${String(error)}`;
         }
-        const event = new ErrorEvent(error);
-        Object.defineProperty(event, 'cancelable', {
-            configurable: true, enumerable: true, value: true, writable: true,
+        const event = new ErrorEvent('error', {
+            cancelable: true, error, message, filename, lineno, colno,
         });
-        Object.defineProperty(event, 'message', {
-            configurable: true, enumerable: true, value: message,
-        });
-        if (filename) {
-            Object.defineProperty(event, 'filename', {
-                configurable: true, enumerable: true, value: filename,
-            });
-        }
-        if (lineno) {
-            Object.defineProperty(event, 'lineno', {
-                configurable: true, enumerable: true, value: lineno,
-            });
-        }
-        if (colno) {
-            Object.defineProperty(event, 'colno', {
-                configurable: true, enumerable: true, value: colno,
-            });
-        }
-        if (globalThis.dispatchEvent(event)) {
+        if (dispatchTrustedEvent(globalThis, event)) {
             consoleObject.error(message);
         }
     },
@@ -370,7 +354,30 @@ Object.defineProperty(globalThis, 'reportError', {
 
 core.defineEventAttribute(Object.getPrototypeOf(globalThis), 'error');
 
-for (const name of [ 'CloseEvent', 'ProgressEvent' ]) {
+// Runtime microtask errors use captured intrinsics and native source metadata.
+// Event identity and origin survive writes to public reportError and stack.
+const microtaskErrorCtor = Error;
+const microtaskString = String;
+const microtaskOwnDescriptor = Object.getOwnPropertyDescriptor;
+const microtaskPrototype = Object.getPrototypeOf;
+core.capsidInstallMicrotaskReporter((error, location) => {
+    try {
+        let message;
+        if (error instanceof microtaskErrorCtor) {
+            const ownMessage = microtaskOwnDescriptor(error, 'message')?.value;
+            const constructor = microtaskOwnDescriptor(microtaskPrototype(error), 'constructor')?.value;
+            const name = microtaskOwnDescriptor(constructor ?? {}, 'name')?.value || 'Error';
+            message = `Uncaught ${name}` + (typeof ownMessage === 'string' && ownMessage ? `: ${ownMessage}` : '');
+        } else message = `Uncaught ${microtaskString(error)}`;
+        const event = new ErrorEvent('error', {error, message,
+            filename: location[0] === undefined ? 'undefined' : location[0],
+            lineno: location[1], colno: location[2]});
+        if (dispatchTrustedEvent(globalThis, event)) consoleObject.error(message);
+    }
+    catch (secondary) { consoleObject.error(secondary); }
+});
+
+for (const name of [ 'ProgressEvent' ]) {
     delete globalThis[name];
 }
 
@@ -477,6 +484,19 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
             }
 
             const headers = bridgeHeaderPairs(response.headers);
+            if (response.status === 101) {
+                try {
+                    await transferWebSocket(id, response, headers);
+                } catch (error) {
+                    // Origin/negotiation failures precede 101. The transfer
+                    // path owns post-commit coupling errors and aborts their
+                    // transport; it must never append another HTTP response.
+                    core.capsidResponseFinal(
+                        id, 500, 'WebSocket transfer failed', [],
+                        String(error?.message ?? error));
+                }
+                return;
+            }
 
             // Fast path: a non-streamed body completes the whole
             // response (head + body + end) in one native call, avoiding

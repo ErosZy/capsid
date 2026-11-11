@@ -10,6 +10,7 @@
 #include "host/host_config_model.h"
 
 #include "host/config.h"
+#include "protocol.h"
 #include "host/listener_cors.h"
 #include "host/request_normalization.h"
 
@@ -55,44 +56,6 @@ bool parse_string_array(json_t* parent, const char* key,
 }
 
 // ---- frozen text grammars (error-returning; no fail()/exit) ---------------
-
-// "host:port" / "host" (any port); decimal ports only.
-bool parse_fetch_target_text(const std::string& text, FetchTarget* out) {
-    const std::size_t colon = text.find(':');
-    if (colon == std::string::npos) {
-        if (text.empty()) {
-            return false;
-        }
-        out->host = text;
-        return true;
-    }
-    out->host = text.substr(0, colon);
-    if (out->host.empty()) {
-        return false;
-    }
-    const std::string ports = text.substr(colon + 1);
-    std::size_t begin = 0;
-    while (begin <= ports.size()) {
-        const std::size_t comma = ports.find(',', begin);
-        const std::string part = ports.substr(
-            begin, comma == std::string::npos ? std::string::npos
-                                              : comma - begin);
-        if (part.empty()) {
-            return false;
-        }
-        char* end = nullptr;
-        const long port = std::strtol(part.c_str(), &end, 10);
-        if (end == nullptr || *end != '\0' || port <= 0 || port > 65535) {
-            return false;
-        }
-        out->ports.push_back(static_cast<std::uint16_t>(port));
-        if (comma == std::string::npos) {
-            break;
-        }
-        begin = comma + 1;
-    }
-    return !out->ports.empty();
-}
 
 // "256MiB" style size with explicit suffix (the frozen size grammar).
 bool parse_size_bytes_text(const std::string& text, std::uint64_t* out) {
@@ -297,6 +260,9 @@ bool parse_listeners(json_t* root, std::vector<ListenerConfig>* out) {
                     &config.limits.stream_idle_timeout_ms)) {
                 return false;
             }
+            if (!parse_uint_field(limits,"channels",&config.limits.channels) ||
+                !parse_size_text_field(limits,"channelQueueBytes",&config.limits.channel_queue_bytes) ||
+                !config.limits.channels || !config.limits.channel_queue_bytes) return false;
         }
         json_t* cors = json_object_get(listener, "cors");
         if (json_is_object(cors)) {
@@ -481,7 +447,9 @@ bool parse_request_tier(json_t* tier, RequestTierConfig* out) {
     json_t* timeout = json_object_get(request, "timeout");
     if (json_is_string(timeout)) {
         std::uint64_t ignored = 0;
-        if (!parse_duration_ms_text(json_string_value(timeout), &ignored)) {
+        if (!parse_duration_ms_text(json_string_value(timeout), &ignored) ||
+            ignored == 0 || ignored > static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max())) {
             return false;
         }
         out->timeout = json_string_value(timeout);
@@ -520,6 +488,90 @@ bool parse_tier(json_t* tier, TierConfig* out) {
            parse_pool_tier(tier, &out->pool);
 }
 
+bool parse_channels(json_t* root, ChannelsConfig* out) {
+    json_t* channels = json_object_get(root, "channels");
+    if (channels == nullptr) {
+        return true;
+    }
+    if (!json_is_object(channels)) {
+        return false;
+    }
+    out->configured = true;
+    // read every field; zero keeps the deployment default
+    struct Field {
+        const char* name;
+        std::uint64_t* target;
+    };
+    std::uint64_t max_channels = 0;
+    std::uint64_t close_ms = 0;
+    std::uint64_t dial_ms = 0;
+    std::uint64_t idle_ms = 0;
+    std::uint64_t queue_bytes = 0;
+    Field fields[] = {
+        {"maxChannels", &max_channels},
+        {"maxMessageBytes", &out->max_message_bytes},
+        {"reassemblyBudgetBytes", &out->reassembly_budget_bytes},
+        {"sendBudgetBytes", &out->send_budget_bytes},
+        {"closeTimeoutMs", &close_ms},
+        {"dialTimeoutMs", &dial_ms},
+        {"idleTimeoutMs", &idle_ms},
+        {"perChannelQueueBytes", &queue_bytes},
+    };
+    for (Field& field : fields) {
+        json_t* value = json_object_get(channels, field.name);
+        if (json_is_integer(value)) {
+            const json_int_t parsed = json_integer_value(value);
+            // json_int_t is a signed 64-bit type: a non-negative
+            // value always fits the uint64 target
+            if (parsed < 0) {
+                return false;
+            }
+            *field.target = static_cast<std::uint64_t>(parsed);
+        }
+    }
+    if (max_channels > std::numeric_limits<std::uint32_t>::max() ||
+        close_ms > std::numeric_limits<std::uint32_t>::max() ||
+        dial_ms > std::numeric_limits<std::uint32_t>::max() ||
+        idle_ms > std::numeric_limits<std::uint32_t>::max() ||
+        queue_bytes > std::numeric_limits<std::uint32_t>::max()) {
+        return false;
+    }
+    out->max_channels = static_cast<std::uint32_t>(max_channels);
+    out->close_timeout_ms = static_cast<std::uint32_t>(close_ms);
+    out->dial_timeout_ms = static_cast<std::uint32_t>(dial_ms);
+    out->idle_timeout_ms = static_cast<std::uint32_t>(idle_ms);
+    out->per_channel_queue_bytes =
+        static_cast<std::uint32_t>(queue_bytes);
+    // The frozen A2 bounds are the authority: defaults filled in for
+    // unset fields, then the whole set must validate.
+    capsid::protocol::ChannelLimits limits;
+    limits.max_channels =
+        out->max_channels != 0 ? out->max_channels : 128;
+    limits.max_message_bytes =
+        out->max_message_bytes != 0 ? out->max_message_bytes
+                                    : 1024u * 1024u;
+    limits.reassembly_budget_bytes =
+        out->reassembly_budget_bytes != 0
+            ? out->reassembly_budget_bytes
+            : 16u * 1024u * 1024u;
+    limits.send_budget_bytes =
+        out->send_budget_bytes != 0 ? out->send_budget_bytes
+                                    : 16u * 1024u * 1024u;
+    limits.close_timeout_ms =
+        out->close_timeout_ms != 0 ? out->close_timeout_ms : 5000;
+    limits.dial_timeout_ms =
+        out->dial_timeout_ms != 0 ? out->dial_timeout_ms : 10000;
+    limits.idle_timeout_ms = out->idle_timeout_ms;
+    limits.per_channel_queue_bytes =
+        out->per_channel_queue_bytes != 0
+            ? out->per_channel_queue_bytes
+            : 4u * 1024u * 1024u;
+    if (!capsid::protocol::validate_channel_limits(limits)) {
+        return false;
+    }
+    return true;
+}
+
 bool parse_capacity(json_t* root, CapacityConfig* out) {
     json_t* capacity = json_object_get(root, "capacity");
     if (capacity == nullptr) {
@@ -541,6 +593,10 @@ bool parse_capacity(json_t* root, CapacityConfig* out) {
     }
     // §9.4: activationSurgeWorkers is non-negative and defaults to 0
     // (absent = no zero-downtime replaces, see the schema member).
+    if (!parse_uint_field(capacity,"channelsTotal",&out->channels.channels) ||
+        !parse_uint_field(capacity,"pendingDialsTotal",&out->channels.pending_dials) ||
+        !parse_size_text_field(capacity,"channelQueueBytesTotal",&out->channels.queue_bytes) ||
+        !out->channels.channels || !out->channels.pending_dials || !out->channels.queue_bytes) return false;
     return parse_uint_field(capacity, "activationSurgeWorkers",
                             &out->activation_surge_workers) &&
            parse_uint_field(capacity, "startupsConcurrent",
@@ -662,6 +718,12 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
     if (defaults != nullptr && !parse_tier(defaults, &config.defaults)) {
         return reject("invalid host.json defaults");
     }
+    if (!config.defaults.request.timeout.empty()) {
+        if (!parse_duration_ms_text(config.defaults.request.timeout,
+                &config.policy.default_request_timeout_ms)) {
+            return reject("invalid defaults.request.timeout");
+        }
+    }
     json_t* maximums = json_object_get(root, "maximums");
     if (maximums != nullptr) {
         if (!parse_tier(maximums, &config.maximums)) {
@@ -670,6 +732,12 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
         // Project the ceilings the policy compiler consumes (§9.2/§9.3/§10.3).
         config.policy.max_requests_per_worker =
             config.maximums.request.max_inflight_per_worker;
+        if (!config.maximums.request.timeout.empty()) {
+            if (!parse_duration_ms_text(config.maximums.request.timeout,
+                    &config.policy.max_request_timeout_ms)) {
+                return reject("invalid maximums.request.timeout");
+            }
+        }
         config.policy.max_streaming_inflight_per_worker =
             config.maximums.request.max_streaming_inflight_per_worker;
         config.policy.max_stream_idle_timeout_ms =
@@ -691,8 +759,17 @@ bool parse_host_config(std::string_view json, ParsedHostConfig* out,
         config.policy.max_queue_timeout_ms =
             config.maximums.pool.queue_timeout_ms;
     }
+    if (config.policy.max_request_timeout_ms != 0 &&
+        config.policy.default_request_timeout_ms >
+            config.policy.max_request_timeout_ms) {
+        return reject("default request timeout exceeds the Host maximum");
+    }
     if (!parse_capacity(root, &config.capacity)) {
         return reject("invalid host.json capacity");
+    }
+    if (!parse_channels(root, &config.channels)) {
+        return reject("invalid host.json channels: limits outside the "
+                      "frozen A2 bounds");
     }
     if (config.capacity.workers_total > kMaxStaticPoolWorkers) {
         return reject("capacity.workersTotal exceeds the static pool worker limit");

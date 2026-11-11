@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 
 namespace capsid::host {
 
@@ -189,7 +190,14 @@ bool read_cpu_seconds(pid_t pid, std::uint64_t* cpu_seconds) {
 
 MetricsRegistry::ProcessSnapshotProvider default_process_snapshot_provider(
     const std::atomic<pid_t>* worker_pid) {
-    return [worker_pid]() -> ProcessMetricsSnapshot {
+    return process_snapshot_provider([worker_pid] {
+        return worker_pid != nullptr ? worker_pid->load() : 0;
+    });
+}
+
+MetricsRegistry::ProcessSnapshotProvider process_snapshot_provider(
+    std::function<pid_t()> worker_pid) {
+    return [worker_pid = std::move(worker_pid)]() -> ProcessMetricsSnapshot {
         ProcessMetricsSnapshot snapshot;
         // Host own footprint.
         std::uint64_t rss_kib = 0;
@@ -208,8 +216,8 @@ MetricsRegistry::ProcessSnapshotProvider default_process_snapshot_provider(
         }
         read_cpu_seconds(host_pid, &snapshot.cpu_seconds_total);
         // The currently active worker, when the Host has published one.
-        if (worker_pid != nullptr) {
-            const pid_t pid = worker_pid->load();
+        if (worker_pid) {
+            const pid_t pid = worker_pid();
             if (pid > 0) {
                 snapshot.worker_pid = static_cast<std::uint64_t>(pid);
                 std::uint64_t worker_rss_kib = 0;

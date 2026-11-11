@@ -97,7 +97,7 @@ bool redirect_stdio_to_dev_null() {
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int capsid_worker_main(int argc, char **argv, const CapsidWorkerIo* io) {
     int ipc_fd = -1;
     int network_namespace_fd = -1;
     bool close_stdio = false;
@@ -149,5 +149,11 @@ int main(int argc, char **argv) {
         return 2;
     }
     TJS_Initialize(argc, argv);
-    return capsid_run_worker(ipc_fd, network_namespace_fd);
+    return capsid_run_worker(ipc_fd, network_namespace_fd, io);
 }
+
+#if !defined(CAPSID_WORKER_CUSTOM_ENTRY)
+int main(int argc, char** argv) {
+    return capsid_worker_main(argc, argv, nullptr);
+}
+#endif

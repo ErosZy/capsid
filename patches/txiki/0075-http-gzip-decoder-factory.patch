@@ -1,0 +1,36 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -1741,15 +1741,19 @@
+     return JS_UNDEFINED;
+ }
+ 
+-static JSValue tjs_httpclient_create_gzip_decoder(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+-    (void) argc; (void) argv;
+-    if (!tjs_httpclient_get(ctx, this_val)) return JS_EXCEPTION;
++static JSValue tjs_http_gzip_decoder_create(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    (void) this_val; (void) argc; (void) argv;
+     TJSHttpGzip *decoder = http_gzip_create(ctx);
+     if (!decoder) return JS_EXCEPTION;
+     JSValue value = JS_NewObjectClass(ctx, tjs_http_gzip_decoder_class_id);
+     if (JS_IsException(value)) {http_gzip_destroy(decoder, JS_GetRuntime(ctx)); return value;}
+     JS_SetOpaque(value, decoder);
+     return value;
++}
++
++static JSValue tjs_httpclient_create_gzip_decoder(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    if (!tjs_httpclient_get(ctx, this_val)) return JS_EXCEPTION;
++    return tjs_http_gzip_decoder_create(ctx, this_val, argc, argv);
+ }
+ 
+ static const JSClassDef tjs_http_gzip_decoder_class = {
+@@ -1795,6 +1799,10 @@
+     JS_SetPropertyFunctionList(ctx, proto, tjs_http_gzip_decoder_funcs, countof(tjs_http_gzip_decoder_funcs));
+     JS_SetClassProto(ctx, tjs_http_gzip_decoder_class_id, proto);
+ 
++    /* CPU-only decoder for credit-controlled HTTP upgrade fallback bodies. */
++    JS_SetPropertyStr(ctx, ns, "createHttpGzipDecoder",
++        JS_NewCFunction(ctx, tjs_http_gzip_decoder_create, "createHttpGzipDecoder", 0));
++
+     /* HttpClient class */
+     JS_NewClassID(rt, &tjs_httpclient_class_id);
+     JS_NewClass(rt, tjs_httpclient_class_id, &tjs_httpclient_class);

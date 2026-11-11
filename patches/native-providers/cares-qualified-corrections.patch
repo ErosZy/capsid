@@ -1,0 +1,60 @@
+--- a/src/lib/event/ares_event_epoll.c
++++ b/src/lib/event/ares_event_epoll.c
+@@ -113,9 +113,16 @@
+   const ares_evsys_epoll_t  *ep = e->ev_sys_data;
+   struct epoll_event         epev;
+ 
++  /* A close notification may already have removed the kernel watch before
++   * the descriptor was closed. The queued update still owns event retirement. */
++  if (event->flags == ARES_EVENT_FLAG_NONE) {
++    return;
++  }
++
+   memset(&epev, 0, sizeof(epev));
+   epev.data.fd = event->fd;
+   epoll_ctl(ep->epoll_fd, EPOLL_CTL_DEL, event->fd, &epev);
++  event->flags = ARES_EVENT_FLAG_NONE;
+ }
+ 
+ static void ares_evsys_epoll_event_mod(ares_event_t      *event,
+@@ -134,7 +141,12 @@
+   if (new_flags & ARES_EVENT_FLAG_WRITE) {
+     epev.events |= EPOLLOUT;
+   }
+-  epoll_ctl(ep->epoll_fd, EPOLL_CTL_MOD, event->fd, &epev);
++  /* A failed allocation for a queued removal can leave its inactive record
++   * until the descriptor is reused. Re-register that descriptor instead of
++   * trying to modify a kernel watch which was already removed before close. */
++  epoll_ctl(ep->epoll_fd,
++            event->flags == ARES_EVENT_FLAG_NONE ? EPOLL_CTL_ADD : EPOLL_CTL_MOD,
++            event->fd, &epev);
+ }
+ 
+ static size_t ares_evsys_epoll_wait(ares_event_thread_t *e,
+--- a/src/lib/event/ares_event_thread.c
++++ b/src/lib/event/ares_event_thread.c
+@@ -222,6 +222,24 @@
+    * event thread to process the update */
+   ares_event_update(NULL, e, flags, ares_event_thread_process_fd, socket_fd,
+                     NULL, NULL, NULL);
++
++#ifdef HAVE_EPOLL
++  if (e != NULL && flags == ARES_EVENT_FLAG_NONE &&
++      e->ev_sys == &ares_evsys_epoll) {
++    ares_event_t *event;
++
++    /* The socket-state callback runs before the channel closes the socket.
++     * Remove the kernel registration now, while the descriptor still belongs
++     * to this channel. Keep the event record for the event thread to retire:
++     * its wait/dispatch path reads that record without holding this mutex. */
++    ares_thread_mutex_lock(e->mutex);
++    event = ares_htable_asvp_get_direct(e->ev_sock_handles, socket_fd);
++    if (event != NULL) {
++      e->ev_sys->event_del(event);
++    }
++    ares_thread_mutex_unlock(e->mutex);
++  }
++#endif
+ }
+ 
+ static void notifywrite_cb(void *data)

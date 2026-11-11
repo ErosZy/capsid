@@ -1,0 +1,31 @@
+{
+  "schema": "capsid-ws-interop-client-lock-v1",
+  "python": {
+    "implementation": "CPython",
+    "version": "3.12.3"
+  },
+  "websockets": {
+    "version": "15.0.1",
+    "wheel": {
+      "filename": "websockets-15.0.1-py3-none-any.whl",
+      "sha256": "f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f",
+      "url": "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl",
+      "size": 169743
+    },
+    "sourceFiles": 47,
+    "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+  },
+  "node": "workerd-ws/reference-lock.json",
+  "notes": "Pinned pure Python and JavaScript protocol implementations; native optional Node addons are disabled. Runtime and loaded source identities are checked before sockets.",
+  "ws": {
+    "version": "8.22.0",
+    "tarball": {
+      "url": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
+      "integrity": "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==",
+      "size": 35094,
+      "sha256": "ca9b3798b2e11ce8fac6713f50ef0501aa12b09b330623c1dc409dff94e7abc8"
+    },
+    "sourceFiles": 17,
+    "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+  }
+}

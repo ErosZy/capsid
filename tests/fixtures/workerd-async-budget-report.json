@@ -1,0 +1,421 @@
+{
+  "schema": "capsid-async-callbacks-v1",
+  "complete": true,
+  "runId": "24a473a0-fe55-460a-bcf7-57b704714fa4",
+  "mode": "single-worker",
+  "family": "budget",
+  "requestTimeoutMs": 120,
+  "sourceName": "file:///E:/capsid/tests/fixtures/workerd-async-callbacks.mjs",
+  "referenceLock": {
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "binary": "workerd-windows-64",
+    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary_version_string": "workerd 2026-10-10",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": [],
+    "client": {
+      "runtime": "node",
+      "websocket": "native (undici) - no external dependency",
+      "node_version": "v24.14.0",
+      "undici_version": "7.21.0"
+    },
+    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
+    "release_asset": "workerd-windows-64.gz",
+    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
+    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+  },
+  "client": {
+    "node": "v24.14.0",
+    "undici": "7.21.0"
+  },
+  "inputs": {
+    "runner": "1c80f1e352c981df6890b45ac93939050db999a81583cc6d6bff2c20c20d2194",
+    "fixture": "cf901f7b941ed761b3dfbb9b1510b2c62c46d05bea71e9424dadaf96b52dada9",
+    "contract": "3701c3b1b8468cc04979af2082289f161a495c496845fd9e86d34a275bc8db90",
+    "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+  },
+  "binaries": {
+    "host": "297e2a0b9e214dcb12bdbebbd27bdc02833e966bb50f83a64fe5483026758495",
+    "worker": "16820c127b75d2b34aaf20cd2b0a73d3766c27dc47c0e07f02a1bd7f80eb82c9"
+  },
+  "cases": [
+    {
+      "id": "timer-budget-loop",
+      "challenge": "46403c15-a885-43e8-9b3a-cac663e8adcc",
+      "initialState": {
+        "realm": "62465849-81dc-4245-936b-4445eb64af03",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: IJltB26PLjmew0osxZFrruKfstc=",
+        "requestKey": "H0uxL1jvMudWmd9JvLUZoQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: IJltB26PLjmew0osxZFrruKfstc=",
+        "requestKey": "H0uxL1jvMudWmd9JvLUZoQ==",
+        "rawTail": "gStxdWV1ZWQ6NDY0MDNjMTUtYTg4NS00M2U4LTliM2EtY2FjNjYzZThhZGNj",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjQ2NDAzYzE1LWE4ODUtNDNlOC05YjNhLWNhYzY2M2U4YWRjYw=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "elapsedMs": 160.51220000000012,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"62465849-81dc-4245-936b-4445eb64af03\",\"state\":{\"kind\":\"timer-budget-loop\",\"challenge\":\"46403c15-a885-43e8-9b3a-cac663e8adcc\",\"trace\":[\"message\",\"loop\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1006,\"reason\":\"WebSocket resource limit\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":0,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "62465849-81dc-4245-936b-4445eb64af03",
+        "state": {
+          "kind": "timer-budget-loop",
+          "challenge": "46403c15-a885-43e8-9b3a-cac663e8adcc",
+          "trace": [
+            "message",
+            "loop",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1006,
+              "reason": "WebSocket resource limit",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 0,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      "stderr": "{\"timestamp\":\"1792392022738\",\"level\":\"info\",\"event\":\"shutdown\",\"duration_ms\":0,\"message\":\"\"}\r\n",
+      "stdout": ""
+    },
+    {
+      "id": "promise-budget-loop",
+      "challenge": "ba86cfc2-a633-4196-bb25-3508266860a3",
+      "initialState": {
+        "realm": "70146782-b2cd-485e-aeff-aee30a9da835",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: 0shf2Kp9YLdy5gzSXLp8c+ZSFjk=",
+        "requestKey": "5+QLWsnxc6gmGyIqIUDV+A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: 0shf2Kp9YLdy5gzSXLp8c+ZSFjk=",
+        "requestKey": "5+QLWsnxc6gmGyIqIUDV+A==",
+        "rawTail": "gStxdWV1ZWQ6YmE4NmNmYzItYTYzMy00MTk2LWJiMjUtMzUwODI2Njg2MGEz",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmJhODZjZmMyLWE2MzMtNDE5Ni1iYjI1LTM1MDgyNjY4NjBhMw=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "elapsedMs": 182.94759999999997,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"70146782-b2cd-485e-aeff-aee30a9da835\",\"state\":{\"kind\":\"promise-budget-loop\",\"challenge\":\"ba86cfc2-a633-4196-bb25-3508266860a3\",\"trace\":[\"message\",\"loop\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1006,\"reason\":\"WebSocket resource limit\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":0,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "70146782-b2cd-485e-aeff-aee30a9da835",
+        "state": {
+          "kind": "promise-budget-loop",
+          "challenge": "ba86cfc2-a633-4196-bb25-3508266860a3",
+          "trace": [
+            "message",
+            "loop",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1006,
+              "reason": "WebSocket resource limit",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 0,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      "stderr": "{\"timestamp\":\"1792392023274\",\"level\":\"info\",\"event\":\"shutdown\",\"duration_ms\":0,\"message\":\"\"}\r\n",
+      "stdout": ""
+    },
+    {
+      "id": "message-budget-loop",
+      "challenge": "25eed2de-630a-4529-b08a-d37cbb088eac",
+      "initialState": {
+        "realm": "855b386a-2cfb-4d20-ad8a-66abf1aa88c9",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: X7yPUl/t/M3PV8SGg/MYrsqSYr8=",
+        "requestKey": "TBg8TR3VcEbEVqluTaiFnw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: X7yPUl/t/M3PV8SGg/MYrsqSYr8=",
+        "requestKey": "TBg8TR3VcEbEVqluTaiFnw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "elapsedMs": 121.10599999999977,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"855b386a-2cfb-4d20-ad8a-66abf1aa88c9\",\"state\":{\"kind\":\"message-budget-loop\",\"challenge\":\"25eed2de-630a-4529-b08a-d37cbb088eac\",\"trace\":[\"message\",\"loop\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1006,\"reason\":\"WebSocket resource limit\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":0,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "855b386a-2cfb-4d20-ad8a-66abf1aa88c9",
+        "state": {
+          "kind": "message-budget-loop",
+          "challenge": "25eed2de-630a-4529-b08a-d37cbb088eac",
+          "trace": [
+            "message",
+            "loop",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1006,
+              "reason": "WebSocket resource limit",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 0,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      "stderr": "{\"timestamp\":\"1792392023790\",\"level\":\"info\",\"event\":\"shutdown\",\"duration_ms\":0,\"message\":\"\"}\r\n",
+      "stdout": ""
+    },
+    {
+      "id": "timer-budget-fresh",
+      "challenge": "913f21a3-4e5b-4251-ae5d-5423e4ce4211",
+      "initialState": {
+        "realm": "22d18fad-cf8b-43b3-82a7-27699f4e56b9",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: nMYIaTSBvyfcp7eeRERsCs6m+mc=",
+        "requestKey": "weM2C/MrGTZI5yfCNyEOpw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: nMYIaTSBvyfcp7eeRERsCs6m+mc=",
+        "requestKey": "weM2C/MrGTZI5yfCNyEOpw==",
+        "rawTail": "gStxdWV1ZWQ6OTEzZjIxYTMtNGU1Yi00MjUxLWFlNWQtNTQyM2U0Y2U0MjExgSphZnRlcjo5MTNmMjFhMy00ZTViLTQyNTEtYWU1ZC01NDIzZTRjZTQyMTGIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjkxM2YyMWEzLTRlNWItNDI1MS1hZTVkLTU0MjNlNGNlNDIxMQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6OTEzZjIxYTMtNGU1Yi00MjUxLWFlNWQtNTQyM2U0Y2U0MjEx"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 188.63859999999977,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"22d18fad-cf8b-43b3-82a7-27699f4e56b9\",\"state\":{\"kind\":\"timer-budget-fresh\",\"challenge\":\"913f21a3-4e5b-4251-ae5d-5423e4ce4211\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":49995000,\"observerThrew\":false}}",
+      "state": {
+        "realm": "22d18fad-cf8b-43b3-82a7-27699f4e56b9",
+        "state": {
+          "kind": "timer-budget-fresh",
+          "challenge": "913f21a3-4e5b-4251-ae5d-5423e4ce4211",
+          "trace": [
+            "message",
+            "callback",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 49995000,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      "stderr": "{\"timestamp\":\"1792392024357\",\"level\":\"info\",\"event\":\"shutdown\",\"duration_ms\":0,\"message\":\"\"}\r\n",
+      "stdout": ""
+    },
+    {
+      "id": "interval-budget-fresh",
+      "challenge": "6d9f2017-1ce5-4824-84aa-9860b8ad7962",
+      "initialState": {
+        "realm": "83b308a6-5a2a-4a49-9f26-67dffd4cc087",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: 9oksZS02fuuoDGQs/9g0zzffhIY=",
+        "requestKey": "YT2JrsCN636zuGs/GH8Ipw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: 9oksZS02fuuoDGQs/9g0zzffhIY=",
+        "requestKey": "YT2JrsCN636zuGs/GH8Ipw==",
+        "rawTail": "gStxdWV1ZWQ6NmQ5ZjIwMTctMWNlNS00ODI0LTg0YWEtOTg2MGI4YWQ3OTYygSphZnRlcjo2ZDlmMjAxNy0xY2U1LTQ4MjQtODRhYS05ODYwYjhhZDc5NjKIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjZkOWYyMDE3LTFjZTUtNDgyNC04NGFhLTk4NjBiOGFkNzk2Mg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NmQ5ZjIwMTctMWNlNS00ODI0LTg0YWEtOTg2MGI4YWQ3OTYy"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 304.6877999999997,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"83b308a6-5a2a-4a49-9f26-67dffd4cc087\",\"state\":{\"kind\":\"interval-budget-fresh\",\"challenge\":\"6d9f2017-1ce5-4824-84aa-9860b8ad7962\",\"trace\":[\"message\",\"interval/1\",\"interval/2\",\"interval/3\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":3,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "83b308a6-5a2a-4a49-9f26-67dffd4cc087",
+        "state": {
+          "kind": "interval-budget-fresh",
+          "challenge": "6d9f2017-1ce5-4824-84aa-9860b8ad7962",
+          "trace": [
+            "message",
+            "interval/1",
+            "interval/2",
+            "interval/3",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 3,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      "stderr": "{\"timestamp\":\"1792392025025\",\"level\":\"info\",\"event\":\"shutdown\",\"duration_ms\":0,\"message\":\"\"}\r\n",
+      "stdout": ""
+    }
+  ]
+}

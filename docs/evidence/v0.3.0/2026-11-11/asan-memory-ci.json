@@ -1,0 +1,118 @@
+{
+  "status": "complete",
+  "complete": true,
+  "changedFiles": [
+    ".github/workflows/testing-validity.yml",
+    "tests/audit-testing-validity-workflow.mjs",
+    "tests/test_testing_validity_workflow.mjs",
+    "cmake/build_tests.cmake",
+    "tools/asan-memory-acceptance.py",
+    "tests/test_asan_memory_acceptance.py"
+  ],
+  "parentPrivateSnapshot": "aa31f4312ec5c4499f495e17a17645486a1aa9a7",
+  "mainHeadBefore": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "realFocusedAcceptanceProofSHA256": "85f2b76cb2db2998a9161616d1b3a1f10a4d4d858df2c0f841660034178c6525",
+  "rawOriginalFailuresRetained": true,
+  "productionRssRemainsMandatoryInIndependentReleaseMatrix": true,
+  "asanRawFootprintResultsRecordedBeforeSeparateResourceMatrix": true,
+  "onlyExactOriginalFootprintFailuresMayBeAccepted": true,
+  "completeLsanAndDefaultQuarantineRequired": true,
+  "tsanAndUbsanExclusionsUnchanged": true,
+  "hostedCiExecuted": false,
+  "mainCommitPushTagOrPublicationPerformed": false,
+  "fullV030GoalComplete": false,
+  "checks": [
+    {
+      "platform": "windows",
+      "lineEnding": "lf",
+      "counts": {
+        "tests": 161,
+        "pass": 161,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "b53c4eff359ec0e05d444e2cf7acd6703a7d51a4cfc69b1e58277fa422d471db",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "windows",
+      "lineEnding": "crlf",
+      "counts": {
+        "tests": 161,
+        "pass": 161,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "d21c28e89f07f329586c4a917c00423448c9f54919075c54584e77939acc1f9e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "windows",
+      "memoryParserUnitTests": 6,
+      "faultMutations": 43,
+      "junitMutations": 5,
+      "stderrSHA256": "99f209713cb2b4f70a8a525da35bb15695d73c679d29ab8037708d8dc4709551"
+    },
+    {
+      "platform": "linux",
+      "lineEnding": "lf",
+      "counts": {
+        "tests": 161,
+        "pass": 161,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "53680f291e6c2d9b6d3bf6d17e3046796cf924b62b34c5c977b5d57c5b572d6a",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "linux",
+      "lineEnding": "crlf",
+      "counts": {
+        "tests": 161,
+        "pass": 161,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "b2d6e6e1bc2667b85186bfbd72c2e5f4c1475837ed54f824a3fe5f4a9b725d99",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "linux",
+      "memoryParserUnitTests": 6,
+      "faultMutations": 43,
+      "junitMutations": 5,
+      "stderrSHA256": "83de4c80f1b9ebc1fbea8683bfe15d9bb2493660b62f8be07053af43c98ed203"
+    }
+  ],
+  "previousQualificationErrorRetainedSHA256": "925749e7456eef21161e2dce3e5aaef22626f82d704af807eceb84f89c715957",
+  "recoveredControls": "Corrected the raw-step JavaScript literal escaping and inventory no-tests guard. Preserved the existing no-tests diagnostic precedence. Used function replacements for regex strings ending in dollar-quote so negative controls cannot expand replacement suffix tokens. The two extra CTest commands add two existing automatic no-tests controls, yielding161 per platform/line ending.",
+  "qualifiedSHA256": {
+    ".github/workflows/testing-validity.yml": "1cc6bc3fa5cdc1ecb48092d926e60583cccf92be5cf4ce3717921547dca63896",
+    "tests/audit-testing-validity-workflow.mjs": "eb4b4930c6e100e72d802914e21e5642b3b39be8ed73d7a36a93d3883c83e4fa",
+    "tests/test_testing_validity_workflow.mjs": "6e357155660d64c3af89b102c6295d515fb4bf7459e9a32a471d24a78b717d14",
+    "cmake/build_tests.cmake": "930dc2dd8c1b3909b1d3bdcc7612b62a7f55fac5918e9bc5a845ae3bb5d66a10",
+    "tools/asan-memory-acceptance.py": "6229419f814769735ad6625580bc8f881878cceefc60c0b9d607e10566998815",
+    "tests/test_asan_memory_acceptance.py": "065e96a466bf8b8c25204d8424185c4d37966937f498e8560aa29124c687d159"
+  },
+  "originalSHA256": {
+    ".github/workflows/testing-validity.yml": "c994924773a8d60284ef2170d4f05178255157ab7a1fe23a86944c7b5da04141",
+    "tests/audit-testing-validity-workflow.mjs": "649dcad971b19bb459118d22d5f45084bb1a6df78eec7ea33e740a5c30cc6fe2",
+    "tests/test_testing_validity_workflow.mjs": "f89437acdf93ea249895f81005d0d73b90caca666f0b2e297f4281a365f827f7",
+    "cmake/build_tests.cmake": "a5db32c2e3992896130b52cdda022ec19472543d9e2b17ad9f570a673897dc21",
+    "tools/asan-memory-acceptance.py": null,
+    "tests/test_asan_memory_acceptance.py": null
+  },
+  "rootIntegrated": true,
+  "privateSnapshotCommit": "3e55af775a0f2b07bcb53d2595e5a34abd6aed48",
+  "privateSnapshotRef": "refs/capsid-private/sdk78-separate-asan-memory-ci-20261110",
+  "mainSourceManifestFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-separate-asan-memory-ci-main-integration-r3\\main-source-manifest.json",
+  "mainSourceManifestSHA256": "525a54ec1d8ce7a488da7712686d773acc431e1628044bcadbf328f8862708d5",
+  "sourceCount": 5102,
+  "workflowControlsPassed": 644,
+  "memoryParserUnitTestsPassed": 12,
+  "memoryParserFaultMutationsRejected": 86,
+  "mainHeadUnchanged": true,
+  "allOtherRepositorySourcesUnchanged": true,
+  "generatedIdentityAndFinalCombinedArtifactNotYetQualified": true
+}

@@ -1,0 +1,146 @@
+{
+  "status": "complete",
+  "complete": true,
+  "capturedUTC": "2026-11-10T12:13:49.834676+00:00",
+  "preparationOnly": true,
+  "formalPerformanceQualified": false,
+  "formalPerformancePublishedPoints": 0,
+  "fullV030GoalComplete": false,
+  "snapshotCommit": "56d487722e9d207a53225444fc32914f80fba155",
+  "sourceCount": 5068,
+  "sourceRoot": "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2",
+  "sourceVersion": "0.2.2",
+  "sourceAndExistingBuildUnmodified": true,
+  "controllerSourceInputCount": 41,
+  "controllerInputsSHA256": "3debfa891d108b0b8525c60e9018d2f421a09f5018c16be7b17c254769879a85",
+  "commandTemplatesSHA256": "042fbeec83cc4d57b7b260a8894b73be440b7e48446bf664e6b28b3877ee9b6b",
+  "cliHelpChecks": [
+    {
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/bench/cold-start.py",
+        "--help"
+      ],
+      "exitCode": 0,
+      "stdoutSHA256": "2bee45e2a19906454d2be72a02d410428068fb71bfd8b210738042ac5ae0592e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/bench/qps-lane.py",
+        "--help"
+      ],
+      "exitCode": 0,
+      "stdoutSHA256": "5c163c535ea733072b31206557dfbdeddd5927b01422fb241d096084b50110fd",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/usr/bin/python3",
+        "-B",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/bench/density-lane.py",
+        "--help"
+      ],
+      "exitCode": 0,
+      "stdoutSHA256": "427367b09c0ccbc20f5c8e60334ae1318ce7f1686ea440a05c9341844171852e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "currentAvailableExecutableIdentities": {
+    "capsid-host": {
+      "path": "/root/capsid-verification-20261109/build-production/capsid-host",
+      "sha256": "0a88b166c6604e7d751a6c4424e1e300bb2e9601a8f271574f84deef4d451429"
+    },
+    "capsid-worker": {
+      "path": "/root/capsid-verification-20261109/build-production/capsid-worker",
+      "sha256": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348"
+    },
+    "cold-start": {
+      "path": "/root/capsid-verification-20261109/build-production/cold-start",
+      "sha256": "3a324737d187d7d2ad8d9b1a957f8205051e2eb95b4f1172977517b14c2be114"
+    },
+    "capsid-bytecode-compile": {
+      "path": "/root/capsid-verification-20261109/build-production/capsid-bytecode-compile",
+      "sha256": "fc70abd8b676f9f0b134ac1e14fbbbc9adb61c762dbed2f818c561702ee9119e"
+    },
+    "loadgen": {
+      "path": "/root/capsid-verification-20261109/build-production/benchmark-tools/loadgen",
+      "sha256": "aa3cc9bb041c753f135af11aa50357d23e378b25ed7703d2e14ac1904fd32efe"
+    },
+    "node": {
+      "path": "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+      "sha256": "e237a2839d0cbdc9a9a2adda1a184afc0f5b20306ffbe923af5686550472d8a8"
+    },
+    "workerd": {
+      "path": "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd",
+      "sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd"
+    }
+  },
+  "missingMeasuredExecutables": [
+    "deno",
+    "nginx",
+    "php-fpm"
+  ],
+  "host": {
+    "kernel": "6.18.40.1-microsoft-standard-WSL2",
+    "logicalCpus": 12,
+    "cpuAffinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "tools": {
+      "deno": null,
+      "php-fpm8.3": null,
+      "php-fpm8.4": null,
+      "nginx": null,
+      "taskset": "/usr/bin/taskset",
+      "go": "/usr/bin/go"
+    }
+  },
+  "formalSessionReady": false,
+  "unmetConditions": [
+    "Current WSL environment is functional qualification only under the established acceptance boundary.",
+    "Production and sanitizer full qualification is live/queued; no quiet measurement session has been established.",
+    "Final v0.3.0 source/version and cross-platform candidate have not been frozen.",
+    "Missing measured executables: deno, nginx, php-fpm"
+  ],
+  "densityProtocol": {
+    "budgetMiB": 2048,
+    "metric": "whole owned descendant-tree PSS",
+    "osAggregateMemoryHardLimitClaimed": false,
+    "cgroupOrRlimitChangesMade": false,
+    "coldRequestsPerWorker": 1,
+    "warmRequestsPerWorker": 100,
+    "consecutiveEqualPositivePssReads": 2,
+    "finalVerificationRetries": 2,
+    "caps": {
+      "capsid": 4096,
+      "workerd": 1024
+    },
+    "capReachedMeansLowerBoundOnly": true
+  },
+  "measurementMetadataMustComeFromActualSession": true,
+  "quietSessionOrCleanV030IdentityNotManufactured": true,
+  "requiredPreparation": [
+    "Freeze final clean source and build Release/LTO with strict production sandbox and no sanitizers.",
+    "Build benchmark-cold-start, capsid-bytecode-compile, benchmark-loadgen from that exact final source.",
+    "Prepare and identify Node, Deno, pinned workerd, QPS Python venv (FastAPI/Flask), PHP-FPM, nginx and vendored PHP fixtures.",
+    "Generate exact cold fixtures; verify all source/binary/dependency identities and real strict sandbox startup.",
+    "Establish one quiet native Linux session; provide actual source, machine, session and binary metadata.",
+    "Resolve every command placeholder; run all three lanes serially without shortened budgets or synthetic records.",
+    "Retain failed search probes and all raw samples; validate sealed archives using collector --check before staging."
+  ]
+}

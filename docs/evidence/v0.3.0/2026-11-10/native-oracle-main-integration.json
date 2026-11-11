@@ -1,0 +1,58 @@
+{
+  "status": "complete",
+  "complete": true,
+  "mainHeadBefore": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "baseSnapshot": "56d487722e9d207a53225444fc32914f80fba155",
+  "changedFiles": [
+    "tools/workerd-native-fetch-contract.mjs",
+    "tests/test_workerd_fetch_arguments_contract.mjs"
+  ],
+  "originalSHA256": {
+    "tools/workerd-native-fetch-contract.mjs": "78f6c8c620f1a541baa61e5fdbd8655349232bda02e43d68d5010acc8465fd4c",
+    "tests/test_workerd_fetch_arguments_contract.mjs": "2cbd2c9891a13432add9a10b37d6d45186e863c0659822c96cdd0c0b1544948d"
+  },
+  "qualifiedSHA256": {
+    "tools/workerd-native-fetch-contract.mjs": "36946ff50505dedbdc3207b7ee989e8eef034a786b19ba3d8f03f7f9f6afb3e4",
+    "tests/test_workerd_fetch_arguments_contract.mjs": "9ce12a4c71bee36ade73493768d507e202350d3f007ee0fe219e59b403e99dd8"
+  },
+  "proofRecords": {
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-native-connection-oracle-proposal-r1\\windows.json": "13c4dcf5d077d841c86fb204b8d7efcbb7eda0116cf77787722d9daf4295aace",
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-native-connection-oracle-proposal-r1\\linux.json": "4e37353b8b1e9e6ac48c1af270ea977050683099b683bd5f7fd49711c716aa2e"
+  },
+  "freshNativeProofSHA256": "d0a1affcddaea3c421402c9dd3f410dad8f7cfd0ac5faacdb6bf3fbb5c9b9286",
+  "windowsFrozenInputSHA256": {
+    "D:\\capsid-verification-20261108\\c78sp1\\tools\\workerd-native-fetch-contract.mjs": "78f6c8c620f1a541baa61e5fdbd8655349232bda02e43d68d5010acc8465fd4c",
+    "D:\\capsid-verification-20261108\\c78sp1\\tests\\test_workerd_fetch_arguments_contract.mjs": "2cbd2c9891a13432add9a10b37d6d45186e863c0659822c96cdd0c0b1544948d"
+  },
+  "allOther5066RegularFilesMustRemainUnchanged": true,
+  "mainCommitPushTagOrPublicationPerformed": false,
+  "mainVersionStill022": true,
+  "fullV030GoalComplete": false,
+  "scope": "Integrate only the qualified test-oracle correction. Running Linux and Windows qualifications use separate immutable snapshots; final combined qualification remains required.",
+  "privateSnapshotCommit": "d9120d006e2ac9073e8d0eebff7aac689410a85e",
+  "privateSnapshotTree": "97df1f71acaace8fde92704bcd4395334379204a",
+  "privateSnapshotRef": "refs/capsid-private/sdk78-native-connection-oracle-20261110",
+  "mainSourceManifestFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-native-connection-oracle-main-integration-r1\\main-source-manifest.json",
+  "mainSourceManifestSHA256": "49d2416755a3bf291a346345eb14e48b92cdde13aa117a49fd4da0e458434cae",
+  "allOtherSourcesUnchanged": true,
+  "windowsFrozenSourcesUnchanged": true,
+  "mainHeadUnchanged": true,
+  "compilerRuntimeAndFuzzerInputFilesUnchanged": true,
+  "qualifiedPrivateSnapshotOnlyNotReleaseFrozen": true,
+  "mainVerificationCommand": [
+    "E:/capsid/build-v030-native/node-24.14.0-d35efba0525442d4965d66d55c035b6c/node-v24.14.0-win-x64/node.exe",
+    "--test",
+    "--test-reporter=tap",
+    "tests/test_workerd_fetch_arguments_contract.mjs"
+  ],
+  "mainPathVerificationCounts": {
+    "tests": 9246,
+    "pass": 9246,
+    "fail": 0,
+    "skipped": 0
+  },
+  "mainPathVerificationStdoutSHA256": "713396b083b7a3f81bc61eed98d60ee51677def0951224284a93ace1295fa804",
+  "mainPathVerificationStderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sourceManifestReverifiedAfterIntegration": true,
+  "finalCombinedAcceptanceStillRequired": true
+}

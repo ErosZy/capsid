@@ -126,6 +126,21 @@ Therefore v1 keeps both source and bytecode, but bytecode must satisfy the full 
 - If the signature is valid but the compatibility ID does not match the current worker, record the reason explicitly and fall back to the same Version's `bundle.mjs`; call `capsid_worker_load_trusted_bytecode_named()` only when it matches;
 - Key revocation affects future deployments and restart recovery; READY workers are not mutated in place and follow generation replacement rules.
 
+Compiler output publication preserves existing final names. On Linux it first
+uses `RENAME_NOREPLACE`; only unsupported-operation errors permit a same-directory
+`linkat` followed by removal of the temporary name. Windows uses `CREATE_NEW`
+and `MoveFileExW` without replacement. Temporary and final name ownership are
+tracked separately, so failed exclusive creation never makes a pre-existing
+temporary eligible for rollback. Failures report the captured OS error, and
+cleanup failures are explicit. Normal failures remove this invocation's partial
+outputs when cleanup succeeds; the three independent paths are not an atomic
+deployment across a crash or power loss. Use a staging generation directory for
+that boundary. See [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html)
+and [link(2)](https://man7.org/linux/man-pages/man2/link.2.html) for the Linux
+no-replace primitives. The actual compiler publication regression tests are
+`bytecode_output_publication`; operation-error ownership is additionally covered
+by `bytecode_publish_operations`.
+
 The v1 shape of `bytecode.json` is fixed as:
 
 ```json

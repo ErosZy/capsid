@@ -1,0 +1,351 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 343,
+  "proposalRecordSHA256": "d5b5e9d2db12a8f17077351bb5ee9ad4b67d57e7cb5ff18c56c25ab144305f77",
+  "priorNativeExecutionRetainedSHA256": "642852f1801766822c06cd2ebad0571a83144392b75853f7e938950a75e499c3",
+  "persistentNativeReportWorkspace": true,
+  "steps": [
+    {
+      "label": "configure-production",
+      "command": [
+        "cmake",
+        "-S",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/project",
+        "-B",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/production",
+        "-DCAPSID_ENABLE_ASAN=OFF",
+        "-DCAPSID_HOST_TEST_NODE=/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "-DQUALIFIED_HOST=/root/capsid-verification-20261109/build-production/capsid-host",
+        "-DQUALIFIED_WORKER=/root/capsid-verification-20261109/build-production/capsid-worker"
+      ],
+      "exitCode": 0,
+      "seconds": 0.07070120000000024,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "0047e16e685a1e47ca176e562822f05e4babb702a2d001241a851451841e2194",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "production-original-rss",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/production",
+        "-j",
+        "1",
+        "--no-tests=error",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-explicit-asan-resource-profile-native-r2/production-original-rss.xml"
+      ],
+      "exitCode": 0,
+      "seconds": 2.6783780999999998,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "7276fbd64d4252abac9abefe368c4d10a506ebd2ee235bb486ec79c3f045ad4d",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "configure-asan",
+      "command": [
+        "cmake",
+        "-S",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/project",
+        "-B",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/asan",
+        "-DCAPSID_ENABLE_ASAN=ON",
+        "-DCAPSID_HOST_TEST_NODE=/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "-DQUALIFIED_HOST=/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "-DQUALIFIED_WORKER=/root/capsid-verification-20261109/build-sanitizer/capsid-worker"
+      ],
+      "exitCode": 0,
+      "seconds": 0.021320600000001022,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "3ee8825ec38bec10fd7bc61a2aa3a06e66347ce4fe71fbbde3f8d175ed109b78",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "asan-original-raw-rss",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/asan",
+        "-j",
+        "1",
+        "--no-tests=error",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-explicit-asan-resource-profile-native-r2/asan-original-raw-rss.xml",
+        "-R",
+        "^websocket_managed_(replacement-recursion|reclamation-idle)$"
+      ],
+      "exitCode": 8,
+      "seconds": 8.479897879000001,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "63ffe69d62d801cf64c6838239b3a8dbcbe19c458b3e1ff6452ba638a051d2b9",
+      "stderrSHA256": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+    },
+    {
+      "label": "asan-complete-resources",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/asan",
+        "-j",
+        "1",
+        "--no-tests=error",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-explicit-asan-resource-profile-native-r2/asan-complete-resources.xml",
+        "-R",
+        "^websocket_managed_asan_resources_"
+      ],
+      "exitCode": 0,
+      "seconds": 9.088449405999999,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "0ddfcb9a53ae7387d29c1a9664c80b1413613fe3ac2c5170d2c1b84c98ec510b",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "negative-leaks-disabled",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--memory-acceptance",
+        "asan-resources",
+        "--report",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/must-not-exist.json"
+      ],
+      "exitCode": 1,
+      "seconds": 0.06994249899999971,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "c3ba43911b4c71491a71ae66c849a41ff32677d6b1d5953e4750664cab580623"
+    },
+    {
+      "label": "negative-quarantine-overridden",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--memory-acceptance",
+        "asan-resources",
+        "--report",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/must-not-exist.json"
+      ],
+      "exitCode": 1,
+      "seconds": 0.07001604200000244,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "b07e815255737cea742bb1206617fa105774632039939969eea000d103dbe465"
+    },
+    {
+      "label": "negative-lsan-suppressed",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--memory-acceptance",
+        "asan-resources",
+        "--report",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/must-not-exist.json"
+      ],
+      "exitCode": 1,
+      "seconds": 0.06999964499999578,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e53d36d7957cf40d51f9cc813bd4b2a2a0d42c15d2481a42e7dbad87211f334d"
+    },
+    {
+      "label": "negative-production-binary",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-production/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-production/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--memory-acceptance",
+        "asan-resources",
+        "--report",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/must-not-exist.json"
+      ],
+      "exitCode": 1,
+      "seconds": 0.1194075209999994,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "5ec0eb56058b84ebbcdde0061c2936d4af0b027388affdd9ded36d0a691357e8"
+    },
+    {
+      "label": "negative-wrong-scenario",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "deploy",
+        "--memory-acceptance",
+        "asan-resources",
+        "--report",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/must-not-exist.json"
+      ],
+      "exitCode": 1,
+      "seconds": 0.06954457799999858,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "4ab24421bcdc3f7f447b04a873619ec71d49aad0d7f83cd185a397bb2813854b"
+    },
+    {
+      "label": "negative-unknown-profile",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--memory-acceptance",
+        "silently-waive",
+        "--report",
+        "/root/capsid-verification-20261109/memory-profile-proof-r2/must-not-exist.json"
+      ],
+      "exitCode": 1,
+      "seconds": 0.06990751800000083,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "7e905fb1a588c0f9bfe6ab24e52db7de9dc7be4dd4110b42b5c2d1b28041bcc4"
+    },
+    {
+      "label": "negative-missing-report",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--memory-acceptance",
+        "asan-resources"
+      ],
+      "exitCode": 1,
+      "seconds": 0.06997026199999823,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "9f00952b820366e68ce7af62c2f9cbc7646550f383302ae378eb89656fa60ff8"
+    }
+  ],
+  "guardedInputs": {
+    "/root/capsid-verification-20261109/build-production/capsid-host": "0a88b166c6604e7d751a6c4424e1e300bb2e9601a8f271574f84deef4d451429",
+    "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "/root/capsid-verification-20261109/build-production/CMakeCache.txt": "09ee864836c05abe0cd56eaafd2fd997182fabb3bc16f9300ab204c124e64c44",
+    "/root/capsid-verification-20261109/build-production/CTestTestfile.cmake": "85b3383e4d7c6837228a79be46cce702196c58ef54abc77069b83988d499473a",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-r1/inventory.json": "38c9d096e6c2c2cce51694f0a5a032c6f5c449990f281526f54695fcdad8fa58",
+    "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a": "980fe86a76599e8b1981d289ec498c5292ac0a4aa53ec43d8018ceac08dd6413",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a": "63940ed4380eb5f8f47993e72d4e872849774c214d6f68b31bcfc43e2eac5fb6",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a": "66c9e01d07c9d8dd98d117e19c304bf7a7e82888aa0361879433821785c113d9",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-host": "33afa1ad5fc3c6004715e5d5dcd2043b7b0769ecf61151eea56af52fc14a5079",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-worker": "f815d91959b20a5c0dfa0dbf6e6cc58a73d8ca1abfe4b45546d70be90e1e88c9",
+    "/root/capsid-verification-20261109/build-sanitizer/CMakeCache.txt": "04b79591a2e2851cb0cd78ba28890314ae28a3d33208f37b7ce59f90cd754932",
+    "/root/capsid-verification-20261109/build-sanitizer/CTestTestfile.cmake": "c141cb6c930c6050bb8447c092e5ee289a41d5cd5fdba2b8f0cb929539d8293e",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-wpt-soak-sanitizer-linux-build-r1/inventory.json": "253f78314c17ebc8fc73b61040e3d38ba1789e6d118819a0aee40fce86b00a8b",
+    "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libssl.a": "99e76ccc2a399ceaaf7cb9456781eeaae46b8c68051062055cb196a7fcd343ee",
+    "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libcrypto.a": "b817f59d771624f213fe1b412197b5456695c847b786acdb04fd951114ebceaa",
+    "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib/libcares.a": "d9ab44d90c35c7823fe8b0d9474e7214e980b287e5b1cefc678f055c4c27a38b",
+    "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs": "067da1b53f44ad6e16b219a29a853ebd2c94424462bce4d7fde830032e0a3eaa"
+  },
+  "actualMainTestProgramExecuted": true,
+  "originalProductSourcesAndExecutablesUnmodified": true,
+  "originalRawRssFailuresRetained": true,
+  "originalRssThresholdsAndCtestOuterTimeoutsUnchanged": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+    "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+    "--host",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+    "--worker",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+    "--case",
+    "replacement-recursion",
+    "--memory-acceptance",
+    "asan-resources"
+  ],
+  "activeCommandPid": 1071,
+  "productionOriginalRssCasesPassed": 2,
+  "originalAsanRawRssCasesFailedAndRetained": 2,
+  "actualSeparatelyNamedResourceCasesPassed": 2,
+  "fullLsanAndNaturalShutdownScenarios": [
+    {
+      "scenario": "replacement-recursion",
+      "file": "/mnt/d/capsid-verification-20261108/evidence/sdk78-explicit-asan-resource-profile-native-r2/asan-memory-replacement-recursion.json",
+      "sha256": "0d61468b0c51be4ca5460e4da8402ceb91e6e8a4b52b950642d8c09d19f3b8fb",
+      "originalFootprintChecks": [
+        {
+          "passed": false,
+          "message": "16 replacements grow RSS by 197960 KiB; retired pools are reclaimed"
+        },
+        {
+          "passed": false,
+          "message": "16 replacements grow VmSize by 168184 KiB"
+        },
+        {
+          "passed": false,
+          "message": "full retire returns the footprint"
+        }
+      ],
+      "naturalExit": true,
+      "fullLsan": true
+    },
+    {
+      "scenario": "reclamation-idle",
+      "file": "/mnt/d/capsid-verification-20261108/evidence/sdk78-explicit-asan-resource-profile-native-r2/asan-memory-reclamation-idle.json",
+      "sha256": "d5033303bfced9c1bf2dbb7aaee96c0cb644d8e1a4b7c0564434df5bff808b36",
+      "originalFootprintChecks": [
+        {
+          "passed": false,
+          "message": "last retired large factory returns memory without another admin operation"
+        }
+      ],
+      "naturalExit": true,
+      "fullLsan": true
+    }
+  ],
+  "negativeControlsRejected": [
+    "leaks-disabled",
+    "quarantine-overridden",
+    "lsan-suppressed",
+    "production-binary",
+    "wrong-scenario",
+    "unknown-profile",
+    "missing-report"
+  ],
+  "negativeControlsRejectedCount": 7,
+  "exactCmakeResourceRegistrationBlockQualified": true,
+  "allGuardedSourceBinariesProvidersCacheAndRegistrationsUnchanged": true,
+  "formalCiIntegrationStillRequired": true
+}

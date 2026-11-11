@@ -1,0 +1,254 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -315,6 +315,8 @@
+     void *interrupt_opaque;
+     JSJobContextHooks job_ctx_hooks;
+     void *job_ctx_opaque;
++    bool (*job_ctx_can_run)(JSContext *, void *, void *);
++    void *job_ctx_can_run_opaque;
+ 
+     JSPromiseHook *promise_hook;
+     void *promise_hook_opaque;
+@@ -2136,6 +2138,14 @@
+     rt->job_ctx_opaque = opaque;
+ }
+ 
++void JS_SetJobContextCanRunHook(JSRuntime *rt,
++                               bool (*can_run)(JSContext *, void *, void *),
++                               void *opaque)
++{
++    rt->job_ctx_can_run = can_run;
++    rt->job_ctx_can_run_opaque = opaque;
++}
++
+ void JS_SetCanBlock(JSRuntime *rt, bool can_block)
+ {
+     rt->can_block = can_block;
+@@ -2241,13 +2251,18 @@
+     e = list_entry(rt->job_list.next, JSJobEntry, link);
+     list_del(&e->link);
+     ctx = e->ctx;
+-    if (rt->job_ctx_hooks.enter && e->job_ctx) {
+-        job_ctx_prev = rt->job_ctx_hooks.enter(ctx, e->job_ctx,
+-                                               rt->job_ctx_opaque);
+-    }
+-    res = e->job_func(e->ctx, e->argc, vc(e->argv));
+-    if (rt->job_ctx_hooks.leave && e->job_ctx) {
+-        rt->job_ctx_hooks.leave(ctx, job_ctx_prev, rt->job_ctx_opaque);
++    bool can_run = !e->job_ctx || !rt->job_ctx_can_run ||
++        rt->job_ctx_can_run(ctx, e->job_ctx, rt->job_ctx_can_run_opaque);
++    res = JS_UNDEFINED;
++    if (can_run) {
++        if (rt->job_ctx_hooks.enter && e->job_ctx) {
++            job_ctx_prev = rt->job_ctx_hooks.enter(ctx, e->job_ctx,
++                                                 rt->job_ctx_opaque);
++        }
++        res = e->job_func(e->ctx, e->argc, vc(e->argv));
++        if (rt->job_ctx_hooks.leave && e->job_ctx) {
++            rt->job_ctx_hooks.leave(ctx, job_ctx_prev, rt->job_ctx_opaque);
++        }
+     }
+     for(i = 0; i < e->argc; i++)
+         JS_FreeValue(ctx, e->argv[i]);
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1162,6 +1162,11 @@
+ } JSJobContextHooks;
+ 
+ JS_EXTERN void JS_SetJobContextHooks(JSRuntime *rt, const JSJobContextHooks *hooks, void *opaque);
++/* A retired connection keeps inert Promise reactions in the JS heap. The
++ * embedder may discard those jobs while still releasing every captured value
++ * and context. Kept separate so existing four-member hook users stay valid. */
++JS_EXTERN void JS_SetJobContextCanRunHook(JSRuntime *rt,
++    bool (*can_run)(JSContext *, void *, void *), void *opaque);
+ /* Capsid: true when at least one pending job carries exactly job_context.
+  * Unlike JS_IsJobPending, this is per-request so an unrelated request's
+  * jobs cannot defer another request's poison decision. */
+--- a/src/private.h
++++ b/src/private.h
+@@ -89,6 +89,8 @@
+     bool loop_shared;
+     TJSAsyncContextHooks async_ctx_hooks;
+     void *async_ctx_opaque;
++    TJSAsyncContextControlHooks async_ctx_control;
++    void *async_ctx_control_opaque;
+     TJSResourceOwnerHooks resource_owner_hooks;
+     void *resource_owner_opaque;
+ #ifdef TJS_HAVE_WASM
+--- a/src/timers.c
++++ b/src/timers.c
+@@ -35,6 +35,7 @@
+     uv_timer_t handle;
+     UT_hash_handle hh;
+     int interval;
++    int cleanup; /* embedder-only task, outside application timer cancellation */
+     void *ctx_data; /* captured async context */
+     void *owner; /* immutable Binding resource owner */
+     JSValue func;
+@@ -81,6 +82,18 @@
+     }
+ }
+ 
++void tjs_cancel_context_timers(JSContext *ctx,
++    bool (*matches)(void *ctx_data, void *opaque), void *opaque) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    TJSTimer *th, *tmp;
++    HASH_ITER(hh, qrt->timers.timers, th, tmp) {
++        if (!th->cleanup && matches(th->ctx_data, opaque)) {
++            uv_timer_stop(&th->handle);
++            destroy_timer(th);
++        }
++    }
++}
++
+ static void uv__timer_cb(uv_timer_t *handle) {
+     TJSTimer *th = handle->data;
+     CHECK_NOT_NULL(th);
+@@ -90,6 +103,10 @@
+         return;
+     }
+ 
++    if (!th->cleanup && !tjs_timer_context_allowed(th->ctx, th->ctx_data, 2)) {
++        destroy_timer(th);
++        return;
++    }
+     tjs_call_handler_ctx(th->ctx, th->ctx_data, th->func, th->argc, th->argv);
+ 
+     if (uv_is_closing((uv_handle_t *) handle)) {
+@@ -125,7 +142,7 @@
+      * intervals to one millisecond so setInterval(callback, 0) remains an
+      * interval instead of becoming a leaked one-shot timer.
+      */
+-    if (magic && delay <= 0) delay = 1;
++    if ((magic & 1) && delay <= 0) delay = 1;
+ 
+     int nargs = argc - 2;
+     if (nargs < 0) {
+@@ -156,20 +173,33 @@
+         tjs__free(th);
+         return JS_ThrowInternalError(ctx, "cannot capture async context");
+     }
++    if (!(magic & 2) && !tjs_timer_context_allowed(ctx, th->ctx_data, 0)) {
++        int64_t id = th->id;
++        tjs_release_ctx(ctx, th->ctx_data);
++        tjs_release_resource_owner(ctx, th->owner);
++        tjs__free(th);
++        return JS_NewInt64(ctx, id);
++    }
+     CHECK_EQ(uv_timer_init(tjs_get_loop(ctx), &th->handle), 0);
+     th->handle.data = th;
+-    th->interval = magic;
++    th->interval = magic & 1;
++    th->cleanup = (magic & 2) != 0;
+     th->func = JS_DupValue(ctx, func);
+     th->argc = nargs;
+     for (int i = 0; i < nargs; i++) {
+         th->argv[i] = JS_DupValue(ctx, argv[i + 2]);
+     }
+ 
+-    CHECK_EQ(uv_timer_start(&th->handle, uv__timer_cb, delay, magic ? delay : 0 /* repeat */), 0);
++    CHECK_EQ(uv_timer_start(&th->handle, uv__timer_cb, delay, (magic & 1) ? delay : 0 /* repeat */), 0);
+ 
+     HASH_ADD_INT64(qrt->timers.timers, id, th);
+ 
+     return JS_NewInt64(ctx, th->id);
++}
++
++JSValue tjs_queue_async_cleanup(JSContext *ctx, JSValueConst callback) {
++    JSValue args[] = { callback, JS_NewInt32(ctx, 0) };
++    return tjs_setTimeout(ctx, JS_UNDEFINED, 2, args, 2);
+ }
+ 
+ static JSValue tjs_clearTimeout(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+@@ -185,6 +215,8 @@
+     HASH_FIND_INT64(qrt->timers.timers, &timer_id, th);
+ 
+     if (th != NULL) {
++        if (th->cleanup || !tjs_timer_context_allowed(ctx, th->ctx_data, 1))
++            return JS_UNDEFINED;
+         if (tjs_require_resource_owner(ctx, th->owner) < 0) {
+             return JS_EXCEPTION;
+         }
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -269,10 +269,44 @@
+         tjs_call_handler(ctx, func, argc, argv);
+         return;
+     }
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (qrt->async_ctx_control.can_run &&
++        !qrt->async_ctx_control.can_run(ctx, ctx_data, qrt->async_ctx_control_opaque)) {
++        return;
++    }
+     void *prev = NULL;
+     tjs_enter_ctx(ctx, ctx_data, &prev);
++    /* Cancellation during the callback can release the resource's capture. */
++    void *held = NULL;
++    if (tjs_capture_ctx(ctx, &held) < 0) {
++        tjs_leave_ctx(ctx, &prev);
++        return;
++    }
+     tjs_call_handler(ctx, func, argc, argv);
+     tjs_leave_ctx(ctx, &prev);
++    tjs_async_context_checkpoint(ctx);
++    tjs_release_ctx(ctx, held);
++}
++
++void tjs_set_async_context_control_hooks(JSContext *ctx,
++    const TJSAsyncContextControlHooks *hooks, void *opaque) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (hooks) qrt->async_ctx_control = *hooks;
++    else memset(&qrt->async_ctx_control, 0, sizeof(qrt->async_ctx_control));
++    qrt->async_ctx_control_opaque = opaque;
++}
++
++bool tjs_timer_context_allowed(JSContext *ctx, void *ctx_data, int operation) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    return !qrt->async_ctx_control.timer_allowed ||
++        qrt->async_ctx_control.timer_allowed(ctx, ctx_data, operation,
++                                           qrt->async_ctx_control_opaque);
++}
++
++void tjs_async_context_checkpoint(JSContext *ctx) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    if (qrt->async_ctx_control.checkpoint)
++        qrt->async_ctx_control.checkpoint(ctx, qrt->async_ctx_control_opaque);
+ }
+ 
+ void tjs_set_resource_owner_hooks(JSContext *ctx, const TJSResourceOwnerHooks *hooks, void *opaque) {
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -166,6 +166,23 @@
+ void tjs_release_ctx(JSContext *ctx, void *ctx_data);
+ void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv);
+ 
++/* Optional connection-lifetime controls, independent of Binding ownership.
++ * timer_allowed operations: 0=create, 1=clear, 2=fire; false is a silent no-op.
++ * checkpoint runs only after the native callback has restored its context. */
++typedef struct TJSAsyncContextControlHooks {
++    bool (*can_run)(JSContext *ctx, void *ctx_data, void *opaque);
++    bool (*timer_allowed)(JSContext *ctx, void *ctx_data, int operation, void *opaque);
++    void (*checkpoint)(JSContext *ctx, void *opaque);
++} TJSAsyncContextControlHooks;
++void tjs_set_async_context_control_hooks(JSContext *ctx,
++    const TJSAsyncContextControlHooks *hooks, void *opaque);
++bool tjs_timer_context_allowed(JSContext *ctx, void *ctx_data, int operation);
++void tjs_async_context_checkpoint(JSContext *ctx);
++void tjs_cancel_context_timers(JSContext *ctx,
++    bool (*matches)(void *ctx_data, void *opaque), void *opaque);
++/* Private cleanup tasks survive application timer cancellation. */
++JSValue tjs_queue_async_cleanup(JSContext *ctx, JSValueConst callback);
++
+ /* Immutable native-resource ownership. The Binding Runtime installs these
+    independently from async callback propagation: a File/socket/database/WASM
+    object keeps its creation-time owner until finalization, and every public
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -835,6 +835,7 @@
+ 
+ void tjs__execute_jobs(JSContext *ctx) {
+     tjs__drain_microtasks(ctx);
++    tjs_async_context_checkpoint(ctx);
+ 
+     /* Process deferred unhandled promise rejections.
+      * The rejection tracker defers event dispatch to after all microtasks

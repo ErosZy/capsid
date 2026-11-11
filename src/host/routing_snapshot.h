@@ -79,6 +79,10 @@ class RoutingTable {
 public:
     void publish(std::shared_ptr<const RoutingSnapshot> snapshot);
     std::shared_ptr<const RoutingSnapshot> load() const;
+    // Render-time observation follows the same committed snapshot as
+    // requests. Prepared/aborted and retired generations cannot publish
+    // their processes here. With several Apps, select the first live one.
+    std::int64_t worker_process_id() const;
     std::uint64_t generation() const { return generation_.load(std::memory_order_relaxed); }
 
 private:

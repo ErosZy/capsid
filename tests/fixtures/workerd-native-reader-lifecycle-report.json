@@ -1,0 +1,11 @@
+{
+  "schema": "capsid-native-reader-lifecycle-capture-v1",
+  "platform": "linux",
+  "source": "upgrade58acu-lifecycle-linux-reference.json",
+  "sourceReportSHA256": "19f11f54e5f1b3db923fe76aa01df76a9560e05a8db87fe56fbb8d6361805900",
+  "rawBytes": 596770,
+  "gzipSHA256": "ef7f25c16935e7c995a2c2816297912ade31e66f633cbc11ce2e7ef0ee89f5ef",
+  "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "referenceBinarySHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "scope": "Actual pinned workerd observations,100 native/standard reader lifecycle and intrinsic cases; no synthetic product results"
+}

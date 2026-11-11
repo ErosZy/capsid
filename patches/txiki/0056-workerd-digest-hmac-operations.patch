@@ -1,0 +1,423 @@
+--- /dev/null
++++ b/src/js/polyfills/crypto/operations.js
+@@ -0,0 +1,35 @@
++import { CryptoKey, getKeyData } from './crypto-key.js';
++import { toUint8Array } from './helpers.js';
++
++const instances = new WeakSet();
++const resolve = Promise.resolve.bind(Promise);
++const reject = Promise.reject.bind(Promise);
++const then = Function.call.bind(Promise.prototype.then);
++
++export function registerSubtle(value) { instances.add(value); }
++export function requireSubtle(value) {
++    if (!instances.has(value)) {
++        throw new TypeError('Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.');
++    }
++}
++export function requireCryptoKey(value, method, parameter) {
++    if (!(value instanceof CryptoKey) || getKeyData(value) === undefined) {
++        throw new TypeError(`Failed to execute '${method}' on 'SubtleCrypto': parameter ${parameter} is not of type 'CryptoKey'.`);
++    }
++}
++export function cryptoBufferSource(value, method, parameter) {
++    try { return toUint8Array(value); }
++    catch {
++        throw new TypeError(`Failed to execute '${method}' on 'SubtleCrypto': parameter ${parameter} is not of type 'BufferSource'.`);
++    }
++}
++// Compute before returning, as the locked workerd implementation does. Its
++// JSG result conversion adds a Promise continuation after the operation, while
++// argument-conversion errors return an already rejected Promise. Keep that
++// boundary explicit; no timer or event-loop delay is involved.
++export function cryptoOperation(compute) {
++    let promise;
++    try { promise = resolve(compute()); }
++    catch (error) { promise = reject(error); }
++    return then(promise, value => value);
++}
+--- a/src/js/polyfills/crypto/subtle.js
++++ b/src/js/polyfills/crypto/subtle.js
+@@ -1,5 +1,6 @@
+ import { aesEncrypt, aesDecrypt, aesGenerateKey, aesImportKey, aesExportKey, aesKwWrap, aesKwUnwrap } from './aes.js';
+ import { digest } from './digest.js';
++import { registerSubtle, requireSubtle, requireCryptoKey, cryptoBufferSource, cryptoOperation } from './operations.js';
+ import { ecGenerateKey, ecdsaSign, ecdsaVerify, ecdhDeriveBits, ecImportKey, ecExportKey } from './ec.js';
+ import { ed25519GenerateKey, ed25519Sign, ed25519Verify, ed25519ImportKey, ed25519ExportKey } from './ed.js';
+ import { normalizeHashAlgorithm, hashBlockSizes } from './helpers.js';
+@@ -25,7 +26,7 @@
+     const raw = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+     const canonical = raw ? (canonicalNameMap[raw.toUpperCase()] ?? raw) : raw;
+ 
+-    if (canonical && typeof algorithm === 'object' && algorithm !== null && algorithm.name !== canonical) {
++    if (canonical && typeof algorithm === 'object' && algorithm !== null && raw !== canonical) {
+         algorithm.name = canonical;
+     }
+ 
+@@ -33,7 +34,10 @@
+ }
+ 
+ export class SubtleCrypto {
++    constructor() { registerSubtle(this); }
++
+     digest(algorithm, data) {
++        requireSubtle(this);
+         return digest(algorithm, data);
+     }
+ 
+@@ -68,11 +72,17 @@
+     }
+ 
+     sign(algorithm, key, data) {
+-        const name = normalizeAlgorithm(algorithm);
++        requireSubtle(this);
++        let name;
++        try {
++            name = normalizeAlgorithm(algorithm);
++            requireCryptoKey(key, 'sign', 2);
++            data = cryptoBufferSource(data, 'sign', 3);
++        } catch (error) { return Promise.reject(error); }
+ 
+         switch (name) {
+             case 'HMAC':
+-                return hmacSign(algorithm, key, data);
++                return cryptoOperation(() => hmacSign(algorithm, key, data));
+             case 'ECDSA':
+                 return ecdsaSign(algorithm, key, data);
+             case 'Ed25519':
+@@ -86,11 +96,18 @@
+     }
+ 
+     verify(algorithm, key, signature, data) {
+-        const name = normalizeAlgorithm(algorithm);
++        requireSubtle(this);
++        let name;
++        try {
++            name = normalizeAlgorithm(algorithm);
++            requireCryptoKey(key, 'verify', 2);
++            signature = cryptoBufferSource(signature, 'verify', 3);
++            data = cryptoBufferSource(data, 'verify', 4);
++        } catch (error) { return Promise.reject(error); }
+ 
+         switch (name) {
+             case 'HMAC':
+-                return hmacVerify(algorithm, key, signature, data);
++                return cryptoOperation(() => hmacVerify(algorithm, key, signature, data));
+             case 'ECDSA':
+                 return ecdsaVerify(algorithm, key, signature, data);
+             case 'Ed25519':
+@@ -174,12 +191,17 @@
+     }
+ 
+     generateKey(algorithm, extractable, keyUsages) {
+-        const name = normalizeAlgorithm(algorithm);
++        requireSubtle(this);
++        let name;
++        try {
++            name = normalizeAlgorithm(algorithm);
++            
++        } catch (error) { return Promise.reject(error); }
+ 
+         try {
+             switch (name) {
+                 case 'HMAC':
+-                    return Promise.resolve(hmacGenerateKey(algorithm, extractable, keyUsages));
++                    return cryptoOperation(() => hmacGenerateKey(algorithm, extractable, keyUsages));
+                 case 'AES-CBC':
+                 case 'AES-CTR':
+                 case 'AES-GCM':
+@@ -206,13 +228,17 @@
+     }
+ 
+     importKey(format, keyData, algorithm, extractable, keyUsages) {
+-        const name = normalizeAlgorithm(algorithm);
++        requireSubtle(this);
++        let name;
++        try {
++            name = normalizeAlgorithm(algorithm);
++            
++        } catch (error) { return Promise.reject(error); }
+ 
+         try {
+             switch (name) {
+                 case 'HMAC':
+-                    return Promise.resolve(
+-                        hmacImportKey(format, keyData, algorithm, extractable, keyUsages));
++                    return cryptoOperation(() => hmacImportKey(format, keyData, algorithm, extractable, keyUsages));
+                 case 'AES-CBC':
+                 case 'AES-CTR':
+                 case 'AES-GCM':
+@@ -339,12 +365,17 @@
+     }
+ 
+     exportKey(format, key) {
+-        const algoName = key?.algorithm?.name;
++        requireSubtle(this);
++        let algoName;
++        try {
++            requireCryptoKey(key, 'exportKey', 2);
++            algoName = key.algorithm.name;
++        } catch (error) { return Promise.reject(error); }
+ 
+         try {
+             switch (algoName) {
+                 case 'HMAC':
+-                    return Promise.resolve(hmacExportKey(format, key));
++                    return cryptoOperation(() => hmacExportKey(format, key));
+                 case 'AES-CBC':
+                 case 'AES-CTR':
+                 case 'AES-GCM':
+--- a/src/js/polyfills/crypto/helpers.js
++++ b/src/js/polyfills/crypto/helpers.js
+@@ -1,6 +1,8 @@
+ import core from 'tjs:internal/core';
+ 
+ export const nativeDigest = core.webcrypto.digest;
++export const nativeDigestSync = core.webcrypto.digestSync;
++export const nativeHmacSignSync = core.webcrypto.hmacSignSync;
+ export const nativeHmacSign = core.webcrypto.hmacSign;
+ export const nativeCipher = core.webcrypto.cipher;
+ export const nativePbkdf2 = core.webcrypto.pbkdf2;
+--- a/src/js/polyfills/crypto/digest.js
++++ b/src/js/polyfills/crypto/digest.js
+@@ -1,33 +1,18 @@
+-import { digestAlgorithms, nativeDigest, toUint8Array } from './helpers.js';
++import { digestAlgorithms, nativeDigestSync } from './helpers.js';
++import { cryptoBufferSource, cryptoOperation } from './operations.js';
+ 
+ export function digest(algorithm, data) {
+-    const rawName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+-    const name = rawName
+-        ? Object.keys(digestAlgorithms).find(k => k.toUpperCase() === rawName.toUpperCase())
+-        : undefined;
+-    const typeId = name !== undefined ? digestAlgorithms[name] : undefined;
+-
+-    if (typeId === undefined) {
+-        return Promise.reject(new DOMException(`Unrecognized algorithm name: ${name}`, 'NotSupportedError'));
+-    }
+-
+-    let bytes;
+-
++    let rawName, bytes;
+     try {
+-        bytes = toUint8Array(data);
+-    } catch (e) {
+-        return Promise.reject(e);
+-    }
+-
+-    const { promise, resolve, reject } = Promise.withResolvers();
+-
+-    nativeDigest(typeId, bytes, (err, result) => {
+-        if (err) {
+-            reject(new DOMException(err, 'OperationError'));
+-        } else {
+-            resolve(result.buffer);
++        rawName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
++        bytes = cryptoBufferSource(data, 'digest', 2);
++    } catch (error) { return Promise.reject(error); }
++    return cryptoOperation(() => {
++        const name = typeof rawName === 'string'
++            ? Object.keys(digestAlgorithms).find(value => value.toUpperCase() === rawName.toUpperCase()) : undefined;
++        if (name === undefined) {
++            throw new DOMException('Unrecognized or unimplemented digest algorithm requested.', 'NotSupportedError');
+         }
++        return nativeDigestSync(digestAlgorithms[name], bytes).buffer;
+     });
+-
+-    return promise;
+ }
+--- a/src/js/polyfills/crypto/hmac.js
++++ b/src/js/polyfills/crypto/hmac.js
+@@ -1,85 +1,41 @@
+ import { CryptoKey, getKeyData } from './crypto-key.js';
+ import {
+-    digestAlgorithms, nativeHmacSign, normalizeHashAlgorithm,
++    digestAlgorithms, nativeHmacSignSync, normalizeHashAlgorithm,
+     hashBlockSizes, toUint8Array, base64urlEncode, base64urlDecode,
+ } from './helpers.js';
+ 
+ function hmacCompute(hashName, keyData, data) {
+-    const typeId = digestAlgorithms[hashName];
+-    const { promise, resolve, reject } = Promise.withResolvers();
+-
+-    nativeHmacSign(typeId, keyData, data, (err, result) => {
+-        if (err) {
+-            reject(new DOMException(err, 'OperationError'));
+-        } else {
+-            resolve(result);
+-        }
+-    });
+-
+-    return promise;
++    return nativeHmacSignSync(digestAlgorithms[hashName], keyData, data);
+ }
+ 
++function validateOperation(key, usage) {
++    if (key.algorithm.name !== 'HMAC') {
++        throw new DOMException(`Requested algorithm "HMAC" does not match this CryptoKey's algorithm "${key.algorithm.name}".`, 'InvalidAccessError');
++    }
++    if (!key.usages.includes(usage)) {
++        throw new DOMException(`Requested key usage "${usage}" does not match any usage listed in this CryptoKey.`, 'InvalidAccessError');
++    }
++}
+ export function hmacSign(algorithm, key, data) {
+-    if (!(key instanceof CryptoKey)) {
+-        return Promise.reject(new TypeError('key must be a CryptoKey'));
+-    }
+-
+-    if (!key.usages.includes('sign')) {
+-        return Promise.reject(new DOMException('Key does not support the "sign" operation', 'InvalidAccessError'));
+-    }
+-
+-    const hashName = normalizeHashAlgorithm(key.algorithm.hash);
+-    let bytes;
+-
+-    try {
+-        bytes = toUint8Array(data);
+-    } catch (e) {
+-        return Promise.reject(e);
+-    }
+-
+-    return hmacCompute(hashName, getKeyData(key), bytes).then(result => result.buffer);
++    validateOperation(key, 'sign');
++    return hmacCompute(normalizeHashAlgorithm(key.algorithm.hash), getKeyData(key), data).buffer;
+ }
+ 
+ export function hmacVerify(algorithm, key, signature, data) {
+-    if (!(key instanceof CryptoKey)) {
+-        return Promise.reject(new TypeError('key must be a CryptoKey'));
+-    }
+-
+-    if (!key.usages.includes('verify')) {
+-        return Promise.reject(new DOMException('Key does not support the "verify" operation', 'InvalidAccessError'));
+-    }
+-
+-    const hashName = normalizeHashAlgorithm(key.algorithm.hash);
+-    let sigBytes, dataBytes;
+-
+-    try {
+-        sigBytes = toUint8Array(signature);
+-        dataBytes = toUint8Array(data);
+-    } catch (e) {
+-        return Promise.reject(e);
+-    }
+-
+-    return hmacCompute(hashName, getKeyData(key), dataBytes).then(result => {
+-        const computed = new Uint8Array(result.buffer);
+-
+-        if (computed.byteLength !== sigBytes.byteLength) {
+-            return false;
+-        }
+-
+-        // Constant-time comparison.
+-        let diff = 0;
+-
+-        for (let i = 0; i < computed.byteLength; i++) {
+-            diff |= computed[i] ^ sigBytes[i];
+-        }
+-
+-        return diff === 0;
+-    });
++    validateOperation(key, 'verify');
++    const computed = hmacCompute(normalizeHashAlgorithm(key.algorithm.hash), getKeyData(key), data);
++    if (computed.byteLength !== signature.byteLength) return false;
++    let diff = 0;
++    for (let index = 0; index < computed.byteLength; ++index) diff |= computed[index] ^ signature[index];
++    return diff === 0;
+ }
+ 
+ export function hmacGenerateKey(algorithm, extractable, keyUsages) {
+     const hashName = normalizeHashAlgorithm(algorithm.hash);
+     const validUsages = [ 'sign', 'verify' ];
++    if (keyUsages.length === 0) {
++        throw new DOMException('Secret/private CryptoKeys must have at least one usage.', 'SyntaxError');
++    }
+ 
+     for (const usage of keyUsages) {
+         if (!validUsages.includes(usage)) {
+@@ -87,8 +43,11 @@
+         }
+     }
+ 
+-    const length = algorithm.length || (hashBlockSizes[hashName] * 8);
+-    const byteLength = length / 8;
++    const length = algorithm.length === undefined ? hashBlockSizes[hashName] * 8 : algorithm.length;
++    if (!Number.isInteger(length) || length <= 0 || length > 0xffffffff) {
++        throw new DOMException(`HMAC key length must be a non-zero unsigned long integer (requested ${length}).`, 'OperationError');
++    }
++    const byteLength = Math.ceil(length / 8);
+     const keyData = new Uint8Array(byteLength);
+ 
+     crypto.getRandomValues(keyData);
+@@ -100,11 +59,14 @@
+ 
+ export function hmacImportKey(format, keyData, algorithm, extractable, keyUsages) {
+     if (format !== 'raw' && format !== 'jwk') {
+-        throw new DOMException(`Unsupported key format: ${format}`, 'NotSupportedError');
++        throw new DOMException(`Unrecognized key import format "${format}".`, 'NotSupportedError');
+     }
+ 
+     const hashName = normalizeHashAlgorithm(algorithm.hash);
+     const validUsages = [ 'sign', 'verify' ];
++    if (keyUsages.length === 0) {
++        throw new DOMException('Secret/private CryptoKeys must have at least one usage.', 'SyntaxError');
++    }
+ 
+     for (const usage of keyUsages) {
+         if (!validUsages.includes(usage)) {
+--- a/src/webcrypto.c
++++ b/src/webcrypto.c
+@@ -363,6 +363,44 @@
+     return JS_EXCEPTION;
+ }
+ 
++/* Synchronous primitives for the workerd-compatible digest/HMAC surface.
++ * No queued work or borrowed mutable BufferSource survives this native call. */
++static JSValue tjs_webcrypto_digest_sync(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    if (argc < 2) return JS_ThrowTypeError(ctx, "expected type and data");
++    int32_t type;
++    if (JS_ToInt32(ctx, &type, argv[0])) return JS_EXCEPTION;
++    if (type < DIGEST_SHA1 || type > DIGEST_SHA512) return JS_ThrowRangeError(ctx, "invalid digest algorithm");
++    size_t size;
++    uint8_t *data = JS_GetUint8Array(ctx, &size, argv[1]);
++    if (!data && JS_HasException(ctx)) return JS_EXCEPTION;
++    static const uint8_t empty = 0;
++    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(digest_to_md_type[type]);
++    uint8_t output[64];
++    if (!info || mbedtls_md(info, data ? data : &empty, size, output)) {
++        return JS_ThrowInternalError(ctx, "digest operation failed");
++    }
++    return JS_NewUint8ArrayCopy(ctx, output, digest_sizes[type]);
++}
++
++static JSValue tjs_webcrypto_hmac_sign_sync(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    if (argc < 3) return JS_ThrowTypeError(ctx, "expected type, key and data");
++    int32_t type;
++    if (JS_ToInt32(ctx, &type, argv[0])) return JS_EXCEPTION;
++    if (type < DIGEST_SHA1 || type > DIGEST_SHA512) return JS_ThrowRangeError(ctx, "invalid digest algorithm");
++    size_t key_size, data_size;
++    uint8_t *key = JS_GetUint8Array(ctx, &key_size, argv[1]);
++    if (!key && JS_HasException(ctx)) return JS_EXCEPTION;
++    uint8_t *data = JS_GetUint8Array(ctx, &data_size, argv[2]);
++    if (!data && JS_HasException(ctx)) return JS_EXCEPTION;
++    static const uint8_t empty = 0;
++    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(digest_to_md_type[type]);
++    uint8_t output[64];
++    if (!info || mbedtls_md_hmac(info, key ? key : &empty, key_size, data ? data : &empty, data_size, output)) {
++        return JS_ThrowInternalError(ctx, "HMAC operation failed");
++    }
++    return JS_NewUint8ArrayCopy(ctx, output, digest_sizes[type]);
++}
++
+ enum {
+     CIPHER_AES_CBC = 0,
+     CIPHER_AES_GCM,
+@@ -3849,6 +3887,8 @@
+ 
+ void tjs__webcrypto_init(JSContext *ctx, JSValue ns) {
+     JSValue obj = JS_NewObject(ctx);
++    JS_DefinePropertyValueStr(ctx, obj, "digestSync", JS_NewCFunction(ctx, tjs_webcrypto_digest_sync, "digestSync", 2), JS_PROP_C_W_E);
++    JS_DefinePropertyValueStr(ctx, obj, "hmacSignSync", JS_NewCFunction(ctx, tjs_webcrypto_hmac_sign_sync, "hmacSignSync", 3), JS_PROP_C_W_E);
+     JSValue digest_fn = JS_NewCFunction(ctx, tjs_webcrypto_digest, "digest", 3);
+     JS_SetPropertyFunctionList(ctx, digest_fn, tjs_webcrypto_consts, countof(tjs_webcrypto_consts));
+     JS_DefinePropertyValueStr(ctx, obj, "digest", digest_fn, JS_PROP_C_W_E);

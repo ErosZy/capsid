@@ -1,0 +1,239 @@
+{
+  "schema": "capsid-workerd-wpt-profile-v2",
+  "id": "CAPSID-WORKERD-v1.20261010.1-default-v2",
+  "references": {
+    "linux": {
+      "release_tag": "v1.20261010.1",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": []
+    },
+    "win32": {
+      "release_tag": "v1.20261010.1",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": []
+    }
+  },
+  "wpt": {
+    "profile": "CAPSID-MIN-2025-subset-v0",
+    "commit": "1985b47aa8972a970f005957f2bfa036da1787c6",
+    "diagnosticMatch": "first-line-exact-with-one-explicit-engine-message-pair",
+    "standardFailuresRetained": true
+  },
+  "scheduling": "locked-workerd-promise-microtasks",
+  "standardsConformanceClaimed": false,
+  "conflicts": [
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+      "upstreamSHA256": "3fdb621068d25c4df83a5904255195fac8164c48c119d21888bf4244a011545a",
+      "total": 36,
+      "failures": [
+        {
+          "name": "delayed handling: delaying handling by setTimeout(,10) will cause both events to fire",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected {}, got undefined"
+        },
+        {
+          "name": "delayed handling: delaying handling rejected promise created from createImageBitmap will cause both events to fire",
+          "status": "FAIL",
+          "errorName": "TypeError",
+          "phase": "test",
+          "message": "cannot read property 'name' of undefined",
+          "referenceMessage": "Cannot read properties of undefined (reading 'name')"
+        },
+        {
+          "name": "delayed handling: a nested-task delay before attaching a handler causes unhandledrejection",
+          "status": "TIMEOUT",
+          "errorName": "TimeoutError",
+          "phase": "timeout",
+          "message": "test timed out"
+        },
+        {
+          "name": "delayed handling: a nested-queueTask after promise creation/rejection, plus promise microtasks, is too late to attach a rejection handler",
+          "status": "TIMEOUT",
+          "errorName": "TimeoutError",
+          "phase": "timeout",
+          "message": "test timed out"
+        },
+        {
+          "name": "delayed handling: a nested-queueTask before promise creation/rejection, plus many promise microtasks, is too late to attach a rejection handler",
+          "status": "TIMEOUT",
+          "errorName": "TimeoutError",
+          "phase": "timeout",
+          "message": "test timed out"
+        },
+        {
+          "name": "delayed handling: a nested-queueTask after promise creation/rejection, plus many promise microtasks, is too late to attach a rejection handler",
+          "status": "TIMEOUT",
+          "errorName": "TimeoutError",
+          "phase": "timeout",
+          "message": "test timed out"
+        }
+      ],
+      "missingExpectedFailures": []
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+      "upstreamSHA256": "c0fb97b890aeb587d92cc632a418e8e4e7a92f447981f335571083dacf86b4f8",
+      "total": 1,
+      "failures": [
+        {
+          "name": "This tests the constructor for the PromiseRejectionEvent DOM class.",
+          "status": "FAIL",
+          "errorName": "TypeError",
+          "phase": "test",
+          "message": "Illegal constructor"
+        }
+      ],
+      "missingExpectedFailures": []
+    },
+    {
+      "path": "webmessaging/MessagePort_initial_disabled.any.js",
+      "upstreamSHA256": "c22d76bc95dbfbb328b0db1ba6cc17d0e6154f5ecdbefb150a972f6c22d27e38",
+      "total": 1,
+      "failures": [
+        {
+          "name": "Untitled test",
+          "status": "FAIL",
+          "errorName": "TypeError",
+          "phase": "test",
+          "message": "addEventListener(): useCapture must be false."
+        }
+      ],
+      "missingExpectedFailures": [
+        {
+          "name": "Untitled test",
+          "deviation": "CAPSID-D010",
+          "errorName": "AssertionError",
+          "message": "reached unreachable code"
+        }
+      ]
+    },
+    {
+      "path": "fetch/api/headers/headers-basic.any.js",
+      "upstreamSHA256": "596cd577710773b42a5edf7c6150138fd0502e005a76b383a8331b5fcaf2cfeb",
+      "total": 23,
+      "failures": [
+        {
+          "name": "Create headers with existing headers with custom iterator",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected \"test\", got null"
+        },
+        {
+          "name": "Iteration skips elements removed while iterating",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "array lengths differ: [\"bar\",\"baz\",\"foo\"] vs [\"bar\",\"baz\"]"
+        },
+        {
+          "name": "Removing elements already iterated over causes an element to be skipped during iteration",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "array lengths differ: [\"bar\",\"baz\",\"foo\",\"quux\"] vs [\"bar\",\"baz\",\"quux\"]"
+        },
+        {
+          "name": "Appending a value pair during iteration causes it to be reached during iteration",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "array lengths differ: [\"bar\",\"baz\",\"foo\",\"quux\"] vs [\"bar\",\"baz\",\"foo\",\"quux\",\"x-yz\"]"
+        },
+        {
+          "name": "Prepending a value pair before the current element position causes it to be skipped during iteration and adds the current element a second time",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "array lengths differ: [\"bar\",\"baz\",\"foo\",\"quux\"] vs [\"bar\",\"baz\",\"baz\",\"foo\",\"quux\"]"
+        }
+      ],
+      "missingExpectedFailures": []
+    },
+    {
+      "path": "fetch/api/headers/headers-errors.any.js",
+      "upstreamSHA256": "4b4b9c8d9b72a52c5200feaa67f018cc91d05e9ee0c98a2a18ad56f44873047b",
+      "total": 18,
+      "failures": [
+        {
+          "name": "Create headers giving bad header name as init argument",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Create headers giving bad header value as init argument",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers get with an invalid name invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers delete with an invalid name invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers has with an invalid name invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers set with an invalid name invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers set with an invalid value invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers append with an invalid name invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers append with an invalid name [object Object]",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        },
+        {
+          "name": "Check headers append with an invalid value invalidĀ",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected TypeError to be thrown"
+        }
+      ],
+      "missingExpectedFailures": []
+    }
+  ]
+}

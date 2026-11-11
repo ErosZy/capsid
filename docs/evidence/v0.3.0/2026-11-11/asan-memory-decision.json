@@ -1,0 +1,34 @@
+{
+  "status": "accepted-by-user",
+  "complete": true,
+  "capturedUTC": "2026-11-10T15:37:14.982130+00:00",
+  "requestId": "call_23135484119c4035839c32231ab1c633",
+  "questionItem": 0,
+  "userAnswer": "保留两项原始失败；用生产 RSS 检查和完整 LSan/资源归还检查分别验收（建议）",
+  "acceptance": "production-rss-and-separate-complete-asan-lsan-resource-return",
+  "rawOriginalSanitizerRssFailuresRetained": [
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle"
+  ],
+  "productionRssChecksActuallyPassed": [
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle"
+  ],
+  "productionFullJUnitSHA256": "55b1e07bec343e4d6d891aef73ab3a66947a750ce90b05f4189262a22412c3b8",
+  "separateAsanResourceReturnAndNaturalShutdownWithFullLsanActuallyCompleted": [
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle"
+  ],
+  "originalAsanOptionsAndDefaultQuarantineRetained": true,
+  "originalRssVmSizePredicatesNeverRewrittenAsPassed": true,
+  "productionSeccompPolicyUnchanged": true,
+  "explicitSanitizerPolicyStillRequired": true,
+  "productMemoryAcceptanceNowUsesExplicitSeparateProfiles": true,
+  "formalTestAndCiIntegrationStillRequired": true,
+  "evidence": {
+    "sdk78-clients-rebound-production-linux-unfiltered-r1\\run.json": "8f4b0a697e2cfcccfaca60e3affb7df8cfa9fdd742039a85cd8d34fbca79ab16",
+    "sdk78-wpt-soak-sanitizer-linux-unfiltered-r1\\run.json": "27e77dd3a8a93424a911c2c4a773da419f3bf3884df2625e4dc7396a867d6ad6",
+    "sdk78-asan-rss-terminal-diagnostics-r4\\run.json": "5aedc968a032b18910c16efd1c9c57146995048a565160fa3518033efca71ef4"
+  },
+  "fullV030GoalComplete": false
+}

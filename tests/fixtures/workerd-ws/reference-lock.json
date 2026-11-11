@@ -1,0 +1,20 @@
+{
+  "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+  "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "release_tag": "v1.20261010.1",
+  "binary": "workerd-linux-64",
+  "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "binary_version_string": "workerd 2026-10-10",
+  "compatibility_date": "2026-08-20",
+  "compatibility_flags": [],
+  "client": {
+    "runtime": "node",
+    "websocket": "native (undici) - no external dependency",
+    "node_version": "v24.14.0",
+    "undici_version": "7.21.0"
+  },
+  "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+  "release_asset": "workerd-linux-64.gz",
+  "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+  "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+}

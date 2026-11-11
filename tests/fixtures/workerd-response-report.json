@@ -1,0 +1,719 @@
+{
+  "schema": "capsid-response-contract-sample-v1",
+  "provenance": {
+    "report": "response-workerd-red-final-v2-report.json",
+    "sha256": "0daf96be3644b9edfff64adb6f2df5b38046c4f1890a038485e7c67adf0125a3",
+    "binarySHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "runnerSHA256": "8053f51491230680b11ce4712965e2d38e203045fa0db908ea07df46404a0791",
+    "fixture": {
+      "fixture": "response.mjs",
+      "sha256": "dd7f9b3c39b11528b92bf4bf464a1dcdddbc6c82b2f79a160b378188673a8be8"
+    },
+    "lock": {
+      "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "release_tag": "v1.20261010.1",
+      "binary": "workerd-linux-64",
+      "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "binary_version_string": "workerd 2026-10-10",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": [],
+      "client": {
+        "runtime": "node",
+        "websocket": "native (undici) - no external dependency",
+        "node_version": "v24.14.0",
+        "undici_version": "7.21.0"
+      },
+      "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+      "release_asset": "workerd-linux-64.gz",
+      "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+      "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+    },
+    "client": {
+      "node": "v24.14.0",
+      "undici": "7.21.0"
+    },
+    "scope": "actual selected Response fixture; full fixture matrix is incomplete"
+  },
+  "observation": {
+    "constructors": {
+      "missing": {
+        "error": "RangeError",
+        "message": "Responses may only be constructed with status codes in the range 200 to 599, inclusive."
+      },
+      "wrong-object": {
+        "error": "TypeError",
+        "message": "Incorrect type for the 'webSocket' field on 'InitializerDict': the provided value is not of type 'WebSocket'."
+      },
+      "wrong-status": {
+        "error": "RangeError",
+        "message": "Responses with a WebSocket must have status code 101."
+      },
+      "wrong-status-object": {
+        "error": "TypeError",
+        "message": "Incorrect type for the 'webSocket' field on 'InitializerDict': the provided value is not of type 'WebSocket'."
+      },
+      "wrong-status-100": {
+        "error": "RangeError",
+        "message": "Responses with a WebSocket must have status code 101."
+      },
+      "wrong-status-201": {
+        "error": "RangeError",
+        "message": "Responses with a WebSocket must have status code 101."
+      },
+      "wrong-status-500": {
+        "error": "RangeError",
+        "message": "Responses with a WebSocket must have status code 101."
+      },
+      "default-status": {
+        "error": "RangeError",
+        "message": "Responses with a WebSocket must have status code 101."
+      },
+      "body-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-text": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-zero": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-bytes-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-buffer-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-blob-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-blob-empty-type": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-empty-explicit-type": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": "text/x-explicit",
+        "endpoint": true
+      },
+      "body-params-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-boxed-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-stream-empty": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-dataview-empty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-view-empty-offset": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-buffer-spoof-empty": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-view-spoof-empty": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-blob-spoof-empty": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-params-spoof-empty": {
+        "error": "TypeError",
+        "message": "Response with null body status (101, 204, 205, or 304) cannot have a body."
+      },
+      "body-params-spoof-nonempty": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-detached-buffer": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-detached-view": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-detached-dataview": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "body-undefined": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "unaccepted": {
+        "status": 101,
+        "statusText": "Switching Protocols",
+        "body": true,
+        "bodyUsed": false,
+        "contentType": null,
+        "endpoint": true
+      },
+      "clone": {
+        "error": "TypeError",
+        "message": "Cannot clone a response to a WebSocket handshake."
+      }
+    },
+    "controls": [
+      {
+        "phase": "before",
+        "simultaneous": true,
+        "connections": [
+          {
+            "status": 101,
+            "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Cum5Q5FpY7lAgqdTBjhapM+Gibk=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+            "requestKey": "ACoj1Ugll3cIFcw/RrqmIA==",
+            "rawTail": "gQ5yZXBseTpiZWZvcmU6MIgGA+hkb25l",
+            "frames": [
+              {
+                "opcode": 1,
+                "payload": "cmVwbHk6YmVmb3JlOjA="
+              },
+              {
+                "opcode": 8,
+                "payload": "A+hkb25l"
+              }
+            ],
+            "peerTerminated": true,
+            "transportError": null,
+            "completion": "peer-ended"
+          },
+          {
+            "status": 101,
+            "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Z4W5u5Zqj1kzPJKrsM/3vt1sgrk=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+            "requestKey": "xbIiIemzBcIMARwLEolhbg==",
+            "rawTail": "gQ5yZXBseTpiZWZvcmU6MYgGA+hkb25l",
+            "frames": [
+              {
+                "opcode": 1,
+                "payload": "cmVwbHk6YmVmb3JlOjE="
+              },
+              {
+                "opcode": 8,
+                "payload": "A+hkb25l"
+              }
+            ],
+            "peerTerminated": true,
+            "transportError": null,
+            "completion": "peer-ended"
+          }
+        ]
+      },
+      {
+        "phase": "after",
+        "simultaneous": true,
+        "connections": [
+          {
+            "status": 101,
+            "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: QmeIi0Pwh88tdkHFa/eYprz7WKs=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+            "requestKey": "TmLfMSWnNsiHPtSFRdZGiA==",
+            "rawTail": "gQ1yZXBseTphZnRlcjowiAYD6GRvbmU=",
+            "frames": [
+              {
+                "opcode": 1,
+                "payload": "cmVwbHk6YWZ0ZXI6MA=="
+              },
+              {
+                "opcode": 8,
+                "payload": "A+hkb25l"
+              }
+            ],
+            "peerTerminated": true,
+            "transportError": null,
+            "completion": "peer-ended"
+          },
+          {
+            "status": 101,
+            "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nsrECvotULbMnlxb8hBJhayth/c=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+            "requestKey": "4HAZTiX2Vc8IRTNayWo3yQ==",
+            "rawTail": "gQ1yZXBseTphZnRlcjoxiAYD6GRvbmU=",
+            "frames": [
+              {
+                "opcode": 1,
+                "payload": "cmVwbHk6YWZ0ZXI6MQ=="
+              },
+              {
+                "opcode": 8,
+                "payload": "A+hkb25l"
+              }
+            ],
+            "peerTerminated": true,
+            "transportError": null,
+            "completion": "peer-ended"
+          }
+        ]
+      }
+    ],
+    "aborted": [
+      {
+        "kind": "accepted",
+        "iteration": 0,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8vdD5Fj3LgPY0uuY3sM/8x7w42U=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "4LKa5SoPw7jJVG46uctiiw==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "both",
+        "iteration": 0,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SR7IWDLTMN+zYC5ye26NWgpZN5A=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "r1WpsThE/gyr86M3leqtNw==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "closed",
+        "iteration": 0,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: a2FnzGeU9YZK0DlGTAGjCtvnYvo=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "d1IOH8MDuEwco05Se8ySUg==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "accepted",
+        "iteration": 1,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Yg2dmWsNFZPJNS6RZDf/DZ8OngU=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "DInLKhTirjjXKP+EB7EQdw==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "both",
+        "iteration": 1,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8lkt8Ze2Z+cXm62iWNnL2RZrqZQ=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "rlasIJqIlJ6+y7x+7indmQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "closed",
+        "iteration": 1,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: b1xKDgtUYKV978MOzvE5uqync1E=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "cqRNkr6R56xvTKFJ4Uw5xA==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "accepted",
+        "iteration": 2,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YdBzkY8y5f/JP2zdDjK4r3bZ3M8=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "KM1ADsl/T06QNY7CiGFrtA==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "both",
+        "iteration": 2,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EErspeDMtllqisGURCvwYP5oA1E=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "7llhum272x0EZ4lj+107/w==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "closed",
+        "iteration": 2,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: +JDl+Nq8YaSTrGwVYcN7Khk/sgE=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "+JceMWTN07N+PgZkCouIkQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "accepted",
+        "iteration": 3,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: UQrjr+yrtQAbhwiY/EySrmQOazg=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "8hWJO/csiaa77DEg+hoMog==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "both",
+        "iteration": 3,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: C4Z1vkyzKW8dG3x/RkUBYrn+Jhw=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "s3b/YVPwBJVRFUWz+sG1kQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "closed",
+        "iteration": 3,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wzU2JTeOzEEz6Kb/ObqSb6IPh1s=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "CUn4o59QTf7YiPxI324QJg==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "accepted",
+        "iteration": 4,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mj4xHVbdzbZ8STyMjGzkgn2shCo=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "ITU+/yt1OHB0y2/blQsL7w==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "both",
+        "iteration": 4,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: bJvOJ4n2zsMjdAB8iSqimH8c4Sw=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "7YnwcdQqMMUmniyZYK3NaQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "closed",
+        "iteration": 4,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YYUPftpRc7mVtiRROmzp/f8ZODI=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "plceiZV//FUgTPGNSkJc8w==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "accepted",
+        "iteration": 5,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dEcSkpahmGF38/ZUaXlz5nWpkOk=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "Ruq2NAhsYSAZNaGrCWRj3g==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "both",
+        "iteration": 5,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ouhMp9oIpiWeDU9csnuo1NI3eC8=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "nH43CY0ScbgJVn+uBKEJAQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      },
+      {
+        "kind": "closed",
+        "iteration": 5,
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7XF9oaH9uh3GlcdXtfoX9HqzkCs=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "AIRT2vvDjCyjaRIta0xYlA==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        }
+      }
+    ],
+    "outbound": [
+      {
+        "kind": "outbound-open",
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zZj9fueJYPf9UMcqWpTz1Hpq/Qw=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "kkA3DtTDlkmQzSjAtqn2iQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        },
+        "upstreamStopped": true
+      },
+      {
+        "kind": "outbound-connecting",
+        "wire": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jpugxEUzyVTTcYCtgb2f3zVbAg8=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+          "requestKey": "HACn4arTFtnazY8lw3CdsQ==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": true,
+          "transportError": null,
+          "completion": "peer-ended"
+        },
+        "upstreamStopped": true
+      }
+    ],
+    "delayed": {
+      "before": {
+        "accepted": false,
+        "events": []
+      },
+      "beforeWire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: U7sMWZdFEoEeVtOC6DJ1ArSjpfU=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+        "requestKey": "PqUlm8wPJ6oArhXNpOnZQA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null
+      },
+      "release": {
+        "status": 200,
+        "text": "released"
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: U7sMWZdFEoEeVtOC6DJ1ArSjpfU=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+        "requestKey": "PqUlm8wPJ6oArhXNpOnZQA==",
+        "rawTail": "gQtyZXBseTplYXJseYgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cmVwbHk6ZWFybHk="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended"
+      },
+      "after": {
+        "accepted": true,
+        "events": [
+          {
+            "type": "message",
+            "data": "early"
+          },
+          {
+            "type": "close",
+            "code": 1000,
+            "clean": true
+          }
+        ]
+      }
+    },
+    "delayedClose": {
+      "before": {
+        "accepted": false,
+        "events": []
+      },
+      "beforeWire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rIKpDvVIbN34GxW7TPOcsy2eBP0=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+        "requestKey": "KYI6EK9ak1/IUD3u4S4BAw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null
+      },
+      "release": {
+        "status": 200,
+        "text": "released"
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rIKpDvVIbN34GxW7TPOcsy2eBP0=\r\nSec-WebSocket-Protocol: chat\r\nx-response-fixture: yes",
+        "requestKey": "KYI6EK9ak1/IUD3u4S4BAw==",
+        "rawTail": "iAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended"
+      },
+      "after": {
+        "accepted": true,
+        "events": [
+          {
+            "type": "message",
+            "data": "early"
+          },
+          {
+            "type": "close",
+            "code": 1000,
+            "clean": true
+          }
+        ]
+      }
+    },
+    "crossContext": {
+      "status": 500,
+      "bodyComplete": true,
+      "bodyNonempty": true
+    },
+    "healthy": {
+      "status": 200,
+      "text": "healthy"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(capsid_runtime VERSION 0.2.2 LANGUAGES C CXX)
+project(capsid_runtime VERSION 0.3.0 LANGUAGES C CXX)
 
 include(CTest)
 include(GNUInstallDirs)
@@ -14,6 +14,7 @@ if(WIN32 AND NOT MSVC)
 endif()
 
 if(MSVC)
+    include(cmake/msvc_dependency_prefix.cmake)
     # Static CRT everywhere: the vendored txiki.js build pins
     # CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded (its CMakeLists.txt line
     # 23), and vcpkg's x64-windows-static triplet links /MT libraries, so
@@ -64,6 +65,22 @@ option(CAPSID_ENABLE_ASAN "Build all runtime targets with AddressSanitizer" OFF)
 option(CAPSID_ENABLE_UBSAN "Build all runtime targets with UndefinedBehaviorSanitizer" OFF)
 option(CAPSID_ENABLE_TSAN "Build all runtime targets with ThreadSanitizer" OFF)
 option(CAPSID_BUILD_FUZZERS "Build the libFuzzer protocol boundary targets" OFF)
+
+set(CAPSID_SANDBOX_PROFILE "production" CACHE STRING
+    "Linux sandbox policy: production or sanitizer (diagnostic builds only)")
+set_property(CACHE CAPSID_SANDBOX_PROFILE PROPERTY STRINGS production sanitizer)
+if(NOT CAPSID_SANDBOX_PROFILE STREQUAL "production" AND
+   NOT CAPSID_SANDBOX_PROFILE STREQUAL "sanitizer")
+    message(FATAL_ERROR "CAPSID_SANDBOX_PROFILE must be production or sanitizer")
+endif()
+if(CAPSID_SANDBOX_PROFILE STREQUAL "sanitizer")
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "The sanitizer sandbox profile is Linux-only")
+    endif()
+    if(NOT (CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN))
+        message(FATAL_ERROR "The sanitizer sandbox profile requires sanitizer instrumentation")
+    endif()
+endif()
 option(CAPSID_GENERATE_LINK_MAP
     "Generate a capsid-worker linker map for artifact audits" OFF)
 option(CAPSID_ENABLE_FFI_CAPABILITY
@@ -72,6 +89,8 @@ option(CAPSID_ENABLE_RAW_SOCKET_CAPABILITY
     "Enable the process-escape raw-socket capability (not implemented)" OFF)
 set(CAPSID_WPT_ROOT "" CACHE PATH
     "Optional checkout of the WPT repository at the revision locked by tests/wpt/manifest.json")
+set(CAPSID_SANDBOX_TEST_DATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/sandbox-test-data"
+    CACHE PATH "Filesystem test data and TLS CA fixtures; use a native Linux filesystem for Landlock tests")
 set(CAPSID_ESBUILD_EXECUTABLE "" CACHE FILEPATH
     "Optional host esbuild executable (defaults to vendor/txiki.js node_modules)")
 
@@ -125,9 +144,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CAPSID_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(CAPSID_CAPABILITY_MANIFEST
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/capability-manifest.json")
+set(CAPSID_LOCKED_IDENTITY_MANIFEST
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
+    CACHE FILEPATH
+    "Locked vendor/QuickJS manifest backing the bytecode-compatibility record")
 set_property(
     DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CAPSID_CAPABILITY_MANIFEST}"
+    "${CAPSID_LOCKED_IDENTITY_MANIFEST}"
 )
 file(SHA256
     "${CAPSID_CAPABILITY_MANIFEST}"
@@ -141,6 +165,10 @@ configure_file(
 )
 
 add_library(capsid_sanitizers INTERFACE)
+if(CAPSID_SANDBOX_PROFILE STREQUAL "sanitizer")
+    target_compile_definitions(capsid_sanitizers INTERFACE CAPSID_SANITIZER_SANDBOX=1)
+endif()
+
 if(CAPSID_ENABLE_ASAN)
     if(MSVC)
         target_compile_options(capsid_sanitizers INTERFACE /fsanitize=address)
@@ -210,6 +238,9 @@ add_library(capsid_runtime STATIC
     src/audit.cc
     src/build_info.cc
     src/capability_policy.cc
+    # Shared channel state and bounded native ownership/queue core.
+    src/channel_io.cc
+    src/channel_registry.cc
     src/client.cc
     src/cpu_topology.cc
     src/egress_policy.cc
@@ -227,6 +258,9 @@ if(WIN32)
     # egress_policy uses inet_pton/ntohs; every consumer of the runtime
     # (host, tests, embedders) must carry the Winsock import library.
     target_link_libraries(capsid_runtime PUBLIC ws2_32)
+else()
+    find_package(Threads REQUIRED)
+    target_link_libraries(capsid_runtime PUBLIC Threads::Threads)
 endif()
 if(CAPSID_ENABLE_LTO)
     include(CheckIPOSupported)
@@ -313,10 +347,6 @@ endif()
 # Override point for the locked identity manifest (docs/txiki-upgrade-
 # baseline.json). The build-identity matrix uses it to prove that a real
 # bytecode-ABI difference changes the compatibility ID.
-set(CAPSID_LOCKED_IDENTITY_MANIFEST
-    "${CMAKE_CURRENT_SOURCE_DIR}/docs/txiki-upgrade-baseline.json"
-    CACHE FILEPATH
-    "Locked vendor/QuickJS manifest backing the bytecode-compatibility record")
 # ABI version 7 matches CAPSID_ABI_VERSION in include/capsid/runtime.h;
 # FetchRPC version 3 matches capsid::protocol::kVersion in src/protocol.h.
 # v3 adds kFlagRequestEnd on RequestHead (bodyless requests).
@@ -338,6 +368,7 @@ capsid_generate_build_identity(
     ASAN "${CAPSID_ENABLE_ASAN}"
     UBSAN "${CAPSID_ENABLE_UBSAN}"
     TSAN "${CAPSID_ENABLE_TSAN}"
+    SANDBOX_PROFILE "${CAPSID_SANDBOX_PROFILE}"
     MIMALLOC "${CAPSID_USE_MIMALLOC}"
     HOST "${CAPSID_BUILD_HOST}"
     WORKER "${CAPSID_BUILD_WORKER}"
@@ -345,7 +376,41 @@ capsid_generate_build_identity(
     COMPILER_VERSION "${CMAKE_CXX_COMPILER_VERSION}"
     TARGET_TRIPLE "${CAPSID_BUILD_TARGET_TRIPLE}")
 
+# Keep all identity consumers current even when an older incremental object
+# has no cached header dependencies. The compiler must never retain a stale
+# bytecode compatibility ID while the Worker and library use the new header.
+set_property(SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/build_info.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/worker_runtime.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/host/main.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/capsid-bytecode-compile.cc"
+    APPEND PROPERTY OBJECT_DEPENDS "${CAPSID_GENERATED_DIR}/build_identity.h")
+
 # WP-08, spec §12: install rules, CPack packaging, build-info.txt/SBOM
 # packaging. Included LAST so capsid owns the CPack configuration and the
 # CPACK_PACKAGE_NAME tripwire (§12.1) runs after every third-party include.
 include(cmake/CapsidPackage.cmake)
+
+# IPO static archives contain compiler IR. Publish the link-driver requirement
+# to ordinary tests and installed consumers as well as production executables.
+# Run after all nested targets exist; leave non-IPO archives and LTO-off builds
+# unchanged.
+if(CAPSID_ENABLE_LTO AND CAPSID_IPO_SUPPORTED)
+    function(capsid_propagate_lto_link_requirements directory)
+        get_property(targets DIRECTORY "${directory}" PROPERTY BUILDSYSTEM_TARGETS)
+        foreach(target IN LISTS targets)
+            get_target_property(type "${target}" TYPE)
+            get_target_property(ipo "${target}" INTERPROCEDURAL_OPTIMIZATION)
+            if(type STREQUAL "STATIC_LIBRARY" AND ipo)
+                target_link_options("${target}" INTERFACE
+                    "$<$<LINK_LANG_AND_ID:C,GNU,Clang,AppleClang>:-flto>"
+                    "$<$<LINK_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-flto>")
+            endif()
+        endforeach()
+        get_property(subdirectories DIRECTORY "${directory}" PROPERTY SUBDIRECTORIES)
+        foreach(subdirectory IN LISTS subdirectories)
+            capsid_propagate_lto_link_requirements("${subdirectory}")
+        endforeach()
+    endfunction()
+    capsid_propagate_lto_link_requirements("${CMAKE_CURRENT_SOURCE_DIR}")
+endif()

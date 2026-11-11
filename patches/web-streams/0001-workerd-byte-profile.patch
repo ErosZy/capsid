@@ -1,0 +1,888 @@
+diff --git a/src/capsid-polyfill.ts b/src/capsid-polyfill.ts
+new file mode 100644
+index 0000000..c3569d4
+--- /dev/null
++++ b/src/capsid-polyfill.ts
+@@ -0,0 +1,2 @@
++import './polyfill';
++export {configureByteStreamCompatibility,markNativeByteStream} from './lib/capsid-byte-profile';
+diff --git a/src/lib/capsid-byte-profile.ts b/src/lib/capsid-byte-profile.ts
+new file mode 100644
+index 0000000..2230136
+--- /dev/null
++++ b/src/lib/capsid-byte-profile.ts
+@@ -0,0 +1,124 @@
++import { transformPromiseWith, uponPromise } from './helpers/webidl';
++// Capsid's pinned workerd default-profile byte-stream operations.
++// The native fetch adapter retains its separate byte-oriented close protocol.
++const ByteArray = Uint8Array;
++const setBytes = Function.prototype.call.bind(Uint8Array.prototype.set);
++export const weakHas = Function.prototype.call.bind(WeakSet.prototype.has);
++const weakAdd = Function.prototype.call.bind(WeakSet.prototype.add);
++export const mapGet = Function.prototype.call.bind(WeakMap.prototype.get);
++export const mapSet = Function.prototype.call.bind(WeakMap.prototype.set);
++const nativeControllers = new WeakSet<object>();
++const nativeStreams = new WeakSet<object>();
++const nativePipeTransformReadables = new WeakSet<object>();
++export const nativeBranchControllers = new WeakSet<object>();
++const originalContents = new WeakMap<object, Uint8Array>();
++let internalError: ((detail: string) => Error) | undefined;
++let aliasBuffer: ((buffer: ArrayBuffer) => ArrayBuffer) | undefined;
++type StreamPromiseObserver = <T>(promise: Promise<T>) => Promise<T>;
++let nativePromiseObserver: StreamPromiseObserver | undefined;
++
++export function configureByteStreamCompatibility(factory: (detail: string) => Error, bufferAlias: (buffer: ArrayBuffer) => ArrayBuffer, streamObserver?: StreamPromiseObserver): void {
++  if (typeof factory !== 'function' || typeof bufferAlias !== 'function' || (streamObserver !== undefined && typeof streamObserver !== 'function') || internalError !== undefined) throw new TypeError('Byte-stream profile is already configured or invalid');
++  internalError = factory;
++  aliasBuffer = bufferAlias;
++  nativePromiseObserver = streamObserver;
++}
++export function markNativeByteStream<T>(stream: T, branch = false): T {
++  const controller = (stream as any)?._readableStreamController;
++  if (controller && typeof controller === 'object') {
++    weakAdd(nativeControllers, controller);
++    weakAdd(nativeStreams, stream as object);
++    if (branch) weakAdd(nativeBranchControllers, controller);
++  }
++  return stream;
++}
++export function isNativePipeSource(stream: object): boolean {
++  return internalError !== undefined && (weakHas(nativeStreams, stream) || weakHas(nativePipeTransformReadables, stream));
++}
++export function markNativePipeTransformReadable(readable: object): void {
++  weakAdd(nativePipeTransformReadables, readable);
++}
++export function observePrivateNativePipePromise<T>(promise: Promise<T>, native: boolean): Promise<T> {
++  return native && nativePromiseObserver !== undefined ? nativePromiseObserver(promise) : promise;
++}
++export function observeNativeTransformWait<T>(readable: object, promise: Promise<T>): Promise<T> {
++  return observePrivateNativePipePromise(promise, weakHas(nativePipeTransformReadables, readable));
++}
++export function usesWorkerdByteProfile(controller: object): boolean {
++  return internalError !== undefined && !weakHas(nativeControllers, controller);
++}
++export function capturePendingContents(controller: any, buffer: ArrayBuffer, offset: number,
++  length: number, elementSize: number, minimumFill: number): Uint8Array | undefined {
++  if (!usesWorkerdByteProfile(controller) || elementSize <= 1 || minimumFill <= elementSize ||
++      controller._closeRequested || controller._queueTotalSize >= minimumFill) return undefined;
++  const copy = new ByteArray(length);
++  setBytes(copy, new ByteArray(buffer, offset, length));
++  return copy;
++}
++export function rememberPendingContents(descriptor: object, bytes: Uint8Array | undefined): void {
++  if (bytes !== undefined) mapSet(originalContents, descriptor, bytes);
++}
++export function prepareCancelledDescriptor(descriptor: any): void {
++  const count = descriptor.bytesFilled, aligned = count - count % descriptor.elementSize;
++  if (aligned > 0 && aligned !== count) {
++    const original = mapGet(originalContents, descriptor);
++    if (original === undefined) throw new TypeError('Missing pending byte-stream backing snapshot');
++    const bytes = new ByteArray(descriptor.buffer);
++    for (let at = aligned; at < count; ++at) bytes[descriptor.byteOffset + at] = original[at];
++  }
++  // Sub-element data remains in the returned backing, even when the view is empty.
++  descriptor.bytesFilled = aligned;
++}
++export function makeByteStreamEOFError(): Error {
++  if (internalError === undefined) throw new TypeError('Byte-stream profile is not configured');
++  return internalError('Standard byte-stream EOF has an incomplete typed-array element');
++}
++
++export function usesWorkerdReaderProfile(): boolean { return internalError !== undefined; }
++
++export function aliasDefaultReaderBuffer(buffer: ArrayBuffer): ArrayBuffer {
++  if (aliasBuffer === undefined) throw new TypeError('Byte-stream profile is not configured');
++  return aliasBuffer(buffer);
++}
++
++// Writable identity controls transform-pipe error handling independently of
++// the readable returned by pipeThrough. All lookups use captured intrinsics.
++export const readableForTransformWritable = new WeakMap<object, object>();
++export const profileTransformErrorStreams = new WeakMap<object, boolean>();
++export type ProfileTransformPipeFailure = (error: any, sourceAlreadyFailingOnly?: boolean) => void;
++export const profileTransformPipeFailures = new WeakMap<object, ProfileTransformPipeFailure>();
++// Cancellation completion records only link an actual transform pair. A
++// generic pair can return an unrelated readable; preventCancel also keeps
++// the original cancellation path.
++const transformPairs = new WeakMap<object, object>();
++type PipeCancellation = {source: object; completion: Promise<void>};
++const pipeCancellations = new WeakMap<object, PipeCancellation>();
++export const mapDelete = Function.prototype.call.bind(WeakMap.prototype.delete);
++export function rememberTransformPair(readable: object, writable: object): void {
++  mapSet(transformPairs, readable, writable);
++  mapSet(readableForTransformWritable, writable, readable);
++}
++export function rememberPipeCancellation(source: object, readable: object, writable: object,
++  completion: Promise<void>, preventCancel: boolean): void {
++  if (internalError === undefined || preventCancel || mapGet(transformPairs, readable) !== writable) return;
++  // Reject self/feedback records before they can make cancellation wait on
++  // its own pipe. The recorded parent graph remains acyclic.
++  let current: object | undefined = source;
++  while (current !== undefined) {
++    if (current === readable) return;
++    current = mapGet(pipeCancellations, current)?.source;
++  }
++  const record = {source, completion};
++  mapSet(pipeCancellations, readable, record);
++  const finished = () => {
++    if (mapGet(pipeCancellations, readable) === record) mapDelete(pipeCancellations, readable);
++    return null;
++  };
++  uponPromise(completion, finished, finished);
++}
++export function finishPipeCancellation<T>(stream: object, result: Promise<T>): Promise<T> {
++  const record = mapGet(pipeCancellations, stream) as PipeCancellation | undefined;
++  if (record === undefined) return result;
++  const after = <U>(settled: () => U) => transformPromiseWith(record.completion, settled, settled);
++  return transformPromiseWith(result, value => after(() => value), error => after(() => {throw error;}));
++}
+diff --git a/src/lib/readable-stream.ts b/src/lib/readable-stream.ts
+index 95a0fb1..ab29d07 100644
+--- a/src/lib/readable-stream.ts
++++ b/src/lib/readable-stream.ts
+@@ -1,3 +1,5 @@
++import { rememberPipeCancellation, finishPipeCancellation } from './capsid-byte-profile';
++import { IsReadableByteStreamController, ReadableByteStreamControllerPrepareProfileCancel, ReadableByteStreamControllerPrepareProfileDefaultClose } from './readable-stream/byte-stream-controller';
+ import assert from '../stub/assert';
+ import {
+   promiseRejectedWith,
+@@ -234,6 +236,7 @@ export class ReadableStream<R = any> implements AsyncIterable<R> {
+     }
+ 
+     const promise = ReadableStreamPipeTo(this, transform.writable, options.preventClose, options.preventAbort, options.preventCancel, options.signal);
++    rememberPipeCancellation(this, transform.readable, transform.writable, promise, options.preventCancel);
+ 
+     setPromiseIsHandledToTrue(promise);
+ 
+@@ -469,12 +472,15 @@ export function ReadableStreamCancel<R>(stream: ReadableStream<R>, reason: any):
+   stream._disturbed = true;
+ 
+   if (stream._state === 'closed') {
+-    return promiseResolvedWith(undefined);
++    return finishPipeCancellation(stream, promiseResolvedWith(undefined));
+   }
+   if (stream._state === 'errored') {
+     return promiseRejectedWith(stream._storedError);
+   }
+ 
++  if (stream._reader !== undefined && IsReadableByteStreamController(stream._readableStreamController)) {
++    ReadableByteStreamControllerPrepareProfileCancel(stream._readableStreamController as ReadableByteStreamController);
++  }
+   ReadableStreamClose(stream);
+ 
+   const reader = stream._reader;
+@@ -487,7 +493,7 @@ export function ReadableStreamCancel<R>(stream: ReadableStream<R>, reason: any):
+   }
+ 
+   const sourceCancelPromise = stream._readableStreamController[CancelSteps](reason);
+-  return transformPromiseWith(sourceCancelPromise, noop);
++  return finishPipeCancellation(stream, transformPromiseWith(sourceCancelPromise, noop));
+ }
+ 
+ export function ReadableStreamClose<R>(stream: ReadableStream<R>): void {
+@@ -501,6 +507,9 @@ export function ReadableStreamClose<R>(stream: ReadableStream<R>): void {
+     return;
+   }
+ 
++  if (IsReadableStreamDefaultReader<R>(reader) && IsReadableByteStreamController(stream._readableStreamController)) {
++    ReadableByteStreamControllerPrepareProfileDefaultClose(stream._readableStreamController);
++  }
+   defaultReaderClosedPromiseResolve(reader);
+ 
+   if (IsReadableStreamDefaultReader<R>(reader)) {
+diff --git a/src/lib/readable-stream/async-iterator.ts b/src/lib/readable-stream/async-iterator.ts
+index 503472d..b1cd8ca 100644
+--- a/src/lib/readable-stream/async-iterator.ts
++++ b/src/lib/readable-stream/async-iterator.ts
+@@ -1,3 +1,4 @@
++import { nativeBranchControllers, weakHas, isNativePipeSource, observePrivateNativePipePromise } from '../capsid-byte-profile';
+ import { ReadableStream } from '../readable-stream';
+ import {
+   AcquireReadableStreamDefaultReader,
+@@ -34,6 +35,7 @@ export class ReadableStreamAsyncIteratorImpl<R> {
+   readonly _preventCancel: boolean;
+   _ongoingPromise: Promise<ReadableStreamDefaultReadResult<R>> | undefined = undefined;
+   _isFinished = false;
++  declare _branchError: unknown;
+ 
+   constructor(reader: ReadableStreamDefaultReader<R>, preventCancel: boolean) {
+     this._reader = reader;
+@@ -58,7 +60,7 @@ export class ReadableStreamAsyncIteratorImpl<R> {
+ 
+   private _nextSteps(): Promise<ReadableStreamDefaultReadResult<R>> {
+     if (this._isFinished) {
+-      return Promise.resolve({ value: undefined, done: true });
++      return this._branchError !== undefined ? promiseRejectedWith(this._branchError) : Promise.resolve({ value: undefined, done: true });
+     }
+ 
+     const reader = this._reader;
+@@ -71,7 +73,7 @@ export class ReadableStreamAsyncIteratorImpl<R> {
+ 
+   private _returnSteps(value: any): Promise<ReadableStreamDefaultReadResult<any>> {
+     if (this._isFinished) {
+-      return Promise.resolve({ value, done: true });
++      return this._branchError !== undefined ? promiseRejectedWith(this._branchError) : Promise.resolve({ value, done: true });
+     }
+     this._isFinished = true;
+ 
+@@ -98,10 +100,13 @@ class AsyncIteratorReadRequest<R> implements ReadRequest<R> {
+ 
+   constructor(iterator: ReadableStreamAsyncIteratorImpl<R>) {
+     this._iterator = iterator;
+-    this._promise = newPromise((resolve, reject) => {
++    // A native iterator uses the internal read algorithm directly, bypassing
++    // the public reader.read wrapper. Observe its actual native read future
++    // before it acquires iterator or user continuation reactions.
++    this._promise = observePrivateNativePipePromise(newPromise((resolve, reject) => {
+       this._resolvePromise = resolve;
+       this._rejectPromise = reject;
+-    });
++    }), isNativePipeSource(iterator._reader._ownerReadableStream!));
+   }
+ 
+   _chunkSteps(chunk: R) {
+@@ -122,6 +127,7 @@ class AsyncIteratorReadRequest<R> implements ReadRequest<R> {
+ 
+   _errorSteps(reason: any) {
+     const iterator = this._iterator;
++    if (weakHas(nativeBranchControllers, iterator._reader._ownerReadableStream!._readableStreamController)) iterator._branchError = reason;
+     iterator._ongoingPromise = undefined;
+     iterator._isFinished = true;
+     ReadableStreamReaderGenericRelease(iterator._reader);
+diff --git a/src/lib/readable-stream/byob-reader.ts b/src/lib/readable-stream/byob-reader.ts
+index dfc103f..26a1d78 100644
+--- a/src/lib/readable-stream/byob-reader.ts
++++ b/src/lib/readable-stream/byob-reader.ts
+@@ -1,3 +1,5 @@
++import { usesWorkerdReaderProfile } from '../capsid-byte-profile';
++const arrayBufferIsView = ArrayBuffer.isView;
+ import assert from '../../stub/assert';
+ import { SimpleQueue } from '../simple-queue';
+ import {
+@@ -180,7 +182,7 @@ export class ReadableStreamBYOBReader {
+       return promiseRejectedWith(byobReaderBrandCheckException('read'));
+     }
+ 
+-    if (!ArrayBuffer.isView(view)) {
++    if (!arrayBufferIsView(view)) {
+       return promiseRejectedWith(new TypeError('view must be an array buffer view'));
+     }
+     if (view.byteLength === 0) {
+@@ -370,8 +372,9 @@ export function ReadableStreamBYOBReaderCanReadSync<T extends ArrayBufferView<Ar
+ }
+ 
+ export function ReadableStreamBYOBReaderRelease(reader: ReadableStreamBYOBReader) {
+-  ReadableStreamReaderGenericRelease(reader);
+-  const e = new TypeError('Reader was released');
++  const profile = usesWorkerdReaderProfile();
++  const e = new TypeError(profile ? 'This ReadableStream reader has been released.' : 'Reader was released');
++  ReadableStreamReaderGenericRelease(reader, profile ? e : undefined);
+   ReadableStreamBYOBReaderErrorReadIntoRequests(reader, e);
+ }
+ 
+diff --git a/src/lib/readable-stream/byte-stream-controller.ts b/src/lib/readable-stream/byte-stream-controller.ts
+index e435b76..b9f4187 100644
+--- a/src/lib/readable-stream/byte-stream-controller.ts
++++ b/src/lib/readable-stream/byte-stream-controller.ts
+@@ -1,3 +1,5 @@
++const arrayBufferIsView = ArrayBuffer.isView;
++import { usesWorkerdByteProfile, aliasDefaultReaderBuffer, capturePendingContents, rememberPendingContents, prepareCancelledDescriptor, makeByteStreamEOFError } from '../capsid-byte-profile';
+ import assert from '../../stub/assert';
+ import { SimpleQueue } from '../simple-queue';
+ import { ResetQueue } from '../abstract-ops/queue-with-sizes';
+@@ -111,7 +113,7 @@ export class ReadableStreamBYOBRequest {
+     }
+     assertRequiredArgument(view, 1, 'respondWithNewView');
+ 
+-    if (!ArrayBuffer.isView(view)) {
++    if (!arrayBufferIsView(view)) {
+       throw new TypeError('You can only respond with array buffer views');
+     }
+ 
+@@ -267,7 +269,7 @@ export class ReadableByteStreamController {
+     }
+ 
+     assertRequiredArgument(chunk, 1, 'enqueue');
+-    if (!ArrayBuffer.isView(chunk)) {
++    if (!arrayBufferIsView(chunk)) {
+       throw new TypeError('chunk must be an array buffer view');
+     }
+     if (chunk.byteLength === 0) {
+@@ -323,7 +325,7 @@ export class ReadableByteStreamController {
+       return;
+     }
+ 
+-    const autoAllocateChunkSize = this._autoAllocateChunkSize;
++    const autoAllocateChunkSize = this._autoAllocateChunkSize ?? (usesWorkerdByteProfile(this) ? 4096 : undefined);
+     if (autoAllocateChunkSize !== undefined) {
+       let buffer: ArrayBuffer;
+       try {
+@@ -538,7 +540,8 @@ function ReadableByteStreamControllerEnqueueDetachedPullIntoToQueue(
+ 
+ function ReadableByteStreamControllerFillPullIntoDescriptorFromQueue(
+   controller: ReadableByteStreamController,
+-  pullIntoDescriptor: PullIntoDescriptor
++  pullIntoDescriptor: PullIntoDescriptor,
++  pendingProfile = false
+ ) {
+   const maxBytesToCopy = Math.min(
+     controller._queueTotalSize,
+@@ -555,7 +558,7 @@ function ReadableByteStreamControllerFillPullIntoDescriptorFromQueue(
+   // A descriptor for a read() request that is not yet filled up to its minimum length will stay at the head
+   // of the queue, so the underlying source can keep filling it.
+   if (maxAlignedBytes >= pullIntoDescriptor.minimumFill) {
+-    totalBytesToCopyRemaining = maxAlignedBytes - pullIntoDescriptor.bytesFilled;
++    if (!pendingProfile) totalBytesToCopyRemaining = maxAlignedBytes - pullIntoDescriptor.bytesFilled;
+     ready = true;
+   }
+ 
+@@ -592,6 +595,11 @@ function ReadableByteStreamControllerFillPullIntoDescriptorFromQueue(
+     assert(pullIntoDescriptor.bytesFilled < pullIntoDescriptor.minimumFill);
+   }
+ 
++  if (ready && pendingProfile) {
++    // Pinned workerd copies all currently supplied bytes into a pending
++    // view's backing and exposes only complete typed-array elements.
++    pullIntoDescriptor.bytesFilled -= pullIntoDescriptor.bytesFilled % pullIntoDescriptor.elementSize;
++  }
+   return ready;
+ }
+ 
+@@ -638,7 +646,7 @@ function ReadableByteStreamControllerProcessPullIntoDescriptorsUsingQueue(contro
+     const pullIntoDescriptor = controller._pendingPullIntos.peek();
+     assert(pullIntoDescriptor.readerType !== 'none');
+ 
+-    if (ReadableByteStreamControllerFillPullIntoDescriptorFromQueue(controller, pullIntoDescriptor)) {
++    if (ReadableByteStreamControllerFillPullIntoDescriptorFromQueue(controller, pullIntoDescriptor, usesWorkerdByteProfile(controller))) {
+       ReadableByteStreamControllerShiftPendingPullInto(controller);
+       filledPullIntos.push(pullIntoDescriptor);
+     }
+@@ -676,9 +684,11 @@ export function ReadableByteStreamControllerPullInto<T extends ArrayBufferView<A
+   assert(minimumFill >= elementSize && minimumFill <= byteLength);
+   assert(minimumFill % elementSize === 0);
+ 
++  const viewBuffer = view.buffer;
++  const originalContents = capturePendingContents(controller, viewBuffer, byteOffset, byteLength, elementSize, minimumFill);
+   let buffer: ArrayBuffer;
+   try {
+-    buffer = TransferArrayBuffer(view.buffer);
++    buffer = TransferArrayBuffer(viewBuffer);
+   } catch (e) {
+     readIntoRequest._errorSteps(e);
+     return;
+@@ -695,6 +705,7 @@ export function ReadableByteStreamControllerPullInto<T extends ArrayBufferView<A
+     viewConstructor: ctor,
+     readerType: 'byob'
+   };
++  rememberPendingContents(pullIntoDescriptor, originalContents);
+ 
+   if (controller._pendingPullIntos.length > 0) {
+     controller._pendingPullIntos.push(pullIntoDescriptor);
+@@ -724,6 +735,20 @@ export function ReadableByteStreamControllerPullInto<T extends ArrayBufferView<A
+     }
+ 
+     if (controller._closeRequested) {
++      if (usesWorkerdByteProfile(controller)) {
++        const count = pullIntoDescriptor.bytesFilled, width = pullIntoDescriptor.elementSize;
++        if (count >= width && count % width !== 0) {
++          const error = makeByteStreamEOFError();
++          ReadableByteStreamControllerError(controller, error);
++          readIntoRequest._errorSteps(error);
++          return;
++        }
++        pullIntoDescriptor.bytesFilled -= count % width;
++        const value = ReadableByteStreamControllerConvertPullIntoDescriptor<T>(pullIntoDescriptor);
++        ReadableByteStreamControllerHandleQueueDrain(controller);
++        readIntoRequest._chunkSteps(value);
++        return;
++      }
+       const e = new TypeError('Insufficient bytes to fill elements in the given buffer');
+       ReadableByteStreamControllerError(controller, e);
+ 
+@@ -908,6 +933,24 @@ export function ReadableByteStreamControllerClose(controller: ReadableByteStream
+     return;
+   }
+ 
++  if (usesWorkerdByteProfile(controller) && ReadableStreamHasBYOBReader(stream)) {
++    while (controller._pendingPullIntos.length > 0 && controller._pendingPullIntos.peek().readerType === 'byob') {
++      const descriptor = ReadableByteStreamControllerShiftPendingPullInto(controller);
++      const empty = descriptor.bytesFilled === 0;
++      descriptor.buffer = TransferArrayBuffer(descriptor.buffer);
++      // A close reaching an already pending read retains every copied byte
++      // in the backing, including an incomplete final typed-array element.
++      descriptor.bytesFilled -= descriptor.bytesFilled % descriptor.elementSize;
++      const value = ReadableByteStreamControllerConvertPullIntoDescriptor(descriptor);
++      ReadableStreamFulfillReadIntoRequest(stream, value, empty);
++    }
++    if (controller._pendingPullIntos.length === 0) {
++      ReadableByteStreamControllerClearAlgorithms(controller);
++      ReadableStreamClose(stream);
++      return;
++    }
++  }
++
+   if (controller._pendingPullIntos.length > 0) {
+     const firstPendingPullInto = controller._pendingPullIntos.peek();
+     if (firstPendingPullInto.bytesFilled % firstPendingPullInto.elementSize !== 0) {
+@@ -950,7 +993,12 @@ export function ReadableByteStreamControllerEnqueue(
+     }
+   }
+ 
+-  if (ReadableStreamHasDefaultReader(stream)) {
++  if (ReadableStreamHasDefaultReader(stream) && usesWorkerdByteProfile(controller)) {
++    ReadableByteStreamControllerEnqueueChunkToQueue(controller, transferredBuffer, byteOffset, byteLength);
++    const filled = ReadableByteStreamControllerProcessPullIntoDescriptorsUsingQueue(controller);
++    ReadableByteStreamControllerCommitPullIntoDescriptors(stream, filled);
++    ReadableByteStreamControllerHandleQueueDrain(controller);
++  } else if (ReadableStreamHasDefaultReader(stream)) {
+     ReadableByteStreamControllerProcessReadRequestsUsingQueue(controller);
+     if (ReadableStreamGetNumReadRequests(stream) === 0) {
+       assert(controller._pendingPullIntos.length === 0);
+@@ -997,6 +1045,16 @@ export function ReadableByteStreamControllerFillReadRequestFromQueue(
+ ) {
+   assert(controller._queueTotalSize > 0);
+ 
++  if (usesWorkerdByteProfile(controller)) {
++    const capacity = controller._autoAllocateChunkSize ?? 4096;
++    const buffer = new ArrayBuffer(capacity);
++    const descriptor: DefaultPullIntoDescriptor = {buffer, bufferByteLength: capacity, byteOffset: 0,
++      byteLength: capacity, bytesFilled: 0, minimumFill: 1, elementSize: 1, viewConstructor: Uint8Array, readerType: 'default'};
++    ReadableByteStreamControllerFillPullIntoDescriptorFromQueue(controller, descriptor);
++    ReadableByteStreamControllerHandleQueueDrain(controller);
++    readRequest._chunkSteps(new Uint8Array(buffer, 0, descriptor.bytesFilled));
++    return;
++  }
+   const entry = controller._queue.shift();
+   controller._queueTotalSize -= entry.byteLength;
+ 
+@@ -1197,7 +1255,7 @@ function SetUpReadableStreamBYOBRequest(
+ ) {
+   assert(IsReadableByteStreamController(controller));
+   assert(typeof view === 'object');
+-  assert(ArrayBuffer.isView(view));
++  assert(arrayBufferIsView(view));
+   assert(!IsDetachedBuffer(view.buffer));
+   request._associatedReadableByteStreamController = controller;
+   request._view = view;
+@@ -1214,3 +1272,40 @@ function byobRequestBrandCheckException(name: string): TypeError {
+ function byteStreamControllerBrandCheckException(name: string): TypeError {
+   return new TypeError(`ReadableByteStreamController.prototype.${name} can only be used on a ReadableByteStreamController`);
+ }
++
++// Cancel returns complete buffered elements before the public closed reaction.
++export function ReadableByteStreamControllerPrepareProfileCancel(controller: ReadableByteStreamController): void {
++  if (!usesWorkerdByteProfile(controller)) return;
++  const stream = controller._controlledReadableByteStream;
++  while (controller._pendingPullIntos.length > 0) {
++    const descriptor = controller._pendingPullIntos.peek();
++    if (descriptor.readerType === 'none') {
++      ReadableByteStreamControllerShiftPendingPullInto(controller);
++      continue;
++    }
++    ReadableByteStreamControllerShiftPendingPullInto(controller);
++    const empty = descriptor.bytesFilled === 0;
++    prepareCancelledDescriptor(descriptor);
++    if (descriptor.readerType === 'default') descriptor.buffer = TransferArrayBuffer(descriptor.buffer);
++    if (empty) {
++      const view = ReadableByteStreamControllerConvertPullIntoDescriptor(descriptor);
++      if (descriptor.readerType === 'default') ReadableStreamFulfillReadRequest(stream, view as Uint8Array<ArrayBuffer>, true);
++      else ReadableStreamFulfillReadIntoRequest(stream, view, true);
++    } else {
++      ReadableByteStreamControllerCommitPullIntoDescriptor(stream, descriptor);
++    }
++  }
++}
++
++export function ReadableByteStreamControllerPrepareProfileDefaultClose(controller: ReadableByteStreamController): void {
++  if (!usesWorkerdByteProfile(controller)) return;
++  const stream = controller._controlledReadableByteStream;
++  while (controller._pendingPullIntos.length > 0) {
++    const descriptor = controller._pendingPullIntos.peek();
++    if (descriptor.readerType !== 'default' || descriptor.bytesFilled !== 0) break;
++    ReadableByteStreamControllerShiftPendingPullInto(controller);
++    descriptor.buffer = aliasDefaultReaderBuffer(descriptor.buffer);
++    const view = ReadableByteStreamControllerConvertPullIntoDescriptor(descriptor);
++    ReadableStreamFulfillReadRequest(stream, view as Uint8Array<ArrayBuffer>, true);
++  }
++}
+diff --git a/src/lib/readable-stream/default-reader.ts b/src/lib/readable-stream/default-reader.ts
+index b0a432c..a259c88 100644
+--- a/src/lib/readable-stream/default-reader.ts
++++ b/src/lib/readable-stream/default-reader.ts
+@@ -1,3 +1,4 @@
++import { usesWorkerdReaderProfile } from '../capsid-byte-profile';
+ import assert from '../../stub/assert';
+ import { SimpleQueue } from '../simple-queue';
+ import {
+@@ -51,7 +52,7 @@ export function ReadableStreamFulfillReadRequest<R>(stream: ReadableStream<R>, c
+ 
+   const readRequest = reader._readRequests.shift()!;
+   if (done) {
+-    readRequest._closeSteps();
++    readRequest._closeSteps(chunk);
+   } else {
+     readRequest._chunkSteps(chunk!);
+   }
+@@ -80,7 +81,7 @@ export function ReadableStreamHasDefaultReader(stream: ReadableStream): boolean
+ export interface ReadRequest<R> {
+   _chunkSteps(chunk: R): void;
+ 
+-  _closeSteps(): void;
++  _closeSteps(chunk?: R): void;
+ 
+   _errorSteps(e: any): void;
+ }
+@@ -222,8 +223,8 @@ class DefaultReadRequest<R> implements ReadRequest<R> {
+     this._resolvePromise({ value: chunk, done: false });
+   }
+ 
+-  _closeSteps() {
+-    this._resolvePromise({ value: undefined, done: true });
++  _closeSteps(chunk?: R) {
++    this._resolvePromise({ value: chunk, done: true });
+   }
+ 
+   _errorSteps(e: any) {
+@@ -239,9 +240,9 @@ class SyncDefaultReadRequest<R> implements ReadRequest<R> {
+     this._promise = promiseResolve({ value: chunk, done: false });
+   }
+ 
+-  _closeSteps() {
++  _closeSteps(chunk?: R) {
+     assert(this._promise === undefined);
+-    this._promise = promiseResolve({ value: undefined, done: true });
++    this._promise = promiseResolve({ value: chunk, done: true });
+   }
+ 
+   _errorSteps(e: any) {
+@@ -302,8 +303,9 @@ export function ReadableStreamDefaultReaderCanReadSync<R>(reader: ReadableStream
+ }
+ 
+ export function ReadableStreamDefaultReaderRelease(reader: ReadableStreamDefaultReader) {
+-  ReadableStreamReaderGenericRelease(reader);
+-  const e = new TypeError('Reader was released');
++  const profile = usesWorkerdReaderProfile();
++  const e = new TypeError(profile ? 'This ReadableStream reader has been released.' : 'Reader was released');
++  ReadableStreamReaderGenericRelease(reader, profile ? e : undefined);
+   ReadableStreamDefaultReaderErrorReadRequests(reader, e);
+ }
+ 
+diff --git a/src/lib/readable-stream/generic-reader.ts b/src/lib/readable-stream/generic-reader.ts
+index 0ce7120..aa6ddea 100644
+--- a/src/lib/readable-stream/generic-reader.ts
++++ b/src/lib/readable-stream/generic-reader.ts
+@@ -1,3 +1,4 @@
++import { usesWorkerdReaderProfile } from '../capsid-byte-profile';
+ import assert from '../../stub/assert';
+ import { ReadableStream, ReadableStreamCancel, type ReadableStreamReader } from '../readable-stream';
+ import { newPromise, setPromiseIsHandledToTrue } from '../helpers/webidl';
+@@ -27,7 +28,7 @@ export function ReadableStreamReaderGenericCancel(reader: ReadableStreamReader<a
+   return ReadableStreamCancel(stream, reason);
+ }
+ 
+-export function ReadableStreamReaderGenericRelease(reader: ReadableStreamReader<any>) {
++export function ReadableStreamReaderGenericRelease(reader: ReadableStreamReader<any>, releasedError?: TypeError) {
+   const stream = reader._ownerReadableStream;
+   assert(stream !== undefined);
+   assert(stream._reader === reader);
+@@ -35,12 +36,12 @@ export function ReadableStreamReaderGenericRelease(reader: ReadableStreamReader<
+   if (stream._state === 'readable') {
+     defaultReaderClosedPromiseReject(
+       reader,
+-      new TypeError(`Reader was released and can no longer be used to monitor the stream's closedness`)
++      releasedError ?? new TypeError(`Reader was released and can no longer be used to monitor the stream's closedness`)
+     );
+-  } else {
++  } else if (stream._state !== 'closed' || !usesWorkerdReaderProfile()) {
+     defaultReaderClosedPromiseResetToRejected(
+       reader,
+-      new TypeError(`Reader was released and can no longer be used to monitor the stream's closedness`)
++      releasedError ?? new TypeError(`Reader was released and can no longer be used to monitor the stream's closedness`)
+     );
+   }
+ 
+diff --git a/src/lib/readable-stream/pipe.ts b/src/lib/readable-stream/pipe.ts
+index 8044696..eb081ca 100644
+--- a/src/lib/readable-stream/pipe.ts
++++ b/src/lib/readable-stream/pipe.ts
+@@ -1,8 +1,14 @@
+ import { IsReadableStream, IsReadableStreamLocked, ReadableStream, ReadableStreamCancel } from '../readable-stream';
++import {
++  usesWorkerdReaderProfile, readableForTransformWritable, profileTransformPipeFailures,
++  profileTransformErrorStreams, mapGet, mapSet, mapDelete,
++  isNativePipeSource, markNativePipeTransformReadable, observePrivateNativePipePromise
++} from '../capsid-byte-profile';
+ import {
+   AcquireReadableStreamDefaultReader,
+   ReadableStreamDefaultReaderCanReadSync,
+   ReadableStreamDefaultReaderRead,
++  ReadableStreamDefaultReaderRelease,
+   type ReadRequest
+ } from './default-reader';
+ import { ReadableStreamReaderGenericRelease } from './generic-reader';
+@@ -40,6 +46,11 @@ export function ReadableStreamPipeTo<T>(
+   preventCancel: boolean,
+   signal: AbortSignal | undefined
+ ): Promise<undefined> {
++  const profileTransform = usesWorkerdReaderProfile() && mapGet(readableForTransformWritable, dest) !== undefined;
++  const nativePipe = isNativePipeSource(source);
++  const observe = <P>(promise: Promise<P>): Promise<P> => observePrivateNativePipePromise(promise, nativePipe);
++  const transformReadable = mapGet(readableForTransformWritable, dest);
++  if (nativePipe && transformReadable !== undefined) markNativePipeTransformReadable(transformReadable);
+   assert(IsReadableStream(source));
+   assert(IsWritableStream(dest));
+   assert(typeof preventClose === 'boolean');
+@@ -57,8 +68,45 @@ export function ReadableStreamPipeTo<T>(
+   const state = new PipeState<T>(writer);
+   const syncReadRequest = new SyncPipeReadRequest<T>(state);
+ 
+-  return newPromise((resolve, reject) => {
++  const readerClosed = observe(reader._closedPromise);
++  const writerClosed = observe(writer._closedPromise);
++  return observe(newPromise((resolve, reject) => {
+     let abortAlgorithm: () => void;
++    let locksReleased = false;
++
++    function releasePipeLocks(): void {
++      if (locksReleased) return;
++      locksReleased = true;
++      WritableStreamDefaultWriterRelease(writer);
++      if (profileTransform) ReadableStreamDefaultReaderRelease(reader);
++      else ReadableStreamReaderGenericRelease(reader);
++    }
++
++    function pairedTransformFailed(error: any, sourceAlreadyFailingOnly = false): void {
++      if (sourceAlreadyFailingOnly && mapGet(profileTransformErrorStreams, source) !== true) return;
++      if (state._shuttingDown) return;
++      state._shuttingDown = true;
++      // Release the known transform pipe before exposing its original error,
++      // including when a user cancellation callback remains pending.
++      releasePipeLocks();
++      let cancelled: Promise<void>;
++      try {
++        cancelled = preventCancel || mapGet(profileTransformErrorStreams, source) === true
++          ? promiseResolvedWith(undefined) : ReadableStreamCancel(source, error);
++      } catch {
++        finalize(true, error);
++        return;
++      }
++      // The default profile keeps the transform's original failure. A later
++      // cancellation rejection cannot replace an already reported error.
++      uponPromise(cancelled, noop, noop);
++      finalize(true, error);
++    }
++
++    if (profileTransform) {
++      mapSet(profileTransformPipeFailures, dest, pairedTransformFailed);
++      if (dest._state === 'errored' || dest._state === 'erroring') pairedTransformFailed(dest._storedError);
++    }
+     if (signal !== undefined) {
+       abortAlgorithm = () => {
+         const error = signal.reason !== undefined ? signal.reason : new DOMException('Aborted', 'AbortError');
+@@ -94,7 +142,7 @@ export function ReadableStreamPipeTo<T>(
+     // - Backpressure must be enforced
+     // - Shutdown must stop all activity
+     function pipeLoop() {
+-      return newPromise<void>((resolveLoop, rejectLoop) => {
++      return observe(newPromise<void>((resolveLoop, rejectLoop) => {
+         function next(done: boolean) {
+           if (done) {
+             resolveLoop();
+@@ -106,7 +154,7 @@ export function ReadableStreamPipeTo<T>(
+         }
+ 
+         next(false);
+-      });
++      }));
+     }
+ 
+     function pipeStep(): Promise<boolean> {
+@@ -127,15 +175,15 @@ export function ReadableStreamPipeTo<T>(
+         return promiseResolvedWith(true);
+       }
+       if (dest._backpressure) {
+-        return PerformPromiseThen(writer._readyPromise, pipeStep);
++        return PerformPromiseThen(observe(writer._readyPromise), pipeStep);
+       }
+       const request = new PipeReadRequest(state);
+       ReadableStreamDefaultReaderRead(reader, request);
+-      return request._promise;
++      return observe(request._promise);
+     }
+ 
+     // Errors must be propagated forward
+-    isOrBecomesErrored(source, reader._closedPromise, (storedError) => {
++    isOrBecomesErrored(source, readerClosed, (storedError) => {
+       if (!preventAbort) {
+         shutdownWithAction(() => WritableStreamAbort(dest, storedError), true, storedError);
+       } else {
+@@ -145,8 +193,10 @@ export function ReadableStreamPipeTo<T>(
+     });
+ 
+     // Errors must be propagated backward
+-    isOrBecomesErrored(dest, writer._closedPromise, (storedError) => {
+-      if (!preventCancel) {
++    isOrBecomesErrored(dest, writerClosed, (storedError) => {
++      if (profileTransform) {
++        pairedTransformFailed(storedError);
++      } else if (!preventCancel) {
+         shutdownWithAction(() => ReadableStreamCancel(source, storedError), true, storedError);
+       } else {
+         shutdown(true, storedError);
+@@ -155,7 +205,7 @@ export function ReadableStreamPipeTo<T>(
+     });
+ 
+     // Closing must be propagated forward
+-    isOrBecomesClosed(source, reader._closedPromise, () => {
++    isOrBecomesClosed(source, readerClosed, () => {
+       if (!preventClose) {
+         shutdownWithAction(() => WritableStreamDefaultWriterCloseWithErrorPropagation(writer));
+       } else {
+@@ -213,8 +263,10 @@ export function ReadableStreamPipeTo<T>(
+     }
+ 
+     function finalize(isError?: boolean, error?: any): null {
+-      WritableStreamDefaultWriterRelease(writer);
+-      ReadableStreamReaderGenericRelease(reader);
++      if (profileTransform && mapGet(profileTransformPipeFailures, dest) === pairedTransformFailed) {
++        mapDelete(profileTransformPipeFailures, dest);
++      }
++      releasePipeLocks();
+ 
+       if (signal !== undefined) {
+         signal.removeEventListener('abort', abortAlgorithm);
+@@ -227,7 +279,7 @@ export function ReadableStreamPipeTo<T>(
+ 
+       return null;
+     }
+-  });
++  }));
+ }
+ 
+ class PipeState<T> {
+diff --git a/src/lib/readable-stream/tee.ts b/src/lib/readable-stream/tee.ts
+index 5b05eb1..be4b0de 100644
+--- a/src/lib/readable-stream/tee.ts
++++ b/src/lib/readable-stream/tee.ts
+@@ -1,3 +1,4 @@
++import { usesWorkerdByteProfile } from '../capsid-byte-profile';
+ import {
+   CreateReadableByteStream,
+   CreateReadableStream,
+@@ -338,7 +339,14 @@ export function ReadableByteStreamTee(stream: ReadableByteStream): [ReadableByte
+         const otherCanceled = forBranch2 ? canceled1 : canceled2;
+ 
+         if (!byobCanceled) {
+-          ReadableByteStreamControllerClose(byobBranch._readableStreamController);
++          const controller = byobBranch._readableStreamController;
++          // The source has returned ownership of the branch's borrowed buffer.
++          // Profile close commits pending reads itself, so restore the buffer
++          // before it can complete a DefaultReader or BYOB EOF read.
++          if (chunk !== undefined && usesWorkerdByteProfile(controller) && controller._pendingPullIntos.length > 0) {
++            controller._pendingPullIntos.peek().buffer = chunk.buffer;
++          }
++          ReadableByteStreamControllerClose(controller);
+         }
+         if (!otherCanceled) {
+           ReadableByteStreamControllerClose(otherBranch._readableStreamController);
+@@ -347,7 +355,7 @@ export function ReadableByteStreamTee(stream: ReadableByteStream): [ReadableByte
+         if (chunk !== undefined) {
+           assert(chunk.byteLength === 0);
+ 
+-          if (!byobCanceled) {
++          if (!byobCanceled && byobBranch._readableStreamController._pendingPullIntos.length > 0) {
+             ReadableByteStreamControllerRespondWithNewView(byobBranch._readableStreamController, chunk);
+           }
+           if (!otherCanceled && otherBranch._readableStreamController._pendingPullIntos.length > 0) {
+diff --git a/src/lib/transform-stream.ts b/src/lib/transform-stream.ts
+index f800382..780c4b6 100644
+--- a/src/lib/transform-stream.ts
++++ b/src/lib/transform-stream.ts
+@@ -1,3 +1,7 @@
++import {
++  rememberTransformPair, profileTransformPipeFailures, profileTransformErrorStreams,
++  usesWorkerdReaderProfile, mapGet, mapSet, mapDelete, observeNativeTransformWait
++} from './capsid-byte-profile';
+ import assert from '../stub/assert';
+ import {
+   newPromise,
+@@ -220,6 +224,7 @@ function InitializeTransformStream<I, O>(
+     startAlgorithm, pullAlgorithm, cancelAlgorithm, readableHighWaterMark,
+     readableSizeAlgorithm
+   );
++  rememberTransformPair(stream._readable, stream._writable);
+ 
+   // The [[backpressure]] slot is set to undefined so that it can be initialised by TransformStreamSetBackpressure.
+   stream._backpressure = undefined!;
+@@ -244,13 +249,28 @@ function IsTransformStream(x: unknown): x is TransformStream {
+ 
+ // This is a no-op if both sides are already errored.
+ function TransformStreamError(stream: TransformStream, e: any) {
+-  ReadableStreamDefaultControllerError(stream._readable._readableStreamController, e);
+-  TransformStreamErrorWritableAndUnblockWrite(stream, e);
++  const pairedFailure = mapGet(profileTransformPipeFailures, stream._writable);
++  if (pairedFailure !== undefined) {
++    const wasFailing = mapGet(profileTransformErrorStreams, stream._readable);
++    mapSet(profileTransformErrorStreams, stream._readable, true);
++    try {
++      TransformStreamErrorWritableAndUnblockWrite(stream, e);
++      ReadableStreamDefaultControllerError(stream._readable._readableStreamController, e);
++    } finally {
++      if (wasFailing === true) mapSet(profileTransformErrorStreams, stream._readable, true);
++      else mapDelete(profileTransformErrorStreams, stream._readable);
++    }
++  } else {
++    ReadableStreamDefaultControllerError(stream._readable._readableStreamController, e);
++    TransformStreamErrorWritableAndUnblockWrite(stream, e);
++  }
+ }
+ 
+ function TransformStreamErrorWritableAndUnblockWrite(stream: TransformStream, e: any) {
+   TransformStreamDefaultControllerClearAlgorithms(stream._transformStreamController);
+   WritableStreamDefaultControllerErrorIfNeeded(stream._writable._writableStreamController, e);
++  const pairedFailure = mapGet(profileTransformPipeFailures, stream._writable);
++  if (pairedFailure !== undefined) pairedFailure(e);
+   TransformStreamUnblockWrite(stream);
+ }
+ 
+@@ -261,6 +281,12 @@ function TransformStreamUnblockWrite(stream: TransformStream) {
+     // _backpressure is set.
+     TransformStreamSetBackpressure(stream, false);
+   }
++  // A retained terminal transform has no next backpressure transition. Finish
++  // its private pull wait instead of retaining the completed request's jobs.
++  if (usesWorkerdReaderProfile() &&
++      (stream._readable._state !== 'readable' || stream._writable._state !== 'writable')) {
++    stream._backpressureChangePromise_resolve();
++  }
+ }
+ 
+ function TransformStreamSetBackpressure(stream: TransformStream, backpressure: boolean) {
+@@ -271,9 +297,9 @@ function TransformStreamSetBackpressure(stream: TransformStream, backpressure: b
+     stream._backpressureChangePromise_resolve();
+   }
+ 
+-  stream._backpressureChangePromise = newPromise((resolve) => {
++  stream._backpressureChangePromise = observeNativeTransformWait(stream._readable, newPromise((resolve) => {
+     stream._backpressureChangePromise_resolve = resolve;
+-  });
++  }));
+ 
+   stream._backpressure = backpressure;
+ }
+@@ -608,10 +634,14 @@ function TransformStreamDefaultSourcePullAlgorithm(stream: TransformStream): Pro
+   TransformStreamSetBackpressure(stream, false);
+ 
+   // Prevent the next pull() call until there is backpressure.
+-  return stream._backpressureChangePromise;
++  return observeNativeTransformWait(stream._readable, stream._backpressureChangePromise);
+ }
+ 
+ function TransformStreamDefaultSourceCancelAlgorithm<I, O>(stream: TransformStream<I, O>, reason: any): Promise<void> {
++  // Unwind a cancellation back-edge without closing the readable whose
++  // synchronous transform error is already being propagated.
++  const pairedFailure = mapGet(profileTransformPipeFailures, stream._writable);
++  if (pairedFailure !== undefined) pairedFailure(reason, true);
+   const controller = stream._transformStreamController;
+   if (controller._finishPromise !== undefined) {
+     return controller._finishPromise;

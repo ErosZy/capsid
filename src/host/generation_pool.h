@@ -62,6 +62,8 @@ namespace capsid::host {
 class StartupPermitCoordinator;
 class StructuredLog;
 class MetricsRegistry;
+class ServiceChannelBudget;
+class WorkerPoolCapacityLease;
 
 struct GenerationPoolOptions {
     // Identity (the generation key; application_id must satisfy the
@@ -79,6 +81,8 @@ struct GenerationPoolOptions {
     // config as the worker it replaces (§8.3). The factory must be
     // thread-safe if concurrent pools share it.
     WorkerExecutor::WorkerFactory factory;
+    std::shared_ptr<ServiceChannelBudget> channel_budget;
+    std::shared_ptr<WorkerPoolCapacityLease> capacity_lease;
     // Crash budget, backoff and startup-permit lane (§8.3). Requires
     // backoff_initial_ms > 0 and backoff_maximum_ms >= backoff_initial_ms
     // (create() rejects an invalid policy).
@@ -132,16 +136,28 @@ struct GenerationPoolOptions {
     // through these callbacks instead of exposing ownership.
     // on_worker_started fires when an executor became READY (create /
     // create_adopted / install_replacement — pool thread or spawn
-    // thread, outside the pool mutex). on_worker_exited fires when an
+    // thread, outside the pool mutex). Drain completion waits for this
+    // observer to return; its executor remains alive during the call.
+    // on_worker_exited fires when an
     // executor's kExit is processed (pump thread, under the pool mutex).
-    // on_quarantine fires when the crash budget is exhausted (pump or
-    // spawn thread): the Host writes the quarantine tombstone; the pool
-    // then requests its own shutdown (a quarantined generation never
-    // spawns again). All three must be cheap and must never take the pool
-    // mutex.
+    // on_quarantine fires once on the pump, outside the pool mutex,
+    // after the crash budget is exhausted and routing/replacement stops.
+    // It must enqueue management work without waiting for an App lock or
+    // I/O. The optional completion flag below gates quarantine shutdown.
+    // All observers must be cheap; started/exited must not take the pool
+    // mutex (exited still runs under it).
     std::function<void(const WorkerExecutor*)> on_worker_started;
     std::function<void(const WorkerExecutor*)> on_worker_exited;
     std::function<void()> on_quarantine;
+    // Optional asynchronous durable-write barrier. on_quarantine only
+    // queues the write (outside mutex_); the pool waits for this flag
+    // before issuing quarantine shutdowns. Explicit owner drain may
+    // supersede that wait, so abort/retire never joins a management job.
+    std::shared_ptr<const std::atomic<bool>> quarantine_completion;
+    // Optional notification observer, called on the executor thread before
+    // it wakes the pump and without the pool mutex. It must not call back
+    // into the pool. Also permits controlled teardown interleavings.
+    std::function<void()> on_executor_notify;
 };
 
 // See the file comment for the full contract.
@@ -162,8 +178,9 @@ public:
     // coordinator's warm-up. Each is wrapped via WorkerExecutor::adopt();
     // nothing is respawned. The factory stays REQUIRED for §8.3
     // replacements (same artifact, same effective config). On failure every
-    // warmed worker is destroyed (adopted ones through their executors)
-    // and nullptr is returned — no worker ever escapes.
+    // warmed worker is destroyed, including the unvisited suffix after a
+    // failed adopt (adopted ones through their executors), and nullptr is
+    // returned — ownership never transfers back to the caller on failure.
     static std::shared_ptr<GenerationPool> create_adopted(
         GenerationPoolOptions options,
         std::vector<capsid_worker*> warmed,
@@ -200,8 +217,14 @@ public:
     // The first READY slot's executor — the active-health probe target
     // (v1 pools are single-worker; a multi-worker pool probes its lowest
     // READY slot). nullptr when the generation is not kActive or no
-    // worker is READY. The returned executor stays pool-pinned.
+    // worker is READY. This is a borrowed pointer: the caller must prevent
+    // the pool from completing a drain while using it. Concurrent users
+    // should take the independently owned snapshot below instead.
     WorkerExecutor* current_worker();
+    // Pins the selected executor independently of the pool's slots. A
+    // concurrent completed drain can clear those slots while the caller
+    // is blocked, even if the caller still owns the pool itself.
+    std::shared_ptr<WorkerExecutor> current_worker_snapshot();
     // M2 item 6 (§7.4) recycle entry: the supervisor probes the worker
     // THROUGH its executor and calls this on consecutive failed verdicts.
     // The pool records a kHealthRecycle instability (the shared budget —
@@ -237,6 +260,10 @@ public:
     // Live READY capacity: N after a full fleet, N-1 while a replacement
     // is in flight, 0 when the fleet is exhausted.
     std::uint32_t ready_workers() const;
+    // One live READY process for render-time metrics, or zero. Copies
+    // only cached identity while the slot is pinned under mutex_.
+    std::int64_t worker_process_id() const;
+    std::shared_ptr<WorkerPoolCapacityLease> capacity_lease() const { return options_.capacity_lease; }
     // The generation's immutable per-worker inflight ceiling (0 = the
     // session layer imposes no cap beyond the worker's own limit).
     std::uint64_t max_inflight_per_worker() const {
@@ -258,6 +285,7 @@ private:
     // tombstone), and request this pool's own drain — a quarantined
     // generation never spawns again and its workers exit to the reaper.
     void begin_quarantine();
+    void finish_quarantine_locked();
     // Record one instability through the recovery controller; on
     // quarantine the pool drains itself, on schedule_replacement the slot
     // is armed. Shared by handle_executor_exit and recycle_worker.
@@ -268,6 +296,9 @@ private:
                             const char* reason);
 
     void pump_loop();
+    // Non-owning executor callback. wait() joins every producer before the
+    // pool's members are destroyed, including aborted adopted fleets.
+    void notify_executor_event();
     // kExit on `slot`: remove from the READY set, run the recovery
     // controller, schedule a replacement when the budget allows.
     void handle_executor_exit(std::size_t slot);
@@ -318,6 +349,8 @@ private:
     // Slot → spawn due time (monotonic ms) for the exponential backoff.
     std::vector<std::uint64_t> replacement_due_ms_;
     bool events_pending_ = false;
+    bool quarantine_notification_pending_ = false;
+    bool quarantine_waiting_ = false;
     // Atomic mirror of "state_ == kActive" for the startup-permit wait
     // abort predicate, which must not take the pool mutex (direction A:
     // a replacement thread abandons its permit wait when the drain
@@ -326,6 +359,7 @@ private:
     std::atomic<bool> active_flag_ = true;
 
     State state_ = State::kPrepared;
+    std::optional<std::chrono::steady_clock::time_point> drain_until_;
     std::uint64_t stable_since_ms_ = 0;   // continuous-READY base
     std::uint32_t ready_workers_locked() const;  // caller holds mutex_
     std::thread pump_thread_;

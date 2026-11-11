@@ -35,6 +35,14 @@ bool hex_eq(const std::vector<uint8_t> &a, const std::string &hex) {
     return a == bytes(hex);
 }
 
+int failures_probe = 0;
+
+void fail(const std::string &message) {
+    std::fprintf(stderr, "FAIL: %s\n", message.c_str());
+    ++failures_probe;
+    std::exit(1);
+}
+
 capsid::host::ws::Frame text_frame(const std::string &s) {
     capsid::host::ws::Frame f;
     f.fin = true;
@@ -225,6 +233,132 @@ int main() {
         require(p4.next(&f) == kParseError &&
                     p4.error() == "server frame must not be masked",
                 "masked server frame rejected: " + p4.error());
+    }
+
+    // ---- T03: consumed-prefix compaction and bounded memory ----
+    {
+        // Interleave complete frames with a held partial frame: the
+        // consumed prefix must be compacted instead of accumulating.
+        Parser parser(kClient);
+        Frame decoded;
+        std::vector<uint8_t> small;
+        require(encode(text_frame("x"), kServer, 0, &small), "encodes");
+        require(small.size() == 3, "fixture frame shape");
+        // Each iteration delivers one frame in two chunks (partial
+        // header state, then completion): the consumed prefix must be
+        // compacted, so storage stays bounded across thousands of
+        // interleaved partial/complete deliveries.
+        size_t peak = 0;
+        for (int i = 0; i < 2000; ++i) {
+            require(parser.append(small.data(), 2),
+                    "partial frame accepted");
+            require(parser.storage_bytes() > 0, "partial buffered");
+            require(parser.append(small.data() + 2, 1),
+                    "frame completion accepted");
+            require(parser.next(&decoded) == kParseFrame,
+                    "completed frame parses");
+            if (parser.storage_bytes() > peak) {
+                peak = parser.storage_bytes();
+            }
+            if (peak > 8192) {
+                fail("parser storage grows without compaction: " +
+                     std::to_string(peak));
+            }
+        }
+        require(peak <= small.size() * 2 + 64,
+                "storage stayed bounded at: " + std::to_string(peak));
+    }
+
+    // ---- T03: over-budget input fails BEFORE allocation ----
+    {
+        Parser parser(kClient);
+        // Cap is 64 MiB; a single huge append must fail without the
+        // buffer having grown (check via storage accounting after the
+        // rejected append).
+        std::vector<uint8_t> huge(70u * 1024u * 1024u, 0x81);
+        require(!parser.append(huge.data(), huge.size()),
+                "oversized append rejected");
+        require(parser.storage_bytes() == 0,
+                "rejected append must not grow storage");
+    }
+
+    // ---- T03: all-zero mask with MASK bit set is legal ----
+    {
+        std::vector<uint8_t> out;
+        require(encode(text_frame("z"), kClient, 0, &out),
+                "client frame with all-zero mask encodes");
+        require((out[1] & 0x80) != 0, "MASK bit is set");
+        require(out[2] == 0 && out[3] == 0 && out[4] == 0 && out[5] == 0,
+                "zero mask key serialized");
+        Parser parser(kServer);
+        Frame decoded;
+        require(parser.append(out.data(), out.size()), "buffers");
+        require(parser.next(&decoded) == kParseFrame, "parses");
+        require(std::string(decoded.payload.begin(),
+                            decoded.payload.end()) == "z",
+                "zero-mask payload round trips");
+        // Server frames still must not be masked.
+        Frame server_frame = text_frame("s");
+        std::vector<uint8_t> server_out;
+        require(encode(server_frame, kServer, 0, &server_out),
+                "server unmasked encodes");
+        require((server_out[1] & 0x80) == 0, "server MASK bit clear");
+    }
+
+    // ---- T03: minimal length encodings (RFC 6455 §5.2) ----
+    {
+        // length==126 form must carry >= 126; ==127 form >= 65536;
+        // a 64-bit length with the MSB set is rejected outright.
+        Parser parser(kClient);
+        Frame f;
+        // 126-length form carrying 100 (< 126): non-minimal.
+        std::vector<uint8_t> bad_short;
+        bad_short.push_back(0x82);
+        bad_short.push_back(126);
+        bad_short.push_back(0);
+        bad_short.push_back(100);
+        bad_short.insert(bad_short.end(), 100, 0x7a);
+        require(parser.append(bad_short.data(), bad_short.size()),
+                "buffers");
+        require(parser.next(&f) == kParseError &&
+                    parser.error() == "non-minimal length encoding",
+                "126-form under 126 rejected: " + parser.error());
+
+        Parser parser2(kClient);
+        std::vector<uint8_t> bad_medium;
+        bad_medium.push_back(0x82);
+        bad_medium.push_back(127);
+        for (int i = 0; i < 8; ++i) {
+            bad_medium.push_back(i == 5 ? 1 : 0);  // = 65536+... no: build
+        }
+        // Simpler: 127-form carrying 1000 (< 65536).
+        std::vector<uint8_t> bad_medium2;
+        bad_medium2.push_back(0x82);
+        bad_medium2.push_back(127);
+        uint64_t small_len = 1000;
+        for (int i = 7; i >= 0; --i) {
+            bad_medium2.push_back(
+                static_cast<uint8_t>(small_len >> (i * 8)));
+        }
+        bad_medium2.insert(bad_medium2.end(), 1000, 0x7a);
+        require(parser2.append(bad_medium2.data(), bad_medium2.size()),
+                "buffers");
+        require(parser2.next(&f) == kParseError &&
+                    parser2.error() == "non-minimal length encoding",
+                "127-form under 65536 rejected: " + parser2.error());
+
+        Parser parser3(kClient);
+        std::vector<uint8_t> bad_msb;
+        bad_msb.push_back(0x82);
+        bad_msb.push_back(127);
+        bad_msb.push_back(0x80);  // MSB set: reserved/absurd
+        for (int i = 0; i < 7; ++i) {
+            bad_msb.push_back(0);
+        }
+        require(parser3.append(bad_msb.data(), bad_msb.size()),
+                "buffers");
+        require(parser3.next(&f) == kParseError,
+                "64-bit MSB length rejected");
     }
 
     if (failures > 0) {

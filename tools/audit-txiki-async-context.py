@@ -74,15 +74,20 @@ REASONS = {
         "as callbacks from a libuv tick"),
 }
 
-# (file, enclosing function) -> class, for every tjs_call_handler call site.
-# The two utils.c entries are the body of the tjs_call_handler_ctx wrapper:
-# the fallback for a NULL ctx_data and the contextual call after enter.
+# (file, enclosing function) -> class, for every public handler-wrapper call.
+# utils.c now factors contextual entry into a private call_handler_ctx helper;
+# wrapper definitions are excluded from call-site inventory.
 HANDLER_SITES = {
-    ("utils.c", "tjs_call_handler_ctx"): CLASS_WIRED,
     ("httpserver.c", "tjs_http_emit_body_chunk"): CLASS_UNREACHABLE,
     ("httpserver.c", "tjs_http_callback"): CLASS_UNREACHABLE,
     ("httpserver.c", "tjs_http_invoke_handler"): CLASS_UNREACHABLE,
     ("httpclient.c", "maybe_invoke_callback"): CLASS_WIRED,
+    # Explicit abort() is synchronous JS re-entry; its original resource
+    # context and independent hold remain required, without a nested checkpoint.
+    ("httpclient.c", "tjs_httpclient_cancel"): CLASS_WIRED,
+    # Buffered decode completion re-enters the captured owner through
+    # tjs_call_handler_ctx_sync when abort() is on the caller stack.
+    ("httpclient.c", "tjs_httpclient_finish_decoding"): CLASS_WIRED,
     ("mod_fswatch.c", "uv__fs_event_cb"): CLASS_WIRED,
     ("mod_process.c", "uv__exit_cb"): CLASS_UNREACHABLE,
     ("mod_streams.c", "maybe_invoke_callback"): CLASS_WIRED,
@@ -184,10 +189,10 @@ def strip_comments(src):
 def scan_handler_sites(lines, path):
     sites = []
     for idx, line in enumerate(lines):
-        if not re.search(r'\btjs_call_handler(?:_ctx)?\s*\(', line):
+        if not re.search(r'\btjs_call_handler(?:_ctx(?:_sync)?)?\s*\(', line):
             continue
         if re.match(
-                r'\s*(?:void|static)\s+tjs_call_handler(?:_ctx)?\s*\(',
+                r'\s*(?:void|static)\s+tjs_call_handler(?:_ctx(?:_sync)?)?\s*\(',
                 line):
             continue  # definition
         fn = enclosing_function(lines, idx)

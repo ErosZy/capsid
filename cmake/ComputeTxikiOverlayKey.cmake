@@ -186,10 +186,50 @@ function(capsid_compute_txiki_overlay_key)
     # 0032 keepalive-evicted queued fetch requests fail closed with their
     #      user_space intact; 0033 only pool onto connections whose peer
     #      already proved keepalive; 0034 per-token pending-job probe;
-    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping.
-    if(NOT CTOK_PATCH_COUNT EQUAL 36)
+    # 0035 correct libwebsockets Secure/HttpOnly cookie attribute mapping;
+    # 0036 retain async/generator heap frames through captured closures;
+    # 0037 public event state/conversions and trusted runtime dispatch;
+    # 0038 dispatch checkpoints and default handled-rejection reason;
+    # 0039 listener snapshots, exceptions, options and abort algorithms.
+    # 0040 reflected IDL event handlers; 0041 pending-handshake fetch abort.
+    # 0043 releases fetch roots/listeners after synchronous open failure.
+    # 0044 separates native call dispatch and uses small local RegExp captures.
+    # 0045 captures the string intrinsic for event Web IDL conversions.
+    # 0046 adds connection async-lifetime controls without changing Binding hooks.
+    # 0047 separates application timer and queueMicrotask exception reporting.
+    # 0048 captures Error source metadata and default-profile runtime flags.
+    # 0049 scopes deferred rejection events without retaining idle requests.
+    # 0050 preserves Promise creation scopes and cross-request turn ordering.
+    # 0051 closes connection-owned HTTP resources without invoking retired JS.
+    # 0052 keeps settled AbortSignal reasons and tunneled native exceptions.
+    # 0053 lets synchronous native abort return before the job checkpoint.
+    # 0054 disables the persistent cookie cache for an empty configured path.
+    # 0055 preserves native HTTP policy owner and caller contexts.
+    # 0056 computes digest/HMAC synchronously and preserves Promise conversion boundaries.
+    # 0057 captures crypto collection intrinsics; 0058 preserves HTTP authority/default headers.
+    # 0059 shares immutable interpreter literals without changing stack quotas or Debug flags.
+    # 0060 backports unsigned BigInt width/sign extension with bounded allocation.
+    # 0061 owns ordinary ArrayBuffer aliases and preserves external transfer ownership.
+    # 0062 retains pending stream observer identity without an active job lease.
+    # 0063 keeps bytecode value operations out of recursive aggregate slots.
+    # 0064 preserves ordinary fetch metadata and registers the native byte source.
+# 0065 preserves the header-buffered body tail with a 4 KiB service read budget.
+# 0066 adds HTTP gzip member/CRC/EOF decoding and demand-based body reads.
+# 0067 bounds gzip expansion by demand and preserves accepted data on signal abort.
+# 0068 uses per-call Windows platform digest handles with whole-input fallback.
+# 0069 keeps synchronous gzip abort callbacks from draining promise jobs.
+# 0070 gives gzip branches independent demand-driven decoders and preserves buffered HTTP input.
+# 0071 completes bodyless HTTP responses at headers and skips absent-content decoding.
+# 0072 aligns runtime rejection-event construction, own fields and event-private intrinsics.
+# 0073 retains subscriber identity through native stream Promise dependencies and late observation.
+# 0074 keeps array/string iterator state with its object and allocates own properties lazily.
+# 0075 exposes the existing CPU-only gzip decoder for credit-controlled HTTP fallback bodies.
+# 0076 keeps WebAssembly bytecode, table and frame accesses aligned and releases validation buffers.
+# 0077 avoids pointer arithmetic on null storage when transfer detaches an empty typed-array view.
+# 0078 keeps compiler-probe cache keys valid identifiers across repeated configuration.
+    if(NOT CTOK_PATCH_COUNT EQUAL 78)
         message(FATAL_ERROR
-            "expected 36 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 78 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")

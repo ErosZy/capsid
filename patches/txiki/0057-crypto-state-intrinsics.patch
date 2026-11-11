@@ -1,0 +1,57 @@
+--- a/src/js/polyfills/crypto/crypto-key.js
++++ b/src/js/polyfills/crypto/crypto-key.js
+@@ -2,9 +2,16 @@
+ // reach them via getKeyData(key) without exposing them on the public API of
+ // CryptoKey.
+ const keyDataMap = new WeakMap();
++const mapGet = Function.call.bind(WeakMap.prototype.get);
++const mapSet = Function.call.bind(WeakMap.prototype.set);
++const mapHas = Function.call.bind(WeakMap.prototype.has);
++
++export function isCryptoKey(value) {
++    return mapHas(keyDataMap, value);
++}
+ 
+ export function getKeyData(key) {
+-    return keyDataMap.get(key);
++    return mapGet(keyDataMap, key);
+ }
+ 
+ export class CryptoKey {
+@@ -18,7 +25,7 @@
+         this.#extractable = extractable;
+         this.#algorithm = Object.freeze({ ...algorithm });
+         this.#usages = Object.freeze([ ...usages ]);
+-        keyDataMap.set(this, keyData);
++        mapSet(keyDataMap, this, keyData);
+     }
+ 
+     get type() {
+--- a/src/js/polyfills/crypto/operations.js
++++ b/src/js/polyfills/crypto/operations.js
+@@ -1,19 +1,21 @@
+-import { CryptoKey, getKeyData } from './crypto-key.js';
++import { isCryptoKey } from './crypto-key.js';
+ import { toUint8Array } from './helpers.js';
+ 
+ const instances = new WeakSet();
++const setAdd = Function.call.bind(WeakSet.prototype.add);
++const setHas = Function.call.bind(WeakSet.prototype.has);
+ const resolve = Promise.resolve.bind(Promise);
+ const reject = Promise.reject.bind(Promise);
+ const then = Function.call.bind(Promise.prototype.then);
+ 
+-export function registerSubtle(value) { instances.add(value); }
++export function registerSubtle(value) { setAdd(instances, value); }
+ export function requireSubtle(value) {
+-    if (!instances.has(value)) {
++    if (!setHas(instances, value)) {
+         throw new TypeError('Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.');
+     }
+ }
+ export function requireCryptoKey(value, method, parameter) {
+-    if (!(value instanceof CryptoKey) || getKeyData(value) === undefined) {
++    if (!isCryptoKey(value)) {
+         throw new TypeError(`Failed to execute '${method}' on 'SubtleCrypto': parameter ${parameter} is not of type 'CryptoKey'.`);
+     }
+ }

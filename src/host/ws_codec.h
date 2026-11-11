@@ -69,13 +69,22 @@ public:
     bool append(const uint8_t *data, size_t size);
     ParseResult next(Frame *frame);
     const std::string &error() const { return error_; }
+    // Total bytes currently held (consumed prefix included) - bounded
+    // memory accounting for tests and host budget checks.
+    size_t storage_bytes() const { return buffer_.size(); }
 
 private:
+    void compact_if_needed();
+
     Role role_;
     std::vector<uint8_t> buffer_;
     size_t offset_;
     std::string error_;
 };
+
+// Hard cap on the unconsumed bytes one parser may hold (largest legal
+// frame); appends that would exceed it fail before allocating.
+const size_t kMaxBufferedBytes = 64u * 1024u * 1024u;
 
 }  // namespace ws
 }  // namespace host

@@ -1,0 +1,26 @@
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -58857,20 +58857,20 @@
+         p->u.array.count = 0;
+         p->u.array.u.ptr = NULL;
+         size_log2 = typed_array_size_log2(p->class_id);
+         size_elem = 1 << size_log2;
+         if (ta->track_rab) {
+             if (len >= (int64_t)ta->offset + size_elem) {
+                 p->u.array.count = (len - ta->offset) >> size_log2;
+-                p->u.array.u.ptr = &data[ta->offset];
++                p->u.array.u.ptr = data ? data + ta->offset : NULL;
+             }
+         } else {
+             if (len >= (int64_t)ta->offset + ta->length) {
+                 p->u.array.count = ta->length >> size_log2;
+-                p->u.array.u.ptr = &data[ta->offset];
++                p->u.array.u.ptr = data ? data + ta->offset : NULL;
+             }
+         }
+     }
+ }
+ 
+ enum {
+     JS_ARRAY_BUFFER_TRANSFER,

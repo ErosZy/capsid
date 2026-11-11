@@ -1,0 +1,175 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -317,6 +317,8 @@
+     void *job_ctx_opaque;
+     bool (*job_ctx_can_run)(JSContext *, void *, void *);
+     void *job_ctx_can_run_opaque;
++    bool (*microtask_exception_hook)(JSContext *, JSValueConst, void *);
++    void *microtask_exception_opaque;
+ 
+     JSPromiseHook *promise_hook;
+     void *promise_hook_opaque;
+@@ -2144,6 +2146,14 @@
+ {
+     rt->job_ctx_can_run = can_run;
+     rt->job_ctx_can_run_opaque = opaque;
++}
++
++void JS_SetMicrotaskExceptionHook(JSRuntime *rt,
++                                bool (*report)(JSContext *, JSValueConst, void *),
++                                void *opaque)
++{
++    rt->microtask_exception_hook = report;
++    rt->microtask_exception_opaque = opaque;
+ }
+ 
+ void JS_SetCanBlock(JSRuntime *rt, bool can_block)
+@@ -40346,7 +40356,18 @@
+ static JSValue js_microtask_job(JSContext *ctx,
+                                 int argc, JSValueConst *argv)
+ {
+-    return JS_Call(ctx, argv[0], ctx->global_obj, 0, NULL);
++    JSValue result = JS_Call(ctx, argv[0], ctx->global_obj, 0, NULL);
++    if (JS_IsException(result) && ctx->rt->microtask_exception_hook) {
++        JSValue exception = JS_GetException(ctx);
++        if (!JS_IsUncatchableError(exception) &&
++            ctx->rt->microtask_exception_hook(ctx, exception,
++                                            ctx->rt->microtask_exception_opaque)) {
++            JS_FreeValue(ctx, exception);
++            return JS_UNDEFINED;
++        }
++        return JS_Throw(ctx, exception);
++    }
++    return result;
+ }
+ 
+ static JSValue js_global_queueMicrotask(JSContext *ctx, JSValueConst this_val,
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1167,6 +1167,11 @@
+  * and context. Kept separate so existing four-member hook users stay valid. */
+ JS_EXTERN void JS_SetJobContextCanRunHook(JSRuntime *rt,
+     bool (*can_run)(JSContext *, void *, void *), void *opaque);
++/* Report catchable queueMicrotask callback exceptions in the owning context.
++ * False preserves the normal unhandled-job behavior. Interrupts bypass this
++ * hook so an embedder's finite execution budget cannot become catchable. */
++JS_EXTERN void JS_SetMicrotaskExceptionHook(JSRuntime *rt,
++    bool (*report)(JSContext *, JSValueConst, void *), void *opaque);
+ /* Capsid: true when at least one pending job carries exactly job_context.
+  * Unlike JS_IsJobPending, this is per-request so an unrelated request's
+  * jobs cannot defer another request's poison decision. */
+--- a/src/private.h
++++ b/src/private.h
+@@ -91,6 +91,8 @@
+     void *async_ctx_opaque;
+     TJSAsyncContextControlHooks async_ctx_control;
+     void *async_ctx_control_opaque;
++    bool (*timer_exception_hook)(JSContext *, JSValueConst, void *);
++    void *timer_exception_opaque;
+     TJSResourceOwnerHooks resource_owner_hooks;
+     void *resource_owner_opaque;
+ #ifdef TJS_HAVE_WASM
+--- a/src/timers.c
++++ b/src/timers.c
+@@ -107,7 +107,10 @@
+         destroy_timer(th);
+         return;
+     }
+-    tjs_call_handler_ctx(th->ctx, th->ctx_data, th->func, th->argc, th->argv);
++    if (th->cleanup)
++        tjs_call_handler_ctx(th->ctx, th->ctx_data, th->func, th->argc, th->argv);
++    else
++        tjs_call_timer_handler_ctx(th->ctx, th->ctx_data, th->func, th->argc, th->argv);
+ 
+     if (uv_is_closing((uv_handle_t *) handle)) {
+         return;
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -203,7 +203,7 @@
+     fflush(stderr);
+ }
+ 
+-void tjs_call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv) {
++static void call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv, bool timer) {
+     JSValue ret, func1;
+     /* 'func' might be destroyed when calling itself (if it frees the
+        handler), so must take extra care */
+@@ -213,10 +213,28 @@
+     if (JS_IsException(ret)) {
+         TJSRuntime *qrt = TJS_GetRuntime(ctx);
+         CHECK_NOT_NULL(qrt);
+-        TJS_Stop(qrt);
++        bool handled = false;
++        if (timer && qrt->timer_exception_hook) {
++            JSValue exception = JS_GetException(ctx);
++            handled = qrt->timer_exception_hook(ctx, exception, qrt->timer_exception_opaque);
++            if (handled) JS_FreeValue(ctx, exception);
++            else JS_Throw(ctx, exception);
++        }
++        if (!handled) TJS_Stop(qrt);
+     }
+     JS_FreeValue(ctx, ret);
+     tjs__drain_microtasks(ctx);
++}
++
++void tjs_call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv) {
++    call_handler(ctx, func, argc, argv, false);
++}
++
++void tjs_set_timer_exception_hook(JSContext *ctx,
++    bool (*handle)(JSContext *, JSValueConst, void *), void *opaque) {
++    TJSRuntime *qrt = TJS_GetRuntime(ctx);
++    qrt->timer_exception_hook = handle;
++    qrt->timer_exception_opaque = opaque;
+ }
+ 
+ void tjs_set_async_context_hooks(JSContext *ctx, const TJSAsyncContextHooks *hooks, void *opaque) {
+@@ -264,9 +282,9 @@
+     }
+ }
+ 
+-void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
++static void call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv, bool timer) {
+     if (!ctx_data) {
+-        tjs_call_handler(ctx, func, argc, argv);
++        call_handler(ctx, func, argc, argv, timer);
+         return;
+     }
+     TJSRuntime *qrt = TJS_GetRuntime(ctx);
+@@ -282,10 +300,18 @@
+         tjs_leave_ctx(ctx, &prev);
+         return;
+     }
+-    tjs_call_handler(ctx, func, argc, argv);
++    call_handler(ctx, func, argc, argv, timer);
+     tjs_leave_ctx(ctx, &prev);
+     tjs_async_context_checkpoint(ctx);
+     tjs_release_ctx(ctx, held);
++}
++
++void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
++    call_handler_ctx(ctx, ctx_data, func, argc, argv, false);
++}
++
++void tjs_call_timer_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
++    call_handler_ctx(ctx, ctx_data, func, argc, argv, true);
+ }
+ 
+ void tjs_set_async_context_control_hooks(JSContext *ctx,
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -183,6 +183,14 @@
+ /* Private cleanup tasks survive application timer cancellation. */
+ JSValue tjs_queue_async_cleanup(JSContext *ctx, JSValueConst callback);
+ 
++/* Application timer failures and internal cleanup tasks have different
++ * policies. An installed hook may consume a timer exception in its live owner;
++ * false preserves the exception and upstream runtime-stop behavior. */
++void tjs_set_timer_exception_hook(JSContext *ctx,
++    bool (*handle)(JSContext *, JSValueConst, void *), void *opaque);
++void tjs_call_timer_handler_ctx(JSContext *ctx, void *ctx_data,
++    JSValue func, int argc, JSValue *argv);
++
+ /* Immutable native-resource ownership. The Binding Runtime installs these
+    independently from async callback propagation: a File/socket/database/WASM
+    object keeps its creation-time owner until finalization, and every public

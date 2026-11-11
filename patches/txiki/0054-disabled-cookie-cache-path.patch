@@ -1,0 +1,15 @@
+--- a/src/lws-utils.c
++++ b/src/lws-utils.c
+@@ -422,7 +422,11 @@
+ 
+     /* Cookie jar is context-level in lws, must be set here. */
+     CHECK_NOT_NULL(qrt->lws.cookie_jar_path);
+-    info.http_nsc_filepath = qrt->lws.cookie_jar_path;
++    /* An empty configured path disables persistent cookies. Passing the
++     * empty string creates a file cache for "", whose .LCK retry loop can
++     * block the JS thread when the working directory cannot create it. */
++    info.http_nsc_filepath = qrt->lws.cookie_jar_path[0]
++        ? qrt->lws.cookie_jar_path : NULL;
+ 
+     qrt->lws.ctx = lws_create_context(&info);
+ 

@@ -31,10 +31,13 @@ struct PermissionDecision {
     PermissionDecision(
         capsid_permission_state value = CAPSID_PERMISSION_STATE_DENIED,
         uint32_t matched_rule = 0,
-        const std::string &normalized_resource = std::string())
+        const std::string &normalized_resource = std::string(""))
         : state(value),
           rule_id(matched_rule),
           resource(normalized_resource) {}
+    // Keep return-value allocation throwable on Debug STL implementations.
+    PermissionDecision(const PermissionDecision&) = default;
+    PermissionDecision& operator=(const PermissionDecision&) = default;
 };
 
 class CapabilityPolicy {
@@ -42,7 +45,7 @@ public:
     struct Rule {
         capsid_permission_action action;
         capsid_permission_name permission;
-        std::string resource;
+        std::string resource{""};
         uint32_t rule_id;
     };
 

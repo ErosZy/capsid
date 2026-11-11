@@ -44,6 +44,10 @@ struct HostPolicy {
     std::uint32_t max_workers = 1;
     std::uint32_t min_ready = 1;  // legacy; not a ceiling (see compile_policy)
     std::uint64_t max_requests_per_worker = 0;  // 0 = unlimited
+    // request.timeout is finite. Zero here means no Host override/ceiling;
+    // an omitted App value uses the Host default, then the Runtime default.
+    std::uint64_t default_request_timeout_ms = 0;
+    std::uint64_t max_request_timeout_ms = 0;
     std::uint64_t max_worker_memory_bytes = 0;
     // Host-side admission-queue maximums (host.json maximums.pool.*, E-1
     // §10.3). 0 = not set: unlike the worker-count ceiling, queueing is
@@ -96,6 +100,7 @@ struct AppRequest {
     // of "stdin"/"stdout"/"stderr".
     std::vector<std::string> stdio_streams;
     std::uint64_t requests_per_worker = 0;
+    std::uint64_t request_timeout_ms = 0;  // request.timeout; 0 = omitted
     // pool.queue* (E-1 §10.3): the bounded per-shard admission queue.
     // 0 = queueing disabled (inflight-full rejects with 429 directly).
     std::uint64_t queue_requests = 0;       // queue depth; 0 = disabled
@@ -155,6 +160,7 @@ struct EffectiveConfig {
     std::vector<std::string> stdio_streams;  // canonical order
     std::vector<std::uint32_t> stdio_rule_ids;  // parallel to streams
     std::uint64_t requests_per_worker = 0;
+    std::uint64_t request_timeout_ms = 0;  // -> Runtime request_timeout_ms
     std::uint64_t queue_requests = 0;       // pool.queueRequests
     std::uint64_t queue_header_bytes = 0;   // pool.queueHeaderBytes
     std::uint64_t queue_timeout_ms = 0;     // pool.queueTimeout

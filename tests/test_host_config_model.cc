@@ -236,6 +236,9 @@ void test_full_document_maps_every_field() {
             "defaults.worker.pidsMax did not map");
     require(config.defaults.request.timeout == "30s",
             "defaults.request.timeout did not map");
+    require(config.policy.default_request_timeout_ms == 30000 &&
+                config.policy.max_request_timeout_ms == 60000,
+            "request timeout tiers did not reach the deployment policy");
     require(config.defaults.request.max_inflight_per_worker == 8,
             "defaults.request.maxInflightPerWorker did not map");
     require(config.defaults.request.max_streaming_inflight_per_worker == 2,
@@ -302,6 +305,76 @@ void test_full_document_maps_every_field() {
             "recovery.activeHealthInterval did not convert");
     require(config.recovery.active_health_failures == 2,
             "recovery.activeHealthFailures did not map");
+}
+
+void test_channels_section_maps_and_gates() {
+    // GLM T08: the channels section maps into the model and the frozen
+    // A2 bounds are enforced at the typed parse (schema-valid,
+    // semantically illegal documents are startup errors).
+    ParsedHostConfig mapped;
+    require_valid_parse(R"json({
+  "apiVersion": "capsid/host-v1",
+  "applicationsRoot": "/srv/apps",
+  "stateRoot": "/var/lib/capsid",
+  "secretRootTemplate": "/secrets/{application}",
+  "admin": {"unix": "/run/capsid/admin.sock"},
+  "channels": {
+    "maxChannels": 64,
+    "maxMessageBytes": 2097152,
+    "reassemblyBudgetBytes": 33554432,
+    "sendBudgetBytes": 33554432,
+    "perChannelQueueBytes": 2097152
+  }
+})json", "channels-mapped", &mapped);
+    require(mapped.channels.configured, "channels section flag");
+    require(mapped.channels.max_channels == 64 &&
+                mapped.channels.max_message_bytes == 2097152 &&
+                mapped.channels.reassembly_budget_bytes == 33554432 &&
+                mapped.channels.send_budget_bytes == 33554432 &&
+                mapped.channels.per_channel_queue_bytes == 2097152,
+            "channels fields mapped");
+    // defaults where absent
+    require(mapped.channels.close_timeout_ms == 0 &&
+                mapped.channels.dial_timeout_ms == 0,
+            "absent timeouts keep zero = deployment default");
+
+    // illegal limits: message cap below the A2 floor
+    require_parse_error(R"json({
+  "apiVersion": "capsid/host-v1",
+  "applicationsRoot": "/srv/apps",
+  "stateRoot": "/var/lib/capsid",
+  "secretRootTemplate": "/secrets/{application}",
+  "admin": {"unix": "/run/capsid/admin.sock"},
+  "channels": {"maxMessageBytes": 512}
+})json", "channels-message-below-floor");
+    // illegal limits: channel count over the A2 ceiling
+    require_parse_error(R"json({
+  "apiVersion": "capsid/host-v1",
+  "applicationsRoot": "/srv/apps",
+  "stateRoot": "/var/lib/capsid",
+  "secretRootTemplate": "/secrets/{application}",
+  "admin": {"unix": "/run/capsid/admin.sock"},
+  "channels": {"maxChannels": 4096}
+})json", "channels-count-over-ceiling");
+    // illegal limits: per-channel queue over the 4 MiB cap
+    require_parse_error(R"json({
+  "apiVersion": "capsid/host-v1",
+  "applicationsRoot": "/srv/apps",
+  "stateRoot": "/var/lib/capsid",
+  "secretRootTemplate": "/secrets/{application}",
+  "admin": {"unix": "/run/capsid/admin.sock"},
+  "channels": {"perChannelQueueBytes": 8388608}
+})json", "channels-queue-over-cap");
+    // minimal document keeps channels unconfigured (v4 carriage)
+    ParsedHostConfig minimal;
+    require_valid_parse(
+        R"json({"apiVersion": "capsid/host-v1",
+          "applicationsRoot": "/srv/apps",
+          "stateRoot": "/var/lib/capsid",
+          "secretRootTemplate": "/secrets/{application}",
+          "admin": {"unix": "/run/capsid/admin.sock"}})json",
+        "channels-absent", &minimal);
+    require(!minimal.channels.configured, "absent channels stay off");
 }
 
 void test_minimal_document_parses() {
@@ -592,6 +665,27 @@ void test_cors_preflight_without_requested_headers() {
             "headerless CORS preflight did not produce 204");
 }
 
+void test_request_timeout_tiers_are_finite_and_ordered() {
+    const auto document = [](const std::string& tiers) {
+        return std::string(R"json({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},)json") + tiers + "}";
+    };
+    ParsedHostConfig config;
+    std::string error;
+    require(parse_host_config(document(R"("defaults":{"request":{"timeout":"100ms"}},"maximums":{"request":{"timeout":"120ms"}})"), &config, &error),
+            "valid finite timeout tiers rejected: " + error);
+    require(config.policy.default_request_timeout_ms == 100 &&
+                config.policy.max_request_timeout_ms == 120,
+            "finite timeout tiers were discarded");
+    for (const auto& tiers : std::vector<std::string>{
+            R"("defaults":{"request":{"timeout":"0ms"}})",
+            R"("maximums":{"request":{"timeout":"0ms"}})",
+            R"("maximums":{"request":{"timeout":"9223372036854775808ms"}})",
+            R"("defaults":{"request":{"timeout":"200ms"}},"maximums":{"request":{"timeout":"120ms"}})"}) {
+        require(!parse_host_config(document(tiers), &config, &error),
+                "invalid timeout tiers accepted: " + tiers);
+    }
+}
+
 void test_error_is_stable_and_safe() {
     ParsedHostConfig config;
     std::string error;
@@ -611,10 +705,34 @@ void test_error_is_stable_and_safe() {
             "error text leaks a path: '" + error + "'");
 }
 
+void test_ipv6_fetch_authorities_reach_the_host_policy() {
+    const auto document = [](const std::string& authority) {
+        return std::string(R"({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},"permissions":{"fetchTargets":[")") + authority + R"("]}})";
+    };
+    for (const auto& authority : std::vector<std::string>{
+            "[::1]:443,8443", "[0:0:0:0:0:0:0:1]:443,8443"}) {
+        ParsedHostConfig config;
+        std::string error;
+        require(parse_host_config(document(authority), &config, &error),
+                "bracketed IPv6 Host fetch authority rejected: " + error);
+        require(config.policy.fetch_targets.size() == 1 && config.policy.fetch_targets[0].host == "::1" &&
+                    config.policy.fetch_targets[0].ports == std::vector<std::uint16_t>({443, 8443}),
+                "IPv6 Host fetch authority gained or lost ports");
+    }
+    for (const auto& authority : std::vector<std::string>{
+            "[::1]:", "[::1]:443,", "[::1]:65536", "[::1]extra:443", "[fe80::1%1]:443", "::1"}) {
+        ParsedHostConfig config;
+        std::string error;
+        require(!parse_host_config(document(authority), &config, &error),
+                "malformed Host fetch authority accepted: " + authority);
+    }
+}
+
 }  // namespace
 
 int main() {
     test_full_document_maps_every_field();
+    test_channels_section_maps_and_gates();
     test_minimal_document_parses();
     test_bindings_root_maps();
     test_semantic_gates();
@@ -622,6 +740,8 @@ int main() {
     test_cors_tokens_use_the_http_tchar_grammar();
     test_cors_preflight_without_requested_headers();
     test_error_is_stable_and_safe();
+    test_request_timeout_tiers_are_finite_and_ordered();
+    test_ipv6_fetch_authorities_reach_the_host_policy();
     std::cout << "test-host-config-model: all tests passed" << std::endl;
     return 0;
 }

@@ -92,7 +92,9 @@ void append_count(std::vector<std::uint8_t> &output, std::size_t count) {
 }  // namespace
 
 std::string compute_generation_digest(const GenerationIdentityInput &input) {
-    static constexpr char kDomain[] = "capsid-generation-v1\0";
+    // v2 (GLM T08): the record gains protocol_limits_digest — protocol
+    // selection and channel limits now take part in the identity.
+    static constexpr char kDomain[] = "capsid-generation-v2\0";
     std::vector<std::uint8_t> message(
         reinterpret_cast<const std::uint8_t *>(kDomain),
         reinterpret_cast<const std::uint8_t *>(kDomain) + sizeof(kDomain) - 1);
@@ -113,12 +115,67 @@ std::string compute_generation_digest(const GenerationIdentityInput &input) {
         input.secret_revision,
         input.runtime_compatibility_id,
         input.binding_set_digest,
+        input.protocol_limits_digest,
     };
     for (const std::string_view field : fields) {
         append_length_prefixed(message, field);
     }
     return sha256_hex(message);
 
+}
+
+
+std::string compute_protocol_limits_digest(
+    std::uint16_t wire_version,
+    const capsid::protocol::ChannelLimits& limits_in) {
+    // defaults filled in: absent fields hash as their deployment
+    // defaults so explicit-default configs keep one identity
+    capsid::protocol::ChannelLimits limits = limits_in;
+    if (limits.max_channels == 0) {
+        limits.max_channels = 128;
+    }
+    if (limits.max_message_bytes == 0) {
+        limits.max_message_bytes = 1024u * 1024u;
+    }
+    if (limits.reassembly_budget_bytes == 0) {
+        limits.reassembly_budget_bytes = 16u * 1024u * 1024u;
+    }
+    if (limits.send_budget_bytes == 0) {
+        limits.send_budget_bytes = 16u * 1024u * 1024u;
+    }
+    if (limits.close_timeout_ms == 0) {
+        limits.close_timeout_ms = 5000;
+    }
+    if (limits.dial_timeout_ms == 0) {
+        limits.dial_timeout_ms = 10000;
+    }
+    if (limits.per_channel_queue_bytes == 0) {
+        limits.per_channel_queue_bytes = 4u * 1024u * 1024u;
+    }
+    static constexpr char kDomain[] = "capsid-protocol-limits-v1\0";
+    std::vector<std::uint8_t> message(
+        reinterpret_cast<const std::uint8_t*>(kDomain),
+        reinterpret_cast<const std::uint8_t*>(kDomain) +
+            sizeof(kDomain) - 1);
+    append_length_prefixed(
+        message,
+        std::to_string(static_cast<unsigned>(wire_version)));
+    append_length_prefixed(message, std::to_string(limits.max_channels));
+    append_length_prefixed(
+        message, std::to_string(limits.max_message_bytes));
+    append_length_prefixed(
+        message, std::to_string(limits.reassembly_budget_bytes));
+    append_length_prefixed(
+        message, std::to_string(limits.send_budget_bytes));
+    append_length_prefixed(
+        message, std::to_string(limits.close_timeout_ms));
+    append_length_prefixed(
+        message, std::to_string(limits.dial_timeout_ms));
+    append_length_prefixed(
+        message, std::to_string(limits.idle_timeout_ms));
+    append_length_prefixed(
+        message, std::to_string(limits.per_channel_queue_bytes));
+    return sha256_hex(message);
 }
 
 std::string compute_binding_set_digest(

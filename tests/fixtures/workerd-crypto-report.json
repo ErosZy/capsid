@@ -1,0 +1,2413 @@
+{
+  "schema": "capsid-webcrypto-compat-v1",
+  "complete": true,
+  "mode": "reference",
+  "runId": "c78ff5bd-6894-4fb9-aea6-26e572de494b",
+  "referenceLock": {
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "binary": "workerd-windows-64",
+    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary_version_string": "workerd 2026-10-10",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": [],
+    "client": {
+      "runtime": "node",
+      "websocket": "native (undici) - no external dependency",
+      "node_version": "v24.14.0",
+      "undici_version": "7.21.0"
+    },
+    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
+    "release_asset": "workerd-windows-64.gz",
+    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
+    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+  },
+  "client": {
+    "node": "v24.14.0",
+    "undici": "7.21.0"
+  },
+  "inputs": {
+    "runner": "398898bda03209abafcd5462b12a281217121790ae1c1a89a2eb0444c92758ea",
+    "fixture": "c19b6092dcf3596039f241f70e8c87ff0305933c2cea91381ca62690db75114d",
+    "contract": "d872ab4af4f7c0d64db999ed100bf7669f12edfd6b54fdc0ae1ac6fabfbc991a",
+    "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+  },
+  "binaries": {
+    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "worker": null
+  },
+  "cases": [
+    {
+      "kind": "crypto-digest-order",
+      "challenge": "26d6e642-23cc-47b5-943e-dccb155a2593",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"488a0ad1-c792-451c-98eb-0841c5e989bc\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: L4dFpAC7gq/3cjCtENzdGaIaJCk=",
+        "requestKey": "qFXzlm3EnI6QBQAQ4iAIyA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: L4dFpAC7gq/3cjCtENzdGaIaJCk=",
+        "requestKey": "qFXzlm3EnI6QBQAQ4iAIyA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"488a0ad1-c792-451c-98eb-0841c5e989bc\",\"state\":{\"kind\":\"crypto-digest-order\",\"challenge\":\"26d6e642-23cc-47b5-943e-dccb155a2593\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"488a0ad1-c792-451c-98eb-0841c5e989bc\",\"state\":{\"kind\":\"crypto-digest-order\",\"challenge\":\"26d6e642-23cc-47b5-943e-dccb155a2593\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-close",
+      "challenge": "ec583199-6bfa-4831-9a8e-64505731beb4",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"c4916095-ae31-4a93-9420-7e21923f73e2\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 58dRcApUcE6EBOG168VASd/LG+8=",
+        "requestKey": "4pp51KCp4DF9bXpEER+gnQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 58dRcApUcE6EBOG168VASd/LG+8=",
+        "requestKey": "4pp51KCp4DF9bXpEER+gnQ==",
+        "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"c4916095-ae31-4a93-9420-7e21923f73e2\",\"state\":{\"kind\":\"crypto-digest-close\",\"challenge\":\"ec583199-6bfa-4831-9a8e-64505731beb4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"c4916095-ae31-4a93-9420-7e21923f73e2\",\"state\":{\"kind\":\"crypto-digest-close\",\"challenge\":\"ec583199-6bfa-4831-9a8e-64505731beb4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-import-order",
+      "challenge": "5ece22a4-732e-450b-be48-da308338a801",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"7d7f4925-7fd4-4df5-ae82-1194ce54fac9\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7dPYvBV754wnwsT7eypYfhoCkyM=",
+        "requestKey": "zUYvjmZlqinX6tNEvLWIdQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7dPYvBV754wnwsT7eypYfhoCkyM=",
+        "requestKey": "zUYvjmZlqinX6tNEvLWIdQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"7d7f4925-7fd4-4df5-ae82-1194ce54fac9\",\"state\":{\"kind\":\"crypto-import-order\",\"challenge\":\"5ece22a4-732e-450b-be48-da308338a801\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"7d7f4925-7fd4-4df5-ae82-1194ce54fac9\",\"state\":{\"kind\":\"crypto-import-order\",\"challenge\":\"5ece22a4-732e-450b-be48-da308338a801\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-import-close",
+      "challenge": "3742fc3a-5319-4f0b-a90a-c2b9041ac5db",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"99eabab8-62eb-40b8-a2fe-a21c44bf02a7\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WIAIwAwqvrj02LXHzwzgObV5C3M=",
+        "requestKey": "doL3apKtQMm6/4ogIHznFQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WIAIwAwqvrj02LXHzwzgObV5C3M=",
+        "requestKey": "doL3apKtQMm6/4ogIHznFQ==",
+        "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"99eabab8-62eb-40b8-a2fe-a21c44bf02a7\",\"state\":{\"kind\":\"crypto-import-close\",\"challenge\":\"3742fc3a-5319-4f0b-a90a-c2b9041ac5db\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"99eabab8-62eb-40b8-a2fe-a21c44bf02a7\",\"state\":{\"kind\":\"crypto-import-close\",\"challenge\":\"3742fc3a-5319-4f0b-a90a-c2b9041ac5db\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-generate-order",
+      "challenge": "81dc265e-750c-45a2-a514-441ff03b1b45",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"473917cb-f543-4e59-a14d-484309112e80\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YnWbsL7nwJTTwABdaiWvw6sqgag=",
+        "requestKey": "V04phqQ2e55oyNbYTL+eyA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YnWbsL7nwJTTwABdaiWvw6sqgag=",
+        "requestKey": "V04phqQ2e55oyNbYTL+eyA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"473917cb-f543-4e59-a14d-484309112e80\",\"state\":{\"kind\":\"crypto-generate-order\",\"challenge\":\"81dc265e-750c-45a2-a514-441ff03b1b45\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"473917cb-f543-4e59-a14d-484309112e80\",\"state\":{\"kind\":\"crypto-generate-order\",\"challenge\":\"81dc265e-750c-45a2-a514-441ff03b1b45\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-generate-close",
+      "challenge": "85499b5c-433e-4fe3-b710-0f282d74a885",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"63c4d306-39d3-4a16-9ddc-9daea058e733\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wzNLovIcr8q9YFbkw57sibfHGj8=",
+        "requestKey": "gytny7VU2F9uUL/WHily2Q==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wzNLovIcr8q9YFbkw57sibfHGj8=",
+        "requestKey": "gytny7VU2F9uUL/WHily2Q==",
+        "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"63c4d306-39d3-4a16-9ddc-9daea058e733\",\"state\":{\"kind\":\"crypto-generate-close\",\"challenge\":\"85499b5c-433e-4fe3-b710-0f282d74a885\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"63c4d306-39d3-4a16-9ddc-9daea058e733\",\"state\":{\"kind\":\"crypto-generate-close\",\"challenge\":\"85499b5c-433e-4fe3-b710-0f282d74a885\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-export-order",
+      "challenge": "79f01a97-51b7-4177-80f7-01a418dd3ae8",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e9e519e7-9038-4230-a8df-cf164e8d6af1\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dyJ0dNWuLd1yYFU4U908rC19lgc=",
+        "requestKey": "SDpQIm7UjTKxP5cEzCs7mA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dyJ0dNWuLd1yYFU4U908rC19lgc=",
+        "requestKey": "SDpQIm7UjTKxP5cEzCs7mA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"e9e519e7-9038-4230-a8df-cf164e8d6af1\",\"state\":{\"kind\":\"crypto-export-order\",\"challenge\":\"79f01a97-51b7-4177-80f7-01a418dd3ae8\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"e9e519e7-9038-4230-a8df-cf164e8d6af1\",\"state\":{\"kind\":\"crypto-export-order\",\"challenge\":\"79f01a97-51b7-4177-80f7-01a418dd3ae8\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-export-close",
+      "challenge": "431f5ec8-ec7e-4fb9-a39d-780a50740ab2",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"c99445ff-36a2-413d-9a71-77a0c043666a\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ro5ieK0BZNBoi4U4kybiW97xhVk=",
+        "requestKey": "d+nfEIqyAlvQGbJQN6SR5w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ro5ieK0BZNBoi4U4kybiW97xhVk=",
+        "requestKey": "d+nfEIqyAlvQGbJQN6SR5w==",
+        "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"c99445ff-36a2-413d-9a71-77a0c043666a\",\"state\":{\"kind\":\"crypto-export-close\",\"challenge\":\"431f5ec8-ec7e-4fb9-a39d-780a50740ab2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"c99445ff-36a2-413d-9a71-77a0c043666a\",\"state\":{\"kind\":\"crypto-export-close\",\"challenge\":\"431f5ec8-ec7e-4fb9-a39d-780a50740ab2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-order",
+      "challenge": "bb4d175b-bf92-4d25-9f87-1ec04854a258",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"c1b88e80-0ec8-43b5-8434-c2593e0795a5\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vTcOPTjAKhgq21jT2x69YO4plkQ=",
+        "requestKey": "AF+UrwKfe0QdI2KNUNvw7w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vTcOPTjAKhgq21jT2x69YO4plkQ=",
+        "requestKey": "AF+UrwKfe0QdI2KNUNvw7w==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"c1b88e80-0ec8-43b5-8434-c2593e0795a5\",\"state\":{\"kind\":\"crypto-sign-order\",\"challenge\":\"bb4d175b-bf92-4d25-9f87-1ec04854a258\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"c1b88e80-0ec8-43b5-8434-c2593e0795a5\",\"state\":{\"kind\":\"crypto-sign-order\",\"challenge\":\"bb4d175b-bf92-4d25-9f87-1ec04854a258\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-close",
+      "challenge": "bad95ad9-eada-4b8d-87e6-900ca98f4075",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"517f829a-6e49-47ec-86b9-cdf5ebaa41af\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Dbstt5ZtTZIWgqhulI7iiUpD2lM=",
+        "requestKey": "DifNtSle2g6vTajdI01Jng==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Dbstt5ZtTZIWgqhulI7iiUpD2lM=",
+        "requestKey": "DifNtSle2g6vTajdI01Jng==",
+        "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"517f829a-6e49-47ec-86b9-cdf5ebaa41af\",\"state\":{\"kind\":\"crypto-sign-close\",\"challenge\":\"bad95ad9-eada-4b8d-87e6-900ca98f4075\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"517f829a-6e49-47ec-86b9-cdf5ebaa41af\",\"state\":{\"kind\":\"crypto-sign-close\",\"challenge\":\"bad95ad9-eada-4b8d-87e6-900ca98f4075\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-verify-order",
+      "challenge": "a025635b-127e-4221-ba77-7255be40daa9",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"685e59e8-816a-4f44-9d97-8044bd3f1c3a\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: K0nDCPA8VTIqO0rN+R22Gnmgx4M=",
+        "requestKey": "PXJdh4US7l7BJCioozgjpg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: K0nDCPA8VTIqO0rN+R22Gnmgx4M=",
+        "requestKey": "PXJdh4US7l7BJCioozgjpg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"685e59e8-816a-4f44-9d97-8044bd3f1c3a\",\"state\":{\"kind\":\"crypto-verify-order\",\"challenge\":\"a025635b-127e-4221-ba77-7255be40daa9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"685e59e8-816a-4f44-9d97-8044bd3f1c3a\",\"state\":{\"kind\":\"crypto-verify-order\",\"challenge\":\"a025635b-127e-4221-ba77-7255be40daa9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-verify-close",
+      "challenge": "5d16cda3-9c6d-4c01-8bf3-632d7969ddb0",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e265ce4d-ba6c-4e02-9ab9-43bb9bd0c628\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ur0XLoQML1/THzKwMC+ZO675/RA=",
+        "requestKey": "/1Gj2Edp6oX+3gyq2zfZkw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ur0XLoQML1/THzKwMC+ZO675/RA=",
+        "requestKey": "/1Gj2Edp6oX+3gyq2zfZkw==",
+        "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"e265ce4d-ba6c-4e02-9ab9-43bb9bd0c628\",\"state\":{\"kind\":\"crypto-verify-close\",\"challenge\":\"5d16cda3-9c6d-4c01-8bf3-632d7969ddb0\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"e265ce4d-ba6c-4e02-9ab9-43bb9bd0c628\",\"state\":{\"kind\":\"crypto-verify-close\",\"challenge\":\"5d16cda3-9c6d-4c01-8bf3-632d7969ddb0\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-data-copy",
+      "challenge": "2b11d177-1514-4a8e-999b-22aa4dcfcf91",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"6d77ee72-85af-4be4-9e1f-45953d2d9315\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Bb7lQFrgVOWWHb5WCQRdgMC8xzQ=",
+        "requestKey": "IpyrN82T4qEiwWD02VeKTA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Bb7lQFrgVOWWHb5WCQRdgMC8xzQ=",
+        "requestKey": "IpyrN82T4qEiwWD02VeKTA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"6d77ee72-85af-4be4-9e1f-45953d2d9315\",\"state\":{\"kind\":\"crypto-digest-data-copy\",\"challenge\":\"2b11d177-1514-4a8e-999b-22aa4dcfcf91\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"6d77ee72-85af-4be4-9e1f-45953d2d9315\",\"state\":{\"kind\":\"crypto-digest-data-copy\",\"challenge\":\"2b11d177-1514-4a8e-999b-22aa4dcfcf91\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-view-copy",
+      "challenge": "30949547-e0c9-43a4-900d-281ef1459ce5",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"3dfd6381-261b-4742-8d07-98b5ba90a048\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vzO8PdpbSGoG345jrZR95bfLz6Y=",
+        "requestKey": "9e5s8mWO512uUHdrrVPDfw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vzO8PdpbSGoG345jrZR95bfLz6Y=",
+        "requestKey": "9e5s8mWO512uUHdrrVPDfw==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"3dfd6381-261b-4742-8d07-98b5ba90a048\",\"state\":{\"kind\":\"crypto-digest-view-copy\",\"challenge\":\"30949547-e0c9-43a4-900d-281ef1459ce5\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"3dfd6381-261b-4742-8d07-98b5ba90a048\",\"state\":{\"kind\":\"crypto-digest-view-copy\",\"challenge\":\"30949547-e0c9-43a4-900d-281ef1459ce5\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-data-copy",
+      "challenge": "e7ab9c2a-0c68-4934-a199-7d3e21575b19",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"ba6fd475-d22b-4e40-bf23-07ced7a60267\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 07CqafmUX23CW1zBaCseGjvLbio=",
+        "requestKey": "Y+3wqkegiWA3PD7nGad0bQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 07CqafmUX23CW1zBaCseGjvLbio=",
+        "requestKey": "Y+3wqkegiWA3PD7nGad0bQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"ba6fd475-d22b-4e40-bf23-07ced7a60267\",\"state\":{\"kind\":\"crypto-sign-data-copy\",\"challenge\":\"e7ab9c2a-0c68-4934-a199-7d3e21575b19\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"ba6fd475-d22b-4e40-bf23-07ced7a60267\",\"state\":{\"kind\":\"crypto-sign-data-copy\",\"challenge\":\"e7ab9c2a-0c68-4934-a199-7d3e21575b19\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-verify-data-copy",
+      "challenge": "c7907963-7dcd-4937-b58d-a02880a162d4",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"dd0b5135-74eb-4f3a-b940-c15e54816266\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0uzraohku2yl1/TGFU1dNmncwYw=",
+        "requestKey": "ETWgYMu3TJhspEH22sKkGA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0uzraohku2yl1/TGFU1dNmncwYw=",
+        "requestKey": "ETWgYMu3TJhspEH22sKkGA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"dd0b5135-74eb-4f3a-b940-c15e54816266\",\"state\":{\"kind\":\"crypto-verify-data-copy\",\"challenge\":\"c7907963-7dcd-4937-b58d-a02880a162d4\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"dd0b5135-74eb-4f3a-b940-c15e54816266\",\"state\":{\"kind\":\"crypto-verify-data-copy\",\"challenge\":\"c7907963-7dcd-4937-b58d-a02880a162d4\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-verify-signature-copy",
+      "challenge": "1f7c5784-da4e-4bb4-bc27-e62c61207481",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"17f4f066-62e4-4d58-bb96-dda31887b4c8\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0hyIF0SUMNmRIxQalr6MNLl4kP4=",
+        "requestKey": "jnTXRA9mnZNHLJzC3EeggQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0hyIF0SUMNmRIxQalr6MNLl4kP4=",
+        "requestKey": "jnTXRA9mnZNHLJzC3EeggQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"17f4f066-62e4-4d58-bb96-dda31887b4c8\",\"state\":{\"kind\":\"crypto-verify-signature-copy\",\"challenge\":\"1f7c5784-da4e-4bb4-bc27-e62c61207481\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"17f4f066-62e4-4d58-bb96-dda31887b4c8\",\"state\":{\"kind\":\"crypto-verify-signature-copy\",\"challenge\":\"1f7c5784-da4e-4bb4-bc27-e62c61207481\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-import-data-copy",
+      "challenge": "0a7f0bc0-44ea-47fc-b6f6-8e3350e1708d",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"ee3ee99b-09ce-47f3-8a4c-4a2c36414018\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9iBUrY0hZMs5TtGvVoWAjlUjeeE=",
+        "requestKey": "SZs9JV5knlPW5BbwVK29OQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9iBUrY0hZMs5TtGvVoWAjlUjeeE=",
+        "requestKey": "SZs9JV5knlPW5BbwVK29OQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"ee3ee99b-09ce-47f3-8a4c-4a2c36414018\",\"state\":{\"kind\":\"crypto-import-data-copy\",\"challenge\":\"0a7f0bc0-44ea-47fc-b6f6-8e3350e1708d\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"],\"raw\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"ee3ee99b-09ce-47f3-8a4c-4a2c36414018\",\"state\":{\"kind\":\"crypto-import-data-copy\",\"challenge\":\"0a7f0bc0-44ea-47fc-b6f6-8e3350e1708d\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"],\"raw\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-algorithm-getter",
+      "challenge": "1025af98-6ede-4198-a606-cfd9f2cdcf8e",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"754a52c0-0234-4db4-9bff-f3baac3f6bc8\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fubQNgojQVuBiX2FMOUGP6t2mKk=",
+        "requestKey": "5g6UWlFonzW/XfpjoJlPYg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fubQNgojQVuBiX2FMOUGP6t2mKk=",
+        "requestKey": "5g6UWlFonzW/XfpjoJlPYg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"754a52c0-0234-4db4-9bff-f3baac3f6bc8\",\"state\":{\"kind\":\"crypto-digest-algorithm-getter\",\"challenge\":\"1025af98-6ede-4198-a606-cfd9f2cdcf8e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"754a52c0-0234-4db4-9bff-f3baac3f6bc8\",\"state\":{\"kind\":\"crypto-digest-algorithm-getter\",\"challenge\":\"1025af98-6ede-4198-a606-cfd9f2cdcf8e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-throwing-getter",
+      "challenge": "24a42d11-951b-4528-b1b6-70f6a019ab24",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"2f0292a9-c118-48e5-a602-ea5054e80029\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CkGQRk/r9Gop69gppQtatqH+X18=",
+        "requestKey": "FIvBewy30qu5QPTVJmGJgQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CkGQRk/r9Gop69gppQtatqH+X18=",
+        "requestKey": "FIvBewy30qu5QPTVJmGJgQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"2f0292a9-c118-48e5-a602-ea5054e80029\",\"state\":{\"kind\":\"crypto-digest-throwing-getter\",\"challenge\":\"24a42d11-951b-4528-b1b6-70f6a019ab24\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"sameSentinel\":true},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"2f0292a9-c118-48e5-a602-ea5054e80029\",\"state\":{\"kind\":\"crypto-digest-throwing-getter\",\"challenge\":\"24a42d11-951b-4528-b1b6-70f6a019ab24\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"sameSentinel\":true},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-invalid-data",
+      "challenge": "4ffbd6ec-d847-460f-8030-c238b975663c",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"759c460f-519f-4cc7-af15-cd45339b186f\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xXBMOaF7gHG1bzLzuetwOubfqf8=",
+        "requestKey": "N+c9H7XgcliHFfauM2zw0w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xXBMOaF7gHG1bzLzuetwOubfqf8=",
+        "requestKey": "N+c9H7XgcliHFfauM2zw0w==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"759c460f-519f-4cc7-af15-cd45339b186f\",\"state\":{\"kind\":\"crypto-digest-invalid-data\",\"challenge\":\"4ffbd6ec-d847-460f-8030-c238b975663c\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'digest' on 'SubtleCrypto': parameter 2 is not of type 'BufferSource'.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"759c460f-519f-4cc7-af15-cd45339b186f\",\"state\":{\"kind\":\"crypto-digest-invalid-data\",\"challenge\":\"4ffbd6ec-d847-460f-8030-c238b975663c\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'digest' on 'SubtleCrypto': parameter 2 is not of type 'BufferSource'.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-invalid-name",
+      "challenge": "c1540e13-08f4-4b48-be94-7cbe0f89bdfb",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e37fce71-fd76-4af1-9a89-4b826af621c1\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Tl6DcIHo3M/sxPCMzfrTUB8vjWQ=",
+        "requestKey": "kg+ke1qnw94weiA6/K1JCg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Tl6DcIHo3M/sxPCMzfrTUB8vjWQ=",
+        "requestKey": "kg+ke1qnw94weiA6/K1JCg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"e37fce71-fd76-4af1-9a89-4b826af621c1\",\"state\":{\"kind\":\"crypto-digest-invalid-name\",\"challenge\":\"c1540e13-08f4-4b48-be94-7cbe0f89bdfb\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized or unimplemented digest algorithm requested.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"e37fce71-fd76-4af1-9a89-4b826af621c1\",\"state\":{\"kind\":\"crypto-digest-invalid-name\",\"challenge\":\"c1540e13-08f4-4b48-be94-7cbe0f89bdfb\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized or unimplemented digest algorithm requested.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-invalid-receiver",
+      "challenge": "08f90976-02ff-4e13-bad0-fd8f3da08100",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"4989e874-2c56-445b-87e3-03f879fce3ed\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nNRx/zz5N0GAsnSy6kFAQ6ufodI=",
+        "requestKey": "FDpTIuu0nV+l6VluJbz0qA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nNRx/zz5N0GAsnSy6kFAQ6ufodI=",
+        "requestKey": "FDpTIuu0nV+l6VluJbz0qA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"4989e874-2c56-445b-87e3-03f879fce3ed\",\"state\":{\"kind\":\"crypto-digest-invalid-receiver\",\"challenge\":\"08f90976-02ff-4e13-bad0-fd8f3da08100\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"4989e874-2c56-445b-87e3-03f879fce3ed\",\"state\":{\"kind\":\"crypto-digest-invalid-receiver\",\"challenge\":\"08f90976-02ff-4e13-bad0-fd8f3da08100\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-invalid-key",
+      "challenge": "1185f245-9135-4509-b545-9048f03ce7c6",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"de932de1-1f82-434f-8980-8294ddaf7db2\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: M9lGgKvvpEGG5OupgPlOkSGEO6U=",
+        "requestKey": "fmtpKYiDBec6qbkpkhB6aw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: M9lGgKvvpEGG5OupgPlOkSGEO6U=",
+        "requestKey": "fmtpKYiDBec6qbkpkhB6aw==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"de932de1-1f82-434f-8980-8294ddaf7db2\",\"state\":{\"kind\":\"crypto-sign-invalid-key\",\"challenge\":\"1185f245-9135-4509-b545-9048f03ce7c6\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'sign' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"de932de1-1f82-434f-8980-8294ddaf7db2\",\"state\":{\"kind\":\"crypto-sign-invalid-key\",\"challenge\":\"1185f245-9135-4509-b545-9048f03ce7c6\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'sign' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-import-invalid-format",
+      "challenge": "3eb23691-4cb8-4dd9-9dff-1d1077adb01d",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"352649ba-ce91-4fb0-a248-e179a4966932\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MklUhgL12y0k5YBokT/UkK4i9uU=",
+        "requestKey": "OnwCjau9zCGrSLWrC1rgdg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MklUhgL12y0k5YBokT/UkK4i9uU=",
+        "requestKey": "OnwCjau9zCGrSLWrC1rgdg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"352649ba-ce91-4fb0-a248-e179a4966932\",\"state\":{\"kind\":\"crypto-import-invalid-format\",\"challenge\":\"3eb23691-4cb8-4dd9-9dff-1d1077adb01d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized key import format \\\"missing\\\".\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"352649ba-ce91-4fb0-a248-e179a4966932\",\"state\":{\"kind\":\"crypto-import-invalid-format\",\"challenge\":\"3eb23691-4cb8-4dd9-9dff-1d1077adb01d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized key import format \\\"missing\\\".\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-import-empty-usages",
+      "challenge": "bbecc5cc-c35f-403a-be03-8f3884b09fa2",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"3441b6b0-29cc-4718-baeb-6e98bdf68e33\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kHXeSYx42ceh9ZKbDg/oLdP5Srk=",
+        "requestKey": "D3vSpmbirKHDBRh5TjYpQg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kHXeSYx42ceh9ZKbDg/oLdP5Srk=",
+        "requestKey": "D3vSpmbirKHDBRh5TjYpQg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"3441b6b0-29cc-4718-baeb-6e98bdf68e33\",\"state\":{\"kind\":\"crypto-import-empty-usages\",\"challenge\":\"bbecc5cc-c35f-403a-be03-8f3884b09fa2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"3441b6b0-29cc-4718-baeb-6e98bdf68e33\",\"state\":{\"kind\":\"crypto-import-empty-usages\",\"challenge\":\"bbecc5cc-c35f-403a-be03-8f3884b09fa2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-generate-zero-length",
+      "challenge": "f133fbe9-06bf-4675-93a6-6d3c4898ffc3",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"b1053697-c7de-4683-875c-0648b7de52e0\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xPO371P2AItBn+zSewWMwumMaSg=",
+        "requestKey": "zQIxXkOxUhy5rkwlFtiQ+w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xPO371P2AItBn+zSewWMwumMaSg=",
+        "requestKey": "zQIxXkOxUhy5rkwlFtiQ+w==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"b1053697-c7de-4683-875c-0648b7de52e0\",\"state\":{\"kind\":\"crypto-generate-zero-length\",\"challenge\":\"f133fbe9-06bf-4675-93a6-6d3c4898ffc3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"OperationError\",\"message\":\"HMAC key length must be a non-zero unsigned long integer (requested 0).\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"b1053697-c7de-4683-875c-0648b7de52e0\",\"state\":{\"kind\":\"crypto-generate-zero-length\",\"challenge\":\"f133fbe9-06bf-4675-93a6-6d3c4898ffc3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"OperationError\",\"message\":\"HMAC key length must be a non-zero unsigned long integer (requested 0).\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-export-invalid-key",
+      "challenge": "cfab32b3-8dae-4670-8a0c-93b0d56d75d5",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"f463776c-9e18-444a-a8a6-16e728709376\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wSu3LpgqzLMw+wtRGk61Q4NffYQ=",
+        "requestKey": "9YZ/LmnYEHAjdtE4Nhk5ZA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wSu3LpgqzLMw+wtRGk61Q4NffYQ=",
+        "requestKey": "9YZ/LmnYEHAjdtE4Nhk5ZA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"f463776c-9e18-444a-a8a6-16e728709376\",\"state\":{\"kind\":\"crypto-export-invalid-key\",\"challenge\":\"cfab32b3-8dae-4670-8a0c-93b0d56d75d5\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'exportKey' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"f463776c-9e18-444a-a8a6-16e728709376\",\"state\":{\"kind\":\"crypto-export-invalid-key\",\"challenge\":\"cfab32b3-8dae-4670-8a0c-93b0d56d75d5\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'exportKey' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-sha1",
+      "challenge": "0091585f-1e43-4cf7-8a93-4cfd674e6179",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"f0d5f745-5602-476f-8793-803904f23400\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: sG+0rnylJFRBQZMhA7o6Uq7N5Qs=",
+        "requestKey": "p2+hDgETBFvmSm+0VJ65FA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: sG+0rnylJFRBQZMhA7o6Uq7N5Qs=",
+        "requestKey": "p2+hDgETBFvmSm+0VJ65FA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"f0d5f745-5602-476f-8793-803904f23400\",\"state\":{\"kind\":\"crypto-digest-sha1\",\"challenge\":\"0091585f-1e43-4cf7-8a93-4cfd674e6179\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[18,218,218,31,255,77,71,135,173,227,51,49,71,32,44,59,68,62,55,111],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"f0d5f745-5602-476f-8793-803904f23400\",\"state\":{\"kind\":\"crypto-digest-sha1\",\"challenge\":\"0091585f-1e43-4cf7-8a93-4cfd674e6179\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[18,218,218,31,255,77,71,135,173,227,51,49,71,32,44,59,68,62,55,111],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-sha384",
+      "challenge": "5454e8fa-2325-450e-9bee-eaba0045a42d",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"327625c6-a0d3-467a-bb0d-26df7b547088\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1DlBiWQDA13taM13XaVGnbm++3c=",
+        "requestKey": "54G3KBSdyarCAbkUKhpq2A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1DlBiWQDA13taM13XaVGnbm++3c=",
+        "requestKey": "54G3KBSdyarCAbkUKhpq2A==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"327625c6-a0d3-467a-bb0d-26df7b547088\",\"state\":{\"kind\":\"crypto-digest-sha384\",\"challenge\":\"5454e8fa-2325-450e-9bee-eaba0045a42d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[90,102,125,98,67,10,140,37,62,186,228,51,51,57,4,220,110,29,65,220,220,71,151,4,119,49,89,185,5,163,173,130,210,186,215,118,45,129,163,102,204,70,251,178,226,50,127,92],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"327625c6-a0d3-467a-bb0d-26df7b547088\",\"state\":{\"kind\":\"crypto-digest-sha384\",\"challenge\":\"5454e8fa-2325-450e-9bee-eaba0045a42d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[90,102,125,98,67,10,140,37,62,186,228,51,51,57,4,220,110,29,65,220,220,71,151,4,119,49,89,185,5,163,173,130,210,186,215,118,45,129,163,102,204,70,251,178,226,50,127,92],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-sha512",
+      "challenge": "b1698773-680d-499f-97e4-14d9332f50be",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"cd9abafe-5b17-4e33-81f7-3cd460a3deb9\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: LJdwL8twaEbYJO64Vu1frWxAN3I=",
+        "requestKey": "eV2uCqGeQVi0I8cFIesqew==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: LJdwL8twaEbYJO64Vu1frWxAN3I=",
+        "requestKey": "eV2uCqGeQVi0I8cFIesqew==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"cd9abafe-5b17-4e33-81f7-3cd460a3deb9\",\"state\":{\"kind\":\"crypto-digest-sha512\",\"challenge\":\"b1698773-680d-499f-97e4-14d9332f50be\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[167,201,118,219,23,35,173,180,18,116,23,141,200,46,155,119,121,65,171,32,28,105,222,97,208,242,188,109,39,163,89,143,89,79,167,72,229,13,136,211,194,191,30,44,46,114,195,207,239,120,195,198,212,175,169,3,145,247,227,58,186,188,164,142],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"cd9abafe-5b17-4e33-81f7-3cd460a3deb9\",\"state\":{\"kind\":\"crypto-digest-sha512\",\"challenge\":\"b1698773-680d-499f-97e4-14d9332f50be\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[167,201,118,219,23,35,173,180,18,116,23,141,200,46,155,119,121,65,171,32,28,105,222,97,208,242,188,109,39,163,89,143,89,79,167,72,229,13,136,211,194,191,30,44,46,114,195,207,239,120,195,198,212,175,169,3,145,247,227,58,186,188,164,142],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-empty",
+      "challenge": "77bbd629-f668-470d-b8ad-4d1fce66b168",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"4fa27984-5f9a-4a83-888c-663c28ee99fe\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zQliSDY05e8XgSOqztjhT/E1KMI=",
+        "requestKey": "Nixlt6EuzslvqrNplGuzJA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zQliSDY05e8XgSOqztjhT/E1KMI=",
+        "requestKey": "Nixlt6EuzslvqrNplGuzJA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"4fa27984-5f9a-4a83-888c-663c28ee99fe\",\"state\":{\"kind\":\"crypto-digest-empty\",\"challenge\":\"77bbd629-f668-470d-b8ad-4d1fce66b168\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[227,176,196,66,152,252,28,20,154,251,244,200,153,111,185,36,39,174,65,228,100,155,147,76,164,149,153,27,120,82,184,85],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"4fa27984-5f9a-4a83-888c-663c28ee99fe\",\"state\":{\"kind\":\"crypto-digest-empty\",\"challenge\":\"77bbd629-f668-470d-b8ad-4d1fce66b168\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[227,176,196,66,152,252,28,20,154,251,244,200,153,111,185,36,39,174,65,228,100,155,147,76,164,149,153,27,120,82,184,85],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-sha1",
+      "challenge": "cba8d71d-80b8-4387-b562-179daa27dadc",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"9701e8f2-a7ed-4ee4-a27d-85ba037311d7\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iPlHt49O4WBg4I2rHi+5MyUzbcY=",
+        "requestKey": "O775d31YsDY5Pz8uwXdMow==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iPlHt49O4WBg4I2rHi+5MyUzbcY=",
+        "requestKey": "O775d31YsDY5Pz8uwXdMow==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"9701e8f2-a7ed-4ee4-a27d-85ba037311d7\",\"state\":{\"kind\":\"crypto-sign-sha1\",\"challenge\":\"cba8d71d-80b8-4387-b562-179daa27dadc\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[188,127,67,3,132,188,42,42,24,233,229,89,197,5,122,173,147,111,160,19],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"9701e8f2-a7ed-4ee4-a27d-85ba037311d7\",\"state\":{\"kind\":\"crypto-sign-sha1\",\"challenge\":\"cba8d71d-80b8-4387-b562-179daa27dadc\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[188,127,67,3,132,188,42,42,24,233,229,89,197,5,122,173,147,111,160,19],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-sha384",
+      "challenge": "0bb42121-5c91-48fe-a216-130ee7d44552",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"4b3331cf-4636-41a9-abf6-61637702d9f7\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /Ojmh37njzAPNisDsm62VQLBnqY=",
+        "requestKey": "gFLR4fnNztO8go2DvwrX8g==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /Ojmh37njzAPNisDsm62VQLBnqY=",
+        "requestKey": "gFLR4fnNztO8go2DvwrX8g==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"4b3331cf-4636-41a9-abf6-61637702d9f7\",\"state\":{\"kind\":\"crypto-sign-sha384\",\"challenge\":\"0bb42121-5c91-48fe-a216-130ee7d44552\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[95,83,96,145,103,221,165,234,229,11,2,158,193,231,111,203,151,211,230,114,210,28,81,216,69,90,73,56,66,213,35,71,11,147,211,19,249,71,205,168,174,162,56,186,105,91,195,145],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"4b3331cf-4636-41a9-abf6-61637702d9f7\",\"state\":{\"kind\":\"crypto-sign-sha384\",\"challenge\":\"0bb42121-5c91-48fe-a216-130ee7d44552\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[95,83,96,145,103,221,165,234,229,11,2,158,193,231,111,203,151,211,230,114,210,28,81,216,69,90,73,56,66,213,35,71,11,147,211,19,249,71,205,168,174,162,56,186,105,91,195,145],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-sha512",
+      "challenge": "24b4e0ba-722e-45d1-bbbb-3eef17d6694b",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"ce9704e5-79b2-4fed-9cd7-b92f5398dd00\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 5AokOw06HmDzaQ2hbA2skUWF3GM=",
+        "requestKey": "u/tvueA7USPpu6eYgpH8XQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 5AokOw06HmDzaQ2hbA2skUWF3GM=",
+        "requestKey": "u/tvueA7USPpu6eYgpH8XQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"ce9704e5-79b2-4fed-9cd7-b92f5398dd00\",\"state\":{\"kind\":\"crypto-sign-sha512\",\"challenge\":\"24b4e0ba-722e-45d1-bbbb-3eef17d6694b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[122,91,205,3,198,210,104,93,89,175,84,187,170,48,169,249,165,36,220,193,19,153,105,230,39,215,130,231,74,223,2,132,27,214,132,236,117,212,74,22,70,197,192,136,109,60,161,147,166,178,110,60,127,208,45,106,43,157,211,133,31,147,204,103],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"ce9704e5-79b2-4fed-9cd7-b92f5398dd00\",\"state\":{\"kind\":\"crypto-sign-sha512\",\"challenge\":\"24b4e0ba-722e-45d1-bbbb-3eef17d6694b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[122,91,205,3,198,210,104,93,89,175,84,187,170,48,169,249,165,36,220,193,19,153,105,230,39,215,130,231,74,223,2,132,27,214,132,236,117,212,74,22,70,197,192,136,109,60,161,147,166,178,110,60,127,208,45,106,43,157,211,133,31,147,204,103],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-sign-empty",
+      "challenge": "f715a3f4-9114-4295-885a-da94adf0e29b",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e0fa4ea2-6164-4877-9ec7-e4dd97cff204\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9HHIRfkqCRYlCjNrNBz2JvRtrHM=",
+        "requestKey": "e8EuDVB3h6p+8q7u56iksg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9HHIRfkqCRYlCjNrNBz2JvRtrHM=",
+        "requestKey": "e8EuDVB3h6p+8q7u56iksg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"e0fa4ea2-6164-4877-9ec7-e4dd97cff204\",\"state\":{\"kind\":\"crypto-sign-empty\",\"challenge\":\"f715a3f4-9114-4295-885a-da94adf0e29b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[182,19,103,154,8,20,217,236,119,47,149,215,120,195,95,197,255,22,151,196,147,113,86,83,198,199,18,20,66,146,197,173],\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"e0fa4ea2-6164-4877-9ec7-e4dd97cff204\",\"state\":{\"kind\":\"crypto-sign-empty\",\"challenge\":\"f715a3f4-9114-4295-885a-da94adf0e29b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[182,19,103,154,8,20,217,236,119,47,149,215,120,195,95,197,255,22,151,196,147,113,86,83,198,199,18,20,66,146,197,173],\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-verify-wrong-signature",
+      "challenge": "3ca449fc-2265-4eee-b2c5-0944d73602aa",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"a1ddebcd-4569-47c4-a89f-5547572a4b03\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: I6+lm2ulNzJt3YOIFUxBu0vI+z4=",
+        "requestKey": "1aFoUubsscxI03jgY9oMDQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: I6+lm2ulNzJt3YOIFUxBu0vI+z4=",
+        "requestKey": "1aFoUubsscxI03jgY9oMDQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"a1ddebcd-4569-47c4-a89f-5547572a4b03\",\"state\":{\"kind\":\"crypto-verify-wrong-signature\",\"challenge\":\"3ca449fc-2265-4eee-b2c5-0944d73602aa\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"a1ddebcd-4569-47c4-a89f-5547572a4b03\",\"state\":{\"kind\":\"crypto-verify-wrong-signature\",\"challenge\":\"3ca449fc-2265-4eee-b2c5-0944d73602aa\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-verify-short-signature",
+      "challenge": "aec9caf7-82a8-4c91-9836-10f71ab16806",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"5f87a78c-9777-4954-bf20-a0870d2dc0c8\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Hpb18QU7pdVoiWfW+PanHkXpaE4=",
+        "requestKey": "jGM2puo0Smpg7uchQeZL1g==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Hpb18QU7pdVoiWfW+PanHkXpaE4=",
+        "requestKey": "jGM2puo0Smpg7uchQeZL1g==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"5f87a78c-9777-4954-bf20-a0870d2dc0c8\",\"state\":{\"kind\":\"crypto-verify-short-signature\",\"challenge\":\"aec9caf7-82a8-4c91-9836-10f71ab16806\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"5f87a78c-9777-4954-bf20-a0870d2dc0c8\",\"state\":{\"kind\":\"crypto-verify-short-signature\",\"challenge\":\"aec9caf7-82a8-4c91-9836-10f71ab16806\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-generate-empty-usages",
+      "challenge": "3335cad8-fd41-42f8-a48e-d01012e1c20d",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"c540ebff-b0ea-4a56-b6f1-172a247d1eda\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jUNnZ96E61SghrCjXiTUTcUy/RI=",
+        "requestKey": "HZ0QvrlnW+b5FPgtly2cUQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jUNnZ96E61SghrCjXiTUTcUy/RI=",
+        "requestKey": "HZ0QvrlnW+b5FPgtly2cUQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"c540ebff-b0ea-4a56-b6f1-172a247d1eda\",\"state\":{\"kind\":\"crypto-generate-empty-usages\",\"challenge\":\"3335cad8-fd41-42f8-a48e-d01012e1c20d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"c540ebff-b0ea-4a56-b6f1-172a247d1eda\",\"state\":{\"kind\":\"crypto-generate-empty-usages\",\"challenge\":\"3335cad8-fd41-42f8-a48e-d01012e1c20d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-digest-forged-receiver",
+      "challenge": "7dd29ce1-2f7a-44d8-8017-831c7df6bdaf",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"3a9946cd-bb99-4502-b237-10f32bd424e6\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /2yIOJBrZ1YLaLiazSWFwycVjNw=",
+        "requestKey": "qm3VxoZIgkH/GtP3a71c+g==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /2yIOJBrZ1YLaLiazSWFwycVjNw=",
+        "requestKey": "qm3VxoZIgkH/GtP3a71c+g==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"3a9946cd-bb99-4502-b237-10f32bd424e6\",\"state\":{\"kind\":\"crypto-digest-forged-receiver\",\"challenge\":\"7dd29ce1-2f7a-44d8-8017-831c7df6bdaf\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"3a9946cd-bb99-4502-b237-10f32bd424e6\",\"state\":{\"kind\":\"crypto-digest-forged-receiver\",\"challenge\":\"7dd29ce1-2f7a-44d8-8017-831c7df6bdaf\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-key-map-prototype",
+      "challenge": "9c7eb7b7-58c0-41a4-9add-bc966cadc4b9",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"0a23e7a3-fa2b-4175-9c93-7bd7b6b08798\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ObQg8EFvCknrTXhU639crnGjB7o=",
+        "requestKey": "OzMPL8A2+Y+nJMKFQ+AAvw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ObQg8EFvCknrTXhU639crnGjB7o=",
+        "requestKey": "OzMPL8A2+Y+nJMKFQ+AAvw==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"0a23e7a3-fa2b-4175-9c93-7bd7b6b08798\",\"state\":{\"kind\":\"crypto-key-map-prototype\",\"challenge\":\"9c7eb7b7-58c0-41a4-9add-bc966cadc4b9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null,\"observations\":[]}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"0a23e7a3-fa2b-4175-9c93-7bd7b6b08798\",\"state\":{\"kind\":\"crypto-key-map-prototype\",\"challenge\":\"9c7eb7b7-58c0-41a4-9add-bc966cadc4b9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null,\"observations\":[]}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "kind": "crypto-subtle-set-prototype",
+      "challenge": "e2f0e922-160e-495b-b0ad-f4734099d3c1",
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"0e261437-f528-47c6-99bb-d145536ab675\",\"state\":null}"
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZPVDMahOeTmd9iteyzOczOc9ujY=",
+        "requestKey": "skPcMB0fe8ylqXW01ozO9A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZPVDMahOeTmd9iteyzOczOc9ujY=",
+        "requestKey": "skPcMB0fe8ylqXW01ozO9A==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "atClose": {
+        "status": 200,
+        "text": "{\"realm\":\"0e261437-f528-47c6-99bb-d145536ab675\",\"state\":{\"kind\":\"crypto-subtle-set-prototype\",\"challenge\":\"e2f0e922-160e-495b-b0ad-f4734099d3c1\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null,\"observations\":[]}}"
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"0e261437-f528-47c6-99bb-d145536ab675\",\"state\":{\"kind\":\"crypto-subtle-set-prototype\",\"challenge\":\"e2f0e922-160e-495b-b0ad-f4734099d3c1\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null,\"observations\":[]}}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    }
+  ]
+}

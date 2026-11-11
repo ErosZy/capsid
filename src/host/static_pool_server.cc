@@ -1,15 +1,25 @@
 // M2 fixed-pool Host data plane. See static_pool_server.h.
 
+// Socket release detaches IOCP ownership (Windows 8.1+). The documented
+// Windows runtime baseline is Windows 10; expose that API before Asio is read.
+#if defined(_WIN32) && !defined(_WIN32_WINNT)
+#define _WIN32_WINNT 0x0A00
+#endif
+
 #include "host/static_pool_server.h"
 
 #include "host/config.h"
 #include "host/local_capsid_policy.h"
+#include "host/listener_cors.h"
 #include "host/static_pool.h"
 #include "host/structured_log.h"
 
+#include <boost/asio.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+
 #if defined(_WIN32)
 #include "win32_compat.h"
-#include <boost/asio.hpp>
 #else
 #include <signal.h>
 #include <unistd.h>
@@ -17,8 +27,10 @@
 
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -26,6 +38,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -33,9 +46,126 @@ namespace capsid::host {
 
 namespace {
 
+// A failed fixed pool still owns its public endpoint. These small, bounded
+// exchanges run only on the accept reactor, independently of exited shards.
+// Read a complete HTTP head before replying and never retain a request body.
+class UnavailableSession : public std::enable_shared_from_this<UnavailableSession> {
+  public:
+    UnavailableSession(boost::asio::ip::tcp::socket peer, const SingleWorkerServerOptions &options,
+                       std::function<void(UnavailableSession *)> finished)
+        : stream_(std::move(peer)), cors_config_(options.cors),
+          read_timeout_(std::chrono::milliseconds(bounded_timeout(options.request_timeout_ms))),
+          write_timeout_(std::chrono::milliseconds(bounded_timeout(options.write_timeout_ms))),
+          finished_(std::move(finished)) {
+        parser_.header_limit(8192);
+        parser_.body_limit(boost::none);
+    }
+
+    void run() {
+        stream_.expires_after(read_timeout_);
+        boost::beast::http::async_read_header(
+            stream_, buffer_, parser_,
+            [self = shared_from_this()](boost::system::error_code ec, std::size_t) {
+                if (ec || self->closed_)
+                    self->close();
+                else
+                    self->reply();
+            });
+    }
+
+    void close() {
+        if (closed_)
+            return;
+        closed_ = true;
+        boost::system::error_code ignored;
+        stream_.socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored);
+        stream_.socket().close(ignored);
+        auto finished = std::move(finished_);
+        if (finished)
+            finished(this);
+    }
+
+  private:
+    static std::uint64_t bounded_timeout(std::uint64_t configured) {
+        return configured == 0 || configured > 5000 ? 5000 : configured;
+    }
+
+    void reply() {
+        namespace http = boost::beast::http;
+        const auto &request = parser_.get();
+        response_.version(request.version());
+        response_.result(http::status::service_unavailable);
+        response_.set(http::field::content_type, "text/plain");
+        response_.body() = "worker unavailable";
+        if (cors_config_.configured) {
+            ListenerCors cors(cors_config_);
+            const auto decision = cors.prepare(request);
+            if (decision == CorsDecision::kBadRequest) {
+                response_.result(http::status::bad_request);
+                response_.body() = "duplicate Origin header";
+            } else if (decision == CorsDecision::kPreflightAllowed ||
+                       decision == CorsDecision::kPreflightRejected) {
+                cors.build_preflight(response_);
+            } else {
+                cors.stamp(response_);
+            }
+        }
+        response_.keep_alive(false);
+        response_.prepare_payload();
+        stream_.expires_after(write_timeout_);
+        const auto done = [self = shared_from_this()](boost::system::error_code, std::size_t) {
+            self->close();
+        };
+        if (request.method() == http::verb::head) {
+            serializer_.emplace(response_);
+            http::async_write_header(stream_, *serializer_, done);
+        } else {
+            http::async_write(stream_, response_, done);
+        }
+    }
+
+    boost::beast::tcp_stream stream_;
+    boost::beast::flat_buffer buffer_{8192};
+    boost::beast::http::request_parser<boost::beast::http::string_body> parser_;
+    boost::beast::http::response<boost::beast::http::string_body> response_;
+    std::optional<boost::beast::http::response_serializer<boost::beast::http::string_body>>
+        serializer_;
+    ListenerCorsConfig cors_config_;
+    std::chrono::milliseconds read_timeout_;
+    std::chrono::milliseconds write_timeout_;
+    std::function<void(UnavailableSession *)> finished_;
+    bool closed_ = false;
+};
+
+// Moving a socket preserves its executor. Transfer native ownership before
+// starting IO whenever a pending accept's owner differs from its final owner.
+bool rehome_peer(boost::asio::ip::tcp::socket &peer, boost::asio::any_io_executor executor) {
+    if (peer.get_executor() == executor)
+        return true;
+    boost::system::error_code ec;
+    const auto endpoint = peer.local_endpoint(ec);
+    if (ec)
+        return false;
+    boost::asio::ip::tcp::socket rebound(std::move(executor));
+    const auto native = peer.release(ec);
+    if (ec)
+        return false; // peer retains ownership on release failure
+    rebound.assign(endpoint.protocol(), native, ec);
+    if (ec) {
+#if defined(_WIN32)
+        ::closesocket(native);
+#else
+        ::close(native);
+#endif
+        return false;
+    }
+    peer = std::move(rebound);
+    return true;
+}
+
 #if defined(_WIN32)
 // Console control events (CTRL_C / CTRL_BREAK / console close) are the
-// Windows stand-in for the SIGTERM/SIGINT sigwait gate in run(): the
+// Windows stand-in for the SIGTERM/SIGINT gate in run(): the
 // handler only sets the stop event, never touches C++ objects.
 HANDLE g_static_pool_term_event = nullptr;
 
@@ -61,7 +191,11 @@ class StaticPoolServerImpl : public std::enable_shared_from_this<StaticPoolServe
 public:
     explicit StaticPoolServerImpl(StaticPoolServerOptions options)
         : options_(std::move(options)),
-          state_(options_.workers) {}
+          state_(options_.workers) {
+        auto &worker=options_.worker_options;
+        if(!worker.channel_service_budget) worker.channel_service_budget=std::make_shared<ServiceChannelBudget>(worker.channel_service_limits);
+        if(!worker.channel_listener_budget) worker.channel_listener_budget=std::make_shared<ServiceChannelBudget>(worker.channel_listener_limits,worker.channel_service_budget);
+    }
 
     StructuredLog* structured_log() const { return options_.log; }
 
@@ -153,17 +287,11 @@ public:
         // (minReady == maxWorkers) and the state is read-only — queueing
         // and load selection (later M2 batches) must define their own
         // cross-thread access before reading it from reactor threads.
-        // The first shard binds the port (kernel-assigned when 0); every
-        // later shard reuses the same address:port through SO_REUSEPORT.
-        // Windows has no SO_REUSEPORT: the pool itself binds the single
-        // shared acceptor up front and dispatches accepted sockets.
-        std::uint16_t shared_port = 0;
-#if defined(_WIN32)
+        // The pool owns the public endpoint on every platform, including
+        // while no Worker is READY. Shards own only sessions and Workers.
         if (!bind_pool_acceptor(error)) {
             return false;
         }
-        shared_port = pool_port_;
-#endif
         for (std::uint32_t index = 0; index < options_.workers; ++index) {
             if (!state_.register_starting(index, index)) {
                 rollback(shards_.size(), error);
@@ -174,19 +302,11 @@ public:
             shard_options.ready_fd = -1;           // pool owns the READY record
             shard_options.write_ready_record = false;  // pool-level READY
             shard_options.install_process_signals = false;  // pool owns signals
-#if defined(_WIN32)
             // One pool-owned acceptor, no per-shard listener: every shard
             // receives connections through adopt_socket().
             shard_options.external_accept = true;
             shard_options.defer_accept = false;
             shard_options.so_reuseport = false;
-#else
-            // Only a multi-shard pool needs the shared-port option. A
-            // one-worker pool must not ask for SO_REUSEPORT (see
-            // docs/platform-support.md).
-            shard_options.so_reuseport = options_.workers > 1;
-            shard_options.defer_accept = true;     // pool-wide activation barrier
-#endif
             // E-1 admission (§10.3): pool-level options are forwarded into
             // every shard (a non-zero pool field overrides the shard
             // template; 0 = not set). In the v1 single-App pool the
@@ -225,13 +345,6 @@ public:
             if (options_.write_timeout_ms != 0) {
                 shard_options.write_timeout_ms = options_.write_timeout_ms;
             }
-#if defined(_WIN32)
-            (void)shared_port;  // the pool acceptor already owns the port
-#else
-            if (index > 0) {
-                shard_options.listen_port = shared_port;
-            }
-#endif
             std::unique_ptr<SingleWorkerServer> shard(
                 new SingleWorkerServer(std::move(shard_options)));
             {
@@ -270,13 +383,6 @@ public:
                 rollback(shards_.size(), error);
                 return false;
             }
-            if (index == 0) {
-#if defined(_WIN32)
-                shared_port = pool_port_;
-#else
-                shared_port = shard->bound_port();
-#endif
-            }
             {
                 std::lock_guard<std::mutex> lock(shards_mutex_);
                 shards_.push_back(std::move(shard));
@@ -292,23 +398,11 @@ public:
             rollback(shards_.size(), error);
             return false;
         }
-        // Pool-wide activation barrier: every shard is prepared (worker
-        // READY + listener bound) but NOT accepting yet. Only now are the
-        // accept loops armed one by one — a client must never observe a
-        // partially READY pool serving HTTP.
-#if defined(_WIN32)
-        // Windows shards own no listener; the pool's single acceptor starts
-        // accepting here, after every shard is READY.
-        start_pool_accept_loop();
-#else
-        for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
-            std::string activation_error;
-            if (!shard->activate_accept(&activation_error)) {
-                rollback(shards_.size(), error);
-                return false;
-            }
+        // Arm the sole public accept loop only after every shard is READY.
+        if (!start_pool_accept_loop()) {
+            rollback(shards_.size(), error);
+            return false;
         }
-#endif
         // M2 item 6: a pool-level healthCheck gates the pool READY record.
         // The probe runs through the now-accepting pool endpoint (shared
         // listener or pool acceptor), using the same routing-aware target an
@@ -335,11 +429,7 @@ public:
             std::string probe_error;
             const bool probe_ok = probe_local_health(
                 worker_options.listen_address,
-#if defined(_WIN32)
                 pool_port_,
-#else
-                shared_port,
-#endif
                 probe_target, probe_host, probe_capsid_app,
                 worker_options.health_check.timeout_ms, &probe_error);
             if (!probe_ok) {
@@ -368,9 +458,7 @@ public:
         if (stop_requested_.exchange(true)) {
             return;  // idempotent
         }
-#if defined(_WIN32)
         close_pool_acceptor();
-#endif
         // Stop every shard in one pass, then wait() joins them: the
         // bounded per-shard shutdown windows run in parallel instead of
         // serially.
@@ -381,6 +469,10 @@ public:
         for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
             shard->request_stop();
         }
+    }
+
+    bool stop_requested() const {
+        return stop_requested_.load(std::memory_order_acquire);
     }
 
     bool wait(std::string* error) {
@@ -401,9 +493,7 @@ public:
             lifecycle_cv_.wait(lock, [this] { return start_finished_; });
         }
         std::call_once(wait_once_, [this] {
-#if defined(_WIN32)
             stop_pool_acceptor();
-#endif
             for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
                 std::string shard_error;
                 shard->wait(&shard_error);
@@ -430,13 +520,21 @@ public:
         return count;
     }
 
+    std::vector<capsid::WorkerExitStatus> worker_exit_statuses() const {
+        std::lock_guard<std::mutex> lock(shards_mutex_);
+        std::vector<capsid::WorkerExitStatus> statuses;
+        statuses.reserve(shards_.size());
+        for (const auto& shard : shards_) {
+            statuses.push_back(shard->worker_exit_status());
+        }
+        return statuses;
+    }
+
     // M2 §7.5: the old generation's pool begins draining — every shard
     // stops accepting and drains in parallel, each shutting down when its
     // own inflight clears or its deadline forces cancellation.
     void begin_drain(std::uint64_t deadline_ms) {
-#if defined(_WIN32)
         close_pool_acceptor();
-#endif
         for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
             shard->begin_drain(deadline_ms);
         }
@@ -470,16 +568,15 @@ public:
     }
 
 private:
-#if defined(_WIN32)
-    // Windows has no SO_REUSEPORT: the pool owns ONE acceptor bound to the
-    // public address:port and round-robins accepted sockets into the
-    // shards' external-accept reactors.
+    // Every platform keeps one public acceptor independent of Worker exit.
     bool bind_pool_acceptor(std::string* error);
-    void start_pool_accept_loop();
+    bool start_pool_accept_loop();
     void stop_pool_acceptor();
     void close_pool_acceptor();
     void do_pool_accept();
-#endif
+    void dispatch_pool_peer(SingleWorkerServer* target, boost::asio::ip::tcp::socket peer);
+    void reject_pool_peer(boost::asio::ip::tcp::socket peer);
+    void close_accept_resources();
 
     void finish_start() {
         {
@@ -494,11 +591,9 @@ private:
     // a partial pool startup. The failed shard itself already unwound its
     // own listener and worker inside its start().
     void rollback(std::size_t started, std::string* error) {
-#if defined(_WIN32)
         // The pool-owned acceptor must not survive a rolled-back start:
         // the port has to be released before start() returns.
         stop_pool_acceptor();
-#endif
         for (std::size_t index = 0; index < started; ++index) {
             shards_[index]->request_stop();
         }
@@ -519,13 +614,7 @@ private:
             "{\"schema\":\"capsid-host-ready-v1\",\"app\":\"" +
             options_.worker_options.application + "\",\"address\":\"" +
             options_.worker_options.listen_address + "\",\"port\":" +
-            std::to_string(
-#if defined(_WIN32)
-                pool_port_
-#else
-                shards_.empty() ? 0 : shards_[0]->bound_port()
-#endif
-            ) +
+            std::to_string(pool_port_) +
             "}\n";
         std::size_t offset = 0;
         while (offset < line.size()) {
@@ -567,24 +656,30 @@ private:
     SingleWorkerServer* starting_shard_ = nullptr;
     std::once_flag wait_once_;
     std::vector<std::unique_ptr<SingleWorkerServer>> shards_;
-#if defined(_WIN32)
     boost::asio::io_context accept_ioc_;
     std::optional<boost::asio::ip::tcp::acceptor> pool_acceptor_;
     std::thread accept_thread_;
-    std::atomic<bool> accept_running_ = false;
+    std::mutex accept_lifecycle_mutex_;
+    bool accept_started_ = false; // control-thread operations hold the mutex
+    std::atomic<bool> accept_closed_ = false;
     std::uint16_t pool_port_ = 0;
     std::size_t next_shard_ = 0;
-#endif
+    std::unordered_map<UnavailableSession*, std::shared_ptr<UnavailableSession>> unavailable_;
 };
 
-#if defined(_WIN32)
-bool StaticPoolServerImpl::bind_pool_acceptor(std::string* error) {
+bool StaticPoolServerImpl::bind_pool_acceptor(std::string *error) {
+    std::lock_guard<std::mutex> lock(accept_lifecycle_mutex_);
+    if (stop_requested_.load(std::memory_order_acquire) ||
+        accept_closed_.load(std::memory_order_acquire)) {
+        if (error != nullptr)
+            *error = "static pool stopped before listener bind";
+        return false;
+    }
     namespace asio = boost::asio;
     using tcp = asio::ip::tcp;
     boost::system::error_code ec;
     tcp::endpoint endpoint;
-    endpoint.address(
-        asio::ip::make_address(options_.worker_options.listen_address, ec));
+    endpoint.address(asio::ip::make_address(options_.worker_options.listen_address, ec));
     if (ec) {
         if (error != nullptr) {
             *error = "invalid static-pool listen address";
@@ -619,35 +714,38 @@ bool StaticPoolServerImpl::bind_pool_acceptor(std::string* error) {
     return true;
 }
 
-void StaticPoolServerImpl::start_pool_accept_loop() {
+bool StaticPoolServerImpl::start_pool_accept_loop() {
+    std::lock_guard<std::mutex> lock(accept_lifecycle_mutex_);
+    if (accept_closed_.load(std::memory_order_acquire) ||
+        stop_requested_.load(std::memory_order_acquire))
+        return false;
     do_pool_accept();
-    accept_running_.store(true, std::memory_order_relaxed);
-    accept_thread_ = std::thread([this] {
-        accept_ioc_.run();
-        accept_running_.store(false, std::memory_order_relaxed);
-    });
+    accept_thread_ = std::thread([this] { accept_ioc_.run(); });
+    accept_started_ = true;
+    return true;
 }
 
 void StaticPoolServerImpl::close_pool_acceptor() {
-    if (!pool_acceptor_ || !pool_acceptor_->is_open()) {
+    std::lock_guard<std::mutex> lock(accept_lifecycle_mutex_);
+    if (accept_closed_.exchange(true, std::memory_order_acq_rel))
         return;
-    }
-    if (!accept_running_.load(std::memory_order_acquire) &&
-        !accept_thread_.joinable()) {
-        // No accept thread exists (start failure or pre-activation stop):
-        // closing on the control thread is safe, nothing is executing.
+    if (!accept_started_)
+        close_accept_resources();
+    else
+        boost::asio::post(accept_ioc_, [this] { close_accept_resources(); });
+}
+
+void StaticPoolServerImpl::close_accept_resources() {
+    if (pool_acceptor_) {
         boost::system::error_code ignored;
         pool_acceptor_->close(ignored);
-        return;
     }
-    boost::asio::post(accept_ioc_, [weak = weak_from_this()] {
-        if (const std::shared_ptr<StaticPoolServerImpl> self = weak.lock()) {
-            if (self->pool_acceptor_ && self->pool_acceptor_->is_open()) {
-                boost::system::error_code ignored;
-                self->pool_acceptor_->close(ignored);
-            }
-        }
-    });
+    while (!unavailable_.empty()) {
+        const auto it = unavailable_.begin();
+        const auto session = it->second;
+        unavailable_.erase(it);
+        session->close();
+    }
 }
 
 void StaticPoolServerImpl::stop_pool_acceptor() {
@@ -655,49 +753,61 @@ void StaticPoolServerImpl::stop_pool_acceptor() {
     if (accept_thread_.joinable()) {
         accept_thread_.join();
     }
+    std::lock_guard<std::mutex> lock(accept_lifecycle_mutex_);
+    // Also covers a reactor that finished after a fatal accept error.
+    close_accept_resources();
     if (pool_acceptor_) {
         boost::system::error_code ignored;
         pool_acceptor_->close(ignored);
         pool_acceptor_.reset();
     }
-    accept_running_.store(false, std::memory_order_relaxed);
+    accept_started_ = false;
 }
 
 void StaticPoolServerImpl::do_pool_accept() {
     if (!pool_acceptor_ || !pool_acceptor_->is_open() ||
+        accept_closed_.load(std::memory_order_acquire) ||
         stop_requested_.load(std::memory_order_acquire)) {
         return;
     }
+    // The accepted peer must be BORN on the target shard's reactor: a
+    // moved socket keeps its accepting executor, so a peer created on
+    // the pool's accept io_context would run its network callbacks on
+    // the accept thread while the shard's Worker events mutate the same
+    // session state from the shard thread (the Windows heap-corruption
+    // regression). The shard is therefore selected BEFORE the accept is
+    // armed and the socket is created directly on its executor.
+    // Completion rechecks the selected shard. If its worker exited while
+    // accept was pending, dispatch_pool_peer can rebind the unused socket
+    // to a healthy shard; a plain move would retain the dead reactor.
+    // The facade keeps Impl alive through stop/wait, and shards are only
+    // destroyed after the accept thread joins. The handler's weak capture
+    // avoids a lifetime cycle; the raw shard outlives its armed operation.
+    SingleWorkerServer *target = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(shards_mutex_);
+        const std::size_t count = shards_.size();
+        for (std::size_t probe = 0; probe < count; ++probe) {
+            const std::size_t index = next_shard_++ % count;
+            SingleWorkerServer *candidate = shards_[index].get();
+            if (candidate->worker_available()) {
+                target = candidate;
+                break;
+            }
+        }
+    }
+    const boost::asio::any_io_executor executor =
+        target ? target->accept_executor() : accept_ioc_.get_executor();
     pool_acceptor_->async_accept(
-        [weak = weak_from_this()](boost::system::error_code ec,
-                                  boost::asio::ip::tcp::socket peer) {
+        executor, [weak = weak_from_this(), target](boost::system::error_code ec,
+                                                    boost::asio::ip::tcp::socket peer) {
             const std::shared_ptr<StaticPoolServerImpl> self = weak.lock();
             if (!self || !self->pool_acceptor_) {
                 return;
             }
-            if (!ec && !self->stop_requested_.load(std::memory_order_acquire)) {
-                SingleWorkerServer* target = nullptr;
-                {
-                    std::lock_guard<std::mutex> lock(self->shards_mutex_);
-                    const std::size_t count = self->shards_.size();
-                    for (std::size_t probe = 0; probe < count; ++probe) {
-                        const std::size_t index =
-                            self->next_shard_++ % count;
-                        SingleWorkerServer* candidate =
-                            self->shards_[index].get();
-                        if (candidate->worker_available()) {
-                            target = candidate;
-                            break;
-                        }
-                    }
-                }
-                if (target != nullptr) {
-                    auto transport =
-                        std::make_shared<boost::asio::ip::tcp::socket>(
-                            std::move(peer));
-                    target->adopt_socket(std::move(*transport));
-                    transport.reset();
-                }
+            if (!ec && !self->accept_closed_.load(std::memory_order_acquire) &&
+                !self->stop_requested_.load(std::memory_order_acquire)) {
+                self->dispatch_pool_peer(target, std::move(peer));
             }
             if (ec && ec != boost::asio::error::operation_aborted) {
                 // A transient accept error would stop the only listener;
@@ -712,7 +822,59 @@ void StaticPoolServerImpl::do_pool_accept() {
             self->do_pool_accept();
         });
 }
-#endif
+
+void StaticPoolServerImpl::dispatch_pool_peer(SingleWorkerServer *target,
+                                              boost::asio::ip::tcp::socket peer) {
+    // Availability can change after selection, including while the shard
+    // prepares its adoption handler. Only a successful admission consumes
+    // the peer. Each failed attempt remains before any request IO and may
+    // choose the next shard; a fixed pool cannot try more than N owners.
+    for (std::uint32_t attempt = 0; attempt < options_.workers; ++attempt) {
+        if (accept_closed_.load(std::memory_order_acquire) ||
+            stop_requested_.load(std::memory_order_acquire))
+            return;
+        if (target == nullptr || !target->worker_available()) {
+            target = nullptr;
+            std::lock_guard<std::mutex> lock(shards_mutex_);
+            const std::size_t count = shards_.size();
+            for (std::size_t probe = 0; probe < count; ++probe) {
+                SingleWorkerServer *candidate = shards_[next_shard_++ % count].get();
+                if (candidate->worker_available()) {
+                    target = candidate;
+                    break;
+                }
+            }
+        }
+        if (target == nullptr)
+            break;
+        // No request IO has started. Detach the native handle from the
+        // old IOCP and register it on the replacement reactor before any
+        // Session can use it. Moving an Asio socket alone cannot do this.
+        if (!rehome_peer(peer, target->accept_executor()))
+            return;
+        if (target->try_adopt_socket(peer))
+            return;
+        target = nullptr;
+    }
+    if (!accept_closed_.load(std::memory_order_acquire) &&
+        !stop_requested_.load(std::memory_order_acquire))
+        reject_pool_peer(std::move(peer));
+}
+
+void StaticPoolServerImpl::reject_pool_peer(boost::asio::ip::tcp::socket peer) {
+    // Bound memory even if many peers stop midway through an HTTP head.
+    // Excess connections are closed; admitted exchanges finish or time out.
+    if (unavailable_.size() >= 128 || !rehome_peer(peer, accept_ioc_.get_executor()))
+        return;
+    auto session = std::make_shared<UnavailableSession>(
+        std::move(peer), options_.worker_options,
+        [weak = weak_from_this()](UnavailableSession *finished) {
+            if (const auto self = weak.lock())
+                self->unavailable_.erase(finished);
+        });
+    unavailable_.emplace(session.get(), session);
+    session->run();
+}
 
 StaticPoolServer::StaticPoolServer(StaticPoolServerOptions options)
     : impl_(std::make_shared<StaticPoolServerImpl>(std::move(options))) {}
@@ -741,6 +903,10 @@ SingleWorkerServer::DrainMetrics StaticPoolServer::drain_metrics() const {
     return impl_->drain_metrics();
 }
 
+std::vector<capsid::WorkerExitStatus> StaticPoolServer::worker_exit_statuses() const {
+    return impl_->worker_exit_statuses();
+}
+
 bool StaticPoolServer::wait(std::string* error) { return impl_->wait(error); }
 
 std::size_t StaticPoolServer::active_workers() const {
@@ -749,6 +915,15 @@ std::size_t StaticPoolServer::active_workers() const {
 
 int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     std::string error;
+#if !defined(_WIN32)
+    // Install the process signal handler before starting any shards. Asio
+    // dispatches it on this thread; parent control uses the same stop gate.
+    boost::asio::io_context signal_io;
+    boost::asio::signal_set signals(signal_io, SIGTERM, SIGINT);
+    signals.async_wait([this](const boost::system::error_code& ec, int) {
+        if (!ec) impl_->request_stop();
+    });
+#endif
     if (!impl_->start(bundle, &error)) {
         // M2 item 7 (§12.2): a failed pool start is a structured startup
         // line; the error text is static and sanitized.
@@ -758,12 +933,8 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
                   .message = error});
         return 1;
     }
-    // Benchmark-only signal handling: SIGTERM/SIGINT are blocked and
-    // waited for with sigwait on the calling thread, so no C++ object is
-    // ever touched from a signal handler (shards install no signal wiring
-    // of their own). The bounded stop/wait runs after the signal. Windows
-    // has no sigwait: a console control handler (CTRL_C/CTRL_BREAK/close)
-    // signals the same stop gate instead.
+    // Both parent control and process signals can request a bounded stop.
+    // Windows console callbacks only set an event, never call C++ objects.
 #if defined(_WIN32)
     g_static_pool_term_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_static_pool_term_event == nullptr ||
@@ -777,36 +948,27 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
         impl_->wait(&error);
         return 1;
     }
-    const DWORD wait_result =
-        WaitForSingleObject(g_static_pool_term_event, INFINITE);
-    (void)wait_result;
+    bool wait_failed = false;
+    while (!impl_->stop_requested()) {
+        const DWORD result = WaitForSingleObject(g_static_pool_term_event, 50);
+        if (result == WAIT_OBJECT_0) break;
+        if (result != WAIT_TIMEOUT) { wait_failed = true; break; }
+    }
 #else
-    sigset_t term_set;
-    sigemptyset(&term_set);
-    sigaddset(&term_set, SIGTERM);
-    sigaddset(&term_set, SIGINT);
-    if (sigprocmask(SIG_BLOCK, &term_set, nullptr) != 0) {
-        emit_log(impl_->structured_log(),
-                 {.event = log_events::kStartup,
-                  .result = "fail",
-                  .message = "cannot block signals"});
-        impl_->request_stop();
-        impl_->wait(&error);
-        return 1;
-    }
-    int signal_number = 0;
-    if (sigwait(&term_set, &signal_number) != 0) {
-        emit_log(impl_->structured_log(),
-                 {.event = log_events::kShutdown,
-                  .result = "fail",
-                  .message = "cannot wait for signals"});
-        impl_->request_stop();
-        impl_->wait(&error);
-        return 1;
-    }
+    while (!impl_->stop_requested())
+        signal_io.run_for(std::chrono::milliseconds(50));
+    signals.cancel();
 #endif
     impl_->request_stop();
     impl_->wait(&error);
+#if defined(_WIN32)
+    if (wait_failed) {
+        emit_log(impl_->structured_log(),
+                 {.event = log_events::kShutdown, .result = "fail",
+                  .message = "cannot wait for stop event"});
+        return 1;
+    }
+#endif
     return 0;
 }
 

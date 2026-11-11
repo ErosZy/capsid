@@ -1,0 +1,3328 @@
+{
+  "schema": "capsid-fetch-resources-v1",
+  "complete": true,
+  "mode": "reference",
+  "runId": "f5ee3875-3bbc-4687-a3cf-6c1b58cd2884",
+  "referenceLock": {
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "binary": "workerd-windows-64",
+    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary_version_string": "workerd 2026-10-10",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": [],
+    "client": {
+      "runtime": "node",
+      "websocket": "native (undici) - no external dependency",
+      "node_version": "v24.14.0",
+      "undici_version": "7.21.0"
+    },
+    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
+    "release_asset": "workerd-windows-64.gz",
+    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
+    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+  },
+  "client": {
+    "node": "v24.14.0",
+    "undici": "7.21.0"
+  },
+  "inputs": {
+    "runner": "9f6154c60130fee243098e44edafc25660838fd2397904544bfc0aaf7a606429",
+    "fixture": "0f0ca1ba116b1b1293eee8f7453b2e01b970712dcc295e10fd0aebdd10c156ad",
+    "contract": "b4eadf0b2c0b860c68bdd2e29accde1dba7a1ce49a9095b85b5ac28fdb3a465d",
+    "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+  },
+  "binaries": {
+    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "worker": null
+  },
+  "cases": [
+    {
+      "id": "fetch-complete",
+      "challenge": "be396751-8f07-4284-9af8-e19eae955744",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62782
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"52917732-c367-4368-9911-bac0643e089d\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zf+XLkjdFSNPPIhkJaLkr8jh+go=",
+        "requestKey": "thbq549B4XyDlRF3eO6Epw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=be396751-8f07-4284-9af8-e19eae955744&role=a&index=0 HTTP/1.1\r\nHost: localhost:62782",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1iZTM5Njc1MS04ZjA3LTQyODQtOWFmOC1lMTllYWU5NTU3NDQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mjc4Mg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62782
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zf+XLkjdFSNPPIhkJaLkr8jh+go=",
+        "requestKey": "thbq549B4XyDlRF3eO6Epw==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"52917732-c367-4368-9911-bac0643e089d\",\"state\":{\"kind\":\"fetch-complete\",\"challenge\":\"be396751-8f07-4284-9af8-e19eae955744\",\"trace\":[\"message\",\"fetch\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/be396751-8f07-4284-9af8-e19eae955744/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"52917732-c367-4368-9911-bac0643e089d\",\"state\":{\"kind\":\"fetch-complete\",\"challenge\":\"be396751-8f07-4284-9af8-e19eae955744\",\"trace\":[\"message\",\"fetch\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/be396751-8f07-4284-9af8-e19eae955744/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=be396751-8f07-4284-9af8-e19eae955744&role=a&index=0 HTTP/1.1\r\nHost: localhost:62782",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1iZTM5Njc1MS04ZjA3LTQyODQtOWFmOC1lMTllYWU5NTU3NDQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mjc4Mg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62782
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-close-pending",
+      "challenge": "988657db-26a4-4958-97de-5cb092b91738",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62821
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e63dd93c-4b6f-4aa5-a907-7a508c09adcc\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zpzqBgT51z5fKDUd0gLAqm3M1hA=",
+        "requestKey": "bRP/bXj+DOB7TwVv1O+Zrg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=988657db-26a4-4958-97de-5cb092b91738&role=a&index=0 HTTP/1.1\r\nHost: localhost:62821",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODg2NTdkYi0yNmE0LTQ5NTgtOTdkZS01Y2IwOTJiOTE3Mzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MjgyMQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62821
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zpzqBgT51z5fKDUd0gLAqm3M1hA=",
+        "requestKey": "bRP/bXj+DOB7TwVv1O+Zrg==",
+        "rawTail": "gQdzdGFydGVkgQphY2svZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2ZpbmlzaA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"e63dd93c-4b6f-4aa5-a907-7a508c09adcc\",\"state\":{\"kind\":\"fetch-close-pending\",\"challenge\":\"988657db-26a4-4958-97de-5cb092b91738\",\"trace\":[\"message\",\"fetch\",\"finish\",\"close\"],\"result\":null,\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"e63dd93c-4b6f-4aa5-a907-7a508c09adcc\",\"state\":{\"kind\":\"fetch-close-pending\",\"challenge\":\"988657db-26a4-4958-97de-5cb092b91738\",\"trace\":[\"message\",\"fetch\",\"finish\",\"close\"],\"result\":null,\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=988657db-26a4-4958-97de-5cb092b91738&role=a&index=0 HTTP/1.1\r\nHost: localhost:62821",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODg2NTdkYi0yNmE0LTQ5NTgtOTdkZS01Y2IwOTJiOTE3Mzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MjgyMQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62821
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-close-body",
+      "challenge": "f89ceb86-be03-4d9c-8a40-05a078870415",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62870
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"f73490ca-9c50-4216-861d-d98414f321fe\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ymDNu5XRseFZSVaKmvRTntep+hk=",
+        "requestKey": "RHkYqMS4+StHnSflJGpTOA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=f89ceb86-be03-4d9c-8a40-05a078870415&role=a&index=0 HTTP/1.1\r\nHost: localhost:62870",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1mODljZWI4Ni1iZTAzLTRkOWMtOGE0MC0wNWEwNzg4NzA0MTUmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mjg3MA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62870
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ymDNu5XRseFZSVaKmvRTntep+hk=",
+        "requestKey": "RHkYqMS4+StHnSflJGpTOA==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQphY2svZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2ZpbmlzaA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"f73490ca-9c50-4216-861d-d98414f321fe\",\"state\":{\"kind\":\"fetch-close-body\",\"challenge\":\"f89ceb86-be03-4d9c-8a40-05a078870415\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"finish\",\"close\"],\"result\":{\"first\":\"first/f89ceb86-be03-4d9c-8a40-05a078870415/a\",\"done\":false},\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"f73490ca-9c50-4216-861d-d98414f321fe\",\"state\":{\"kind\":\"fetch-close-body\",\"challenge\":\"f89ceb86-be03-4d9c-8a40-05a078870415\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"finish\",\"close\"],\"result\":{\"first\":\"first/f89ceb86-be03-4d9c-8a40-05a078870415/a\",\"done\":false},\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=f89ceb86-be03-4d9c-8a40-05a078870415&role=a&index=0 HTTP/1.1\r\nHost: localhost:62870",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1mODljZWI4Ni1iZTAzLTRkOWMtOGE0MC0wNWEwNzg4NzA0MTUmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mjg3MA0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62870
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-cancel-reader",
+      "challenge": "1da847bf-5eb0-4ddf-90db-d80beb1c5d25",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62915
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"453cd788-4791-4b04-8d65-2c557ba8894f\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: BMARNmNk/cbsaUj22S2KgeMUjkc=",
+        "requestKey": "RwFcGKqodzH942JFWzD2Kw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=1da847bf-5eb0-4ddf-90db-d80beb1c5d25&role=a&index=0 HTTP/1.1\r\nHost: localhost:62915",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0xZGE4NDdiZi01ZWIwLTRkZGYtOTBkYi1kODBiZWIxYzVkMjUmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MjkxNQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62915
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: BMARNmNk/cbsaUj22S2KgeMUjkc=",
+        "requestKey": "RwFcGKqodzH942JFWzD2Kw==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"453cd788-4791-4b04-8d65-2c557ba8894f\",\"state\":{\"kind\":\"fetch-cancel-reader\",\"challenge\":\"1da847bf-5eb0-4ddf-90db-d80beb1c5d25\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"cancel/before\",\"cancel/after\",\"close\"],\"result\":{\"first\":\"first/1da847bf-5eb0-4ddf-90db-d80beb1c5d25/a\",\"done\":false},\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"453cd788-4791-4b04-8d65-2c557ba8894f\",\"state\":{\"kind\":\"fetch-cancel-reader\",\"challenge\":\"1da847bf-5eb0-4ddf-90db-d80beb1c5d25\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"cancel/before\",\"cancel/after\",\"close\"],\"result\":{\"first\":\"first/1da847bf-5eb0-4ddf-90db-d80beb1c5d25/a\",\"done\":false},\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=1da847bf-5eb0-4ddf-90db-d80beb1c5d25&role=a&index=0 HTTP/1.1\r\nHost: localhost:62915",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0xZGE4NDdiZi01ZWIwLTRkZGYtOTBkYi1kODBiZWIxYzVkMjUmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MjkxNQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 62915
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-default",
+      "challenge": "a6482f3b-4847-4630-8422-a48e2b02a43d",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62970
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"a65fc586-2a90-49b8-ba4d-92f968f51207\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7tF9g94WsHn4yXSWicnA3qKVrBs=",
+        "requestKey": "Q4SlTLDvNbyfut3FJ3B92Q==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7tF9g94WsHn4yXSWicnA3qKVrBs=",
+        "requestKey": "Q4SlTLDvNbyfut3FJ3B92Q==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"a65fc586-2a90-49b8-ba4d-92f968f51207\",\"state\":{\"kind\":\"fetch-abort-pre-default\",\"challenge\":\"a6482f3b-4847-4630-8422-a48e2b02a43d\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"a65fc586-2a90-49b8-ba4d-92f968f51207\",\"state\":{\"kind\":\"fetch-abort-pre-default\",\"challenge\":\"a6482f3b-4847-4630-8422-a48e2b02a43d\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-string",
+      "challenge": "076df227-41d7-4b7c-8121-87016a1e4159",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62978
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"1d31412e-afb1-4172-abe6-16070be8c045\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: BkBoOI78IRpWue5x4/jZGHEiU0o=",
+        "requestKey": "SohZpMzJ7VYk0hTskNY4rQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: BkBoOI78IRpWue5x4/jZGHEiU0o=",
+        "requestKey": "SohZpMzJ7VYk0hTskNY4rQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"1d31412e-afb1-4172-abe6-16070be8c045\",\"state\":{\"kind\":\"fetch-abort-pre-string\",\"challenge\":\"076df227-41d7-4b7c-8121-87016a1e4159\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"076df227-41d7-4b7c-8121-87016a1e4159\"},\"failure\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"076df227-41d7-4b7c-8121-87016a1e4159\"},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"1d31412e-afb1-4172-abe6-16070be8c045\",\"state\":{\"kind\":\"fetch-abort-pre-string\",\"challenge\":\"076df227-41d7-4b7c-8121-87016a1e4159\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"076df227-41d7-4b7c-8121-87016a1e4159\"},\"failure\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"076df227-41d7-4b7c-8121-87016a1e4159\"},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-error",
+      "challenge": "0f9e462a-dab5-43c2-a95e-5be36c9dbc67",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 62990
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"6374e80e-5588-469a-b455-7b84acfe71d1\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: pLe4pdp3Y70ylY9xKLHxHW8m6OY=",
+        "requestKey": "1Do+PFssPY/s9GYzyGx/FA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: pLe4pdp3Y70ylY9xKLHxHW8m6OY=",
+        "requestKey": "1Do+PFssPY/s9GYzyGx/FA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"6374e80e-5588-469a-b455-7b84acfe71d1\",\"state\":{\"kind\":\"fetch-abort-pre-error\",\"challenge\":\"0f9e462a-dab5-43c2-a95e-5be36c9dbc67\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0f9e462a-dab5-43c2-a95e-5be36c9dbc67\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0f9e462a-dab5-43c2-a95e-5be36c9dbc67\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"6374e80e-5588-469a-b455-7b84acfe71d1\",\"state\":{\"kind\":\"fetch-abort-pre-error\",\"challenge\":\"0f9e462a-dab5-43c2-a95e-5be36c9dbc67\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0f9e462a-dab5-43c2-a95e-5be36c9dbc67\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0f9e462a-dab5-43c2-a95e-5be36c9dbc67\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-dom",
+      "challenge": "e93c72ab-aa1e-496d-9460-e1615f632bcb",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63011
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"9253c283-e299-44ec-babe-fc894f03e113\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: VLhlfO0ORHSzVLSaPho0BoeKi+M=",
+        "requestKey": "G0+tHAeo/rgMMPpZLjYiLA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: VLhlfO0ORHSzVLSaPho0BoeKi+M=",
+        "requestKey": "G0+tHAeo/rgMMPpZLjYiLA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"9253c283-e299-44ec-babe-fc894f03e113\",\"state\":{\"kind\":\"fetch-abort-pre-dom\",\"challenge\":\"e93c72ab-aa1e-496d-9460-e1615f632bcb\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"e93c72ab-aa1e-496d-9460-e1615f632bcb\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"e93c72ab-aa1e-496d-9460-e1615f632bcb\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"9253c283-e299-44ec-babe-fc894f03e113\",\"state\":{\"kind\":\"fetch-abort-pre-dom\",\"challenge\":\"e93c72ab-aa1e-496d-9460-e1615f632bcb\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"e93c72ab-aa1e-496d-9460-e1615f632bcb\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"e93c72ab-aa1e-496d-9460-e1615f632bcb\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-null",
+      "challenge": "3a960134-cd91-4946-a705-e9d16443ddca",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63025
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"5212a232-4ae7-4b45-abe0-b7af99600cde\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7LZLiUcEkPT1Rnh3KPhytMu9QbQ=",
+        "requestKey": "KAL9ipqjQN3A6gUHcMdVRw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7LZLiUcEkPT1Rnh3KPhytMu9QbQ=",
+        "requestKey": "KAL9ipqjQN3A6gUHcMdVRw==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"5212a232-4ae7-4b45-abe0-b7af99600cde\",\"state\":{\"kind\":\"fetch-abort-pre-null\",\"challenge\":\"3a960134-cd91-4946-a705-e9d16443ddca\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"5212a232-4ae7-4b45-abe0-b7af99600cde\",\"state\":{\"kind\":\"fetch-abort-pre-null\",\"challenge\":\"3a960134-cd91-4946-a705-e9d16443ddca\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-number",
+      "challenge": "cfdcca4d-c2ac-421a-8b9e-ce5c75436db7",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63039
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"fbb841f7-84cf-4377-abbb-4d24b3a95e0c\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rTZhI8c/fGK82doB6MocOo5EXB8=",
+        "requestKey": "vsPg7uGjBPfLA/1vZ8GtRA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rTZhI8c/fGK82doB6MocOo5EXB8=",
+        "requestKey": "vsPg7uGjBPfLA/1vZ8GtRA==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"fbb841f7-84cf-4377-abbb-4d24b3a95e0c\",\"state\":{\"kind\":\"fetch-abort-pre-number\",\"challenge\":\"cfdcca4d-c2ac-421a-8b9e-ce5c75436db7\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"failure\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"fbb841f7-84cf-4377-abbb-4d24b3a95e0c\",\"state\":{\"kind\":\"fetch-abort-pre-number\",\"challenge\":\"cfdcca4d-c2ac-421a-8b9e-ce5c75436db7\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"failure\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-pre-object",
+      "challenge": "05cb9f39-f9c4-4253-a114-4e30be63727c",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63051
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e66668ab-5036-46b2-a371-5556cbc976ee\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ho7pmTHH1m5/eiZEfh9kzoA09+E=",
+        "requestKey": "aUO4C5hryT9YW9Gni93lFQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ho7pmTHH1m5/eiZEfh9kzoA09+E=",
+        "requestKey": "aUO4C5hryT9YW9Gni93lFQ==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"e66668ab-5036-46b2-a371-5556cbc976ee\",\"state\":{\"kind\":\"fetch-abort-pre-object\",\"challenge\":\"05cb9f39-f9c4-4253-a114-4e30be63727c\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"05cb9f39-f9c4-4253-a114-4e30be63727c\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"05cb9f39-f9c4-4253-a114-4e30be63727c\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"e66668ab-5036-46b2-a371-5556cbc976ee\",\"state\":{\"kind\":\"fetch-abort-pre-object\",\"challenge\":\"05cb9f39-f9c4-4253-a114-4e30be63727c\",\"trace\":[\"message\",\"fetch\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"05cb9f39-f9c4-4253-a114-4e30be63727c\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"05cb9f39-f9c4-4253-a114-4e30be63727c\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-default",
+      "challenge": "b0f49764-6135-4645-8bb5-2789e8a9ec7e",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63069
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"8ddc6c2e-53d6-41b0-9b20-f181e5660b03\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 5NmVYli6YeTkHyf2xs3G4OrzlrY=",
+        "requestKey": "DqPqhVwOrfjgEkZncXLiBw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=b0f49764-6135-4645-8bb5-2789e8a9ec7e&role=a&index=0 HTTP/1.1\r\nHost: localhost:63069",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1iMGY0OTc2NC02MTM1LTQ2NDUtOGJiNS0yNzg5ZThhOWVjN2Umcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzA2OQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63069
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 5NmVYli6YeTkHyf2xs3G4OrzlrY=",
+        "requestKey": "DqPqhVwOrfjgEkZncXLiBw==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"8ddc6c2e-53d6-41b0-9b20-f181e5660b03\",\"state\":{\"kind\":\"fetch-abort-live-default\",\"challenge\":\"b0f49764-6135-4645-8bb5-2789e8a9ec7e\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"8ddc6c2e-53d6-41b0-9b20-f181e5660b03\",\"state\":{\"kind\":\"fetch-abort-live-default\",\"challenge\":\"b0f49764-6135-4645-8bb5-2789e8a9ec7e\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=b0f49764-6135-4645-8bb5-2789e8a9ec7e&role=a&index=0 HTTP/1.1\r\nHost: localhost:63069",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1iMGY0OTc2NC02MTM1LTQ2NDUtOGJiNS0yNzg5ZThhOWVjN2Umcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzA2OQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63069
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-string",
+      "challenge": "30bbf513-ce02-4df6-b30a-2f99a35ba638",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63136
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"cc1560e5-2487-4713-9ce3-3dcd7feb3630\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SvEfTmZevFqx4mAyD/UKI21qknY=",
+        "requestKey": "xw+0o+e9VD48uubm7c9lGw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=30bbf513-ce02-4df6-b30a-2f99a35ba638&role=a&index=0 HTTP/1.1\r\nHost: localhost:63136",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0zMGJiZjUxMy1jZTAyLTRkZjYtYjMwYS0yZjk5YTM1YmE2Mzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzEzNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63136
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SvEfTmZevFqx4mAyD/UKI21qknY=",
+        "requestKey": "xw+0o+e9VD48uubm7c9lGw==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"cc1560e5-2487-4713-9ce3-3dcd7feb3630\",\"state\":{\"kind\":\"fetch-abort-live-string\",\"challenge\":\"30bbf513-ce02-4df6-b30a-2f99a35ba638\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"30bbf513-ce02-4df6-b30a-2f99a35ba638\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"30bbf513-ce02-4df6-b30a-2f99a35ba638\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"cc1560e5-2487-4713-9ce3-3dcd7feb3630\",\"state\":{\"kind\":\"fetch-abort-live-string\",\"challenge\":\"30bbf513-ce02-4df6-b30a-2f99a35ba638\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"30bbf513-ce02-4df6-b30a-2f99a35ba638\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"30bbf513-ce02-4df6-b30a-2f99a35ba638\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=30bbf513-ce02-4df6-b30a-2f99a35ba638&role=a&index=0 HTTP/1.1\r\nHost: localhost:63136",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0zMGJiZjUxMy1jZTAyLTRkZjYtYjMwYS0yZjk5YTM1YmE2Mzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzEzNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63136
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-error",
+      "challenge": "0d326108-47bb-47af-952e-b2452602e646",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63184
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"202afb84-b923-40e5-9c1f-aa67d617fd2a\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZA/pENlBCsXULogBW/5J+R+IXkc=",
+        "requestKey": "P9TBfTdD3Te1p4xduQSdew==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=0d326108-47bb-47af-952e-b2452602e646&role=a&index=0 HTTP/1.1\r\nHost: localhost:63184",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0wZDMyNjEwOC00N2JiLTQ3YWYtOTUyZS1iMjQ1MjYwMmU2NDYmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzE4NA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63184
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZA/pENlBCsXULogBW/5J+R+IXkc=",
+        "requestKey": "P9TBfTdD3Te1p4xduQSdew==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"202afb84-b923-40e5-9c1f-aa67d617fd2a\",\"state\":{\"kind\":\"fetch-abort-live-error\",\"challenge\":\"0d326108-47bb-47af-952e-b2452602e646\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0d326108-47bb-47af-952e-b2452602e646\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0d326108-47bb-47af-952e-b2452602e646\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"202afb84-b923-40e5-9c1f-aa67d617fd2a\",\"state\":{\"kind\":\"fetch-abort-live-error\",\"challenge\":\"0d326108-47bb-47af-952e-b2452602e646\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0d326108-47bb-47af-952e-b2452602e646\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"0d326108-47bb-47af-952e-b2452602e646\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=0d326108-47bb-47af-952e-b2452602e646&role=a&index=0 HTTP/1.1\r\nHost: localhost:63184",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0wZDMyNjEwOC00N2JiLTQ3YWYtOTUyZS1iMjQ1MjYwMmU2NDYmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzE4NA0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63184
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-dom",
+      "challenge": "fa65e23b-5dcd-4d30-ae12-4789c6a072ee",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63238
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"23df4746-b963-4a0a-b24a-f14a46f04447\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: lSK4aLodWPY1CnyAaDGiWDzrXwQ=",
+        "requestKey": "wl6lB2Qf2ssh3mJxCxjPjA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=fa65e23b-5dcd-4d30-ae12-4789c6a072ee&role=a&index=0 HTTP/1.1\r\nHost: localhost:63238",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1mYTY1ZTIzYi01ZGNkLTRkMzAtYWUxMi00Nzg5YzZhMDcyZWUmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzIzOA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63238
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: lSK4aLodWPY1CnyAaDGiWDzrXwQ=",
+        "requestKey": "wl6lB2Qf2ssh3mJxCxjPjA==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"23df4746-b963-4a0a-b24a-f14a46f04447\",\"state\":{\"kind\":\"fetch-abort-live-dom\",\"challenge\":\"fa65e23b-5dcd-4d30-ae12-4789c6a072ee\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"fa65e23b-5dcd-4d30-ae12-4789c6a072ee\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"fa65e23b-5dcd-4d30-ae12-4789c6a072ee\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"23df4746-b963-4a0a-b24a-f14a46f04447\",\"state\":{\"kind\":\"fetch-abort-live-dom\",\"challenge\":\"fa65e23b-5dcd-4d30-ae12-4789c6a072ee\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"fa65e23b-5dcd-4d30-ae12-4789c6a072ee\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"fa65e23b-5dcd-4d30-ae12-4789c6a072ee\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=fa65e23b-5dcd-4d30-ae12-4789c6a072ee&role=a&index=0 HTTP/1.1\r\nHost: localhost:63238",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1mYTY1ZTIzYi01ZGNkLTRkMzAtYWUxMi00Nzg5YzZhMDcyZWUmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzIzOA0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63238
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-null",
+      "challenge": "0840de65-0faa-43c6-a066-d18bfaa3bb11",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63282
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"71b67a7b-2a02-4a4a-ae9e-8e690c91b38a\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WjrsU62oB92P/EhrAuwrK81UJxE=",
+        "requestKey": "PhraBuyjAU6fNOgf6r0sCA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=0840de65-0faa-43c6-a066-d18bfaa3bb11&role=a&index=0 HTTP/1.1\r\nHost: localhost:63282",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0wODQwZGU2NS0wZmFhLTQzYzYtYTA2Ni1kMThiZmFhM2JiMTEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzI4Mg0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63282
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WjrsU62oB92P/EhrAuwrK81UJxE=",
+        "requestKey": "PhraBuyjAU6fNOgf6r0sCA==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"71b67a7b-2a02-4a4a-ae9e-8e690c91b38a\",\"state\":{\"kind\":\"fetch-abort-live-null\",\"challenge\":\"0840de65-0faa-43c6-a066-d18bfaa3bb11\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"null\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"71b67a7b-2a02-4a4a-ae9e-8e690c91b38a\",\"state\":{\"kind\":\"fetch-abort-live-null\",\"challenge\":\"0840de65-0faa-43c6-a066-d18bfaa3bb11\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"null\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=0840de65-0faa-43c6-a066-d18bfaa3bb11&role=a&index=0 HTTP/1.1\r\nHost: localhost:63282",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0wODQwZGU2NS0wZmFhLTQzYzYtYTA2Ni1kMThiZmFhM2JiMTEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzI4Mg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63282
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-number",
+      "challenge": "d8119a7b-4d75-4b69-9acd-32e8ee75c30d",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63336
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"a56c086f-5526-4368-930f-51a1a7565c49\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qSh+uQpGbJYfBLEWT5TJqnwY/+c=",
+        "requestKey": "pmzKqqUC4UeI7QDyfqlF2A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=d8119a7b-4d75-4b69-9acd-32e8ee75c30d&role=a&index=0 HTTP/1.1\r\nHost: localhost:63336",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1kODExOWE3Yi00ZDc1LTRiNjktOWFjZC0zMmU4ZWU3NWMzMGQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzMzNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63336
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qSh+uQpGbJYfBLEWT5TJqnwY/+c=",
+        "requestKey": "pmzKqqUC4UeI7QDyfqlF2A==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"a56c086f-5526-4368-930f-51a1a7565c49\",\"state\":{\"kind\":\"fetch-abort-live-number\",\"challenge\":\"d8119a7b-4d75-4b69-9acd-32e8ee75c30d\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"23\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"a56c086f-5526-4368-930f-51a1a7565c49\",\"state\":{\"kind\":\"fetch-abort-live-number\",\"challenge\":\"d8119a7b-4d75-4b69-9acd-32e8ee75c30d\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"23\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=d8119a7b-4d75-4b69-9acd-32e8ee75c30d&role=a&index=0 HTTP/1.1\r\nHost: localhost:63336",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1kODExOWE3Yi00ZDc1LTRiNjktOWFjZC0zMmU4ZWU3NWMzMGQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzMzNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63336
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-object",
+      "challenge": "66299dd1-4cb5-4f70-b2e4-8723fbbd5238",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63387
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"593a6121-9e2d-48e8-ab75-d9660ff51cbe\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 4S72jY1fiT7eTnfDZb+nDzeqaRc=",
+        "requestKey": "Un3dHx0o2JVZ7CoH4u/WzQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=66299dd1-4cb5-4f70-b2e4-8723fbbd5238&role=a&index=0 HTTP/1.1\r\nHost: localhost:63387",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02NjI5OWRkMS00Y2I1LTRmNzAtYjJlNC04NzIzZmJiZDUyMzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzM4Nw0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63387
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 4S72jY1fiT7eTnfDZb+nDzeqaRc=",
+        "requestKey": "Un3dHx0o2JVZ7CoH4u/WzQ==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"593a6121-9e2d-48e8-ab75-d9660ff51cbe\",\"state\":{\"kind\":\"fetch-abort-live-object\",\"challenge\":\"66299dd1-4cb5-4f70-b2e4-8723fbbd5238\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"66299dd1-4cb5-4f70-b2e4-8723fbbd5238\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"66299dd1-4cb5-4f70-b2e4-8723fbbd5238\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"593a6121-9e2d-48e8-ab75-d9660ff51cbe\",\"state\":{\"kind\":\"fetch-abort-live-object\",\"challenge\":\"66299dd1-4cb5-4f70-b2e4-8723fbbd5238\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"66299dd1-4cb5-4f70-b2e4-8723fbbd5238\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"66299dd1-4cb5-4f70-b2e4-8723fbbd5238\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=66299dd1-4cb5-4f70-b2e4-8723fbbd5238&role=a&index=0 HTTP/1.1\r\nHost: localhost:63387",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02NjI5OWRkMS00Y2I1LTRmNzAtYjJlNC04NzIzZmJiZDUyMzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzM4Nw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63387
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-default",
+      "challenge": "7c5747e0-5ff7-470b-a120-05cea7d33103",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63435
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"417c08ed-b696-4b50-91b4-46b9c8222a07\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FqHJVdzml7qpiHMjvR3qR36hlMs=",
+        "requestKey": "3ptuTCZVzL/Ecyy6QPUsZQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=7c5747e0-5ff7-470b-a120-05cea7d33103&role=a&index=0 HTTP/1.1\r\nHost: localhost:63435",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT03YzU3NDdlMC01ZmY3LTQ3MGItYTEyMC0wNWNlYTdkMzMxMDMmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzQzNQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63435
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FqHJVdzml7qpiHMjvR3qR36hlMs=",
+        "requestKey": "3ptuTCZVzL/Ecyy6QPUsZQ==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"417c08ed-b696-4b50-91b4-46b9c8222a07\",\"state\":{\"kind\":\"fetch-abort-body-default\",\"challenge\":\"7c5747e0-5ff7-470b-a120-05cea7d33103\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/7c5747e0-5ff7-470b-a120-05cea7d33103/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"417c08ed-b696-4b50-91b4-46b9c8222a07\",\"state\":{\"kind\":\"fetch-abort-body-default\",\"challenge\":\"7c5747e0-5ff7-470b-a120-05cea7d33103\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/7c5747e0-5ff7-470b-a120-05cea7d33103/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"The operation was aborted\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=7c5747e0-5ff7-470b-a120-05cea7d33103&role=a&index=0 HTTP/1.1\r\nHost: localhost:63435",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT03YzU3NDdlMC01ZmY3LTQ3MGItYTEyMC0wNWNlYTdkMzMxMDMmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzQzNQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63435
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-string",
+      "challenge": "a8b487be-bf55-4405-b2de-6324c2c087fc",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63487
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"aa2f17a4-3be6-41a5-bfa4-05ebaed81675\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7NU9LKaYgP5d7IhVazk/8MEYEAk=",
+        "requestKey": "thKjCy1X89ZbJNFDhOYT3Q==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=a8b487be-bf55-4405-b2de-6324c2c087fc&role=a&index=0 HTTP/1.1\r\nHost: localhost:63487",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1hOGI0ODdiZS1iZjU1LTQ0MDUtYjJkZS02MzI0YzJjMDg3ZmMmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzQ4Nw0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63487
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7NU9LKaYgP5d7IhVazk/8MEYEAk=",
+        "requestKey": "thKjCy1X89ZbJNFDhOYT3Q==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"aa2f17a4-3be6-41a5-bfa4-05ebaed81675\",\"state\":{\"kind\":\"fetch-abort-body-string\",\"challenge\":\"a8b487be-bf55-4405-b2de-6324c2c087fc\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/a8b487be-bf55-4405-b2de-6324c2c087fc/a\",\"done\":false},\"reason\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"a8b487be-bf55-4405-b2de-6324c2c087fc\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"a8b487be-bf55-4405-b2de-6324c2c087fc\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"aa2f17a4-3be6-41a5-bfa4-05ebaed81675\",\"state\":{\"kind\":\"fetch-abort-body-string\",\"challenge\":\"a8b487be-bf55-4405-b2de-6324c2c087fc\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/a8b487be-bf55-4405-b2de-6324c2c087fc/a\",\"done\":false},\"reason\":{\"type\":\"string\",\"name\":null,\"message\":null,\"constructor\":\"String\",\"sameReason\":true,\"primitive\":\"a8b487be-bf55-4405-b2de-6324c2c087fc\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"a8b487be-bf55-4405-b2de-6324c2c087fc\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=a8b487be-bf55-4405-b2de-6324c2c087fc&role=a&index=0 HTTP/1.1\r\nHost: localhost:63487",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT1hOGI0ODdiZS1iZjU1LTQ0MDUtYjJkZS02MzI0YzJjMDg3ZmMmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzQ4Nw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63487
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-error",
+      "challenge": "91201184-f650-4f9a-ba6d-81f14253d431",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63534
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"0cbeecac-0196-4ba7-b6ef-dc8c5266a225\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: XpFaptxY5fcLXNn/UxD4e7NMdgY=",
+        "requestKey": "P1geV6ibkm+cctnK6CE0wA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=91201184-f650-4f9a-ba6d-81f14253d431&role=a&index=0 HTTP/1.1\r\nHost: localhost:63534",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05MTIwMTE4NC1mNjUwLTRmOWEtYmE2ZC04MWYxNDI1M2Q0MzEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzUzNA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63534
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: XpFaptxY5fcLXNn/UxD4e7NMdgY=",
+        "requestKey": "P1geV6ibkm+cctnK6CE0wA==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"0cbeecac-0196-4ba7-b6ef-dc8c5266a225\",\"state\":{\"kind\":\"fetch-abort-body-error\",\"challenge\":\"91201184-f650-4f9a-ba6d-81f14253d431\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/91201184-f650-4f9a-ba6d-81f14253d431/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"91201184-f650-4f9a-ba6d-81f14253d431\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"91201184-f650-4f9a-ba6d-81f14253d431\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"0cbeecac-0196-4ba7-b6ef-dc8c5266a225\",\"state\":{\"kind\":\"fetch-abort-body-error\",\"challenge\":\"91201184-f650-4f9a-ba6d-81f14253d431\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/91201184-f650-4f9a-ba6d-81f14253d431/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"91201184-f650-4f9a-ba6d-81f14253d431\",\"constructor\":\"Error\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"91201184-f650-4f9a-ba6d-81f14253d431\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=91201184-f650-4f9a-ba6d-81f14253d431&role=a&index=0 HTTP/1.1\r\nHost: localhost:63534",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05MTIwMTE4NC1mNjUwLTRmOWEtYmE2ZC04MWYxNDI1M2Q0MzEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzUzNA0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63534
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-dom",
+      "challenge": "6cc814fe-9832-4969-b2ee-a842e687fff7",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63591
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"7ea8a984-7e49-45e2-8420-2bf6b6486be9\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: sJRlauHWFaPRNKGVXln58rgXDUM=",
+        "requestKey": "hu5GeH48K7m4DfA5SYmqxA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=6cc814fe-9832-4969-b2ee-a842e687fff7&role=a&index=0 HTTP/1.1\r\nHost: localhost:63591",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02Y2M4MTRmZS05ODMyLTQ5NjktYjJlZS1hODQyZTY4N2ZmZjcmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzU5MQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63591
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: sJRlauHWFaPRNKGVXln58rgXDUM=",
+        "requestKey": "hu5GeH48K7m4DfA5SYmqxA==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"7ea8a984-7e49-45e2-8420-2bf6b6486be9\",\"state\":{\"kind\":\"fetch-abort-body-dom\",\"challenge\":\"6cc814fe-9832-4969-b2ee-a842e687fff7\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/6cc814fe-9832-4969-b2ee-a842e687fff7/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"6cc814fe-9832-4969-b2ee-a842e687fff7\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"6cc814fe-9832-4969-b2ee-a842e687fff7\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"7ea8a984-7e49-45e2-8420-2bf6b6486be9\",\"state\":{\"kind\":\"fetch-abort-body-dom\",\"challenge\":\"6cc814fe-9832-4969-b2ee-a842e687fff7\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/6cc814fe-9832-4969-b2ee-a842e687fff7/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"6cc814fe-9832-4969-b2ee-a842e687fff7\",\"constructor\":\"DOMException\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"AbortError\",\"message\":\"6cc814fe-9832-4969-b2ee-a842e687fff7\",\"constructor\":\"DOMException\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=6cc814fe-9832-4969-b2ee-a842e687fff7&role=a&index=0 HTTP/1.1\r\nHost: localhost:63591",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02Y2M4MTRmZS05ODMyLTQ5NjktYjJlZS1hODQyZTY4N2ZmZjcmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzU5MQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63591
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-null",
+      "challenge": "51d75ff4-febc-4a59-86df-de83026154b1",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63633
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"c3b28b05-f601-4def-aa37-289a122adab0\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: UEgj5Ju2FV2JI42GQDpZgEb1GPI=",
+        "requestKey": "uN9ClBPtO6scZsf6MfCy/w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=51d75ff4-febc-4a59-86df-de83026154b1&role=a&index=0 HTTP/1.1\r\nHost: localhost:63633",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT01MWQ3NWZmNC1mZWJjLTRhNTktODZkZi1kZTgzMDI2MTU0YjEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzYzMw0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63633
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: UEgj5Ju2FV2JI42GQDpZgEb1GPI=",
+        "requestKey": "uN9ClBPtO6scZsf6MfCy/w==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"c3b28b05-f601-4def-aa37-289a122adab0\",\"state\":{\"kind\":\"fetch-abort-body-null\",\"challenge\":\"51d75ff4-febc-4a59-86df-de83026154b1\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/51d75ff4-febc-4a59-86df-de83026154b1/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"null\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"c3b28b05-f601-4def-aa37-289a122adab0\",\"state\":{\"kind\":\"fetch-abort-body-null\",\"challenge\":\"51d75ff4-febc-4a59-86df-de83026154b1\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/51d75ff4-febc-4a59-86df-de83026154b1/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":null,\"message\":null,\"constructor\":null,\"sameReason\":true,\"primitive\":\"null\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"null\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=51d75ff4-febc-4a59-86df-de83026154b1&role=a&index=0 HTTP/1.1\r\nHost: localhost:63633",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT01MWQ3NWZmNC1mZWJjLTRhNTktODZkZi1kZTgzMDI2MTU0YjEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzYzMw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63633
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-number",
+      "challenge": "73009e4e-9f92-4612-9123-691a7c166390",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63666
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"97cc7308-6d97-481b-a2a4-482628929016\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YSG5J+cIH9cELDhM9rOtIBPRow8=",
+        "requestKey": "VLrRofuJ5RuHFxXmDziDxw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=73009e4e-9f92-4612-9123-691a7c166390&role=a&index=0 HTTP/1.1\r\nHost: localhost:63666",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT03MzAwOWU0ZS05ZjkyLTQ2MTItOTEyMy02OTFhN2MxNjYzOTAmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY2Ng0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63666
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YSG5J+cIH9cELDhM9rOtIBPRow8=",
+        "requestKey": "VLrRofuJ5RuHFxXmDziDxw==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"97cc7308-6d97-481b-a2a4-482628929016\",\"state\":{\"kind\":\"fetch-abort-body-number\",\"challenge\":\"73009e4e-9f92-4612-9123-691a7c166390\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/73009e4e-9f92-4612-9123-691a7c166390/a\",\"done\":false},\"reason\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"23\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"97cc7308-6d97-481b-a2a4-482628929016\",\"state\":{\"kind\":\"fetch-abort-body-number\",\"challenge\":\"73009e4e-9f92-4612-9123-691a7c166390\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/73009e4e-9f92-4612-9123-691a7c166390/a\",\"done\":false},\"reason\":{\"type\":\"number\",\"name\":null,\"message\":null,\"constructor\":\"Number\",\"sameReason\":true,\"primitive\":\"23\"},\"failure\":{\"type\":\"object\",\"name\":\"Error\",\"message\":\"23\",\"constructor\":\"Error\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=73009e4e-9f92-4612-9123-691a7c166390&role=a&index=0 HTTP/1.1\r\nHost: localhost:63666",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT03MzAwOWU0ZS05ZjkyLTQ2MTItOTEyMy02OTFhN2MxNjYzOTAmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY2Ng0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63666
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-body-object",
+      "challenge": "5039729b-68ce-4f5e-bfc2-41fdd6e4500b",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63676
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"cb8bf4de-f4a8-49a3-8a0a-467019d2d3d1\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: n7oMW53tm93mugNbbR/MXFNE51U=",
+        "requestKey": "lWtQbi4SXGekbRBWhAhslA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=5039729b-68ce-4f5e-bfc2-41fdd6e4500b&role=a&index=0 HTTP/1.1\r\nHost: localhost:63676",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT01MDM5NzI5Yi02OGNlLTRmNWUtYmZjMi00MWZkZDZlNDUwMGImcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY3Ng0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63676
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: n7oMW53tm93mugNbbR/MXFNE51U=",
+        "requestKey": "lWtQbi4SXGekbRBWhAhslA==",
+        "rawTail": "gQdzdGFydGVkgQdyZWFkaW5ngQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhZGluZw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"cb8bf4de-f4a8-49a3-8a0a-467019d2d3d1\",\"state\":{\"kind\":\"fetch-abort-body-object\",\"challenge\":\"5039729b-68ce-4f5e-bfc2-41fdd6e4500b\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/5039729b-68ce-4f5e-bfc2-41fdd6e4500b/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"5039729b-68ce-4f5e-bfc2-41fdd6e4500b\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"5039729b-68ce-4f5e-bfc2-41fdd6e4500b\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"cb8bf4de-f4a8-49a3-8a0a-467019d2d3d1\",\"state\":{\"kind\":\"fetch-abort-body-object\",\"challenge\":\"5039729b-68ce-4f5e-bfc2-41fdd6e4500b\",\"trace\":[\"message\",\"fetch\",\"headers\",\"first\",\"abort\",\"failure\",\"close\"],\"result\":{\"first\":\"first/5039729b-68ce-4f5e-bfc2-41fdd6e4500b/a\",\"done\":false},\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"5039729b-68ce-4f5e-bfc2-41fdd6e4500b\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"5039729b-68ce-4f5e-bfc2-41fdd6e4500b\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=5039729b-68ce-4f5e-bfc2-41fdd6e4500b&role=a&index=0 HTTP/1.1\r\nHost: localhost:63676",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT01MDM5NzI5Yi02OGNlLTRmNWUtYmZjMi00MWZkZDZlNDUwMGImcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY3Ng0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-first",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63676
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-two-owners",
+      "challenge": "9822c6eb-d44c-4986-b8f9-b5cec9242112",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63693
+        },
+        {
+          "host": "localhost",
+          "port": 63694
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"1dad0808-1575-4bbe-9a06-7f739d2d42a7\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 4+6EspjYpLIi7VmoA/Mwsu+zRGA=",
+        "requestKey": "4WV+aJcvlImatDtUj2ghXQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 6RXv8hpMaEOQXqNJOs/Cyde492I=",
+        "requestKey": "Bwj51mQllCXc79k7Mf81sQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=9822c6eb-d44c-4986-b8f9-b5cec9242112&role=a&index=0 HTTP/1.1\r\nHost: localhost:63693",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODIyYzZlYi1kNDRjLTQ5ODYtYjhmOS1iNWNlYzkyNDIxMTImcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY5Mw0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63693
+        },
+        {
+          "request": "GET /hold?challenge=9822c6eb-d44c-4986-b8f9-b5cec9242112&role=b&index=0 HTTP/1.1\r\nHost: localhost:63694",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODIyYzZlYi1kNDRjLTQ5ODYtYjhmOS1iNWNlYzkyNDIxMTImcm9sZT1iJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY5NA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63694
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 4+6EspjYpLIi7VmoA/Mwsu+zRGA=",
+        "requestKey": "4WV+aJcvlImatDtUj2ghXQ==",
+        "rawTail": "gQdzdGFydGVkgQphY2svZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2ZpbmlzaA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "checkpoint": {
+        "status": 200,
+        "text": "{\"realm\":\"1dad0808-1575-4bbe-9a06-7f739d2d42a7\",\"state\":{\"kind\":\"fetch-two-owners\",\"challenge\":\"9822c6eb-d44c-4986-b8f9-b5cec9242112\",\"trace\":[\"message\",\"fetch\",\"finish\",\"close\"],\"result\":null,\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"fetch\",\"checkpoint\"],\"result\":null}}}"
+      },
+      "checkpointUpstream": [
+        {
+          "request": "GET /hold?challenge=9822c6eb-d44c-4986-b8f9-b5cec9242112&role=a&index=0 HTTP/1.1\r\nHost: localhost:63693",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODIyYzZlYi1kNDRjLTQ5ODYtYjhmOS1iNWNlYzkyNDIxMTImcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY5Mw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63693
+        },
+        {
+          "request": "GET /hold?challenge=9822c6eb-d44c-4986-b8f9-b5cec9242112&role=b&index=0 HTTP/1.1\r\nHost: localhost:63694",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODIyYzZlYi1kNDRjLTQ5ODYtYjhmOS1iNWNlYzkyNDIxMTImcm9sZT1iJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY5NA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63694
+        }
+      ],
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 6RXv8hpMaEOQXqNJOs/Cyde492I=",
+        "requestKey": "Bwj51mQllCXc79k7Mf81sQ==",
+        "rawTail": "gQdzdGFydGVkgQ5hY2svY2hlY2twb2ludIEEZG9uZYgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2NoZWNrcG9pbnQ="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"1dad0808-1575-4bbe-9a06-7f739d2d42a7\",\"state\":{\"kind\":\"fetch-two-owners\",\"challenge\":\"9822c6eb-d44c-4986-b8f9-b5cec9242112\",\"trace\":[\"message\",\"fetch\",\"finish\",\"close\"],\"result\":null,\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"fetch\",\"checkpoint\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/9822c6eb-d44c-4986-b8f9-b5cec9242112/b\"}}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"1dad0808-1575-4bbe-9a06-7f739d2d42a7\",\"state\":{\"kind\":\"fetch-two-owners\",\"challenge\":\"9822c6eb-d44c-4986-b8f9-b5cec9242112\",\"trace\":[\"message\",\"fetch\",\"finish\",\"close\"],\"result\":null,\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"fetch\",\"checkpoint\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/9822c6eb-d44c-4986-b8f9-b5cec9242112/b\"}}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=9822c6eb-d44c-4986-b8f9-b5cec9242112&role=a&index=0 HTTP/1.1\r\nHost: localhost:63693",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODIyYzZlYi1kNDRjLTQ5ODYtYjhmOS1iNWNlYzkyNDIxMTImcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY5Mw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63693
+        },
+        {
+          "request": "GET /hold?challenge=9822c6eb-d44c-4986-b8f9-b5cec9242112&role=b&index=0 HTTP/1.1\r\nHost: localhost:63694",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ODIyYzZlYi1kNDRjLTQ5ODYtYjhmOS1iNWNlYzkyNDIxMTImcm9sZT1iJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzY5NA0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63694
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-mutation",
+      "challenge": "21486fbf-f4d5-4e8f-9d54-92d585276add",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63727
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"57712d32-4fdb-419f-8c4f-600f91d7886c\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 2SCUmZ1d8E9HplJGV9xCZ0n8Ijk=",
+        "requestKey": "3mlc11HtPVLrDREc+DEXSA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=21486fbf-f4d5-4e8f-9d54-92d585276add&role=a&index=0 HTTP/1.1\r\nHost: localhost:63727",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0yMTQ4NmZiZi1mNGQ1LTRlOGYtOWQ1NC05MmQ1ODUyNzZhZGQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzcyNw0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63727
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 2SCUmZ1d8E9HplJGV9xCZ0n8Ijk=",
+        "requestKey": "3mlc11HtPVLrDREc+DEXSA==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"57712d32-4fdb-419f-8c4f-600f91d7886c\",\"state\":{\"kind\":\"fetch-abort-live-mutation\",\"challenge\":\"21486fbf-f4d5-4e8f-9d54-92d585276add\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"changed\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"21486fbf-f4d5-4e8f-9d54-92d585276add\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"57712d32-4fdb-419f-8c4f-600f91d7886c\",\"state\":{\"kind\":\"fetch-abort-live-mutation\",\"challenge\":\"21486fbf-f4d5-4e8f-9d54-92d585276add\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"changed\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"21486fbf-f4d5-4e8f-9d54-92d585276add\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=21486fbf-f4d5-4e8f-9d54-92d585276add&role=a&index=0 HTTP/1.1\r\nHost: localhost:63727",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0yMTQ4NmZiZi1mNGQ1LTRlOGYtOWQ1NC05MmQ1ODUyNzZhZGQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzcyNw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63727
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-abort-live-shared",
+      "challenge": "9d892db9-644a-49bd-9b38-7cf2231b01e4",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63740
+        },
+        {
+          "host": "localhost",
+          "port": 63741
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"f6f7fe48-565b-4f48-8d1b-4e0a212a75e2\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: DZQPN/6XfrHpictoU4J5waqE0lw=",
+        "requestKey": "CQEvPD8i4Ek0TPscvLmgLg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=9d892db9-644a-49bd-9b38-7cf2231b01e4&role=a&index=0 HTTP/1.1\r\nHost: localhost:63740",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ZDg5MmRiOS02NDRhLTQ5YmQtOWIzOC03Y2YyMjMxYjAxZTQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc0MA0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63740
+        },
+        {
+          "request": "GET /hold?challenge=9d892db9-644a-49bd-9b38-7cf2231b01e4&role=a&index=1 HTTP/1.1\r\nHost: localhost:63741",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ZDg5MmRiOS02NDRhLTQ5YmQtOWIzOC03Y2YyMjMxYjAxZTQmcm9sZT1hJmluZGV4PTEgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc0MQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": false,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63741
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: DZQPN/6XfrHpictoU4J5waqE0lw=",
+        "requestKey": "CQEvPD8i4Ek0TPscvLmgLg==",
+        "rawTail": "gQdzdGFydGVkgQlhY2svYWJvcnSBBGRvbmWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2Fib3J0"
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"f6f7fe48-565b-4f48-8d1b-4e0a212a75e2\",\"state\":{\"kind\":\"fetch-abort-live-shared\",\"challenge\":\"9d892db9-644a-49bd-9b38-7cf2231b01e4\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure/0\",\"failure/1\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"9d892db9-644a-49bd-9b38-7cf2231b01e4\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"9d892db9-644a-49bd-9b38-7cf2231b01e4\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":{\"sameErrors\":false,\"sameReason0\":false,\"sameReason1\":false,\"sameNested\":false,\"sharedAlias0\":true,\"sharedAlias1\":true,\"firstNested\":\"original\",\"secondNested\":\"original\"},\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"f6f7fe48-565b-4f48-8d1b-4e0a212a75e2\",\"state\":{\"kind\":\"fetch-abort-live-shared\",\"challenge\":\"9d892db9-644a-49bd-9b38-7cf2231b01e4\",\"trace\":[\"message\",\"fetch\",\"abort\",\"failure/0\",\"failure/1\",\"close\"],\"result\":null,\"reason\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"9d892db9-644a-49bd-9b38-7cf2231b01e4\",\"constructor\":\"Object\",\"sameReason\":true,\"primitive\":null},\"failure\":{\"type\":\"object\",\"name\":\"Custom\",\"message\":\"9d892db9-644a-49bd-9b38-7cf2231b01e4\",\"constructor\":\"Object\",\"sameReason\":false,\"primitive\":null},\"clones\":{\"sameErrors\":false,\"sameReason0\":false,\"sameReason1\":false,\"sameNested\":false,\"sharedAlias0\":true,\"sharedAlias1\":true,\"firstNested\":\"original\",\"secondNested\":\"original\"},\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=9d892db9-644a-49bd-9b38-7cf2231b01e4&role=a&index=0 HTTP/1.1\r\nHost: localhost:63740",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ZDg5MmRiOS02NDRhLTQ5YmQtOWIzOC03Y2YyMjMxYjAxZTQmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc0MA0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63740
+        },
+        {
+          "request": "GET /hold?challenge=9d892db9-644a-49bd-9b38-7cf2231b01e4&role=a&index=1 HTTP/1.1\r\nHost: localhost:63741",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT05ZDg5MmRiOS02NDRhLTQ5YmQtOWIzOC03Y2YyMjMxYjAxZTQmcm9sZT1hJmluZGV4PTEgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc0MQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": false,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63741
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-disabled-cookie-cache",
+      "challenge": "02c63028-005d-4a0d-b990-3c1f3d048918",
+      "filesystemGuard": {
+        "path": ".LCK",
+        "before": {
+          "type": "directory",
+          "dev": "4134395153",
+          "ino": "1407374883751291"
+        },
+        "after": {
+          "type": "directory",
+          "dev": "4134395153",
+          "ino": "1407374883751291"
+        }
+      },
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63763
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"f6d21136-384b-4be1-838d-28cca8042ad5\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WujABOqyI4M6U0deYE7j/d8wLj4=",
+        "requestKey": "M8M4NXvC7E6XM0uRbk4A9A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=02c63028-005d-4a0d-b990-3c1f3d048918&role=a&index=0 HTTP/1.1\r\nHost: localhost:63763",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0wMmM2MzAyOC0wMDVkLTRhMGQtYjk5MC0zYzFmM2QwNDg5MTgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc2Mw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63763
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WujABOqyI4M6U0deYE7j/d8wLj4=",
+        "requestKey": "M8M4NXvC7E6XM0uRbk4A9A==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"f6d21136-384b-4be1-838d-28cca8042ad5\",\"state\":{\"kind\":\"fetch-disabled-cookie-cache\",\"challenge\":\"02c63028-005d-4a0d-b990-3c1f3d048918\",\"trace\":[\"message\",\"fetch\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/02c63028-005d-4a0d-b990-3c1f3d048918/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"f6d21136-384b-4be1-838d-28cca8042ad5\",\"state\":{\"kind\":\"fetch-disabled-cookie-cache\",\"challenge\":\"02c63028-005d-4a0d-b990-3c1f3d048918\",\"trace\":[\"message\",\"fetch\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/02c63028-005d-4a0d-b990-3c1f3d048918/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=02c63028-005d-4a0d-b990-3c1f3d048918&role=a&index=0 HTTP/1.1\r\nHost: localhost:63763",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT0wMmM2MzAyOC0wMDVkLTRhMGQtYjk5MC0zYzFmM2QwNDg5MTgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc2Mw0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63763
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-sync-context",
+      "challenge": "6fe216ad-da85-461d-b46c-5f71e51f8840",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63785
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"8e27daa8-8cea-4c20-b013-7255590192b5\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: DWfvqRXZhjEk+iybcxc5RG4LYek=",
+        "requestKey": "ylhD4mcl1yg8h9z8LLgsYw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mjXHkumTJTgS8oDzVltH/lX5XTU=",
+        "requestKey": "Iojg+L8wAoDfz6+IilZZ3w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=6fe216ad-da85-461d-b46c-5f71e51f8840&role=a&index=0 HTTP/1.1\r\nHost: localhost:63785",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02ZmUyMTZhZC1kYTg1LTQ2MWQtYjQ2Yy01ZjcxZTUxZjg4NDAmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc4NQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63785
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: DWfvqRXZhjEk+iybcxc5RG4LYek=",
+        "requestKey": "ylhD4mcl1yg8h9z8LLgsYw==",
+        "rawTail": "gQdzdGFydGVkgQhiZWZvcmUvYYEHYWZ0ZXIvYYEKY2FsbGJhY2svYYEEZG9uZYgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YmVmb3JlL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXIvYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "Y2FsbGJhY2svYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "checkpoint": {
+        "status": 200,
+        "text": "{\"realm\":\"8e27daa8-8cea-4c20-b013-7255590192b5\",\"state\":{\"kind\":\"fetch-sync-context\",\"challenge\":\"6fe216ad-da85-461d-b46c-5f71e51f8840\",\"trace\":[\"message\",\"before/a/ok\",\"before/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"fetch\",\"after/a/ok\",\"after/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"headers\",\"callback/a/ok\",\"callback/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"complete\",\"close\"],\"result\":\"complete/6fe216ad-da85-461d-b46c-5f71e51f8840/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"checkpoint\"],\"result\":null}}}"
+      },
+      "checkpointUpstream": [
+        {
+          "request": "GET /hold?challenge=6fe216ad-da85-461d-b46c-5f71e51f8840&role=a&index=0 HTTP/1.1\r\nHost: localhost:63785",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02ZmUyMTZhZC1kYTg1LTQ2MWQtYjQ2Yy01ZjcxZTUxZjg4NDAmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc4NQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63785
+        }
+      ],
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mjXHkumTJTgS8oDzVltH/lX5XTU=",
+        "requestKey": "Iojg+L8wAoDfz6+IilZZ3w==",
+        "rawTail": "gQdzdGFydGVkgQ5hY2svY2hlY2twb2ludIEKYWNrL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2NoZWNrcG9pbnQ="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2ZpbmlzaA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"8e27daa8-8cea-4c20-b013-7255590192b5\",\"state\":{\"kind\":\"fetch-sync-context\",\"challenge\":\"6fe216ad-da85-461d-b46c-5f71e51f8840\",\"trace\":[\"message\",\"before/a/ok\",\"before/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"fetch\",\"after/a/ok\",\"after/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"headers\",\"callback/a/ok\",\"callback/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"complete\",\"close\"],\"result\":\"complete/6fe216ad-da85-461d-b46c-5f71e51f8840/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"checkpoint\",\"finish\",\"close\"],\"result\":null}}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"8e27daa8-8cea-4c20-b013-7255590192b5\",\"state\":{\"kind\":\"fetch-sync-context\",\"challenge\":\"6fe216ad-da85-461d-b46c-5f71e51f8840\",\"trace\":[\"message\",\"before/a/ok\",\"before/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"fetch\",\"after/a/ok\",\"after/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"headers\",\"callback/a/ok\",\"callback/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"complete\",\"close\"],\"result\":\"complete/6fe216ad-da85-461d-b46c-5f71e51f8840/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"checkpoint\",\"finish\",\"close\"],\"result\":null}}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=6fe216ad-da85-461d-b46c-5f71e51f8840&role=a&index=0 HTTP/1.1\r\nHost: localhost:63785",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT02ZmUyMTZhZC1kYTg1LTQ2MWQtYjQ2Yy01ZjcxZTUxZjg4NDAmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2Mzc4NQ0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63785
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-sync-context-numeric",
+      "challenge": "4672f9e6-30f9-42de-a5fb-0a122171a9ba",
+      "targets": [
+        {
+          "host": "127.0.0.1",
+          "port": 63806
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"76e1061f-2044-4b06-8f23-2d8d1b052904\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /bKcqDd1ZsUfQMnLbr85lZyh30U=",
+        "requestKey": "WoHKrelJMVnZ3+DnN5ZkRQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: RucMA2FFHcSDnddSS3b05JtCtyI=",
+        "requestKey": "vqlBnJiYvMpnNQSB9PkSiw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=4672f9e6-30f9-42de-a5fb-0a122171a9ba&role=a&index=0 HTTP/1.1\r\nHost: 127.0.0.1:63806",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT00NjcyZjllNi0zMGY5LTQyZGUtYTVmYi0wYTEyMjE3MWE5YmEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IDEyNy4wLjAuMTo2MzgwNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63806
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /bKcqDd1ZsUfQMnLbr85lZyh30U=",
+        "requestKey": "WoHKrelJMVnZ3+DnN5ZkRQ==",
+        "rawTail": "gQdzdGFydGVkgQhiZWZvcmUvYYEHYWZ0ZXIvYYEKY2FsbGJhY2svYYEEZG9uZYgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YmVmb3JlL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXIvYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "Y2FsbGJhY2svYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "checkpoint": {
+        "status": 200,
+        "text": "{\"realm\":\"76e1061f-2044-4b06-8f23-2d8d1b052904\",\"state\":{\"kind\":\"fetch-sync-context-numeric\",\"challenge\":\"4672f9e6-30f9-42de-a5fb-0a122171a9ba\",\"trace\":[\"message\",\"before/a/ok\",\"before/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"fetch\",\"after/a/ok\",\"after/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"headers\",\"callback/a/ok\",\"callback/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"complete\",\"close\"],\"result\":\"complete/4672f9e6-30f9-42de-a5fb-0a122171a9ba/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"checkpoint\"],\"result\":null}}}"
+      },
+      "checkpointUpstream": [
+        {
+          "request": "GET /hold?challenge=4672f9e6-30f9-42de-a5fb-0a122171a9ba&role=a&index=0 HTTP/1.1\r\nHost: 127.0.0.1:63806",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT00NjcyZjllNi0zMGY5LTQyZGUtYTVmYi0wYTEyMjE3MWE5YmEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IDEyNy4wLjAuMTo2MzgwNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63806
+        }
+      ],
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: RucMA2FFHcSDnddSS3b05JtCtyI=",
+        "requestKey": "vqlBnJiYvMpnNQSB9PkSiw==",
+        "rawTail": "gQdzdGFydGVkgQ5hY2svY2hlY2twb2ludIEKYWNrL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2NoZWNrcG9pbnQ="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2ZpbmlzaA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"76e1061f-2044-4b06-8f23-2d8d1b052904\",\"state\":{\"kind\":\"fetch-sync-context-numeric\",\"challenge\":\"4672f9e6-30f9-42de-a5fb-0a122171a9ba\",\"trace\":[\"message\",\"before/a/ok\",\"before/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"fetch\",\"after/a/ok\",\"after/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"headers\",\"callback/a/ok\",\"callback/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"complete\",\"close\"],\"result\":\"complete/4672f9e6-30f9-42de-a5fb-0a122171a9ba/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"checkpoint\",\"finish\",\"close\"],\"result\":null}}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"76e1061f-2044-4b06-8f23-2d8d1b052904\",\"state\":{\"kind\":\"fetch-sync-context-numeric\",\"challenge\":\"4672f9e6-30f9-42de-a5fb-0a122171a9ba\",\"trace\":[\"message\",\"before/a/ok\",\"before/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"fetch\",\"after/a/ok\",\"after/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"headers\",\"callback/a/ok\",\"callback/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"complete\",\"close\"],\"result\":\"complete/4672f9e6-30f9-42de-a5fb-0a122171a9ba/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":{\"trace\":[\"message\",\"checkpoint\",\"finish\",\"close\"],\"result\":null}}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=4672f9e6-30f9-42de-a5fb-0a122171a9ba&role=a&index=0 HTTP/1.1\r\nHost: 127.0.0.1:63806",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT00NjcyZjllNi0zMGY5LTQyZGUtYTVmYi0wYTEyMjE3MWE5YmEmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IDEyNy4wLjAuMTo2MzgwNg0KDQo=",
+          "bytes": 107,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63806
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "fetch-custom-headers",
+      "challenge": "75a3b1ed-0263-4840-a3f8-4c9bad30b678",
+      "targets": [
+        {
+          "host": "localhost",
+          "port": 63814
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"0d8a201a-4f8c-4455-a886-168d61bd7f2c\",\"state\":null}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8UgKIB5BHNIJrcfajtxE1dzwFrA=",
+        "requestKey": "ieRgxf2KyXCIidzFvlTPcg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAction": [
+        {
+          "request": "GET /hold?challenge=75a3b1ed-0263-4840-a3f8-4c9bad30b678&role=a&index=0 HTTP/1.1\r\nHost: localhost:63814\r\nAccept-Encoding: identity\r\nCache-Control: max-age=17\r\nUser-Agent: caller/75a3b1ed-0263-4840-a3f8-4c9bad30b678\r\nPragma: caller\r\nOrigin: https://caller.example\r\nX-Capsid-Header: 75a3b1ed-0263-4840-a3f8-4c9bad30b678",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT03NWEzYjFlZC0wMjYzLTQ4NDAtYTNmOC00YzliYWQzMGI2Nzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzgxNA0KQWNjZXB0LUVuY29kaW5nOiBpZGVudGl0eQ0KQ2FjaGUtQ29udHJvbDogbWF4LWFnZT0xNw0KVXNlci1BZ2VudDogY2FsbGVyLzc1YTNiMWVkLTAyNjMtNDg0MC1hM2Y4LTRjOWJhZDMwYjY3OA0KUHJhZ21hOiBjYWxsZXINCk9yaWdpbjogaHR0cHM6Ly9jYWxsZXIuZXhhbXBsZQ0KWC1DYXBzaWQtSGVhZGVyOiA3NWEzYjFlZC0wMjYzLTQ4NDAtYTNmOC00YzliYWQzMGI2NzgNCg0K",
+          "bytes": 321,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63814
+        }
+      ],
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8UgKIB5BHNIJrcfajtxE1dzwFrA=",
+        "requestKey": "ieRgxf2KyXCIidzFvlTPcg==",
+        "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "c3RhcnRlZA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "ZG9uZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "observed": {
+        "status": 200,
+        "text": "{\"realm\":\"0d8a201a-4f8c-4455-a886-168d61bd7f2c\",\"state\":{\"kind\":\"fetch-custom-headers\",\"challenge\":\"75a3b1ed-0263-4840-a3f8-4c9bad30b678\",\"trace\":[\"message\",\"fetch\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/75a3b1ed-0263-4840-a3f8-4c9bad30b678/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"0d8a201a-4f8c-4455-a886-168d61bd7f2c\",\"state\":{\"kind\":\"fetch-custom-headers\",\"challenge\":\"75a3b1ed-0263-4840-a3f8-4c9bad30b678\",\"trace\":[\"message\",\"fetch\",\"headers\",\"complete\",\"close\"],\"result\":\"complete/75a3b1ed-0263-4840-a3f8-4c9bad30b678/a\",\"reason\":null,\"failure\":null,\"clones\":null,\"other\":null}}"
+      },
+      "upstream": [
+        {
+          "request": "GET /hold?challenge=75a3b1ed-0263-4840-a3f8-4c9bad30b678&role=a&index=0 HTTP/1.1\r\nHost: localhost:63814\r\nAccept-Encoding: identity\r\nCache-Control: max-age=17\r\nUser-Agent: caller/75a3b1ed-0263-4840-a3f8-4c9bad30b678\r\nPragma: caller\r\nOrigin: https://caller.example\r\nX-Capsid-Header: 75a3b1ed-0263-4840-a3f8-4c9bad30b678",
+          "rawRequest": "R0VUIC9ob2xkP2NoYWxsZW5nZT03NWEzYjFlZC0wMjYzLTQ4NDAtYTNmOC00YzliYWQzMGI2Nzgmcm9sZT1hJmluZGV4PTAgSFRUUC8xLjENCkhvc3Q6IGxvY2FsaG9zdDo2MzgxNA0KQWNjZXB0LUVuY29kaW5nOiBpZGVudGl0eQ0KQ2FjaGUtQ29udHJvbDogbWF4LWFnZT0xNw0KVXNlci1BZ2VudDogY2FsbGVyLzc1YTNiMWVkLTAyNjMtNDg0MC1hM2Y4LTRjOWJhZDMwYjY3OA0KUHJhZ21hOiBjYWxsZXINCk9yaWdpbjogaHR0cHM6Ly9jYWxsZXIuZXhhbXBsZQ0KWC1DYXBzaWQtSGVhZGVyOiA3NWEzYjFlZC0wMjYzLTQ4NDAtYTNmOC00YzliYWQzMGI2NzgNCg0K",
+          "bytes": 321,
+          "peerEnded": true,
+          "peerReset": false,
+          "fixtureEnded": true,
+          "fixtureDestroyed": false,
+          "events": [
+            "request",
+            "sent-complete",
+            "peer-ended"
+          ],
+          "localAddress": "127.0.0.1",
+          "localPort": 63814
+        }
+      ],
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    }
+  ]
+}

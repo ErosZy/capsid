@@ -1,0 +1,112 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 299042,
+  "originalSourceSHA256": "f531e747cf1dfe435ca98bbe23faba36451a8933d066884e0bd530b703de4634",
+  "companionSourceSHA256": "726f2cd57f51fa08b4c03f4783d0aff5dbf853daaefb6ef908fbc9e20dcfca21",
+  "sourceChangesSHA256": "cd8ac4b18620a0df37af561e458e6797505ff85fe2dca3668f9ab21742fa8ab5",
+  "onlyFourAllocatorUpperBoundsObservedInsteadOfThrowing": true,
+  "allOtherOriginalAssertionsAndNativeWorkloadsRetained": true,
+  "originalFullTestFailuresNeverRewritten": true,
+  "diagnosticOnly": true,
+  "userRssAcceptanceUnmodified": true,
+  "previousDiagnosticFailuresRetained": true,
+  "previousDiagnosticRecordSHA256": {
+    "sdk78-asan-rss-terminal-diagnostics-r2": "a89bd5da47f5e3335577b6aaf2bf1fc18c0fc889406e1e9d98d3201cc0ed71f9",
+    "sdk78-asan-rss-terminal-diagnostics-r3": "b2304800b7180bf2bf030d9414f17c038565900621dac305eed2517a14057172"
+  },
+  "nativeLinuxPrivateTemporaryDirectory": true,
+  "previousFailureCause": "R2 used a DrvFS temporary applications directory rejected as unverified. R3 used an overlong Unix socket pathname. Use a short private native Linux temporary directory, as the original full suite did.",
+  "sourceAndProductBuildsUnmodified": true,
+  "originalSanitizerOptionsAndQuarantineRetained": true,
+  "steps": [
+    {
+      "name": "websocket_managed_replacement-recursion",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-terminal-diagnostics-r4/managed-rss-terminal-diagnostic.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "replacement-recursion",
+        "--report",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-terminal-diagnostics-r4/websocket_managed_replacement-recursion.diagnostic.json"
+      ],
+      "exitCode": 0,
+      "seconds": 2.9794521520016133,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "13f29f83bdcef58c545cbc01a83aaa359ffef8330bd2153f5788a0d86c37340e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnosticSHA256": "730fbd83a60a62fd008f5a11b697b56df67ed3499cff9717f6d1b083b91bb27d",
+      "originalMemoryThresholdResults": [
+        {
+          "passed": false,
+          "message": "16 replacements grow RSS by 198172 KiB; retired pools are reclaimed"
+        },
+        {
+          "passed": false,
+          "message": "16 replacements grow VmSize by 168184 KiB"
+        },
+        {
+          "passed": false,
+          "message": "full retire returns the footprint"
+        }
+      ],
+      "naturalHostShutdownWithOriginalSanitizers": true,
+      "allOtherOriginalAssertionsPassed": true
+    },
+    {
+      "name": "websocket_managed_reclamation-idle",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-terminal-diagnostics-r4/managed-rss-terminal-diagnostic.mjs",
+        "--host",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "--case",
+        "reclamation-idle",
+        "--report",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-terminal-diagnostics-r4/websocket_managed_reclamation-idle.diagnostic.json"
+      ],
+      "exitCode": 0,
+      "seconds": 5.988650561999748,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "17223f7b18e040c43ffe4f608d09edabaf7e756bed3ddcd52a1c1d355c706acd",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnosticSHA256": "f64feffeb635be5a5d133a05498d0f3915a46e0e68ce80d573a44998d0ff15dd",
+      "originalMemoryThresholdResults": [
+        {
+          "passed": false,
+          "message": "last retired large factory returns memory without another admin operation"
+        }
+      ],
+      "naturalHostShutdownWithOriginalSanitizers": true,
+      "allOtherOriginalAssertionsPassed": true
+    }
+  ],
+  "fullV030GoalComplete": false,
+  "originalFullRecordSHA256": "27e77dd3a8a93424a911c2c4a773da419f3bf3884df2625e4dc7396a867d6ad6",
+  "originalMemoryFailingTests": [
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle"
+  ],
+  "activeCommand": [
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-terminal-diagnostics-r4/managed-rss-terminal-diagnostic.mjs",
+    "--host",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-host",
+    "--worker",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+    "--case",
+    "reclamation-idle",
+    "--report",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-terminal-diagnostics-r4/websocket_managed_reclamation-idle.diagnostic.json"
+  ],
+  "activeCommandPid": 299459,
+  "diagnosedScenarios": 2,
+  "interpretation": "Original RSS/VmSize gates retain their raw full-suite status. Companion diagnostics only complete the original retire/reap/thread and natural-shutdown/sanitizer assertions that an earlier footprint exception would bypass.",
+  "productMemoryAcceptanceNotChanged": true
+}

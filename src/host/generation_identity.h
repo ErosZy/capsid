@@ -2,6 +2,8 @@
 #define CAPSID_HOST_GENERATION_IDENTITY_H
 
 #include <cstdint>
+
+#include "protocol.h"
 #include <span>
 #include <string>
 #include <string_view>
@@ -43,6 +45,11 @@ struct GenerationIdentityInput {
     std::string host_config_digest;
     std::string secret_revision;
     std::string runtime_compatibility_id;
+    // GLM T08: digest over the negotiated wire protocol and channel
+    // limits (the same framing as the record itself): the same bundle
+    // under different limits or wire versions is a DIFFERENT
+    // generation. Empty for the legacy v3 carriage default.
+    std::string protocol_limits_digest;
     // Binding v1 §6: the binding-set digest over every committed Binding
     // (manifest, source, canonical config, effective permissions, sandbox
     // profiles, secret key ids and revisions). Empty for zero-binding
@@ -77,6 +84,16 @@ std::string compute_binding_set_digest(
 // stable ASCII value "source" or "trusted-bytecode". The domain NUL is part
 // of the hash input. This framing is locale-independent and unambiguous.
 std::string compute_generation_digest(const GenerationIdentityInput& input);
+
+// Canonical "protocol+limits" digest for GenerationIdentityInput:
+// "sha256:" over the wire version and every channel limit (zero keeps
+// the deployment default; defaults are filled in before hashing so a
+// defaulted config and an explicitly-default config are the same
+// identity). Embedders feed the result into
+// GenerationIdentityInput::protocol_limits_digest.
+std::string compute_protocol_limits_digest(
+    std::uint16_t wire_version,
+    const capsid::protocol::ChannelLimits& limits);
 
 }  // namespace capsid::host
 

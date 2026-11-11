@@ -1,0 +1,75 @@
+--- /dev/null
++++ b/src/platform-digest.h
+@@ -0,0 +1,51 @@
++#ifndef TJS_PLATFORM_DIGEST_H
++#define TJS_PLATFORM_DIGEST_H
++
++#include <stdint.h>
++#include <stddef.h>
++#include <mbedtls/md.h>
++#if defined(_WIN32)
++#include <windows.h>
++#include <bcrypt.h>
++#endif
++
++/* Keep the synchronous operation and its input lifetime unchanged. A fresh
++ * provider/hash belongs to this call; no mutable hash or digest is cached.
++ * If the platform provider fails, recompute the whole input using the existing
++ * backend after releasing the platform handles. */
++static int tjs_digest_bytes(mbedtls_md_type_t type, const uint8_t *data,
++                            size_t size, uint8_t *output) {
++    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(type);
++    if (!info) return -1;
++#if defined(_WIN32)
++    LPCWSTR name = NULL;
++    switch (type) {
++        case MBEDTLS_MD_SHA1: name = BCRYPT_SHA1_ALGORITHM; break;
++        case MBEDTLS_MD_SHA256: name = BCRYPT_SHA256_ALGORITHM; break;
++        case MBEDTLS_MD_SHA384: name = BCRYPT_SHA384_ALGORITHM; break;
++        case MBEDTLS_MD_SHA512: name = BCRYPT_SHA512_ALGORITHM; break;
++        default: break;
++    }
++    if (name) {
++        BCRYPT_ALG_HANDLE algorithm = NULL;
++        BCRYPT_HASH_HANDLE hash = NULL;
++        NTSTATUS status = BCryptOpenAlgorithmProvider(&algorithm, name, NULL, 0);
++        if (status >= 0) status = BCryptCreateHash(algorithm, &hash, NULL, 0, NULL, 0, 0);
++        const uint8_t *cursor = data;
++        size_t remaining = size;
++        while (status >= 0 && remaining) {
++            ULONG count = (ULONG) (remaining > UINT32_MAX ? UINT32_MAX : remaining);
++            status = BCryptHashData(hash, (PUCHAR) cursor, count, 0);
++            cursor += count;
++            remaining -= count;
++        }
++        if (status >= 0) status = BCryptFinishHash(hash, output, (ULONG) mbedtls_md_get_size(info), 0);
++        if (hash) BCryptDestroyHash(hash);
++        if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
++        if (status >= 0) return 0;
++    }
++#endif
++    return mbedtls_md(info, data, size, output);
++}
++
++#endif
+--- a/src/webcrypto.c
++++ b/src/webcrypto.c
+@@ -41,6 +41,7 @@
+ #include <mbedtls/sha256.h>
+ #include <mbedtls/sha512.h>
+ #include <string.h>
++#include "platform-digest.h"
+ 
+ enum {
+     DIGEST_SHA1 = 0,
+@@ -374,9 +375,8 @@
+     uint8_t *data = JS_GetUint8Array(ctx, &size, argv[1]);
+     if (!data && JS_HasException(ctx)) return JS_EXCEPTION;
+     static const uint8_t empty = 0;
+-    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(digest_to_md_type[type]);
+     uint8_t output[64];
+-    if (!info || mbedtls_md(info, data ? data : &empty, size, output)) {
++    if (tjs_digest_bytes(digest_to_md_type[type], data ? data : &empty, size, output)) {
+         return JS_ThrowInternalError(ctx, "digest operation failed");
+     }
+     return JS_NewUint8ArrayCopy(ctx, output, digest_sizes[type]);

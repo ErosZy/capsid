@@ -1,0 +1,139 @@
+Subject: [PATCH] Keep pending stream observations separate from active job leases
+
+Capsid-local embedding control; ordinary pending promises keep existing policy.
+
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -54575,6 +54575,7 @@
+     bool is_handled; /* Note: only useful to debug */
+     JSValue promise_result;
+     void *origin; /* non-owning request lifetime, retained by origin hooks */
++    bool passive_reactions; /* stream observations do not retain parked request jobs */
+ } JSPromiseData;
+ 
+ typedef struct JSPromiseFunctionDataResolved {
+@@ -54594,7 +54595,17 @@
+     void *ctx_data; /* captured when .then()/await creates the reaction,
+                        transferred to the settle job, released by
+                        promise_reaction_data_free */
++    void *observer_origin; /* inert subscriber identity for pending stream observations */
+ } JSPromiseReactionData;
++
++int JS_MarkPromiseReactionsPassive(JSContext *ctx, JSValueConst promise)
++{
++    JSPromiseData *s = JS_GetOpaque2(ctx, promise, JS_CLASS_PROMISE);
++    if (!s)
++        return -1;
++    s->passive_reactions = true;
++    return 0;
++}
+ 
+ JSPromiseStateEnum JS_PromiseState(JSContext *ctx, JSValueConst promise)
+ {
+@@ -54633,6 +54644,8 @@
+     if (rd->ctx_data != NULL && rt->job_ctx_hooks.release) {
+         rt->job_ctx_hooks.release(rd->ctx_data, rt->job_ctx_opaque);
+     }
++    if (rd->observer_origin && rt->promise_ctx_hooks.release)
++        rt->promise_ctx_hooks.release(rd->observer_origin, rt->promise_ctx_opaque);
+     JS_FreeValueRT(rt, rd->resolving_funcs[0]);
+     JS_FreeValueRT(rt, rd->resolving_funcs[1]);
+     JS_FreeValueRT(rt, rd->handler);
+@@ -54771,16 +54784,32 @@
+         /* the reaction carries the context captured when .then() (or the
+            await) was created; the settle job runs under that identity,
+            not the resolving job's */
+-        bool inherited_scope = rt->promise_ctx_hooks.capture && !s->origin;
+-        bool cross_scope = s->origin && rd->ctx_data && rt->promise_ctx_hooks.same_context &&
+-            !rt->promise_ctx_hooks.same_context(ctx, s->origin, rd->ctx_data, rt->promise_ctx_opaque);
+-        if (cross_scope)
+-            js_enqueue_deferred_promise_job(ctx, promise_reaction_job, 5, args,
+-                                           rd->ctx_data, true);
+-        else
+-            js_enqueue_job_ex(ctx, promise_reaction_job, 5, args,
+-                              rd->ctx_data, !inherited_scope);
+-        rd->ctx_data = NULL; /* ownership moved to the job entry */
++        if (rd->observer_origin) {
++            /* A parked stream observer is an inert identity. Only delivery
++               to a still-live scope acquires an actual queued-job lease. */
++            if (!rt->promise_ctx_hooks.can_run ||
++                    rt->promise_ctx_hooks.can_run(ctx, rd->observer_origin, rt->promise_ctx_opaque)) {
++                void *previous = rt->promise_ctx_hooks.enter(ctx, rd->observer_origin, rt->promise_ctx_opaque);
++                bool cross_scope = s->origin && rt->promise_ctx_hooks.same_context &&
++                    !rt->promise_ctx_hooks.same_context(ctx, s->origin, NULL, rt->promise_ctx_opaque);
++                if (cross_scope)
++                    js_enqueue_deferred_promise_job(ctx, promise_reaction_job, 5, args, NULL, false);
++                else
++                    js_enqueue_job_ex(ctx, promise_reaction_job, 5, args, NULL, false);
++                rt->promise_ctx_hooks.leave(ctx, previous, rt->promise_ctx_opaque);
++            }
++        } else {
++            bool inherited_scope = rt->promise_ctx_hooks.capture && !s->origin;
++            bool cross_scope = s->origin && rd->ctx_data && rt->promise_ctx_hooks.same_context &&
++                !rt->promise_ctx_hooks.same_context(ctx, s->origin, rd->ctx_data, rt->promise_ctx_opaque);
++            if (cross_scope)
++                js_enqueue_deferred_promise_job(ctx, promise_reaction_job, 5, args,
++                                               rd->ctx_data, true);
++            else
++                js_enqueue_job_ex(ctx, promise_reaction_job, 5, args,
++                                  rd->ctx_data, !inherited_scope);
++            rd->ctx_data = NULL; /* ownership moved to the job entry */
++        }
+         list_del(&rd->link);
+         promise_reaction_data_free(ctx->rt, rd);
+     }
+@@ -55014,6 +55043,7 @@
+     }
+     s->promise_state = JS_PROMISE_PENDING;
+     s->is_handled = false;
++    s->passive_reactions = false;
+     init_list_head(&s->promise_reactions[0]);
+     init_list_head(&s->promise_reactions[1]);
+     s->promise_result = JS_UNDEFINED;
+@@ -55562,10 +55592,17 @@
+         /* async-context: capture the .then() caller's identity now; the
+            reaction may settle from a different job's context and the
+            settle job must still run under the caller's identity */
+-        if (ctx->rt->job_ctx_hooks.capture &&
+-            !(ctx->rt->promise_ctx_hooks.capture && !s->origin && s->promise_state == JS_PROMISE_PENDING) &&
+-            ctx->rt->job_ctx_hooks.capture(ctx, ctx->rt->job_ctx_opaque,
+-                                           &rd->ctx_data) < 0) {
++        rd->observer_origin = NULL;
++        int capture_result = 0;
++        if (s->passive_reactions && s->origin && s->promise_state == JS_PROMISE_PENDING &&
++                ctx->rt->promise_ctx_hooks.capture) {
++            capture_result = ctx->rt->promise_ctx_hooks.capture(ctx, ctx->rt->promise_ctx_opaque,
++                                                                &rd->observer_origin);
++        } else if (ctx->rt->job_ctx_hooks.capture &&
++                !(ctx->rt->promise_ctx_hooks.capture && !s->origin && s->promise_state == JS_PROMISE_PENDING)) {
++            capture_result = ctx->rt->job_ctx_hooks.capture(ctx, ctx->rt->job_ctx_opaque, &rd->ctx_data);
++        }
++        if (capture_result < 0) {
+             promise_reaction_data_free(ctx->rt, rd);
+             if (i == 1)
+                 promise_reaction_data_free(ctx->rt, rd_array[0]);
+@@ -55632,6 +55669,11 @@
+     JS_FreeValue(ctx, ctor);
+     if (JS_IsException(result_promise))
+         return result_promise;
++    if (s->passive_reactions) {
++        JSPromiseData *result = JS_GetOpaque(result_promise, JS_CLASS_PROMISE);
++        if (result)
++            result->passive_reactions = true;
++    }
+     ret = perform_promise_then(ctx, this_val, argv, vc(resolving_funcs));
+     for(i = 0; i < 2; i++)
+         JS_FreeValue(ctx, resolving_funcs[i]);
+diff --git a/deps/quickjs/quickjs.h b/deps/quickjs/quickjs.h
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1110,6 +1110,8 @@
+ } JSPromiseStateEnum;
+ 
+ JS_EXTERN JSValue JS_NewPromiseCapability(JSContext *ctx, JSValue *resolving_funcs);
++/* Internal embedding control for passive stream observers; no JS global. */
++JS_EXTERN int JS_MarkPromiseReactionsPassive(JSContext *ctx, JSValueConst promise);
+ JS_EXTERN JSPromiseStateEnum JS_PromiseState(JSContext *ctx,
+                                              JSValueConst promise);
+ JS_EXTERN JSValue JS_PromiseResult(JSContext *ctx, JSValueConst promise);

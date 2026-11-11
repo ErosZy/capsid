@@ -1,0 +1,101 @@
+diff --git a/src/js/polyfills/fetch/fetch.js b/src/js/polyfills/fetch/fetch.js
+--- a/src/js/polyfills/fetch/fetch.js
++++ b/src/js/polyfills/fetch/fetch.js
+@@ -6,6 +6,11 @@
+ import { Headers } from './headers.js';
+ import { Request } from './request.js';
+ import { Response } from './response.js';
++
++let responseBodyFactory;
++export function configureResponseBodyFactory(factory) {
++    responseBodyFactory = factory;
++}
+ 
+ async function fetchFileURI(url) {
+     // Strip file:// prefix and decode. Handles both POSIX (file:///tmp/foo)
+@@ -105,7 +110,7 @@
+ 
+         let responseResolved = false;
+         let streamController = null;
+-        let responseStatus, responseStatusText, responseUrl;
++        let responseStatus, responseStatusText, responseUrl, responseRedirected = false;
+         const responseHeaders = new Headers();
+ 
+         function abortClient() {
+@@ -141,7 +146,8 @@
+         }
+ 
+         // Create ReadableStream for response body
+-        const responseBody = new ReadableStream({
++        const adapter = responseBodyFactory?.(client);
++        const responseBody = adapter ? adapter.body : new ReadableStream({
+             start(controller) {
+                 streamController = controller;
+             },
+@@ -149,14 +155,16 @@
+                 client.abort();
+             }
+         });
++        if (adapter) streamController = adapter.controller;
+ 
+         client.onstatus = function(status, statusText) {
+             responseStatus = status;
+             responseStatusText = statusText;
+         };
+ 
+-        client.onurl = function(url) {
++        client.onurl = function(url, redirected) {
+             responseUrl = url;
++            responseRedirected = redirected;
+         };
+ 
+         client.onheader = function(name, value) {
+@@ -174,12 +182,16 @@
+             responseResolved = true;
+ 
+             setTimeout(function() {
+-                resolve(new Response(responseBody, {
++                const nullBody = request.method === 'HEAD' ||
++                    responseStatus === 204 || responseStatus === 205 || responseStatus === 304;
++                const response = new Response(nullBody ? null : responseBody, {
+                     status: responseStatus,
+                     statusText: responseStatusText || '',
+                     headers: responseHeaders,
+                     url: responseUrl
+-                }));
++                });
++                response.redirected = responseRedirected;
++                resolve(response);
+             }, 0);
+         };
+ 
+diff --git a/src/js/polyfills/http-client.js b/src/js/polyfills/http-client.js
+--- a/src/js/polyfills/http-client.js
++++ b/src/js/polyfills/http-client.js
+@@ -316,7 +316,7 @@
+         };
+ 
+         client.onurl = url => {
+-            this._onurl?.(url);
++            this._onurl?.(url, this.#redirectCount > 0);
+         };
+ 
+         client.onheader = (name, value) => {
+diff --git a/src/js/polyfills/fetch/headers.js b/src/js/polyfills/fetch/headers.js
+--- a/src/js/polyfills/fetch/headers.js
++++ b/src/js/polyfills/fetch/headers.js
+@@ -1,9 +1,14 @@
++
++let cloneOwnedHeaders;
++export function configureOwnedHeadersCloner(cloner) {cloneOwnedHeaders = cloner;}
+ 
+ export class Headers {
+     #map;
+     #setCookies;
+ 
+     constructor(headers) {
++        const owned = cloneOwnedHeaders?.(headers);
++        if (owned !== undefined) return owned;
+         this.#map = {};
+         this.#setCookies = [];
+ 

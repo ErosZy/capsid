@@ -12,6 +12,7 @@
 //   - digests are deterministic.
 
 #include "host/policy_compiler.h"
+#include "host/config.h"
 
 #include <cstdlib>
 #include <cstdint>
@@ -209,6 +210,35 @@ int main() {
         port.fetch = { { "api.example", { 8443 } } };
         require(!compile_policy(default_host(), port, {}).ok,
                 "fetch port outside targets accepted");
+    }
+
+    // Separate fetch entries on one host form one canonical port union.
+    {
+        auto host = default_host();
+        host.fetch_targets = {{"api.example", {443}}, {"api.example", {8443}}, {"api.example", {443}}};
+        auto app = legal_app(); app.env.clear();
+        app.fetch = {{"api.example", {8443}}, {"api.example", {443, 443}}, {"api.example", {8443}}};
+        const auto first = compile_policy(host, app, {});
+        require(first.ok, "separate ports on one fetch host must compile");
+        require(first.effective.fetch.size() == 1 && first.effective.fetch[0].ports == std::vector<std::uint16_t>({443, 8443}) &&
+                    first.effective.fetch_rule_ids.size() == 1,
+                "one stable fetch rule must contain the exact merged ports");
+        host.fetch_targets = {{"api.example", {8443, 443}}};
+        app.fetch = {{"api.example", {443, 8443}}};
+        const auto second = compile_policy(host, app, {});
+        require(second.ok && first.effective.effective_json == second.effective.effective_json &&
+                    first.effective.effective_digest == second.effective.effective_digest &&
+                    first.effective.app_config_digest == second.effective.app_config_digest &&
+                    first.effective.rule_ids == second.effective.rule_ids,
+                "equivalent fetch port unions must retain canonical configuration, digests and ids");
+        app.fetch.push_back({"api.example", {9443}});
+        require(!compile_policy(host, app, {}).ok, "merging fetch entries must not allow an unlisted port");
+        app.fetch = {{"api.example", {}}, {"api.example", {443}}};
+        require(!compile_policy(host, app, {}).ok, "a finite Host port set cannot cover an any-port App entry");
+        host.fetch_targets.push_back({"api.example", {}});
+        const auto any = compile_policy(host, app, {});
+        require(any.ok && any.effective.fetch.size() == 1 && any.effective.fetch[0].ports.empty(),
+                "an explicit any-port entry must survive normalization without being narrowed");
     }
 
     // 6. storage/stdio overreach rejects.
@@ -587,6 +617,72 @@ int main() {
         require(first.effective.effective_json.find(canary) == std::string::npos &&
                     first.effective.effective_json.find("sk-live") == std::string::npos,
                 "secret value leaked into effective.json");
+    }
+
+    // Request deadlines must survive policy compilation, honor tier
+    // precedence/ceilings, and participate in both configuration identities.
+    {
+        capsid::host::HostPolicy host;
+        host.strict_sandbox = false;
+        capsid::host::AppRequest app;
+        const auto legacy = compile_policy(host, app, {});
+        require(legacy.ok && legacy.effective.request_timeout_ms == 0,
+                "omitted timeout did not preserve Runtime default selection");
+        app.request_timeout_ms = 120;
+        const auto first = compile_policy(host, app, {});
+        require(first.ok && first.effective.request_timeout_ms == 120,
+                "explicit timeout lost in effective policy");
+        require(first.effective.effective_json.find("\"requestTimeoutMs\":120") != std::string::npos,
+                "effective policy omits the selected timeout");
+        app.request_timeout_ms = 121;
+        const auto second = compile_policy(host, app, {});
+        require(second.ok && first.effective.app_config_digest != second.effective.app_config_digest &&
+                    first.effective.effective_digest != second.effective.effective_digest,
+                "different request deadlines share a configuration identity");
+        host.default_request_timeout_ms = 100;
+        host.max_request_timeout_ms = 120;
+        require(!compile_policy(host, app, {}).ok, "App deadline exceeded Host ceiling");
+        app.request_timeout_ms = 120;
+        require(compile_policy(host, app, {}).effective.request_timeout_ms == 120,
+                "App deadline did not override the Host default");
+        app.request_timeout_ms = 0;
+        require(compile_policy(host, app, {}).effective.request_timeout_ms == 100,
+                "Host default deadline ignored");
+        host.default_request_timeout_ms = 0;
+        require(compile_policy(host, app, {}).effective.request_timeout_ms == 120,
+                "Runtime fallback escaped a smaller Host ceiling");
+        host.default_request_timeout_ms = 200;
+        require(!compile_policy(host, app, {}).ok, "inconsistent Host timeout tiers accepted");
+        host = {};
+        app.request_timeout_ms = std::numeric_limits<std::uint64_t>::max();
+        require(!compile_policy(host, app, {}).ok, "unsupported worker timeout width accepted");
+    }
+
+    // Equivalent IPv6 spellings have one authority identity; a neighboring
+    // literal or a wider port request must still fail the Host intersection.
+    {
+        capsid::host::FetchTarget host_target, app_target;
+        require(capsid::host::parse_fetch_target_text("[::1]:443", &host_target) &&
+                    capsid::host::parse_fetch_target_text("[0:0:0:0:0:0:0:1]:443", &app_target),
+                "equivalent numeric IPv6 authorities did not parse");
+        capsid::host::HostPolicy host;
+        host.strict_sandbox = false;
+        host.fetch_targets = {host_target};
+        capsid::host::AppRequest app;
+        app.fetch = {app_target};
+        const auto first = compile_policy(host, app, {});
+        require(first.ok && first.effective.fetch.size() == 1 && first.effective.fetch[0].host == "::1" &&
+                    first.effective.fetch[0].ports == std::vector<std::uint16_t>({443}),
+                "IPv6 authority did not survive the effective intersection");
+        app.fetch = {host_target};
+        require(compile_policy(host, app, {}).effective.effective_digest == first.effective.effective_digest,
+                "equivalent IPv6 spellings changed the effective identity");
+        app.fetch[0].ports.push_back(8443);
+        require(!compile_policy(host, app, {}).ok, "IPv6 App widened the Host port set");
+        app.fetch[0].ports.clear();
+        require(!compile_policy(host, app, {}).ok, "IPv6 App widened a finite Host grant to every port");
+        app.fetch[0] = {"::2", {443}};
+        require(!compile_policy(host, app, {}).ok, "neighboring IPv6 literal inherited another address grant");
     }
 
     std::cout << "PASS" << std::endl;

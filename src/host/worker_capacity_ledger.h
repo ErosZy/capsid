@@ -40,6 +40,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -90,6 +91,7 @@ public:
     // completed, not when the drain started).
     void release_drained(const std::string& application,
                          std::uint64_t drained);
+    void release_active(const std::string& application, std::uint64_t reaped);
 
     // True when the App has a serving pool (steady > 0).
     bool holds(const std::string& application) const;
@@ -110,6 +112,30 @@ private:
     const std::uint64_t workers_total_;
     const std::uint64_t surge_workers_;
     mutable std::mutex mutex_;
+};
+
+// One pool incarnation, including its retired executors. Reap may race a
+// commit, a retire, or an aborted prepare; the stage chooses which held
+// category is actually released, exactly once. Warm reserves stay owned by
+// the coordinator until activation or abort settles them.
+class WorkerPoolCapacityLease {
+public:
+    WorkerPoolCapacityLease(WorkerCapacityLedger* ledger, std::string application,
+                            std::uint64_t workers);
+    void activate_fresh();
+    void activate_replacement(const std::shared_ptr<WorkerPoolCapacityLease>& old);
+    void abort(bool replacement);
+    void begin_drain();
+    void reaped();
+private:
+    enum class Stage { kPrepared, kActive, kDraining, kReleased };
+    void release_reaped_locked();
+    WorkerCapacityLedger* ledger_;
+    const std::string application_;
+    const std::uint64_t workers_;
+    std::mutex mutex_;
+    Stage stage_ = Stage::kPrepared;
+    bool reaped_ = false;
 };
 
 }  // namespace capsid::host

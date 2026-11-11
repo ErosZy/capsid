@@ -194,8 +194,18 @@ it gives yourself an explicit boundary:
 }
 ```
 
-- `timeout` is the request-level timeout (`ms`/`s`/`m`); after a synchronous CPU
-  infinite loop is interrupted, the worker is treated as non-reusable;
+- `timeout` is a positive request-level duration (`ms`/`s`/`m`). Managed
+  deployments use the App value, then `defaults.request.timeout`, then the
+  Runtime's 30s default. `maximums.request.timeout` bounds the selected value;
+  an explicit App value above that ceiling is rejected. With only a Host
+  ceiling configured, the default is the smaller of 30s and that ceiling.
+  Changing the selected duration changes the generation's effective identity.
+  After a synchronous HTTP CPU infinite loop is interrupted, the worker is
+  treated as non-reusable;
+- after a WebSocket Upgrade, each active connection callback or Promise turn
+  receives a fresh execution budget from this duration. An exhausted budget
+  ends that connection and preserves the realm for subsequent requests. Idle
+  connection time follows the separate channel idle-timeout configuration;
 - `maxInflightPerWorker` is the per-worker concurrent request window;
 - `maxStreamingInflightPerWorker` is the SSE/streaming slot count (default 2),
   and `streamIdleTimeoutMs` is the stream idle timeout — slow clients are covered

@@ -1,0 +1,11 @@
+{
+  "schema": "capsid-fetch-reader-reference-capture-v1",
+  "platform": "linux",
+  "sourceReport": "upgrade58za-native-readers-linux-reference.json",
+  "sourceReportSHA256": "758fb55acd347250a0864c113f29f3f0f0244af1091cb7d5094f650352c319ad",
+  "rawBytes": 331239,
+  "gzipSHA256": "d28064a2ba6c62aa6f6d37e1cf53b726f58b3db529ab6e5ec1f697972ad9fa5c",
+  "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "referenceBinarySHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "cases": 14
+}

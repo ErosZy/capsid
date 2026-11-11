@@ -1,0 +1,45 @@
+{
+  "schema": "capsid-qualification-snapshot-index-v5",
+  "capturedUTC": "2026-11-10T17:02:20.295835+00:00",
+  "parentCodeSnapshot": "7d364fdfc92063a3db90645e7589ca0634d0bbec",
+  "records": {
+    "namespace-native.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-tsan-namespace-test-native-r1\\run.json",
+      "sha256": "fb7cb019aca821b82e61546284171c2029c2ac33a3a940ac2f61754009abcbf3",
+      "immutablePointInTimeCopy": true
+    },
+    "instrumented-resources-native.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-instrumented-memory-profiles-native-r3\\run.json",
+      "sha256": "6f0d743b6365ad7bb93bb9d66f14d5e486f3c0f6c95c08076b0091224cebc1da",
+      "immutablePointInTimeCopy": true
+    },
+    "memory-report-claims.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-memory-report-claims-r1\\run.json",
+      "sha256": "7f339c59eb3501ec4cc505f4efc54eca4bfd6d04b3040bbcd807538544a87f31",
+      "immutablePointInTimeCopy": true
+    },
+    "sanitizer-ci-controls.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final-configuration-r1\\run.json",
+      "sha256": "80fc5d6779cd1878b910e18fcfa08794fa453abddaeac57235cf3f499e52ddf8",
+      "immutablePointInTimeCopy": true
+    },
+    "benchmark-launchers.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-benchmark-launcher-qualification-r1\\run.json",
+      "sha256": "995498fdeee8dc4b1fffcb662e4c7c8f0b1fb6020bfb89cb323b5043ede1f69e",
+      "immutablePointInTimeCopy": true
+    },
+    "benchmark-python-tools.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-wsl-python-benchmark-tools-r3\\run.json",
+      "sha256": "4c2fd4dd76dccbd24500734b6d055703beae022408cb80ba645e880bf4adc962",
+      "immutablePointInTimeCopy": true
+    },
+    "preparatory-release-build.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-production-linux-preparation-build-r1\\build.json",
+      "sha256": "01fda2b7184887162a7d8d02216f97721684ce76191955e54d7e262a1ee03514",
+      "immutablePointInTimeCopy": true
+    }
+  },
+  "formalPerformancePoints": 0,
+  "finalCombinedAcceptancePending": true,
+  "releaseQualified": false
+}

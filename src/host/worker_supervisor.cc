@@ -74,8 +74,9 @@ void WorkerSupervisor::join() {
 }
 
 bool WorkerSupervisor::stop_requested() const {
-    return options_.stop_requested != nullptr &&
-           options_.stop_requested->load(std::memory_order_relaxed);
+    return stopped_.load(std::memory_order_relaxed) ||
+           (options_.stop_requested != nullptr &&
+            options_.stop_requested->load(std::memory_order_relaxed));
 }
 
 std::uint64_t WorkerSupervisor::monotonic_ms() const {
@@ -107,46 +108,55 @@ bool WorkerSupervisor::sleep_interruptible(std::uint64_t milliseconds) {
 void WorkerSupervisor::run() {
     for (;;) {
         if (stop_requested()) {
+            clear_probe_target();
             return;
         }
-        GenerationPool* pool = options_.current_pool();
+        auto pool = options_.current_pool();
         if (pool == nullptr) {
             // No pool (never deployed, quarantined, retired): nothing to
             // probe.
-            probe_target_ = nullptr;
-            probe_in_flight_ = false;
-            consecutive_probe_failures_ = 0;
+            clear_probe_target();
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
-        WorkerExecutor* executor = pool->current_worker();
+        auto executor = pool->current_worker_snapshot();
         if (executor == nullptr) {
             // No READY worker (a replacement in flight, or draining):
             // re-sync when one appears. A probe target the pool already
             // removed counts nothing — the pool recorded its instability
             // and owns the outcome.
-            probe_target_ = nullptr;
-            probe_in_flight_ = false;
+            clear_probe_target();
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
-        if (executor != probe_target_) {
+        if (pool != probe_pool_ || executor != probe_target_) {
             // A new worker (deploy, replacement, or recycle): re-arm the
             // probe schedule — a fresh worker starts a fresh failure
             // streak.
             rearm_probe(pool, executor);
         }
+        // Reading a committed health snapshot can wait for an App
+        // operation. Keep both owners alive through that wait, then
+        // discard its result if shutdown, deploy or drain won meanwhile.
+        if (!target_is_current(pool, executor)) {
+            clear_probe_target();
+            continue;
+        }
         // §7.4 probe state machine: submit → verdict → schedule. The
         // executor's ProbeState mirrors the worker-thread fold of the
         // probe's response events.
         const ProbeState state = executor->probe_state();
+        if (!target_is_current(pool, executor)) {
+            clear_probe_target();
+            continue;
+        }
         if (probe_in_flight_) {
             if (state.complete) {
                 probe_in_flight_ = false;
                 if (state.healthy) {
                     probe_success();
                 } else {
-                    probe_failure(executor);
+                    probe_failure(pool, executor);
                 }
             } else if (!state.in_flight) {
                 // The probe never began on the worker thread within the
@@ -162,7 +172,7 @@ void WorkerSupervisor::run() {
                 // frees its response slot; a failed verdict.
                 executor->cancel_probe();
                 probe_in_flight_ = false;
-                probe_failure(executor);
+                probe_failure(pool, executor);
             }
         } else if (next_probe_due_ms_ != kProbeDisabled &&
                    monotonic_ms() >= next_probe_due_ms_) {
@@ -184,17 +194,32 @@ void WorkerSupervisor::run() {
         // The verdict may have recycled the worker just observed (the
         // pool retired it and is spawning a replacement): never touch a
         // worker the pool no longer hands out.
-        if (pool->current_worker() != executor) {
-            probe_target_ = nullptr;
-            probe_in_flight_ = false;
+        if (!target_is_current(pool, executor)) {
+            clear_probe_target();
             continue;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
 
-void WorkerSupervisor::rearm_probe(GenerationPool* pool,
-                                   WorkerExecutor* executor) {
+void WorkerSupervisor::clear_probe_target() {
+    probe_target_.reset();
+    probe_pool_.reset();
+    probe_in_flight_ = false;
+    consecutive_probe_failures_ = 0;
+}
+
+bool WorkerSupervisor::target_is_current(
+    const std::shared_ptr<GenerationPool>& pool,
+    const std::shared_ptr<WorkerExecutor>& executor) const {
+    return !stop_requested() && options_.current_pool() == pool &&
+           pool->current_worker_snapshot() == executor && !stop_requested();
+}
+
+void WorkerSupervisor::rearm_probe(
+    const std::shared_ptr<GenerationPool>& pool,
+    const std::shared_ptr<WorkerExecutor>& executor) {
+    probe_pool_ = pool;
     probe_target_ = executor;
     probe_in_flight_ = false;
     consecutive_probe_failures_ = 0;
@@ -203,11 +228,14 @@ void WorkerSupervisor::rearm_probe(GenerationPool* pool,
     // The config is re-read from the committed generation on every arm,
     // so a redeployed healthCheck takes effect with the new generation;
     // an App without a readable lifecycle snapshot is never probed.
+    if (options_.health_check_reader) {
+        health_check_ = options_.health_check_reader(anchored_generation_);
+    }
 #if !defined(_WIN32)
     // managed_read_health_check lives in the managed coordinator, which
     // is not built on Windows (see docs/windows.md); managed_options is
     // never wired there, so the default (unconfigured) probe applies.
-    if (options_.managed_options != nullptr) {
+    else if (options_.managed_options != nullptr) {
         health_check_ = managed_read_health_check(
             options_.managed_options, anchored_generation_);
     }
@@ -226,7 +254,13 @@ void WorkerSupervisor::probe_success() {
     schedule_next_probe();
 }
 
-void WorkerSupervisor::probe_failure(WorkerExecutor* executor) {
+void WorkerSupervisor::probe_failure(
+    const std::shared_ptr<GenerationPool>& pool,
+    const std::shared_ptr<WorkerExecutor>& executor) {
+    if (!target_is_current(pool, executor)) {
+        clear_probe_target();
+        return;
+    }
     ++consecutive_probe_failures_;
     LogFields fields;
     fields.level = "warn";
@@ -246,11 +280,8 @@ void WorkerSupervisor::probe_failure(WorkerExecutor* executor) {
         // counting against the shared budget (§10.5.2). The pool retires
         // the target (it leaves the READY set immediately) and schedules
         // the replacement; the next loop re-syncs to the fresh worker.
-        GenerationPool* pool = options_.current_pool();
-        if (pool != nullptr && pool->recycle_worker(executor)) {
-            probe_target_ = nullptr;
-            probe_in_flight_ = false;
-            consecutive_probe_failures_ = 0;
+        if (target_is_current(pool, executor) && pool->recycle_worker(executor.get())) {
+            clear_probe_target();
             return;
         }
         // The recycle was stale (the pool already moved on): fall through

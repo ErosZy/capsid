@@ -24,6 +24,8 @@ export default {
     async fetch(request) {
         const url = new URL(request.url);
         switch (url.pathname) {
+            case '/timeout-pressure-body':
+                return new Response(fill(131073, 0x52));
             case '/chunk-20000':
                 return new Response(fill(20000, 0x53));
             case '/chunk-8193':

@@ -1,0 +1,981 @@
+{
+  "schema": "capsid-fanout-sample-v1",
+  "provenance": {
+    "report": "fanout-reference-overlap-attempt1-report.json",
+    "sha256": "2b58b46070ab536978bac8694846b1c3b768a5add24a888d900deaeed82c409e",
+    "scope": "actual locked reference with two Worker services, 24 ownership and six overlapping-handler probes; candidate unit copies are synthetic"
+  },
+  "report": {
+    "schema": "capsid-workerd-fanout-v1",
+    "complete": true,
+    "runId": "ec372a57-aac1-43ae-a2a2-839079cb7327",
+    "mode": "reference",
+    "referenceLock": {
+      "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "release_tag": "v1.20261010.1",
+      "binary": "workerd-linux-64",
+      "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "binary_version_string": "workerd 2026-10-10",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": [],
+      "client": {
+        "runtime": "node",
+        "websocket": "native (undici) - no external dependency",
+        "node_version": "v24.14.0",
+        "undici_version": "7.21.0"
+      },
+      "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+      "release_asset": "workerd-linux-64.gz",
+      "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+      "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+    },
+    "clientLock": {
+      "schema": "capsid-ws-interop-client-lock-v1",
+      "python": {
+        "implementation": "CPython",
+        "version": "3.12.3"
+      },
+      "websockets": {
+        "version": "15.0.1",
+        "wheel": {
+          "filename": "websockets-15.0.1-py3-none-any.whl",
+          "sha256": "f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f",
+          "url": "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl",
+          "size": 169743
+        },
+        "sourceFiles": 47,
+        "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+      },
+      "node": "workerd-ws/reference-lock.json",
+      "notes": "Pinned pure Python and JavaScript protocol implementations; native optional Node addons are disabled. Runtime and loaded source identities are checked before sockets.",
+      "ws": {
+        "version": "8.22.0",
+        "tarball": {
+          "url": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
+          "integrity": "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==",
+          "size": 35094,
+          "sha256": "ca9b3798b2e11ce8fac6713f50ef0501aa12b09b330623c1dc409dff94e7abc8"
+        },
+        "sourceFiles": 17,
+        "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+      }
+    },
+    "inputs": {
+      "runner": "61a3d0195086e464b53646cdaf3a4be12843007f51e9d1f97720570135de7f84",
+      "fixture": "2ab7951668373c6087cf55655b8c014e6a342c443ffbda4ad43d216e3d35859a",
+      "contract": "7c46bfdbdc7f9ab1873ed19535c8a002be6b9e69d0ca679e035b1dcda523be94",
+      "hostBackend": "e5efdcef3842ad3ab9fd27c335bea986369eaa720139563b6e22931986ce2bc1",
+      "nodeSDK": "dafba2e5535b84e6dcf10b86e2a4bc01302984d7fcdef2c074be95bc2ff0a35a"
+    },
+    "binaries": {
+      "host": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "worker": null
+    },
+    "client": {
+      "node": "v24.14.0",
+      "undici": "7.21.0",
+      "ws": "8.22.0",
+      "sourceFiles": 17,
+      "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+    },
+    "topology": {
+      "workers": 2,
+      "hostProcesses": 1,
+      "referenceServices": 2
+    },
+    "endpoints": [
+      "ws://127.0.0.1:42581/@capsid/orders/fanout",
+      "ws://127.0.0.1:39727/@capsid/orders/fanout"
+    ],
+    "discovery": [
+      {
+        "endpoint": "ws://127.0.0.1:42581/@capsid/orders/fanout",
+        "identity": {
+          "op": "identity",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:identity:0",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "members": [
+            "995ebe5c-eaf1-4506-a838-99a8b69671b3"
+          ]
+        }
+      },
+      {
+        "endpoint": "ws://127.0.0.1:39727/@capsid/orders/fanout",
+        "identity": {
+          "op": "identity",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:identity:1",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "members": [
+            "8788f027-a38a-4299-a33f-33364495b47c"
+          ]
+        }
+      },
+      {
+        "endpoint": "ws://127.0.0.1:42581/@capsid/orders/fanout",
+        "identity": {
+          "op": "identity",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:identity:2",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "members": [
+            "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+            "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+          ]
+        }
+      },
+      {
+        "endpoint": "ws://127.0.0.1:39727/@capsid/orders/fanout",
+        "identity": {
+          "op": "identity",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:identity:3",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "members": [
+            "8788f027-a38a-4299-a33f-33364495b47c",
+            "67254e7e-ae95-498c-983d-c9870e7d0f08"
+          ]
+        }
+      }
+    ],
+    "selected": [
+      "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+      "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+      "8788f027-a38a-4299-a33f-33364495b47c",
+      "67254e7e-ae95-498c-983d-c9870e7d0f08"
+    ],
+    "extraCloses": [],
+    "baseline": [
+      [
+        {
+          "op": "stats",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:baseline:0:0",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "members": [
+            "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+            "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+          ]
+        }
+      ],
+      [
+        {
+          "op": "stats",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:baseline:1:0",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "members": [
+            "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+            "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+          ]
+        }
+      ],
+      [
+        {
+          "op": "stats",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:baseline:2:0",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "members": [
+            "8788f027-a38a-4299-a33f-33364495b47c",
+            "67254e7e-ae95-498c-983d-c9870e7d0f08"
+          ]
+        }
+      ],
+      [
+        {
+          "op": "stats",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:baseline:3:0",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "members": [
+            "8788f027-a38a-4299-a33f-33364495b47c",
+            "67254e7e-ae95-498c-983d-c9870e7d0f08"
+          ]
+        }
+      ]
+    ],
+    "probes": [
+      {
+        "name": "same/send/0/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/send/0/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "send",
+          "attempts": [
+            {
+              "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/send/0/1",
+        "sender": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "target": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/send/0/1:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "operation": "send",
+          "attempts": [
+            {
+              "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/send/1/0",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/send/1/0:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "send",
+          "attempts": [
+            {
+              "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/send/1/1",
+        "sender": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "target": "8788f027-a38a-4299-a33f-33364495b47c",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/send/1/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "operation": "send",
+          "attempts": [
+            {
+              "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/readyState/0/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/readyState/0/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "readyState",
+          "attempts": [
+            {
+              "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/readyState/0/1",
+        "sender": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "target": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/readyState/0/1:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "operation": "readyState",
+          "attempts": [
+            {
+              "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/readyState/1/0",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/readyState/1/0:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "readyState",
+          "attempts": [
+            {
+              "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/readyState/1/1",
+        "sender": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "target": "8788f027-a38a-4299-a33f-33364495b47c",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/readyState/1/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "operation": "readyState",
+          "attempts": [
+            {
+              "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/close/0/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/close/0/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "close",
+          "attempts": [
+            {
+              "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/close/0/1",
+        "sender": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "target": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/close/0/1:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "operation": "close",
+          "attempts": [
+            {
+              "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/close/1/0",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/close/1/0:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "close",
+          "attempts": [
+            {
+              "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "same/close/1/1",
+        "sender": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "target": "8788f027-a38a-4299-a33f-33364495b47c",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:same/close/1/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "operation": "close",
+          "attempts": [
+            {
+              "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        }
+      },
+      {
+        "name": "cross/send/0/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "8788f027-a38a-4299-a33f-33364495b47c",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/send/0/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "send",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/send/0/1",
+        "sender": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/send/0/1:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "operation": "send",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/send/1/0",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/send/1/0:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "send",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/send/1/1",
+        "sender": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/send/1/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "operation": "send",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/readyState/0/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "8788f027-a38a-4299-a33f-33364495b47c",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/readyState/0/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "readyState",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/readyState/0/1",
+        "sender": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/readyState/0/1:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "operation": "readyState",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/readyState/1/0",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/readyState/1/0:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "readyState",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/readyState/1/1",
+        "sender": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/readyState/1/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "operation": "readyState",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/close/0/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "8788f027-a38a-4299-a33f-33364495b47c",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/close/0/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "close",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/close/0/1",
+        "sender": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/close/0/1:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "operation": "close",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/close/1/0",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/close/1/0:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "close",
+          "attempts": []
+        }
+      },
+      {
+        "name": "cross/close/1/1",
+        "sender": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "response": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:cross/close/1/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "operation": "close",
+          "attempts": []
+        }
+      }
+    ],
+    "overlap": [
+      {
+        "name": "overlap/send/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "heldBefore": [
+          {
+            "op": "held",
+            "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/0:held:0",
+            "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+            "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+            "held": [
+              "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+            ]
+          }
+        ],
+        "probe": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "send",
+          "attempts": [
+            {
+              "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        },
+        "release": {
+          "op": "release",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/0:release",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "released": true
+        },
+        "holdReply": {
+          "op": "hold",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/0:hold",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+        }
+      },
+      {
+        "name": "overlap/send/1",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "heldBefore": [
+          {
+            "op": "held",
+            "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/1:held:0",
+            "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+            "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+            "held": [
+              "67254e7e-ae95-498c-983d-c9870e7d0f08"
+            ]
+          }
+        ],
+        "probe": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "send",
+          "attempts": [
+            {
+              "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        },
+        "release": {
+          "op": "release",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/1:release",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "released": true
+        },
+        "holdReply": {
+          "op": "hold",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/send/1:hold",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08"
+        }
+      },
+      {
+        "name": "overlap/readyState/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "heldBefore": [
+          {
+            "op": "held",
+            "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/0:held:0",
+            "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+            "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+            "held": [
+              "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+            ]
+          }
+        ],
+        "probe": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "readyState",
+          "attempts": [
+            {
+              "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        },
+        "release": {
+          "op": "release",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/0:release",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "released": true
+        },
+        "holdReply": {
+          "op": "hold",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/0:hold",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+        }
+      },
+      {
+        "name": "overlap/readyState/1",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "heldBefore": [
+          {
+            "op": "held",
+            "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/1:held:0",
+            "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+            "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+            "held": [
+              "67254e7e-ae95-498c-983d-c9870e7d0f08"
+            ]
+          }
+        ],
+        "probe": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "readyState",
+          "attempts": [
+            {
+              "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        },
+        "release": {
+          "op": "release",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/1:release",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "released": true
+        },
+        "holdReply": {
+          "op": "hold",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/readyState/1:hold",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08"
+        }
+      },
+      {
+        "name": "overlap/close/0",
+        "sender": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "target": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "heldBefore": [
+          {
+            "op": "held",
+            "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/0:held:0",
+            "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+            "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+            "held": [
+              "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+            ]
+          }
+        ],
+        "probe": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/0:\u0000界😀",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "operation": "close",
+          "attempts": [
+            {
+              "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        },
+        "release": {
+          "op": "release",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/0:release",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+          "released": true
+        },
+        "holdReply": {
+          "op": "hold",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/0:hold",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+        }
+      },
+      {
+        "name": "overlap/close/1",
+        "sender": "8788f027-a38a-4299-a33f-33364495b47c",
+        "target": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "heldBefore": [
+          {
+            "op": "held",
+            "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/1:held:0",
+            "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+            "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+            "held": [
+              "67254e7e-ae95-498c-983d-c9870e7d0f08"
+            ]
+          }
+        ],
+        "probe": {
+          "op": "probe",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/1:\u0000界😀",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "operation": "close",
+          "attempts": [
+            {
+              "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+              "outcome": "blocked",
+              "errorName": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            }
+          ]
+        },
+        "release": {
+          "op": "release",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/1:release",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+          "released": true
+        },
+        "holdReply": {
+          "op": "hold",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:overlap/close/1:hold",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08"
+        }
+      }
+    ],
+    "echoes": [
+      {
+        "op": "echo",
+        "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:echo:0",
+        "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+        "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3"
+      },
+      {
+        "op": "echo",
+        "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:echo:1",
+        "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+        "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+      },
+      {
+        "op": "echo",
+        "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:echo:2",
+        "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+        "connection": "8788f027-a38a-4299-a33f-33364495b47c"
+      },
+      {
+        "op": "echo",
+        "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:echo:3",
+        "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+        "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08"
+      }
+    ],
+    "memberCloses": [
+      {
+        "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "code": 1000,
+        "reason": "fanout-member",
+        "clean": true
+      },
+      {
+        "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+        "code": 1000,
+        "reason": "fanout-member",
+        "clean": true
+      }
+    ],
+    "afterClose": [
+      [
+        {
+          "op": "stats",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:after-close:0:0",
+          "instance": "7c901d9a-4858-419d-a2ae-4d07857f763a",
+          "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+          "members": [
+            "c01021ec-cf2f-4255-bac6-ad27e6c56885"
+          ]
+        }
+      ],
+      [
+        {
+          "op": "stats",
+          "challenge": "ec372a57-aac1-43ae-a2a2-839079cb7327:after-close:1:0",
+          "instance": "0fb59f91-8377-4d4a-b3a2-881ba03e6255",
+          "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+          "members": [
+            "67254e7e-ae95-498c-983d-c9870e7d0f08"
+          ]
+        }
+      ]
+    ],
+    "finalCloses": [
+      {
+        "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "code": 1000,
+        "reason": "fanout-done",
+        "clean": true
+      },
+      {
+        "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "code": 1000,
+        "reason": "fanout-done",
+        "clean": true
+      }
+    ],
+    "unexpectedMessages": [
+      {
+        "connection": "995ebe5c-eaf1-4506-a838-99a8b69671b3",
+        "messages": []
+      },
+      {
+        "connection": "8788f027-a38a-4299-a33f-33364495b47c",
+        "messages": []
+      },
+      {
+        "connection": "c01021ec-cf2f-4255-bac6-ad27e6c56885",
+        "messages": []
+      },
+      {
+        "connection": "67254e7e-ae95-498c-983d-c9870e7d0f08",
+        "messages": []
+      }
+    ],
+    "healthy": [
+      {
+        "status": 200,
+        "text": "healthy"
+      },
+      {
+        "status": 200,
+        "text": "healthy"
+      }
+    ],
+    "shutdowns": [
+      {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      }
+    ],
+    "backendStderr": [
+      ""
+    ]
+  }
+}

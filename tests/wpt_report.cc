@@ -38,13 +38,10 @@ public:
             if (!skip_value(0, error)) {
                 return false;
             }
-            if (key == "total" || key == "ranNothing") {
-                if (fields->count(key) != 0) {
-                    return fail(error, "duplicate WPT report field: " + key);
-                }
-                (*fields)[key] =
-                    text_.substr(value_begin, offset_ - value_begin);
+            if (fields->count(key) != 0) {
+                return fail(error, "duplicate WPT report field: " + key);
             }
+            (*fields)[key] = text_.substr(value_begin, offset_ - value_begin);
             skip_space();
             if (consume('}')) {
                 skip_space();
@@ -129,7 +126,45 @@ private:
         if (offset_ == begin) {
             return fail(error, "empty JSON scalar");
         }
-        return true;
+        const std::string scalar = text_.substr(begin, offset_ - begin);
+        if (scalar == "true" || scalar == "false" || scalar == "null") {
+            return true;
+        }
+        size_t digit = scalar[0] == '-' ? 1 : 0;
+        if (digit == scalar.size()) {
+            return fail(error, "invalid JSON scalar");
+        }
+        if (scalar[digit] == '0') {
+            ++digit;
+        } else if (scalar[digit] >= '1' && scalar[digit] <= '9') {
+            do { ++digit; } while (digit < scalar.size() &&
+                scalar[digit] >= '0' && scalar[digit] <= '9');
+        } else {
+            return fail(error, "invalid JSON scalar");
+        }
+        if (digit < scalar.size() && scalar[digit] == '.') {
+            const size_t fraction = ++digit;
+            while (digit < scalar.size() && scalar[digit] >= '0' && scalar[digit] <= '9') {
+                ++digit;
+            }
+            if (digit == fraction) {
+                return fail(error, "invalid JSON fraction");
+            }
+        }
+        if (digit < scalar.size() && (scalar[digit] == 'e' || scalar[digit] == 'E')) {
+            ++digit;
+            if (digit < scalar.size() && (scalar[digit] == '+' || scalar[digit] == '-')) {
+                ++digit;
+            }
+            const size_t exponent = digit;
+            while (digit < scalar.size() && scalar[digit] >= '0' && scalar[digit] <= '9') {
+                ++digit;
+            }
+            if (digit == exponent) {
+                return fail(error, "invalid JSON exponent");
+            }
+        }
+        return digit == scalar.size() || fail(error, "invalid JSON scalar");
     }
 
     bool parse_string(std::string *output, std::string *error) {
@@ -175,7 +210,7 @@ private:
                 case 't':
                     output->push_back('\t');
                     break;
-                case 'u':
+                case 'u': {
                     if (offset_ + 4 > text_.size()) {
                         return fail(error, "truncated JSON unicode escape");
                     }
@@ -185,12 +220,23 @@ private:
                             return fail(error, "invalid JSON unicode escape");
                         }
                     }
-                    // The fields used by this verifier are ASCII. Preserve a
-                    // placeholder for other escaped keys without pretending to
-                    // implement Unicode normalization.
-                    output->push_back('?');
+                    const unsigned code = static_cast<unsigned>(std::strtoul(
+                        text_.substr(offset_, 4).c_str(), NULL, 16));
+                    // Decode escaped ASCII keys as well, so e.g. passed and
+                    // \u0070assed cannot evade duplicate-field detection.
+                    if (code < 0x80) {
+                        output->push_back(static_cast<char>(code));
+                    } else if (code < 0x800) {
+                        output->push_back(static_cast<char>(0xc0 | (code >> 6)));
+                        output->push_back(static_cast<char>(0x80 | (code & 0x3f)));
+                    } else {
+                        output->push_back(static_cast<char>(0xe0 | (code >> 12)));
+                        output->push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3f)));
+                        output->push_back(static_cast<char>(0x80 | (code & 0x3f)));
+                    }
                     offset_ += 4;
                     break;
+                }
                 default:
                     return fail(error, "invalid JSON escape");
             }
@@ -200,7 +246,8 @@ private:
 
     void skip_space() {
         while (offset_ < text_.size() &&
-               std::isspace(static_cast<unsigned char>(text_[offset_]))) {
+               (text_[offset_] == ' ' || text_[offset_] == '\t' ||
+                text_[offset_] == '\n' || text_[offset_] == '\r')) {
             ++offset_;
         }
     }
@@ -294,6 +341,42 @@ bool validate_wpt_nonzero_report(const std::string &json,
                          : "WPT report field 'ranNothing' is not a boolean";
         }
         return false;
+    }
+    return true;
+}
+
+bool validate_wpt_success_report(const std::string &json, std::string *error) {
+    if (!validate_wpt_nonzero_report(json, error)) {
+        return false;
+    }
+    std::map<std::string, std::string> fields;
+    JsonCursor cursor(json);
+    if (!cursor.top_level_scalars(&fields, error)) {
+        return false;
+    }
+    const auto require_value = [&](const char *field, const char *expected) {
+        if (fields.count(field) && fields[field] == expected) {
+            return true;
+        }
+        if (error) {
+            *error = std::string("unexpected or missing top-level WPT field: ") + field;
+        }
+        return false;
+    };
+    if (!require_value("profile", "\"CAPSID-MIN-2025-subset-v0\"") ||
+        !require_value("source", "\"web-platform-tests/wpt\"") ||
+        !require_value("passed", "true")) {
+        return false;
+    }
+    for (const char *field : {"failures", "missingExpectedFailures"}) {
+        const std::string &value = fields[field];
+        if (value.size() < 2 || value.front() != '[' || value.back() != ']' ||
+            value.find_first_not_of(" \r\n\t", 1) != value.size() - 1) {
+            if (error) {
+                *error = std::string("WPT report requires an empty array: ") + field;
+            }
+            return false;
+        }
     }
     return true;
 }

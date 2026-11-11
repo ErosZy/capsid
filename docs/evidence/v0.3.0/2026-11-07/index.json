@@ -1,0 +1,57 @@
+{
+  "schema": "capsid-documentation-evidence-snapshot-v1",
+  "capturedUTC": "2026-11-07T14:51:45.626471+00:00",
+  "historicalSnapshots": true,
+  "fullV030GoalComplete": false,
+  "scope": "Byte-preserved audit and requirement snapshots referenced by maintained documents. These do not replace raw execution logs, source manifests, binaries, or final qualification.",
+  "sources": [
+    {
+      "original": "build-v030-dev/evidence/response-retirement-20261107/progress-audit.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/response-retirement-progress.json",
+      "bytes": 6736,
+      "sha256": "6b6f62eb60bea3510e6fc844b0f0a016c9c6b7f0a25173baccfaa73ced528ab1"
+    },
+    {
+      "original": "build-v030-dev/evidence/fetch-branch-context-20261107/v9-progress-audit.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/context-v9-progress.json",
+      "bytes": 3386,
+      "sha256": "36403a5f3f200e7844d616ae56b3ba2d4a80c1b30215a8a2648a6915357694a2"
+    },
+    {
+      "original": "build-v030-dev/evidence/fetch-encoded-layer-20261107/progress-audit.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/encoded-v10-progress.json",
+      "bytes": 7513,
+      "sha256": "bda1e513b006b53e2f1aeb1ace60106d0c9b78c6eaa711c3892f44b787060c6e"
+    },
+    {
+      "original": "build-v030-dev/evidence/fetch-encoded-layer-20261107/current-goal-requirements.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/goal-requirements-at-capture.json",
+      "bytes": 11235,
+      "sha256": "2e5239b5062192fb511c27508295a6d24402fb799e5528127eac457ed21260aa"
+    },
+    {
+      "original": "build-v030-dev/evidence/fetch-encoded-layer-20261107/post-verification-documents.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/document-update-proof.json",
+      "bytes": 3599,
+      "sha256": "b5ab42b7fd19d34767d2c60298d25500670faae56432d0dcb2bee72f0c39e288"
+    },
+    {
+      "original": "build-v030-dev/evidence/fetch-branch-lifetime-20261107/v8-progress-audit.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/lifetime-v8-progress.json",
+      "bytes": 1322,
+      "sha256": "929aa377f8b6530386f427437c3c894cb147839bb8799cf5c8b08d6f31490ef6"
+    },
+    {
+      "original": "build-v030-dev/evidence/fetch-branch-context-20261107/progress-audit.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/context-v7-progress.json",
+      "bytes": 1723,
+      "sha256": "9a490d12ef01bee7992c9ea7701c926564e598fadd3507b2dc03058c07717240"
+    },
+    {
+      "original": "build-v030-dev/evidence/response-retirement-20261107/current-goal-requirements.json",
+      "destination": "docs/evidence/v0.3.0/2026-11-07/historical-goal-requirements.json",
+      "bytes": 5114,
+      "sha256": "216b3d0c32b13887fe9e18955a38d00dfa2a6104e83ecb16bff5b00c2d97943d"
+    }
+  ]
+}

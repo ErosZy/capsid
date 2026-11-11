@@ -1,0 +1,87 @@
+{
+  "schema": "capsid-qualification-snapshot-index-v4",
+  "capturedUTC": "2026-11-10T16:12:06.926566+00:00",
+  "localDate": "2026-11-11",
+  "timeZone": "Asia/Shanghai",
+  "codeAndTestConfigurationSnapshot": "3e55af775a0f2b07bcb53d2595e5a34abd6aed48",
+  "documentationAddedAfterCodeSnapshot": true,
+  "records": {
+    "wsl-benchmark-decision.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-wsl-benchmark-environment-clarification-r1\\run.json",
+      "sha256": "3057bf6faa0e8b107d54aebce357276a1476db8bd34db062ae531b1f3f993a8d",
+      "bytes": 966,
+      "immutablePointInTimeCopy": true
+    },
+    "asan-memory-decision.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-asan-rss-acceptance-boundary-decision-r1\\run.json",
+      "sha256": "f5b171ee0c8df432b94376384fba2ede0f65c89c01596756181a10bc278ffcc8",
+      "bytes": 1746,
+      "immutablePointInTimeCopy": true
+    },
+    "asan-memory-ci.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-separate-asan-memory-ci-main-integration-r3\\run.json",
+      "sha256": "a8de968909a74bc8dd0ee33df9497dd228b04c754e0d3747a1634f2b2aae1e61",
+      "bytes": 5507,
+      "immutablePointInTimeCopy": true
+    },
+    "asan-memory-actual-positive.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-asan-memory-ci-actual-positive-r3\\run.json",
+      "sha256": "85f2b76cb2db2998a9161616d1b3a1f10a4d4d858df2c0f841660034178c6525",
+      "bytes": 2959,
+      "immutablePointInTimeCopy": true
+    },
+    "asan-memory-native-profiles.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-explicit-asan-resource-profile-native-r2\\run.json",
+      "sha256": "775f04eca9e797cca188e6450ea7baeff8df81db1b70aef6f2ea775610c3146d",
+      "bytes": 16009,
+      "immutablePointInTimeCopy": true
+    },
+    "tsan-original-full.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-tsan-linux-unfiltered-r4\\run.json",
+      "sha256": "004047007633f21e36df52258b19ec0562bfd373dad116ad01ffc198345b5372",
+      "bytes": 10350,
+      "immutablePointInTimeCopy": true
+    },
+    "tls-fixture-race-fix.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-tls-test-listener-race-main-integration-r1\\run.json",
+      "sha256": "d900f532c1453f7dcb2d50f487adb0e1041a4c107c765616e604dfe764399740",
+      "bytes": 1547,
+      "immutablePointInTimeCopy": true
+    },
+    "tsan-post-full-focused.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-tsan-terminal-focused-r1\\run.json",
+      "sha256": "81da371a31c9fe77807598622fe1ee1b5f5a26f6718651011c0a996a637e0680",
+      "bytes": 8560,
+      "immutablePointInTimeCopy": true
+    },
+    "certificate-tool-replay.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-certificate-tool-binding-r1\\run.json",
+      "sha256": "e045b1966dc4717d4145addf4250f40d501d3746694db7eb8700cf07cb60e893",
+      "bytes": 6801,
+      "immutablePointInTimeCopy": true
+    },
+    "native-benchmark-tools.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-wsl-native-benchmark-tools-r1\\run.json",
+      "sha256": "de16563e8bb8b5076c75348a7a6559d62e86102a5b8d63a6a9652897505e11b4",
+      "bytes": 3991,
+      "immutablePointInTimeCopy": true
+    },
+    "deno-and-python-setup-at-capture.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-wsl-python-benchmark-tools-r2\\run.json",
+      "sha256": "8ed8a4de8779d39e1e4baa98553313df6dfb870c438e8be813ec44433656664a",
+      "bytes": 1540,
+      "immutablePointInTimeCopy": true
+    },
+    "goal-requirements-at-capture.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\current-goal-requirements.json",
+      "sha256": "44af84aaf3f20258a86bf502ff14dc10f9df803883035c6f69fc0364f8d7fea5",
+      "bytes": 225613,
+      "immutablePointInTimeCopy": true
+    }
+  },
+  "actualFormalEnvironment": "same-machine-CapsidV030-WSL",
+  "externalSshHostRequired": false,
+  "formalPerformancePoints": 0,
+  "releaseQualified": false,
+  "fullV030GoalComplete": false
+}

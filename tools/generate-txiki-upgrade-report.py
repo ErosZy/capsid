@@ -6,10 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
-import shutil
 import subprocess
-import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +20,7 @@ REQUIRED_AUDIT_TESTS = {
     "txiki_vendor_patch_integrity",
     "txiki_overlay_audit_negative_controls",
     "txiki_overlay_key_canonicalization",
+    "txiki_upgrade_report_contract_controls",
     "worker_binary_audit",
     "worker_binary_audit_negative_controls",
     "worker_global_surface",
@@ -108,35 +108,10 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
             f"vendor submodules are not pinned: {bad_submodules}"
         )
     patches = sorted((root / "patches/txiki").glob("*.patch"))
-    # Keep in sync with cmake/AuditTxikiVendor.cmake, which applies the
-    # same directory in order and freezes the count in its header comment.
-    if len(patches) != 36:
-        raise RuntimeError(f"expected 36 patches, found {len(patches)}")
-    # Mirror the build's own application semantics (PrepareTxiki.cmake):
-    # the patch series is sequential — later patches depend on earlier
-    # ones' edits — and applied with patch -p1 --forward --batch on a
-    # fresh copy of the vendor. Hunks the pinned revision already carries
-    # are skipped, never fatal. Checking each patch in isolation against
-    # the pristine vendor (git apply --check, or a per-patch --dry-run)
-    # breaks on both counts: it contradicts --forward and it loses the
-    # sequential context for shared files like quickjs.c.
-    with tempfile.TemporaryDirectory(prefix="capsid-patch-check-") as tmp:
-        overlay = Path(tmp) / "txiki.js"
-        # minimal-examples carries a self-referential symlink tree inside
-        # libwebsockets that copytree descends into forever; the Capsid
-        # patch series never touches those trees.
-        shutil.copytree(
-            vendor,
-            overlay,
-            ignore=shutil.ignore_patterns(
-                "node_modules", ".git", "minimal-examples"),
-        )
-        for patch in patches:
-            run(
-                ["patch", "-p1", "--forward", "--batch", "-i", str(patch)],
-                cwd=overlay,
-            )
-
+    patch_records = [
+        {"name": patch.name, "bytes": patch.stat().st_size, "sha256": sha256(patch)}
+        for patch in patches
+    ]
     stamp_path = build / "vendor-overlay/txiki.js/.capsid-overlay-key"
     stamp_lines = stamp_path.read_text(encoding="utf-8").splitlines()
     if (
@@ -146,37 +121,39 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
         or not re.fullmatch(r"manifest=[0-9a-f]{64}", stamp_lines[2])
     ):
         raise RuntimeError("invalid txiki overlay stamp")
+    stamp_sha256 = sha256(stamp_path)
+    # AuditTxikiVendor owns the pinned patch count and fresh sequential
+    # application. Reuse the build's exact PrepareTxiki/git-apply semantics;
+    # a second copy/patch implementation can silently disagree with the build.
+    audit = run_vendor_audit(root, build, tag)
+    after = [
+        {"name": patch.name, "bytes": patch.stat().st_size, "sha256": sha256(patch)}
+        for patch in sorted((root / "patches/txiki").glob("*.patch"))
+    ]
+    if after != patch_records or sha256(stamp_path) != stamp_sha256:
+        raise RuntimeError("vendor patch inputs or overlay stamp changed during audit")
     return {
         "tag": tag,
         "commit": commit,
         "clean": True,
         "submodules": submodules,
-        "patches": [
-            {
-                "name": patch.name,
-                "bytes": patch.stat().st_size,
-                "sha256": sha256(patch),
-            }
-            for patch in patches
-        ],
+        "patch_count": len(patch_records),
+        "patches": patch_records,
         "combined_apply_check": "passed",
+        "audit": audit,
         "overlay": {
             "key": stamp_lines[1].split("=", 1)[1],
             "manifest": stamp_lines[2].split("=", 1)[1],
-            "stamp_sha256": sha256(stamp_path),
+            "stamp_sha256": stamp_sha256,
         },
     }
 
 
-def run_cmake_audits(
+def run_vendor_audit(
     root: Path,
     build: Path,
-    cache: dict[str, str],
+    current_tag: str,
 ) -> dict[str, Any]:
-    current_tag = run(
-        ["git", "describe", "--tags", "--exact-match", "HEAD"],
-        cwd=root / "vendor/txiki.js",
-    )
     vendor_command = [
         "cmake",
         f"-DCAPSID_TXIKI_VENDOR={root / 'vendor/txiki.js'}",
@@ -197,6 +174,25 @@ def run_cmake_audits(
         "-P",
         str(root / "cmake/AuditTxikiVendor.cmake"),
     ]
+    return {
+        "passed": True,
+        "command": vendor_command,
+        "output": run(vendor_command),
+        "scripts": {
+            name: sha256(root / "cmake" / name)
+            for name in ["AuditTxikiVendor.cmake", "PrepareTxiki.cmake", "ComputeTxikiOverlayKey.cmake"]
+        },
+    }
+
+
+def run_cmake_audits(
+    root: Path,
+    build: Path,
+    cache: dict[str, str],
+    vendor_audit: dict[str, Any],
+) -> dict[str, Any]:
+    if vendor_audit.get("passed") is not True:
+        raise RuntimeError("fresh vendor audit did not pass")
     restricted_command = [
         "cmake",
         f"-DCAPSID_WORKER={build / 'capsid-worker'}",
@@ -208,10 +204,7 @@ def run_cmake_audits(
         str(root / "cmake/AuditRestrictedWorker.cmake"),
     ]
     return {
-        "vendor_source_patch_overlay": {
-            "passed": True,
-            "output": run(vendor_command),
-        },
+        "vendor_source_patch_overlay": vendor_audit,
         "restricted_worker_symbols": {
             "passed": True,
             "output": run(restricted_command),
@@ -260,11 +253,23 @@ def ctest_evidence(
     catalog = json.loads(
         run(["ctest", "--test-dir", str(build), "--show-only=json-v1"])
     )
-    registered = {test["name"]: test for test in catalog["tests"]}
+    tests = catalog.get("tests")
+    if not isinstance(tests, list) or not tests:
+        raise RuntimeError("empty or invalid CTest catalog")
+    names = [test.get("name") for test in tests]
+    if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(names):
+        raise RuntimeError("missing or duplicate CTest catalog names")
+    registered = dict(zip(names, tests))
     if "wpt_conformance_not_configured" in registered:
         raise RuntimeError("full matrix was configured without pinned WPT")
     xml_root = ET.parse(junit_path).getroot()
-    cases = {case.attrib["name"]: case for case in xml_root.findall("testcase")}
+    if xml_root.tag != "testsuite":
+        raise RuntimeError("expected a complete CTest JUnit testsuite")
+    elements = xml_root.findall("testcase")
+    names = [case.get("name") for case in elements]
+    if any(not name for name in names) or len(set(names)) != len(names):
+        raise RuntimeError("missing or duplicate JUnit case names")
+    cases = dict(zip(names, elements))
     missing = sorted(set(registered) - set(cases))
     extra = sorted(set(cases) - set(registered))
     if missing or extra:
@@ -284,12 +289,27 @@ def ctest_evidence(
         )
     }
     for name, case in cases.items():
-        if case.find("failure") is not None or case.find("error") is not None:
+        failure = case.find("failure") is not None or case.find("error") is not None
+        skip = case.find("skipped") is not None
+        expected_status = "fail" if failure else "notrun" if skip else "run"
+        if case.get("status") != expected_status or failure and skip:
+            raise RuntimeError(f"contradictory or missing execution status: {name}")
+        try:
+            elapsed = float(case.attrib["time"])
+        except (KeyError, ValueError) as error:
+            raise RuntimeError(f"missing or invalid elapsed time: {name}") from error
+        if not math.isfinite(elapsed) or elapsed < 0:
+            raise RuntimeError(f"invalid elapsed time: {name}")
+        if failure:
             failed.append(name)
         elif case.find("skipped") is not None:
             skipped.append(name)
         else:
             passed.append(name)
+    counts = {"tests": len(cases), "failures": len(failed), "skipped": len(skipped), "disabled": 0}
+    for key, count in counts.items():
+        if xml_root.get(key) != str(count):
+            raise RuntimeError(f"JUnit summary disagrees with executed cases: {key}")
     unexpected_skips = sorted(set(skipped) - allowed_skips)
     if failed or unexpected_skips:
         raise RuntimeError(
@@ -474,12 +494,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
+def collect_report(args: argparse.Namespace) -> dict[str, Any]:
     root = args.source_root.resolve()
     build = args.build_dir.resolve()
     cache = cache_values(build / "CMakeCache.txt")
     baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
+    vendor = vendor_evidence(root, build)
     document: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "state": "complete",
@@ -488,9 +508,9 @@ def main() -> None:
             "path": str(args.baseline),
             "sha256": sha256(args.baseline),
         },
-        "vendor": vendor_evidence(root, build),
+        "vendor": vendor,
         "restricted_source": source_configuration(root, build, cache),
-        "audits": run_cmake_audits(root, build, cache),
+        "audits": run_cmake_audits(root, build, cache, vendor["audit"]),
         "tests": ctest_evidence(build, args.junit),
         "conformance": {
             "deviations": deviations(root, baseline),
@@ -514,13 +534,42 @@ def main() -> None:
             document["vendor"]["commit"] != expected_vendor["commit"]
         ),
     }
-    args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    args.output_md.parent.mkdir(parents=True, exist_ok=True)
+    return document
+
+
+def write_document(args: argparse.Namespace, document: dict[str, Any]) -> None:
+    for path in [args.output_json, args.output_md]:
+        path.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(
         json.dumps(document, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    args.output_md.write_text(render_report(document), encoding="utf-8")
+    text = render_report(document) if document["state"] == "complete" else (
+        "# txiki.js 升级报告未完成\n\n"
+        f"状态：{document['state']}。\n\n{document.get('error', '验收仍在执行。')}\n"
+    )
+    args.output_md.write_text(text, encoding="utf-8")
+
+
+def main() -> None:
+    args = parse_args()
+    outputs = [args.output_json.resolve(), args.output_md.resolve()]
+    inputs = {args.junit.resolve(), args.baseline.resolve(),
+              (args.build_dir / "CMakeCache.txt").resolve(), Path(__file__).resolve()}
+    if outputs[0] == outputs[1] or any(path in inputs or path.is_dir() for path in outputs):
+        raise RuntimeError("report outputs must be distinct files and cannot replace report inputs")
+    status = {"schema_version": SCHEMA_VERSION, "state": "incomplete",
+              "generated_at": datetime.now(timezone.utc).isoformat()}
+    # A failed attempt must not leave an earlier successful report at the
+    # requested output paths. Keep a concrete failed/incomplete artifact.
+    write_document(args, status)
+    try:
+        document = collect_report(args)
+    except Exception as error:
+        write_document(args, {**status, "state": "failed",
+                              "error": f"{type(error).__name__}: {error}"})
+        raise
+    write_document(args, document)
 
 
 if __name__ == "__main__":

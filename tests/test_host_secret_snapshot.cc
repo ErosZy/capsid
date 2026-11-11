@@ -88,7 +88,7 @@ std::string expected_secret_revision(
 }
 
 std::string expected_generation_digest(const GenerationIdentityInput& input) {
-    static constexpr char kDomain[] = "capsid-generation-v1\0";
+    static constexpr char kDomain[] = "capsid-generation-v2\0";
     std::vector<std::uint8_t> message(
         reinterpret_cast<const std::uint8_t*>(kDomain),
         reinterpret_cast<const std::uint8_t*>(kDomain) + sizeof(kDomain) - 1);
@@ -108,6 +108,7 @@ std::string expected_generation_digest(const GenerationIdentityInput& input) {
         input.secret_revision,
         input.runtime_compatibility_id,
         input.binding_set_digest,
+        input.protocol_limits_digest,
     };
     for (const std::string_view field : fields) {
         append_length_prefixed(message, field);

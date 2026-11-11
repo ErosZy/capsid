@@ -12,6 +12,10 @@ namespace capsid_test {
 bool validate_wpt_nonzero_report(const std::string &json,
                                  std::string *error);
 
+// Also checks the top-level success and failure fields, independently of the
+// JavaScript reporter. Nested fields and duplicate keys cannot assert success.
+bool validate_wpt_success_report(const std::string &json, std::string *error);
+
 }  // namespace capsid_test
 
 #endif

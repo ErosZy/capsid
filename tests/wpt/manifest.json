@@ -95,102 +95,23 @@
     {
       "path": "wasm/jsapi/memory/grow.any.js",
       "subtest": "Growing shared memory does not detach old buffer",
-      "deviation": "CAPSID-D008"
+      "deviation": "CAPSID-D008",
+      "errorName": "AssertionError",
+      "message": "Buffer before growing: constructor: expected true, got false"
     },
     {
       "path": "webmessaging/MessagePort_initial_disabled.any.js",
       "subtest": "Untitled test",
-      "deviation": "CAPSID-D010"
+      "deviation": "CAPSID-D010",
+      "errorName": "AssertionError",
+      "message": "reached unreachable code"
     },
     {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 19",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 20",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 21",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 22",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 23",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 24",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 25",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 26",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 27",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 28",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 29",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 30",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 31",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 32",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 33",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 34",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 35",
-      "deviation": "CAPSID-D011"
-    },
-    {
-      "path": "encoding/legacy-mb-schinese/gb18030/gb18030-decoder.any.js",
-      "subtest": "gb18030 decoder: GB18030-2022 36",
-      "deviation": "CAPSID-D011"
+      "path": "dom/events/EventTarget-constructible.any.js",
+      "subtest": "A constructed EventTarget implements dispatch correctly",
+      "deviation": "CAPSID-D012",
+      "errorName": "AssertionError",
+      "message": "expected null, got {}"
     }
   ],
   "tests": [
@@ -212,7 +133,7 @@
       "notExecuted": [
         "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.html"
       ],
-      "notExecutedReason": "Upstream file drives unhandledrejection/rejectionhandled ordering through a document-scoped harness that the one-file-per-worker-realm execution model does not reproduce. CAPSID-D005 is therefore evidenced by reportError plus PromiseRejectionEvent construction only; event-ordering semantics are covered by the project-owned p1-platform-contract fixture, not by upstream WPT.",
+      "notExecutedReason": "Upstream file drives unhandledrejection/rejectionhandled ordering through a document-scoped harness that the one-file-per-worker-realm execution model does not reproduce. Selected upstream evidence covers reportError and PromiseRejectionEvent construction. The project-owned p1-platform-contract and mandatory workerd API differential cover runtime rejection delivery and listener behavior, but do not execute or replace this upstream lifecycle harness (CAPSID-D005).",
       "gap": "CAPSID-D005"
     },
     {
@@ -362,6 +283,19 @@
         "hr-time/monotonic-clock.any.js"
       ],
       "gap": "CAPSID-D004"
+    }
+  ],
+  "sourceAugmentations": [
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+      "tool": "tests/wpt/guard-rejection-events.mjs",
+      "kind": "additional-observation-assertions",
+      "preservesUpstreamStatements": true,
+      "subtests": [
+        "delayed handling: delaying handling by setTimeout(,10) will cause both events to fire",
+        "delayed handling: delaying handling rejected promise created from createImageBitmap will cause both events to fire"
+      ],
+      "reason": "Both upstream bodies can finish from a timer without observing rejectionhandled. Add cleanup assertions requiring exactly one callback for the matching promise; preserve all original statements and reason assertions."
     }
   ]
 }

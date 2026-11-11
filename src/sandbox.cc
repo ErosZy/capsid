@@ -440,6 +440,27 @@ bool install_landlock(const std::vector<std::string> &required_paths,
             return false;
         }
     }
+
+#if defined(CAPSID_SANITIZER_SANDBOX)
+    // Diagnostic builds need process introspection and the system symbolizer.
+    if (!add_landlock_path(ruleset_fd, "/proc", true, 0, error) ||
+        !add_landlock_path(ruleset_fd, "/proc/self/exe", true,
+                           LANDLOCK_ACCESS_FS_READ_FILE, error)) {
+        close(ruleset_fd);
+        return false;
+    }
+    static const char *const sanitizer_symbolizer_paths[] = {
+        "/usr/bin", "/usr/lib", "/lib", "/lib64",
+    };
+    for (const char *path : sanitizer_symbolizer_paths) {
+        if (!add_landlock_path(ruleset_fd, path, true,
+                LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_EXECUTE,
+                error)) {
+            close(ruleset_fd);
+            return false;
+        }
+    }
+#endif
     for (size_t i = 0; i < required_paths.size(); ++i) {
         if (!add_landlock_path(
                 ruleset_fd, required_paths[i], false, 0, error)) {
@@ -536,7 +557,12 @@ void filter_open_syscall(std::vector<struct sock_filter> *filter,
     uint32_t forbidden =
         O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
 #ifdef O_TMPFILE
+#if defined(CAPSID_SANITIZER_SANDBOX)
+    // O_TMPFILE includes O_DIRECTORY; LSan must read /proc task directories.
+    forbidden |= (O_TMPFILE & ~O_DIRECTORY);
+#else
     forbidden |= O_TMPFILE;
+#endif
 #endif
     bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
              static_cast<uint32_t>(number), 0, 4);
@@ -667,6 +693,64 @@ bool install_seccomp(const std::vector<std::string> &binding_profiles,
     bpf_statement(
         &filter, BPF_LD | BPF_W | BPF_ABS,
         offsetof(struct seccomp_data, nr));
+
+#if defined(CAPSID_SANITIZER_SANDBOX)
+// Diagnostic-only process operations required by sanitizer tracing and symbolization.
+#ifdef __NR_clone
+    allow_syscall(&filter, __NR_clone);
+#endif
+#ifdef __NR_clone3
+    allow_syscall(&filter, __NR_clone3);
+#endif
+#ifdef __NR_fork
+    allow_syscall(&filter, __NR_fork);
+#endif
+#ifdef __NR_vfork
+    allow_syscall(&filter, __NR_vfork);
+#endif
+#ifdef __NR_execve
+    allow_syscall(&filter, __NR_execve);
+#endif
+#ifdef __NR_execveat
+    allow_syscall(&filter, __NR_execveat);
+#endif
+#ifdef __NR_ptrace
+    allow_syscall(&filter, __NR_ptrace);
+#endif
+#ifdef __NR_process_vm_readv
+    allow_syscall(&filter, __NR_process_vm_readv);
+#endif
+#ifdef __NR_wait4
+    allow_syscall(&filter, __NR_wait4);
+#endif
+#ifdef __NR_waitid
+    allow_syscall(&filter, __NR_waitid);
+#endif
+#ifdef __NR_kill
+    allow_syscall(&filter, __NR_kill);
+#endif
+#ifdef __NR_tkill
+    allow_syscall(&filter, __NR_tkill);
+#endif
+#ifdef __NR_tgkill
+    allow_syscall(&filter, __NR_tgkill);
+#endif
+#ifdef __NR_prctl
+    allow_syscall(&filter, __NR_prctl);
+#endif
+#ifdef __NR_mmap
+    allow_syscall(&filter, __NR_mmap);
+#endif
+#ifdef __NR_mmap2
+    allow_syscall(&filter, __NR_mmap2);
+#endif
+#ifdef __NR_mprotect
+    allow_syscall(&filter, __NR_mprotect);
+#endif
+#ifdef __NR_pkey_mprotect
+    allow_syscall(&filter, __NR_pkey_mprotect);
+#endif
+#endif
 
 #define CAPSID_DENY_SYSCALL(name) \
     do { \

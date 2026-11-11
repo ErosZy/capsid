@@ -45,7 +45,7 @@ class HarnessTest {
         this.cleanups = [];
         this.timeout = asynchronous
             ? setTimeout(() => {
-                this.fail(new Error('test timed out'));
+                this.finish('TIMEOUT', 'test timed out', 'TimeoutError', 'timeout');
             }, 10000)
             : undefined;
         if (asynchronous) {
@@ -103,7 +103,7 @@ class HarnessTest {
         const detail = error?.stack
             ? `${summary}\n${error.stack}`
             : summary;
-        this.finish('FAIL', detail);
+        this.finish('FAIL', detail, error?.name ?? 'Error');
     }
 
     done() {
@@ -112,7 +112,7 @@ class HarnessTest {
         }
     }
 
-    finish(status, message) {
+    finish(status, message, errorName = null, phase = 'test') {
         this.completed = true;
         if (this.timeout !== undefined) {
             clearTimeout(this.timeout);
@@ -122,10 +122,14 @@ class HarnessTest {
                 cleanup();
             } catch (error) {
                 status = 'FAIL';
-                message ||= `cleanup failed: ${error?.stack ?? error}`;
+                phase = 'cleanup';
+                errorName = error?.name ?? 'Error';
+                const summary = error?.message ?? String(error);
+                const detail = error?.stack ? `${summary}\n${error.stack}` : summary;
+                message += `${message ? '\n' : ''}cleanup failed: ${detail}`;
             }
         }
-        results.push({ name: this.name, status, message });
+        results.push({ name: this.name, status, message, errorName, phase });
         pending.delete(this);
         maybeComplete();
     }
@@ -222,7 +226,8 @@ globalThis.assert_not_equals = (actual, expected, description) => {
 };
 
 globalThis.assert_array_equals = (actual, expected, description) => {
-    if (actual == null || expected == null ||
+    if (typeof actual !== 'object' || actual === null ||
+        !('length' in actual) || expected == null ||
         actual.length !== expected.length) {
         throw new AssertionError(assertionMessage(
             description,
@@ -230,7 +235,9 @@ globalThis.assert_array_equals = (actual, expected, description) => {
         ));
     }
     for (let index = 0; index < expected.length; ++index) {
-        if (!Object.is(actual[index], expected[index])) {
+        if (Object.prototype.hasOwnProperty.call(actual, index) !==
+                Object.prototype.hasOwnProperty.call(expected, index) ||
+            !Object.is(actual[index], expected[index])) {
             throw new AssertionError(assertionMessage(
                 description,
                 `arrays differ at ${index}: ` +
@@ -260,7 +267,7 @@ globalThis.assert_inherits = (object, property, description) => {
 };
 
 globalThis.assert_in_array = (actual, expected, description) => {
-    if (!expected.includes(actual)) {
+    if (expected.indexOf(actual) === -1) {
         throw new AssertionError(assertionMessage(
             description,
             `expected ${format(actual)} to be in ${format(expected)}`,
@@ -290,8 +297,11 @@ globalThis.assert_class_string = (object, expected, description) => {
 
 globalThis.assert_approx_equals =
     (actual, expected, epsilon, description) => {
-        if (typeof actual !== 'number' || typeof expected !== 'number' ||
-            Math.abs(actual - expected) > epsilon) {
+        const matches = typeof actual === 'number' &&
+            (isFinite(actual) || isFinite(expected)
+                ? Math.abs(actual - expected) <= epsilon
+                : Object.is(actual, expected));
+        if (!matches) {
             throw new AssertionError(assertionMessage(
                 description,
                 `expected ${format(actual)} to be within ${epsilon} of ` +
@@ -301,7 +311,8 @@ globalThis.assert_approx_equals =
     };
 
 globalThis.assert_greater_than = (actual, expected, description) => {
-    if (!(actual > expected)) {
+    if ((typeof actual !== 'number' && typeof actual !== 'bigint') ||
+        typeof actual !== typeof expected || !(actual > expected)) {
         throw new AssertionError(assertionMessage(
             description,
             `expected ${format(actual)} to be greater than ${format(expected)}`,
@@ -315,17 +326,31 @@ globalThis.assert_throws_js = (constructor, callback, description) => {
         callback();
     } catch (error) {
         thrown = true;
-        if (!(error instanceof constructor)) {
-            throw new AssertionError(assertionMessage(
-                description,
-                `expected ${constructor.name}, got ${error?.constructor?.name}`,
-            ));
-        }
+        assertErrorConstructor(error, constructor, description);
     }
     if (!thrown) {
         throw new AssertionError(assertionMessage(
             description,
-            `expected ${constructor.name} to be thrown`,
+            `expected ${constructor?.name} to be thrown`,
+        ));
+    }
+};
+
+const assertErrorConstructor = (error, constructor, description) => {
+    if (error instanceof AssertionError) {
+        throw error;
+    }
+    let ancestor = constructor;
+    while (ancestor &&
+           !(typeof ancestor === 'function' && ancestor.name === 'Error')) {
+        ancestor = Object.getPrototypeOf(ancestor);
+    }
+    if (typeof constructor !== 'function' || !ancestor ||
+        typeof error !== 'object' || error === null ||
+        error.constructor !== constructor || error.name !== constructor.name) {
+        throw new AssertionError(assertionMessage(
+            description,
+            `expected ${constructor?.name}, got ${error?.constructor?.name}`,
         ));
     }
 };
@@ -336,7 +361,10 @@ globalThis.assert_throws_exactly = (expected, callback, description) => {
         callback();
     } catch (error) {
         thrown = true;
-        if (error !== expected) {
+        if (error instanceof AssertionError) {
+            throw error;
+        }
+        if (!Object.is(error, expected)) {
             throw new AssertionError(assertionMessage(
                 description,
                 `expected ${format(expected)}, got ${format(error)}`,
@@ -399,14 +427,8 @@ globalThis.promise_rejects_js =
         try {
             await promise;
         } catch (error) {
-            if (error instanceof constructor) {
-                return error;
-            }
-            throw new AssertionError(assertionMessage(
-                description,
-                `expected rejection with ${constructor.name}, got ` +
-                    `${error?.constructor?.name}`,
-            ));
+            assertErrorConstructor(error, constructor, description);
+            return error;
         }
         throw new AssertionError(assertionMessage(
             description,
@@ -419,7 +441,10 @@ globalThis.promise_rejects_exactly =
         try {
             await promise;
         } catch (error) {
-            if (error === expected) {
+            if (error instanceof AssertionError) {
+                throw error;
+            }
+            if (Object.is(error, expected)) {
                 return error;
             }
             throw new AssertionError(assertionMessage(

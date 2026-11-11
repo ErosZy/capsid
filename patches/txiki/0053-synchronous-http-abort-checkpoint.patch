@@ -1,0 +1,92 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -1419,7 +1419,10 @@
+     if (wsi) lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
+     if (notify) {
+         JSValue error = JS_NewString(h->ctx, "ABORTED");
+-        maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++        JSValue callback = h->callbacks[HC_CALLBACK_COMPLETE];
++        if (!h->qrt->freeing && JS_IsFunction(h->ctx, callback))
++            tjs_call_handler_ctx_sync(h->ctx, h->ctx_data, callback, 1, &error);
++        JS_FreeValue(h->ctx, error);
+     }
+     tjs_httpclient_done(h);
+     /* A protocol-state timeout may be overwritten by pending handshake
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -203,7 +203,7 @@
+     fflush(stderr);
+ }
+ 
+-static void call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv, bool timer) {
++static void call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv, bool timer, bool checkpoint) {
+     JSValue ret, func1;
+     /* 'func' might be destroyed when calling itself (if it frees the
+        handler), so must take extra care */
+@@ -223,11 +223,11 @@
+         if (!handled) TJS_Stop(qrt);
+     }
+     JS_FreeValue(ctx, ret);
+-    tjs__drain_microtasks(ctx);
++    if (checkpoint) tjs__drain_microtasks(ctx);
+ }
+ 
+ void tjs_call_handler(JSContext *ctx, JSValue func, int argc, JSValue *argv) {
+-    call_handler(ctx, func, argc, argv, false);
++    call_handler(ctx, func, argc, argv, false, true);
+ }
+ 
+ void tjs_set_timer_exception_hook(JSContext *ctx,
+@@ -282,9 +282,9 @@
+     }
+ }
+ 
+-static void call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv, bool timer) {
++static void call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv, bool timer, bool checkpoint) {
+     if (!ctx_data) {
+-        call_handler(ctx, func, argc, argv, timer);
++        call_handler(ctx, func, argc, argv, timer, checkpoint);
+         return;
+     }
+     TJSRuntime *qrt = TJS_GetRuntime(ctx);
+@@ -300,18 +300,25 @@
+         tjs_leave_ctx(ctx, &prev);
+         return;
+     }
+-    call_handler(ctx, func, argc, argv, timer);
++    call_handler(ctx, func, argc, argv, timer, checkpoint);
+     tjs_leave_ctx(ctx, &prev);
+-    tjs_async_context_checkpoint(ctx);
++    if (checkpoint) tjs_async_context_checkpoint(ctx);
+     tjs_release_ctx(ctx, held);
+ }
+ 
+ void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
+-    call_handler_ctx(ctx, ctx_data, func, argc, argv, false);
++    call_handler_ctx(ctx, ctx_data, func, argc, argv, false, true);
++}
++
++void tjs_call_handler_ctx_sync(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
++    /* A native method called from JS must return to the outer JS stack before
++     * draining jobs or retiring its execution owner. Context entry and the
++     * independent hold still protect cancellation during the synchronous call. */
++    call_handler_ctx(ctx, ctx_data, func, argc, argv, false, false);
+ }
+ 
+ void tjs_call_timer_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv) {
+-    call_handler_ctx(ctx, ctx_data, func, argc, argv, true);
++    call_handler_ctx(ctx, ctx_data, func, argc, argv, true, true);
+ }
+ 
+ void tjs_set_async_context_control_hooks(JSContext *ctx,
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -165,6 +165,8 @@
+ void tjs_leave_ctx(JSContext *ctx, void **prev);
+ void tjs_release_ctx(JSContext *ctx, void *ctx_data);
+ void tjs_call_handler_ctx(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv);
++/* Contextual JS re-entry from a native JS method: no nested checkpoint. */
++void tjs_call_handler_ctx_sync(JSContext *ctx, void *ctx_data, JSValue func, int argc, JSValue *argv);
+ 
+ /* Optional connection-lifetime controls, independent of Binding ownership.
+  * timer_allowed operations: 0=create, 1=clear, 2=fire; false is a silent no-op.

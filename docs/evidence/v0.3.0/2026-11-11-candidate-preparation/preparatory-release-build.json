@@ -1,0 +1,74 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 322,
+  "preparationOnly": true,
+  "finalCandidateFrozen": false,
+  "source": "/root/capsid-verification-20261109/source-v030-preparation-r1",
+  "build": "/root/capsid-verification-20261109/build-v030-production-preparation-r1",
+  "sourceVersion": "0.3.0",
+  "snapshotCommit": "dbb25be7888b71bbe832f214f4eff8481b3dcc73",
+  "sourceCount": 5115,
+  "sourceManifestFile": "/mnt/d/capsid-verification-20261108/evidence/v030-versioned-private-build-snapshot-r1/source-manifest.json",
+  "sourceManifestSHA256": "1da8b9a60d2e696fc8e19f57a69e72e82c0273df58c33277ea6b795e0462f0ee",
+  "measuredProviderLibraries": {
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a": "980fe86a76599e8b1981d289ec498c5292ac0a4aa53ec43d8018ceac08dd6413",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a": "63940ed4380eb5f8f47993e72d4e872849774c214d6f68b31bcfc43e2eac5fb6",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a": "66c9e01d07c9d8dd98d117e19c304bf7a7e82888aa0361879433821785c113d9"
+  },
+  "steps": [
+    {
+      "label": "configure",
+      "exitCode": 0,
+      "seconds": 10.7529476,
+      "stdoutSHA256": "95c4f0a16b1fea81e85ec2a49d07a0189eb4749a94847d3f28d28d081620fb0c",
+      "stderrSHA256": "f95fcd5f2e801d1a285572307e66fd19edd67534dfe8d5ff21863014100aa139"
+    },
+    {
+      "label": "strict-all",
+      "exitCode": 0,
+      "seconds": 772.8822495119999,
+      "stdoutSHA256": "f2f16546d7f58500a599cf29e23fcf7aee625f259375571478548bda86dab977",
+      "stderrSHA256": "f95fcd5f2e801d1a285572307e66fd19edd67534dfe8d5ff21863014100aa139"
+    }
+  ],
+  "qualificationEnvironment": {
+    "PATH": "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin:/root/capsid-verification-20261109/toolchains/deno-v2.9.7-linux-x64:/root/capsid-verification-20261109/toolchains/qps-reference-r1/bin:/root/capsid-verification-20261109/toolchains/functional-tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "CAPSID_WORKERD_REF": "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd",
+    "CAPSID_WORKERD_REQUIRED": "1",
+    "CAPSID_WS_INTEROP_NODE_PACKAGE": "/root/capsid-verification-20261109/toolchains/interop-clients-r1/node-package/package",
+    "CAPSID_WS_INTEROP_PYTHON": "/root/capsid-verification-20261109/toolchains/interop-clients-r1/python-venv/bin/python",
+    "CAPSID_WS_REPORT_DIR": "/mnt/d/capsid-verification-20261108/evidence/sdk78-wpt-soak-production-linux-build-r1/reports",
+    "CAPSID_WS_RUN_ID": "sdk78-wpt-soak-production-linux-build-r1",
+    "TMPDIR": "/root/c78v30p1tmp",
+    "GOTMPDIR": "/root/c78v30p1tmp"
+  },
+  "sourceAndIdentityMayStillNeedFinalTestConfigurationUpdate": true,
+  "finalCombinedQualificationNotClaimed": true,
+  "existingMainAndFrozenBuildsUnmodified": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/usr/bin/nice",
+    "-n",
+    "10",
+    "cmake",
+    "--build",
+    "/root/capsid-verification-20261109/build-v030-production-preparation-r1",
+    "--parallel",
+    "2",
+    "--verbose"
+  ],
+  "activeCommandPid": 2331,
+  "productionRuntimeActuallyUsesLto": true,
+  "productionIpoTranslationUnits": 12,
+  "dedicatedUninstrumentedProductionBuild": true,
+  "strictAllBuildPassed": true,
+  "registered": 1098,
+  "inventoryFile": "/mnt/d/capsid-verification-20261108/evidence/v030-production-linux-preparation-build-r1/inventory.json",
+  "inventorySHA256": "d985abf0ba11106c465ccb83bebc66a0b042ca77f393a2144dd20aac180ddb05",
+  "hostSHA256": "176b231b032f7e33c4002362d6f3ab9637d1aaf0f0c0018a75e2a4a2611e9324",
+  "workerSHA256": "094cac92090d9361363ecf7cfb97132708392440f2b6304877958df6918af940",
+  "actualPreparatoryVersionBuilt": "0.3.0",
+  "finalSourceUpdateMustReconfigureAndRebuildBeforeFreeze": true,
+  "fullFinalSuiteAndFormalMeasurementStillRequired": true
+}

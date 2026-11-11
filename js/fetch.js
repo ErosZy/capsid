@@ -1,7 +1,51 @@
+import { validateResponseWebSocket, setResponseWebSocket, getResponseWebSocket, isWebSocketEndpoint, captureNativeException, openFetchUpgrade, configureFetchChannelStreams, inheritFetchChannelStream, isFetchChannelStream } from './websocket.js';
+import { configureAbortExceptions } from 'txiki-polyfills/abort-controller.js';
+import { configureResponseBodyFactory } from 'txiki-polyfills/fetch/fetch.js';
+import { configureOwnedHeadersCloner } from 'txiki-polyfills/fetch/headers.js';
+import { createOrdinaryFetchBody, isOrdinaryFetchBody, teeOrdinaryFetchBody } from './websocket.js';
+
+configureAbortExceptions(captureNativeException);
+
 const NativeHeaders = globalThis.Headers;
 const NativeRequest = globalThis.Request;
 const NativeResponse = globalThis.Response;
 const nativeFetch = globalThis.fetch;
+
+function normalizeRequestInfo(input) {
+    // Preserve native Request bodies and brands (including the base instances
+    // returned by clone). Other RequestInfo values use one Web IDL string
+    // conversion, before RequestInit getters are observed.
+    return input instanceof NativeRequest ? input : `${input}`;
+}
+const emptyBodyIntrinsics = {
+    bufferLength: Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get,
+    typedLength: Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'byteLength').get,
+    viewLength: Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength').get,
+    viewBuffer: Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer').get,
+    blobSize: Object.getOwnPropertyDescriptor(Blob.prototype, 'size').get,
+    paramsString: URLSearchParams.prototype.toString,
+    isView: ArrayBuffer.isView,
+};
+const bodyTypeError = globalThis.TypeError;
+const bodyProperty = Object.getOwnPropertyDescriptor;
+
+function trackBodyUsage(body) {
+    let consumed = body.bodyUsed;
+    Object.defineProperty(body, 'bodyUsed', {
+        configurable: true,
+        enumerable: true,
+        get() {
+            // The pinned streams implementation records disturbance for read,
+            // cancel, tee and pipe operations. Pulling into its internal queue
+            // does not disturb it, and merely acquiring a reader does not count.
+            const stream = this._bodyStream;
+            return consumed || (stream !== null && stream !== undefined &&
+                bodyProperty(stream, '_disturbed')?.value === true);
+        },
+        // The native BodyMixin marks its convenience consumers before reading.
+        set(value) {consumed = Boolean(value);},
+    });
+}
 
 let maxFetchRequestBodyBytes = 0;
 let maxFetchResponseBodyBytes = 0;
@@ -16,18 +60,148 @@ export function configureFetchLimits(requestBytes, responseBytes) {
     }
     maxFetchRequestBodyBytes = requestLimit;
     maxFetchResponseBodyBytes = responseLimit;
+    configureFetchChannelStreams(globalThis.ReadableStream);
+    configureResponseBodyFactory(client => createOrdinaryFetchBody(client, maxFetchResponseBodyBytes));
 }
 
 const headerLists = new WeakMap();
 const setCookieLists = new WeakMap();
 const iteratorStates = new WeakMap();
 const fastResponseBodies = new WeakMap();
+const immutableHeaders = new WeakSet();
+const headerBuiltinString = String;
+const headerLowerAscii = Function.prototype.call.bind(String.prototype.toLowerCase);
+const headerCode = Function.prototype.call.bind(String.prototype.charCodeAt);
+const headerSubarray = Function.prototype.call.bind(Uint8Array.prototype.subarray);
+const headerByteArray = Uint8Array;
+const headerBigInt = BigInt;
+const headerChar = String.fromCharCode;
+// kj::String conversion preserves unpaired UTF-16 code units as WTF-8.
+// The reference decodes their invalid byte sequence at the JS return boundary.
+function headerEncode(value) {
+    const bytes = new headerByteArray(value.length * 3);let at = 0;
+    for (let index = 0; index < value.length; ++index) {
+        let code = headerCode(value, index);
+        if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+            const low = headerCode(value, index + 1);
+            if (low >= 0xdc00 && low <= 0xdfff) {code = 0x10000 + ((code - 0xd800) << 10) + low - 0xdc00; ++index;}
+        }
+        if (code < 0x80) bytes[at++] = code;
+        else if (code < 0x800) {bytes[at++] = 0xc0 | (code >> 6); bytes[at++] = 0x80 | (code & 63);}
+        else if (code < 0x10000) {bytes[at++] = 0xe0 | (code >> 12); bytes[at++] = 0x80 | ((code >> 6) & 63); bytes[at++] = 0x80 | (code & 63);}
+        else {bytes[at++] = 0xf0 | (code >> 18); bytes[at++] = 0x80 | ((code >> 12) & 63); bytes[at++] = 0x80 | ((code >> 6) & 63); bytes[at++] = 0x80 | (code & 63);}
+    }
+    return headerSubarray(bytes, 0, at);
+}
+const headerDecode = Function.prototype.call.bind(TextDecoder.prototype.decode, new TextDecoder('utf-8', {ignoreBOM: true}));
+// Keep uncommon names as canonical bytes. The pinned64-bit SWAR conversion
+// also has observable non-ASCII results; decoding only at display preserves
+// distinct raw keys that happen to render to the same replacement string.
+function lowerHeaderKey(name) {
+    if (!/[^\x00-\x7f]/.test(name)) return headerLowerAscii(name);
+    const bytes = headerEncode(name);
+    for (let offset = 0; offset < bytes.length; offset += 8) {
+        const count = Math.min(8, bytes.length - offset);let word = 0n;
+        for (let index = 0; index < count; ++index) word |= headerBigInt(bytes[offset + index]) << headerBigInt(index * 8);
+        word ^= (((word + 0x3f3f3f3f3f3f3f3fn) ^ (word + 0x2525252525252525n)) & 0x8080808080808080n) >> 2n;
+        for (let index = 0; index < count; ++index) bytes[offset + index] = Number((word >> headerBigInt(index * 8)) & 255n);
+    }
+    let raw = '';for (const byte of bytes) raw += headerChar(byte);return raw;
+}
+function displayHeaderKey(raw) {
+    if (!/[^\x00-\x7f]/.test(raw)) return raw;
+    const bytes = new headerByteArray(raw.length);
+    for (let index = 0; index < raw.length; ++index) bytes[index] = raw.charCodeAt(index);
+    return headerDecode(bytes);
+}
+const headerPrimitiveSymbol = Symbol.toPrimitive;
+// Private state must not call application replacements of WeakMap methods.
+const headerWeakGet = Function.prototype.call.bind(WeakMap.prototype.get);
+const headerWeakSet = Function.prototype.call.bind(WeakMap.prototype.set);
+const headerMapGet = Function.prototype.call.bind(Map.prototype.get);
+const headerMapHas = Function.prototype.call.bind(Map.prototype.has);
+const readableLocked = Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'locked').get;
+const headerInvocationMessage = 'Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.';
+const isObjectValue = value => value !== null && (typeof value === 'object' || typeof value === 'function');
+function headerMutationString(value) {
+    if (isObjectValue(value)) {
+        const exotic = value[headerPrimitiveSymbol];
+        if (exotic !== undefined && exotic !== null) {
+            if (typeof exotic !== 'function') {
+                const label = isObjectValue(exotic) ? '#<Object>' : headerBuiltinString(exotic);
+                throw new bodyTypeError(`'${label}' returned for property 'Symbol(Symbol.toPrimitive)' of object '#<Object>' is not a function`);
+            }
+            value = applyIntrinsic(exotic, value, ['string']);
+            if (isObjectValue(value)) throw new bodyTypeError('Cannot convert object to primitive value');
+        } else {
+            let primitive = false;
+            for (const name of ['toString', 'valueOf']) {
+                const method = value[name];
+                if (typeof method !== 'function') continue;
+                const result = applyIntrinsic(method, value, []);
+                if (!isObjectValue(result)) {value = result; primitive = true; break;}
+            }
+            if (!primitive) throw new bodyTypeError('Cannot convert object to primitive value');
+        }
+    }
+    if (typeof value === 'symbol') throw new bodyTypeError('Cannot convert a Symbol value to a string');
+    return headerBuiltinString(value);
+}
+function headerReadInput(headers, operation, count, name) {
+    const list = headerWeakGet(headerLists, headers);
+    if (list === undefined) throw new bodyTypeError(headerInvocationMessage);
+    if (count < 1) {
+        throw new bodyTypeError(`Failed to execute '${operation}' on 'Headers': parameter 1 is not of type 'string'.`);
+    }
+    return {list, name: normalizeName(name)};
+}
+function headerMutationInput(headers, operation, count, name, value) {
+    const list = headerWeakGet(headerLists, headers);
+    if (list === undefined) throw new bodyTypeError(headerInvocationMessage);
+    const missing = index => new bodyTypeError(`Failed to execute '${operation}' on 'Headers': parameter ${index} is not of type 'string'.`);
+    if (count < 1) throw missing(1);
+    name = headerMutationString(name);
+    if (operation !== 'delete') {
+        if (count < 2) throw missing(2);
+        value = headerMutationString(value);
+    }
+    requireMutableHeaders(headers);
+    const normalizedValue = operation === 'delete' ? undefined : normalizeValue(value);
+    return {list, name: normalizeName(name), value: normalizedValue};
+}
+const ordinaryFetchStreams = new WeakSet();
+const weakHas = Function.prototype.call.bind(WeakSet.prototype.has);
+const weakAdd = Function.prototype.call.bind(WeakSet.prototype.add);
+const applyIntrinsic = Reflect.apply;
+function requireMutableHeaders(headers) {
+    if (weakHas(immutableHeaders, headers)) throw new bodyTypeError("Can't modify immutable headers.");
+}
+function finishFetchedResponse(response, url, redirected) {
+    response.url = url;
+    response.redirected = Boolean(redirected);
+    weakAdd(immutableHeaders, response.headers);
+    if (response.body !== null) weakAdd(ordinaryFetchStreams, response.body);
+    return response;
+}
+const streamTee = ReadableStream.prototype.tee;
+Object.defineProperty(ReadableStream.prototype, 'tee', {
+    ...Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'tee'),
+    value: function tee() {
+        if ((weakHas(ordinaryFetchStreams, this) || isOrdinaryFetchBody(this)) && applyIntrinsic(readableLocked, this, []))
+            throw new bodyTypeError('This ReadableStream is currently locked to a reader,');
+        const nativeBranches = teeOrdinaryFetchBody(this);
+        const branches = nativeBranches ?? applyIntrinsic(streamTee, this, []);
+        if (!nativeBranches) for (const branch of branches) inheritFetchChannelStream(this, branch);
+        if (weakHas(ordinaryFetchStreams, this)) this._disturbed = true;
+        return branches;
+    },
+});
 const incomingRequestBrand = Symbol('capsid incoming request');
 const arrayIteratorPrototype =
     Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
 
 function toByteString(value) {
-    const string = String(value);
+    const string = headerBuiltinString(value);
 
     for (let i = 0; i < string.length; i++) {
         if (string.charCodeAt(i) > 0xff) {
@@ -39,32 +213,24 @@ function toByteString(value) {
 }
 
 function normalizeName(value) {
-    const name = toByteString(value);
-
-    if (name === '' || /[^!#$%&'*+.^_`|~0-9A-Za-z-]/.test(name)) {
-        throw new TypeError(`Invalid character in header field name: "${name}"`);
+    const name = headerMutationString(value), forbidden = '()<>@,;:\\"/[]?={}';
+    for (let index = 0; index < name.length; ++index) {
+        const code = name.charCodeAt(index);
+        if (code <= 32 || code === 127 || forbidden.includes(name[index]))
+            throw new bodyTypeError('Invalid header name.');
     }
-
-    return name.toLowerCase();
+    return lowerHeaderKey(name);
 }
 
 function normalizeValue(value) {
-    const string = toByteString(value);
-
-    if (/[\0\r\n]/.test(string)) {
-        throw new TypeError('Invalid character in header field value');
-    }
-
-    return string.replace(/^[\t ]+|[\t ]+$/g, '');
+    const string = headerMutationString(value).replace(/^[\t\r\n ]+|[\t\r\n ]+$/g, '');
+    if (/[\0\r\n]/.test(string)) throw new bodyTypeError('Invalid header value.');
+    return headerDecode(headerEncode(string));
 }
 
 function requireHeaders(value) {
-    const list = headerLists.get(value);
-
-    if (!list) {
-        throw new TypeError('Illegal invocation');
-    }
-
+    const list = headerWeakGet(headerLists, value);
+    if (list === undefined) throw new bodyTypeError(headerInvocationMessage);
     return list;
 }
 
@@ -74,125 +240,121 @@ function sortedEntries(headers) {
 
     for (const name of Array.from(list.keys()).sort()) {
         if (name === 'set-cookie') {
-            for (const value of setCookieLists.get(headers)) {
+            for (const value of headerWeakGet(setCookieLists, headers)) {
                 entries.push([ name, value ]);
             }
         } else {
-            entries.push([ name, list.get(name) ]);
+            entries.push([ displayHeaderKey(name), list.get(name) ]);
         }
     }
     return entries;
 }
 
-const headersIteratorPrototype = Object.create(arrayIteratorPrototype);
-Object.defineProperties(headersIteratorPrototype, {
-    next: {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value() {
-            const state = iteratorStates.get(this);
-
-            if (!state) {
-                throw new TypeError('Illegal invocation');
-            }
-
-            const entries = sortedEntries(state.headers);
-            if (state.index >= entries.length) {
-                return { value: undefined, done: true };
-            }
-
-            const [ name, value ] = entries[state.index++];
-
-            if (state.kind === 'key') {
-                return { value: name, done: false };
-            }
-            if (state.kind === 'value') {
-                return { value, done: false };
-            }
-            return { value: [ name, value ], done: false };
+const headersIteratorPrototypes = Object.create(null);
+for (const [kind, label] of [['entry', 'EntryIterator'], ['key', 'KeyIterator'], ['value', 'ValueIterator']]) {
+    const prototype = Object.create(arrayIteratorPrototype);
+    Object.defineProperties(prototype, {
+        next: {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: function next() {
+                const state = headerWeakGet(iteratorStates, this);
+                if (!state || state.kind !== kind) throw new bodyTypeError(headerInvocationMessage);
+                if (state.index >= state.entries.length) return {done: true, value: undefined};
+                const [name, value] = state.entries[state.index++];
+                return {done: false, value: kind === 'key' ? name : kind === 'value' ? value : [name, value]};
+            },
         },
-    },
-    [Symbol.iterator]: {
-        configurable: true,
-        writable: true,
-        value() {
-            return this;
+        [Symbol.iterator]: {
+            configurable: true,
+            writable: true,
+            // The pinned iterator method is anonymous and checks its kind.
+            value: function () {
+                const state = headerWeakGet(iteratorStates, this);
+                if (!state || state.kind !== kind) throw new bodyTypeError(headerInvocationMessage);
+                return this;
+            },
         },
-    },
-    [Symbol.toStringTag]: {
-        configurable: true,
-        value: 'Headers Iterator',
-    },
-});
+        [Symbol.toStringTag]: {configurable: true, value: label},
+    });
+    Object.defineProperty(prototype[Symbol.iterator], 'name', {value: ''});
+    headersIteratorPrototypes[kind] = prototype;
+}
 
 function createHeadersIterator(headers, kind) {
-    const iterator = Object.create(headersIteratorPrototype);
-
-    iteratorStates.set(iterator, { headers, kind, index: 0 });
+    const iterator = Object.create(headersIteratorPrototypes[kind]);
+    headerWeakSet(iteratorStates, iterator, {entries: sortedEntries(headers), kind, index: 0});
     return iterator;
+}
+
+// Cache the supplied iterator method and let for-of cache next and perform
+// IteratorClose if converting an element throws. Conversion happens while
+// consuming the sequence, before Headers validates pair lengths/names/values.
+function convertHeaderSequence(value, method, convert) {
+    const converted = [];
+    const iterable = {[Symbol.iterator]() {return applyIntrinsic(method, value, []);}};
+    for (const item of iterable) converted.push(convert(item));
+    return converted;
 }
 
 class Headers {
     constructor(init = undefined) {
-        headerLists.set(this, new Map());
-        setCookieLists.set(this, []);
+        headerWeakSet(headerLists, this, new Map());
+        headerWeakSet(setCookieLists, this, []);
+        if (init === undefined) return;
 
-        if (init === undefined) {
+        const owned = headerWeakGet(headerLists, init);
+        if (owned !== undefined) {
+            headerWeakSet(headerLists, this, new Map(owned));
+            headerWeakSet(setCookieLists, this, headerWeakGet(setCookieLists, init).slice());
             return;
         }
-        if ((typeof init !== 'object' && typeof init !== 'function') ||
-            init === null) {
-            throw new TypeError('Headers init must be a sequence or record');
+        if (!isObjectValue(init)) {
+            throw new bodyTypeError("Failed to construct 'Headers': constructor parameter 1 is not of type 'Headers or Sequence or object'.");
         }
-
         if ((init instanceof NativeHeaders || init instanceof Headers) &&
             !Object.prototype.hasOwnProperty.call(init, Symbol.iterator) &&
             typeof init.getSetCookie === 'function') {
-            for (const [ name, value ] of init) {
-                if (name !== 'set-cookie') {
-                    this.append(name, value);
-                }
+            for (const [name, value] of init) {
+                if (name !== 'set-cookie') applyIntrinsic(headerAppendMethod, this, [name, value]);
             }
-            for (const value of init.getSetCookie()) {
-                this.append('set-cookie', value);
-            }
+            for (const value of init.getSetCookie()) applyIntrinsic(headerAppendMethod, this, ['set-cookie', value]);
             return;
         }
 
-        const iterator = init[Symbol.iterator];
-        if (iterator !== undefined) {
-            if (typeof iterator !== 'function') {
-                throw new TypeError('Headers init iterator is not callable');
-            }
-            for (const pair of init) {
-                if ((typeof pair !== 'object' && typeof pair !== 'function') ||
-                    pair === null) {
-                    throw new TypeError('Header entry is not an object');
+        const method = init[Symbol.iterator];
+        const sequence = typeof method === 'function';
+        let entries;
+        if (sequence) {
+            entries = convertHeaderSequence(init, method, pair => {
+                const inner = isObjectValue(pair) ? pair[Symbol.iterator] : undefined;
+                if (typeof inner !== 'function') {
+                    throw new bodyTypeError("Incorrect type: the provided value is not of type 'Sequence'.");
                 }
-                const values = Array.from(pair);
-                if (values.length !== 2) {
-                    throw new TypeError(
-                        `Expected name/value pair to be length 2, found ${values.length}`);
-                }
-                this.append(values[0], values[1]);
-            }
-            return;
+                return convertHeaderSequence(pair, inner, headerMutationString);
+            });
+        } else {
+            entries = [];
+            for (const name of Object.keys(init)) entries.push([name, headerMutationString(init[name])]);
         }
-
-        for (const name of Object.keys(init)) {
-            this.append(name, init[name]);
+        // Complete the union/sequence/record conversion before native-style
+        // validation. A subclass append override is not part of construction.
+        for (const pair of entries) {
+            if (pair.length !== 2) {
+                throw new bodyTypeError('To initialize a Headers object from a sequence, each inner sequence must have exactly two elements.');
+            }
+            applyIntrinsic(headerAppendMethod, this, pair);
         }
     }
 
     append(name, value) {
-        const list = requireHeaders(this);
-        const normalizedName = normalizeName(name);
-        const normalizedValue = normalizeValue(value);
+        const input = headerMutationInput(this, 'append', arguments.length, name, value);
+        const list = input.list, normalizedName = input.name, normalizedValue = input.value;
         const existing = list.get(normalizedName);
 
         if (normalizedName === 'set-cookie') {
-            setCookieLists.get(this).push(normalizedValue);
+            headerWeakGet(setCookieLists, this).push(normalizedValue);
         }
         list.set(
             normalizedName,
@@ -201,16 +363,17 @@ class Headers {
     }
 
     delete(name) {
-        const normalizedName = normalizeName(name);
-
-        requireHeaders(this).delete(normalizedName);
+        const input = headerMutationInput(this, 'delete', arguments.length, name);
+        const list = input.list, normalizedName = input.name;
+        list.delete(normalizedName);
         if (normalizedName === 'set-cookie') {
-            setCookieLists.set(this, []);
+            headerWeakSet(setCookieLists, this, []);
         }
     }
 
     get(name) {
-        const value = requireHeaders(this).get(normalizeName(name));
+        const input = headerReadInput(this, 'get', arguments.length, name);
+        const value = headerMapGet(input.list, input.name);
 
         return value === undefined ? null : value;
     }
@@ -218,32 +381,32 @@ class Headers {
     getSetCookie() {
         requireHeaders(this);
 
-        return setCookieLists.get(this).slice();
+        return headerWeakGet(setCookieLists, this).slice();
     }
 
     has(name) {
-        return requireHeaders(this).has(normalizeName(name));
+        const input = headerReadInput(this, 'has', arguments.length, name);
+        return headerMapHas(input.list, input.name);
     }
 
     set(name, value) {
-        const normalizedName = normalizeName(name);
-        const normalizedValue = normalizeValue(value);
-
-        requireHeaders(this).set(normalizedName, normalizedValue);
+        const input = headerMutationInput(this, 'set', arguments.length, name, value);
+        const list = input.list, normalizedName = input.name, normalizedValue = input.value;
+        list.set(normalizedName, normalizedValue);
         if (normalizedName === 'set-cookie') {
-            setCookieLists.set(this, [ normalizedValue ]);
+            headerWeakSet(setCookieLists, this, [ normalizedValue ]);
         }
     }
 
     forEach(callback, thisArg = undefined) {
+        requireHeaders(this);
         if (typeof callback !== 'function') {
-            throw new TypeError('Headers forEach callback must be callable');
+            throw new bodyTypeError("Failed to execute 'forEach' on 'Headers': parameter 1 is not of type 'function'.");
         }
-
-        const iterator = this.entries();
-        for (let result = iterator.next(); !result.done; result = iterator.next()) {
-            callback.call(thisArg, result.value[1], result.value[0], this);
-        }
+        // Pinned workerd uses a complete entry snapshot here, and invokes the
+        // callback directly without reading this.entries or callback.call.
+        const entries = sortedEntries(this);
+        for (const [name, value] of entries) applyIntrinsic(callback, thisArg, [value, name, this]);
     }
 
     keys() {
@@ -267,13 +430,15 @@ class Headers {
     }
 }
 
+const headerAppendMethod = Headers.prototype.append;
+
 function wrapNormalizedNativeHeaders(nativeHeaders) {
     const headers = Object.create(Headers.prototype);
     const list = new Map();
     const cookies = [];
 
-    headerLists.set(headers, list);
-    setCookieLists.set(headers, cookies);
+    headerWeakSet(headerLists, headers, list);
+    headerWeakSet(setCookieLists, headers, cookies);
     for (const [ name, value ] of nativeHeaders) {
         if (name !== 'set-cookie') {
             list.set(name, value);
@@ -305,6 +470,25 @@ function normalizeBody(body) {
     return String(body);
 }
 
+function isEmptyFixedResponseBody(body) {
+    if (typeof body === 'string') return body.length === 0;
+    if (body instanceof ArrayBuffer) return emptyBodyIntrinsics.bufferLength.call(body) === 0;
+    if (emptyBodyIntrinsics.isView(body)) {
+        try { return emptyBodyIntrinsics.typedLength.call(body) === 0; }
+        catch (error) {
+            if (!(error instanceof bodyTypeError)) throw error;
+            // A DataView's JS byteLength getter throws after detachment, while
+            // the reference's native BufferSource conversion sees zero bytes.
+            emptyBodyIntrinsics.viewBuffer.call(body); // native brand check
+            try { return emptyBodyIntrinsics.viewLength.call(body) === 0; }
+            catch (viewError) { if (viewError instanceof bodyTypeError) return true; throw viewError; }
+        }
+    }
+    if (body instanceof Blob) return emptyBodyIntrinsics.blobSize.call(body) === 0;
+    if (body instanceof URLSearchParams) return emptyBodyIntrinsics.paramsString.call(body) === '';
+    return false;
+}
+
 // The txiki Fetch polyfill eagerly wraps every string body in a
 // ReadableStream. Keep an internal text snapshot for an untouched string
 // response so the Runtime can encode and send it with one native call.
@@ -317,7 +501,7 @@ function normalizeBody(body) {
 // observable sequence the bootstrap's previous forEach+getSetCookie
 // construction produced (frozen by test_host_single_worker.mjs).
 export function bridgeHeaderPairs(headers) {
-    const list = headerLists.get(headers);
+    const list = headerWeakGet(headerLists, headers);
     if (list === undefined) {
         // Foreign (native) Headers instance: fall back to the public
         // iterator construction.
@@ -338,14 +522,14 @@ export function bridgeHeaderPairs(headers) {
             pairs.push([ name, list.get(name) ]);
         }
     }
-    for (const value of setCookieLists.get(headers)) {
+    for (const value of headerWeakGet(setCookieLists, headers)) {
         pairs.push([ 'set-cookie', value ]);
     }
     return pairs;
 }
 
 export function getFastResponseBody(response) {
-    const record = fastResponseBodies.get(response);
+    const record = headerWeakGet(fastResponseBodies, response);
 
     if (!record || record.exposed || response.bodyUsed ||
         response._bodyStream !== record.stream) {
@@ -359,7 +543,7 @@ export function getFastResponseBody(response) {
 }
 
 function materializeFastResponseBody(response, exposed) {
-    const record = fastResponseBodies.get(response);
+    const record = headerWeakGet(fastResponseBodies, response);
 
     if (!record) {
         return null;
@@ -392,7 +576,7 @@ function consumeFastResponseBody(response, method, args) {
 
 function toNativeHeaderEntries(init) {
     const headers = init instanceof Headers ? init : new Headers(init);
-    const entries = Array.from(headers)
+    const entries = sortedEntries(headers)
         .filter(([ name ]) => name !== 'set-cookie');
 
     for (const value of headers.getSetCookie()) {
@@ -401,17 +585,35 @@ function toNativeHeaderEntries(init) {
     return entries;
 }
 
-function normalizeInit(init) {
+const redirectValueError = 'Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge; use "manual" and check the response status code).';
+function normalizeRedirect(value) {
+    if (value === undefined) return undefined;
+    if (typeof value === 'symbol')
+        throw new bodyTypeError('Cannot convert a Symbol value to a string');
+    const redirect = `${value}`;
+    if (redirect !== 'follow' && redirect !== 'manual')
+        throw new bodyTypeError(redirectValueError);
+    return redirect;
+}
+
+function normalizeInit(init, requestInit = false) {
     if (init === undefined || init === null) {
         return {};
     }
 
-    const normalized = { ...init };
+    // Response's dictionary has no redirect/body member. Do not invoke
+    // unrelated getters or conversions while preparing a response.
+    const normalized = requestInit ? { ...init } : {
+        headers: init.headers, status: init.status, statusText: init.statusText, webSocket: init.webSocket,
+    };
     if (normalized.headers !== undefined) {
-        normalized.headers = toNativeHeaderEntries(normalized.headers);
+        normalized.headers = new Headers(normalized.headers);
     }
     if (Object.prototype.hasOwnProperty.call(normalized, 'body')) {
         normalized.body = normalizeBody(normalized.body);
+    }
+    if (requestInit && normalized.redirect !== undefined) {
+        normalized.redirect = normalizeRedirect(normalized.redirect);
     }
     return normalized;
 }
@@ -484,12 +686,17 @@ function knownBodySize(body) {
 }
 
 function rejectedBodyStream(stream, error) {
-    return new ReadableStream({
+    const channel = isFetchChannelStream(stream);
+    const rejected = new ReadableStream({
+        ...(channel ? {type: 'bytes'} : {}),
         start(controller) {
             Promise.resolve(stream.cancel(error)).catch(() => {});
             controller.error(error);
         },
     });
+    // A configured limit errors the native body without changing its reader
+    // interface or losing the request context carried by the original stream.
+    return channel ? inheritFetchChannelStream(stream, rejected) : rejected;
 }
 
 function limitedBodyStream(stream, limit, kind, state = undefined) {
@@ -497,13 +704,15 @@ function limitedBodyStream(stream, limit, kind, state = undefined) {
     let total = 0;
     let finished = false;
 
-    return new ReadableStream({
+    const limited = new ReadableStream({
+        ...(kind === 'response' && isFetchChannelStream(stream) ? {type: 'bytes'} : {}),
         async pull(controller) {
             const result = await reader.read();
             if (result.done) {
                 finished = true;
                 reader.releaseLock();
                 controller.close();
+                controller.byobRequest?.respond(0);
                 return;
             }
 
@@ -537,6 +746,7 @@ function limitedBodyStream(stream, limit, kind, state = undefined) {
             }
         },
     });
+    return kind === 'response' ? inheritFetchChannelStream(stream, limited) : limited;
 }
 
 function limitedNativeRequest(input, init, limit) {
@@ -575,27 +785,34 @@ function limitedResponseBody(response, limit) {
         return null;
     }
     const contentLength = response.headers.get('content-length');
-    if (contentLength !== null &&
+    const ordinary = isOrdinaryFetchBody(response.body);
+    const encodedGzip = (ordinary || isFetchChannelStream(response.body)) &&
+        headerLowerAscii(response.headers.get('content-encoding') ?? '') === 'gzip';
+    if (!encodedGzip && contentLength !== null &&
         /^[0-9]+$/.test(contentLength) &&
         Number(contentLength) > limit) {
         return rejectedBodyStream(
             response.body,
             bodyLimitError('response', limit));
     }
+    // Ordinary native bodies count decoded producer bytes directly, retaining
+    // their native reader and demand geometry under an enabled limit.
+    if (ordinary) return response.body;
     return limitedBodyStream(response.body, limit, 'response');
 }
 
 class Request extends NativeRequest {
     constructor(input, init = undefined, brand = undefined) {
+        const normalizedInput = normalizeRequestInfo(input);
         const incoming = brand === incomingRequestBrand;
         const normalized = incoming
             ? normalizeIncomingInit(init)
-            : normalizeInit(init);
+            : normalizeInit(init, true);
 
         if (input instanceof Request) {
             const inherited = {
                 method: input.method,
-                headers: toNativeHeaderEntries(input.headers),
+                headers: new Headers(input.headers),
                 credentials: input.credentials,
                 redirect: input.redirect,
                 mode: input.mode,
@@ -609,7 +826,7 @@ class Request extends NativeRequest {
             }
             super(input.url, inherited);
         } else {
-            super(input, normalized);
+            super(normalizedInput, normalized);
         }
 
         this.headers = incoming
@@ -622,6 +839,7 @@ class Request extends NativeRequest {
          */
         this._nativeFormData = this.formData;
         this.formData = multipartFormDataOverride;
+        trackBodyUsage(this);
     }
 
     clone() {
@@ -829,19 +1047,49 @@ class Response extends NativeResponse {
     constructor(body = null, init = undefined) {
         const normalized = normalizeInit(init);
         const status = normalized.status === undefined ? 200 : Number(normalized.status);
-        const normalizedBody = normalizeBody(body);
+        let normalizedBody = normalizeBody(body);
+        const socket = normalized.webSocket;
+        if (socket !== undefined && socket !== null && !isWebSocketEndpoint(socket))
+            throw new TypeError("Incorrect type for the 'webSocket' field on 'InitializerDict': the provided value is not of type 'WebSocket'.");
+        if (status === 101) {
+            // 101 without an endpoint is the fetch-spec forbidden-status
+            // violation (RangeError in the reference, C13); with an
+            // endpoint CONSTRUCTION succeeds regardless of accept/role
+            // state — those are validated at send time (C14) — but the
+            // VALUE must still BE a WebSocket endpoint (fix-review §4:
+            // {} / true / 1 are TypeErrors, not silent 101s).
+            if (socket === undefined || socket === null)
+                throw new RangeError('Responses may only be constructed with status codes in the range 200 to 599, inclusive.');
+            // Fixed zero-byte bodies are absent in the locked reference,
+            // including detached BufferSources. An empty stream is still a
+            // body. Read native lengths, never caller-overridden properties.
+            if (isEmptyFixedResponseBody(normalizedBody)) normalizedBody = null;
+        } else if (socket !== undefined && socket !== null) {
+            throw new RangeError('Responses with a WebSocket must have status code 101.');
+        }
 
-        if (body !== null && body !== undefined && isNullBodyStatus(status)) {
-            throw new TypeError('Response with a null-body status cannot have a body');
+        if (normalizedBody !== null && normalizedBody !== undefined && isNullBodyStatus(status)) {
+            throw new TypeError(status === 101
+                ? 'Response with null body status (101, 204, 205, or 304) cannot have a body.'
+                : 'Response with a null-body status cannot have a body');
         }
 
         const fastText = typeof normalizedBody === 'string' && normalizedBody.length > 0
             ? normalizedBody
             : null;
-        super(fastText === null ? normalizedBody : null, normalized);
+        super(fastText === null ? normalizedBody : null,
+            status === 101 ? { ...normalized, status: 200, statusText: '' } : normalized);
+        if (status === 101) {
+            this.status = 101;
+            this.statusText = normalized.statusText === undefined ? 'Switching Protocols' : String(normalized.statusText);
+            this.ok = false;
+            setResponseWebSocket(this, socket);
+        }
         this.headers = new Headers(this.headers);
+        this.redirected = false;
         this._nativeFormData = this.formData;
         this.formData = multipartFormDataOverride;
+        trackBodyUsage(this);
 
         if (fastText !== null) {
             this._noBody = false;
@@ -868,7 +1116,7 @@ class Response extends NativeResponse {
                     text: this.text,
                 },
             };
-            fastResponseBodies.set(this, record);
+            headerWeakSet(fastResponseBodies, this, record);
             record.getter = () => {
                 return materializeFastResponseBody(this, true).stream;
             };
@@ -906,6 +1154,7 @@ class Response extends NativeResponse {
     }
 
     clone() {
+        if (getResponseWebSocket(this)) throw new TypeError('Cannot clone a response to a WebSocket handshake.');
         /*
          * Response.error() has status 0, which is outside [200, 599].
          * The native clone() calls the Response constructor with status 0
@@ -926,6 +1175,8 @@ class Response extends NativeResponse {
             wrapped.formData = multipartFormDataOverride;
             return wrapped;
         }
+        const stream = this.body;
+        if (stream?.locked) throw new bodyTypeError('This ReadableStream is currently locked to a reader,');
         const nativeClone = super.clone();
         const cloned = new Response(
             nativeClone.body,
@@ -936,9 +1187,13 @@ class Response extends NativeResponse {
             },
         );
         cloned.ok = nativeClone.ok;
-        cloned.redirected = nativeClone.redirected;
+        cloned.redirected = this.redirected;
         cloned.type = nativeClone.type;
-        cloned.url = nativeClone.url;
+        cloned.url = this.url;
+        if (weakHas(immutableHeaders, this.headers)) {
+            finishFetchedResponse(cloned, this.url, this.redirected);
+            if (this.body !== null) weakAdd(ordinaryFetchStreams, this.body);
+        }
         return cloned;
     }
 
@@ -951,6 +1206,8 @@ class Response extends NativeResponse {
         response.type = native.type;
         return response;
     }
+
+    get webSocket() { return getResponseWebSocket(this); }
 
     static json(data, init = undefined) {
         const body = JSON.stringify(data);
@@ -981,30 +1238,92 @@ class Response extends NativeResponse {
     }
 }
 
+async function fetchUpgradeRequest(request) {
+    let redirected = false;
+    const visited = [];
+    for (let count = 0;; count++) {
+        const target = new URL(request.url); target.hash = '';
+        visited.push(target.href);
+        const result = await openFetchUpgrade(target.href, toNativeHeaderEntries(request.headers),
+            request.redirect === 'manual' ? 1 : request.redirect === 'error' ? 2 : 0, request.signal);
+        const metadata = result.metadata;
+        const responseHeaders = new Headers(metadata.headers);
+        const location = responseHeaders.get('location');
+        if ([301, 302, 303, 307, 308].includes(metadata.status) && location !== null && request.redirect !== 'manual') {
+            if (count >= 20) {
+                await result.body?.cancel();
+                throw new bodyTypeError('Too many redirects.' + visited.join(', '));
+            }
+            // Drain a redirect without accumulating its body. Each subsequent
+            // transaction re-enters the same native policy/owner checks and
+            // generates a fresh WebSocket nonce for its actual destination.
+            if (result.body) {
+                const reader = result.body.getReader();
+                try {while (!(await reader.read()).done) {}}
+                finally {reader.releaseLock();}
+            }
+            const next = new URL(location, target);
+            const headers = new Headers(request.headers);
+            if (next.origin !== target.origin) headers.delete('authorization');
+            request = new NativeRequest(next.href, {method: 'GET', headers: toNativeHeaderEntries(headers), redirect: request.redirect, signal: request.signal});
+            redirected = true; continue;
+        }
+        const body = result.body && maxFetchResponseBodyBytes !== 0
+            ? limitedResponseBody({body: result.body, headers: responseHeaders}, maxFetchResponseBodyBytes) : result.body;
+        const response = new Response(body, {status: metadata.status, statusText: metadata.statusText,
+            headers: metadata.headers, url: metadata.url, ...(result.webSocket ? {webSocket: result.webSocket} : {})});
+        response.url = metadata.url;
+        response.redirected = redirected || metadata.redirected;
+        return response;
+    }
+}
+
 function fetch(input, init = undefined) {
-    let nativeInput = input;
+    let nativeInput;
+    try { nativeInput = normalizeRequestInfo(input); }
+    catch (error) { return Promise.reject(error); }
     let nativeInit = init;
     let requestLimitState = null;
 
-    if (input instanceof Request) {
-        nativeInput = input.url;
-        nativeInit = {
-            method: input.method,
-            headers: toNativeHeaderEntries(input.headers),
-            credentials: input.credentials,
-            redirect: input.redirect,
-            mode: input.mode,
-            signal: input.signal,
-        };
-        if (input.body !== null) {
-            nativeInit.body = input.body;
-            nativeInit.duplex = 'half';
+    try {
+        if (input instanceof Request) {
+            nativeInput = input.url;
+            nativeInit = {
+                method: input.method,
+                headers: new Headers(input.headers),
+                credentials: input.credentials,
+                redirect: input.redirect,
+                mode: input.mode,
+                signal: input.signal,
+            };
+            if (input.body !== null) {
+                nativeInit.body = input.body;
+                nativeInit.duplex = 'half';
+            }
+            if (init !== undefined && init !== null) {
+                Object.assign(nativeInit, normalizeInit(init, true));
+            }
+        } else if (init !== undefined) {
+            nativeInit = normalizeInit(init, true);
         }
-        if (init !== undefined && init !== null) {
-            Object.assign(nativeInit, normalizeInit(init));
-        }
-    } else if (init !== undefined) {
-        nativeInit = normalizeInit(init);
+    } catch (error) {
+        return Promise.reject(error);
+    }
+
+    // Prepared Headers retain their raw owned keys for copy operations.
+    // Read the private list, without application getters or public iteration,
+    // when selecting the existing Upgrade transport.
+    const fields = nativeInit?.headers;
+    const ownedFields = headerWeakGet(headerLists, fields);
+    const upgradeValue = ownedFields === undefined ? undefined : headerMapGet(ownedFields, 'upgrade');
+    let upgrade = upgradeValue !== undefined && headerLowerAscii(upgradeValue) === 'websocket';
+    if (Array.isArray(fields)) {
+        for (let index = 0; index < fields.length; index++)
+            if (fields[index][0] === 'upgrade' && headerLowerAscii(fields[index][1]) === 'websocket') upgrade = true;
+    }
+    if (upgrade) {
+        try {return fetchUpgradeRequest(new NativeRequest(nativeInput, nativeInit));}
+        catch (error) {return Promise.reject(error);}
     }
 
     if (maxFetchRequestBodyBytes !== 0) {
@@ -1028,7 +1347,7 @@ function fetch(input, init = undefined) {
         throw error;
     }).then(response => {
         if (response instanceof Response) {
-            return response;
+            return finishFetchedResponse(response, response.url, response.redirected);
         }
         const nullBody = isNullBodyStatus(response.status);
         if (nullBody && response.body !== null) {
@@ -1041,16 +1360,18 @@ function fetch(input, init = undefined) {
                 : limitedResponseBody(
                     response,
                     maxFetchResponseBodyBytes);
-        return new Response(
-            nullBody ? null : body,
-            {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers,
-                url: response.url,
-            });
+        const wrapped = new Response(nullBody ? null : body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: wrapNormalizedNativeHeaders(response.headers),
+        });
+        return finishFetchedResponse(wrapped, response.url, response.redirected);
     });
 }
+
+// Preserve owned raw keys through vendor Request/Response copies without
+// invoking an application replacement of Headers[Symbol.iterator].
+configureOwnedHeadersCloner(init => headerWeakGet(headerLists, init) === undefined ? undefined : new Headers(init));
 
 Object.defineProperties(globalThis, {
     Headers: { configurable: true, writable: true, value: Headers },

@@ -659,6 +659,10 @@ bool decode_wire_capability(const uint8_t **cursor,
     return true;
 }
 
+}  // namespace
+
+namespace capsid {
+
 bool decode_hello(const capsid::protocol::Frame &frame,
                   capsid::WorkerStartupConfig *output,
                   std::string *error) {
@@ -758,18 +762,49 @@ bool decode_hello(const capsid::protocol::Frame &frame,
     decoded.legacy_egress_configured =
         legacy_egress_configured != 0;
     if (frame.version == capsid::protocol::kVersionV4) {
-        // Amended §1.2: the v4 Hello carries the v3 startup payload
-        // plus an 8-byte capability tail.
+        // Amended §1.2 (v4.1): the v4 Hello payload is [v3 startup]
+        // [A2 limits extension, only when A2 announced] [8-byte tail].
+        // The tail is read from the END so the extension (which sits
+        // before it) cannot be mistaken for the capability bits.
+        if (static_cast<size_t>(end - cursor) <
+            capsid::protocol::kHelloV4TailSize) {
+            return reject(error, "invalid hello capabilities");
+        }
+        const uint8_t *tail = end - capsid::protocol::kHelloV4TailSize;
         uint32_t capabilities = 0;
         uint32_t reserved = 0;
-        if (!capsid::protocol::read_u32(&cursor, end, &capabilities) ||
-            !capsid::protocol::read_u32(&cursor, end, &reserved) ||
+        if (!capsid::protocol::read_u32(&tail, end, &capabilities) ||
+            !capsid::protocol::read_u32(&tail, end, &reserved) ||
             reserved != 0 ||
-            (capabilities & ~capsid::protocol::kCapabilitiesKnownMask) != 0) {
-            return reject(error, "invalid HELLO capabilities");
+            tail != end ||
+            (capabilities & ~capsid::protocol::kCapabilitiesKnownMask) != 0 ||
+            !capsid::protocol::capabilities_satisfy_closure(
+                capabilities)) {
+            return reject(error, "invalid hello capabilities");
+        }
+        if ((capabilities & capsid::protocol::kCapChannelLayoutA2) != 0) {
+            const uint8_t *extension_end =
+                end - capsid::protocol::kHelloV4TailSize;
+            if (extension_end < cursor ||
+                !capsid::protocol::decode_hello_a2_extension(
+                    cursor,
+                    static_cast<size_t>(extension_end - cursor),
+                    &decoded.channel_limits,
+                    error)) {
+                return reject(error, "invalid hello extension");
+            }
+            // decode_hello_a2_extension consumed exactly the 48-byte
+            // extension; the tail (already validated) follows.
+            cursor = extension_end;
+            decoded.channel_limits_present = true;
         }
         decoded.protocol_version = capsid::protocol::kVersionV4;
         decoded.host_capabilities = capabilities;
+        // consume the validated tail only when the cursor has reached
+        // it; otherwise stray bytes fall to the trailing-bytes check
+        if (cursor == end - capsid::protocol::kHelloV4TailSize) {
+            cursor = end;
+        }
     }
     if (cursor != end) {
         return reject(error, "trailing HELLO payload");
@@ -826,7 +861,7 @@ bool decode_hello(const capsid::protocol::Frame &frame,
     return true;
 }
 
-}  // namespace
+}  // namespace capsid
 
 namespace capsid {
 
@@ -990,7 +1025,8 @@ bool decode_worker_request_head(const protocol::Frame &frame,
         error->clear();
     }
     if (!output || frame.type != protocol::kRequestHead ||
-        (frame.flags & ~protocol::kFlagRequestEnd) != 0 ||
+        (frame.flags & ~(protocol::kFlagRequestEnd | protocol::kFlagRequestUpgrade)) != 0 ||
+        ((frame.flags & protocol::kFlagRequestUpgrade) && frame.version != protocol::kVersionV4) ||
         frame.request_id == 0 ||
         frame.payload.size() < 8 ||
         frame.payload.size() > max_header_bytes ||
@@ -1018,6 +1054,13 @@ bool decode_worker_request_head(const protocol::Frame &frame,
             return reject(error, "invalid request header");
         }
         decoded.headers.push_back(header);
+    }
+    if (frame.flags & protocol::kFlagRequestUpgrade) {
+        protocol::UpgradeTail tail;
+        if (!decoded.bodyless || !protocol::decode_upgrade_head(frame, &tail, error)) return false;
+        decoded.upgrade_channel_id = tail.channel_id;
+        decoded.upgrade_max_message_bytes = tail.max_message_bytes;
+        cursor += 12;
     }
     if (cursor != end) {
         return reject(error, "trailing request head payload");

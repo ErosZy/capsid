@@ -382,15 +382,24 @@ std::string compute_effective_profile_digest(
 
 capsid::WorkerReadyProof expected_worker_ready_proof(
     const std::vector<EffectiveBinding>& bindings,
-    bool strict_sandbox) {
+    const capsid_worker_config& config) {
     capsid::WorkerReadyProof expected;
     if (bindings.empty()) {
         return expected;
     }
     expected.extended = true;
+    const bool strict_sandbox = config.strict_sandbox != 0;
+    // POSIX always installs CORE/NOFILE limits. Windows reports RLIMITS
+    // only when its process-memory Job limit is actually enabled.
+#if defined(_WIN32)
+    const uint32_t resource_features = config.process_memory_limit != 0
+        ? static_cast<uint32_t>(CAPSID_SANDBOX_FEATURE_RLIMITS) : 0U;
+#else
+    const uint32_t resource_features = CAPSID_SANDBOX_FEATURE_RLIMITS;
+#endif
     expected.applied_feature_bits = strict_sandbox
         ? static_cast<uint32_t>(CAPSID_SANDBOX_FEATURE_STRICT_BASE)
-        : static_cast<uint32_t>(CAPSID_SANDBOX_FEATURE_RLIMITS);
+        : resource_features;
     expected.seccomp_mode = strict_sandbox ? capsid::kSeccompModeFilter : 0;
     expected.landlock_abi = strict_sandbox ? host_landlock_abi() : 0;
     expected.network_namespace_identity.clear();

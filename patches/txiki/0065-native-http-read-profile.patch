@@ -1,0 +1,12 @@
+diff --git a/src/lws-utils.c b/src/lws-utils.c
+--- a/src/lws-utils.c
++++ b/src/lws-utils.c
+@@ -412,7 +412,7 @@
+     info.port = CONTEXT_PORT_NO_LISTEN;
+     info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT | LWS_SERVER_OPTION_EXPLICIT_VHOSTS;
+     /* Match Node.js / Deno default max header size (16 KiB). */
+-    info.pt_serv_buf_size = 16384;
++    info.pt_serv_buf_size = 4096 + LWS_PRE;
+     info.max_http_header_data2 = 16384;
+ 
+     /* Use the existing libuv event loop via our own event lib. */

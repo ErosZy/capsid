@@ -1,0 +1,18 @@
+{
+  "status": "accepted-by-user",
+  "complete": true,
+  "capturedUTC": "2026-11-10T11:12:36.095486+00:00",
+  "requestId": "call_32a9b16040194e13b9b2ffa2f75afaf9",
+  "questionItem": 0,
+  "userAnswer": "保留锁定 workerd 的调度；保留原始 WPT 超时失败，另做逐项兼容验收（建议，符合现有兼容目标）",
+  "defaultMessageChannelScheduling": "preserve-locked-workerd-promise-microtasks",
+  "rawWptTimeoutFailuresRetained": true,
+  "standardConformancePassed": false,
+  "compatibilityAcceptance": "separate per-case comparison with the pinned workerd reference plus independent scheduling witnesses; unexpected differences remain failures",
+  "evidence": "sdk78-complete-wpt-request-context-linux-r4/run.json",
+  "referenceVersion": "v1.20261010.1",
+  "referenceLinuxSHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "compatibilityDate": "2026-08-20",
+  "compatibilityFlags": [],
+  "fullV030GoalComplete": false
+}

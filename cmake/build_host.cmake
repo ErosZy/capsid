@@ -32,11 +32,14 @@ if(CAPSID_BUILD_HOST)
         src/host/binding_registry.cc
         src/host/bytecode_attestation.cc
         src/host/config.cc
+        src/host/channel_ledger.cc
         src/host/generation_identity.cc
         src/host/generation_pool.cc
+        src/host/ipc_metrics.cc
         src/host/listener_cors.cc
         src/host/local_capsid_policy.cc
         src/host/metrics.cc
+        src/host/parent_stop_monitor.cc
         src/host/policy_compiler.cc
         src/host/process_snapshot.cc
         src/host/request_normalization.cc
@@ -47,6 +50,7 @@ if(CAPSID_BUILD_HOST)
         src/host/static_pool_server.cc
         src/host/trusted_key_store.cc
         src/host/ws_codec.cc
+        src/host/ws_stream.cc
         src/host/worker_capacity_ledger.cc
         src/host/worker_event_source.cc
         src/host/worker_executor.cc
@@ -64,6 +68,7 @@ if(CAPSID_BUILD_HOST)
             src/host/managed_admin_backend.cc
             src/host/managed_host.cc
             src/host/managed_registry.cc
+            src/host/quarantine_dispatcher.cc
             src/host/secret_file_provider.cc
         )
     endif()
@@ -113,14 +118,11 @@ if(CAPSID_BUILD_HOST)
     # Platforms without system Boost configure fine but get no capsid-host;
     # the frozen integration test registration only references the target
     # when CAPSID_BUILD_WORKER is enabled, which requires the Linux toolchain.
-    # A fully static package (-static in CMAKE_EXE_LINKER_FLAGS) cannot link
-    # Boost's shared library; FindBoost must be told to prefer the archive
-    # before it resolves the target (Alpine's boost-dev ships both, and the
-    # default picks libboost_system.so.1.84.0).
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND
-       CMAKE_EXE_LINKER_FLAGS MATCHES "(^| )-static( |$)")
-        set(Boost_USE_STATIC_LIBS ON)
-    endif()
+    # Shipped Hosts must not require an undeclared system Boost library.
+    # Select the archive before resolving Boost::system even when libc and
+    # the platform loader remain dynamic. Newer header-only Boost.System
+    # releases continue through the component fallback below.
+    set(Boost_USE_STATIC_LIBS ON)
     find_package(Boost 1.74 QUIET COMPONENTS system)
     if(NOT Boost_FOUND)
         # Boost >= 1.87 ships Boost.System as header-only and no longer
@@ -151,6 +153,19 @@ if(CAPSID_BUILD_HOST)
         endif()
     endif()
     if(Boost_FOUND)
+        find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto SSL)
+        include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/host_dns.cmake")
+        target_link_libraries(capsid_host_core PRIVATE OpenSSL::SSL)
+        target_compile_definitions(capsid_host_core PUBLIC CAPSID_HOST_NETWORKING=1)
+        # StaticPoolServer and the managed coordinator reference this
+        # transport. Keep its implementation in the same archive so core
+        # consumers need no private source copy to satisfy the link closure.
+        # Tests with their own transport object still resolve that object
+        # first; the archive member is extracted only when it is needed.
+        target_sources(capsid_host_core PRIVATE
+            src/host/single_worker_server.cc
+            src/host/websocket_session.cc
+            src/host/websocket_dialer.cc)
         # M1A design gate (design review §4.3): only the WorkerEventSource
         # adapter may call capsid_worker_fd(); every other Host module
         # observes the worker IPC through readable/writable semantics.

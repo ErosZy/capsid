@@ -19,10 +19,9 @@
 #include <string>
 #include <vector>
 
+#include "graceful_worker_exit.h"
 #include "win32_compat.h"
-#if defined(_WIN32)
-#include "win32_compat.h"
-#else
+#if !defined(_WIN32)
 #include <unistd.h>
 #endif
 
@@ -84,7 +83,6 @@ bool next_event(capsid_worker *worker, capsid_event *event) {
         return false;
     }
     fail(std::string("next event: ") + capsid_result_string(result));
-    return false;
 }
 
 void wait_ready(capsid_worker *worker) {
@@ -154,6 +152,41 @@ struct Collector {
     std::map<uint64_t, uint64_t> pending_grant_bytes;
 };
 
+// Observe every phase through the same counters; a terminal received while
+// credit is withheld remains part of the final exactly-once assertions.
+void collect_event(Collector &collector, const capsid_event &event) {
+    switch (event.type) {
+        case CAPSID_EVENT_RESPONSE_HEAD:
+            collector.head_frames += 1;
+            break;
+        case CAPSID_EVENT_RESPONSE_BODY:
+            collector.body_frames += 1;
+            collector.outcomes[event.request_id].body.append(
+                reinterpret_cast<const char *>(event.payload.data), event.payload.size);
+            break;
+        case CAPSID_EVENT_RESPONSE_END:
+            collector.end_frames += 1;
+            collector.outcomes[event.request_id].ended = true;
+            collector.terminal_counts[event.request_id] += 1;
+            collector.completion_order.push_back(event.request_id);
+            collector.pending_grant_bytes[event.request_id] = 0;
+            break;
+        case CAPSID_EVENT_ERROR:
+        case CAPSID_EVENT_REQUEST_TIMEOUT:
+            collector.error_frames += 1;
+            collector.outcomes[event.request_id].errored = true;
+            collector.terminal_counts[event.request_id] += 1;
+            collector.completion_order.push_back(event.request_id);
+            collector.pending_grant_bytes[event.request_id] = 0;
+            break;
+        case CAPSID_EVENT_EXIT:
+            collector.saw_exit = true;
+            break;
+        default:
+            break;
+    }
+}
+
 enum class GrantMode {
     kImmediate,  // reimburse every frame as it arrives (fast host)
     kDeferredOnce,  // hold credits until every request produced a first
@@ -166,9 +199,12 @@ enum class GrantMode {
 Collector drive(capsid_worker *worker,
                 const std::vector<uint64_t> &ids,
                 GrantMode mode,
-                int timeout_s) {
-    Collector collector;
+                int timeout_s,
+                Collector collector = Collector()) {
     std::set<uint64_t> pending_ids(ids.begin(), ids.end());
+    for (const auto &entry : collector.terminal_counts) {
+        if (entry.second != 0) pending_ids.erase(entry.first);
+    }
     std::set<uint64_t> seen_first_frame;
     const size_t expected_ids = ids.size();
     bool deferred_fired = false;
@@ -186,35 +222,26 @@ Collector drive(capsid_worker *worker,
                         worker, entry.first,
                         static_cast<uint32_t>(entry.second) + 65536u);
                 entry.second = 0;
-                // A request can reach its terminal between the deferred
-                // trigger and this release; the client has already dropped
-                // its credit state, so a stale grant is a benign race.
-                if (result == CAPSID_INVALID_ARGUMENT) {
-                    continue;
-                }
                 require_result(result, "grant deferred credit");
             }
         }
     };
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(timeout_s);
+    bool first_pass = true;
     while (std::chrono::steady_clock::now() < deadline &&
-           !pending_ids.empty()) {
+           (first_pass || !pending_ids.empty())) {
+        first_pass = false;
         pump(worker);
         capsid_event event;
         while (next_event(worker, &event)) {
+            collect_event(collector, event);
             switch (event.type) {
                 case CAPSID_EVENT_REQUEST_CREDIT:
                     continue;
                 case CAPSID_EVENT_RESPONSE_HEAD:
-                    collector.head_frames += 1;
                     continue;
                 case CAPSID_EVENT_RESPONSE_BODY: {
-                    collector.body_frames += 1;
-                    Outcome &outcome = collector.outcomes[event.request_id];
-                    outcome.body.append(
-                        reinterpret_cast<const char *>(event.payload.data),
-                        event.payload.size);
                     seen_first_frame.insert(event.request_id);
                     if (mode == GrantMode::kImmediate || deferred_fired) {
                         collector.pending_grant_bytes[event.request_id] +=
@@ -234,24 +261,13 @@ Collector drive(capsid_worker *worker,
                     break;
                 }
                 case CAPSID_EVENT_RESPONSE_END:
-                    collector.end_frames += 1;
-                    collector.outcomes[event.request_id].ended = true;
-                    collector.terminal_counts[event.request_id] += 1;
-                    collector.completion_order.push_back(event.request_id);
-                    collector.pending_grant_bytes[event.request_id] = 0;
                     pending_ids.erase(event.request_id);
                     break;
                 case CAPSID_EVENT_ERROR:
                 case CAPSID_EVENT_REQUEST_TIMEOUT:
-                    collector.error_frames += 1;
-                    collector.outcomes[event.request_id].errored = true;
-                    collector.terminal_counts[event.request_id] += 1;
-                    collector.completion_order.push_back(event.request_id);
-                    collector.pending_grant_bytes[event.request_id] = 0;
                     pending_ids.erase(event.request_id);
                     break;
                 case CAPSID_EVENT_EXIT:
-                    collector.saw_exit = true;
                     pending_ids.clear();
                     break;
                 default:
@@ -575,17 +591,26 @@ void test_error_after_partial_write(const char *worker_path,
 // once; the terminal is delivered exactly once (no re-cancel on later
 // timer ticks).
 //
-// Saturation is forced: 64 x 65537 with max_queued=1 MiB and initial
-// window 16 KiB fills the wire queue (64 x 16 KiB = 1 MiB) before any
-// credit is granted. The hang request times out (300 ms) while the
-// queue is still full, so its error terminal has to wait; the fixture
-// counts cancel-bridge deliveries via the abort signal, and the probe
-// asserts the count is exactly 1.
+// A 1 MiB wire queue and 64 response bodies provide the pressure input.
+// The dedicated timeout writer fixture lets the first body from each
+// response reach the host, then returns EAGAIN for 1.5 s. Its independent
+// queue observer requires the timeout terminal to remain blocked behind
+// a full wire queue across later timer ticks, then enter the queue once.
+// The ordinary Worker runs the same public exactly-once/abort assertions;
+// kernel buffering alone does not prove that its wire queue saturated.
 void test_timeout_once_under_saturation(const char *worker_path,
                                         const std::string &bundle) {
     capsid_worker *worker =
-        spawn_with(worker_path, bundle, 4u * 1024u * 1024u, 16u * 1024u, 300);
+        spawn_with(worker_path, bundle, 1024u * 1024u, 16u * 1024u, 300);
     std::vector<uint64_t> ids;
+    require_result(
+        capsid_worker_begin_request(
+            worker, 92, "GET", "https://example.test/hang", NULL, 0),
+        "begin hang for timeout");
+    require_result(
+        capsid_worker_end_request(worker, 92),
+        "end hang for timeout");
+    ids.push_back(92);
     for (uint64_t id = 93; id < 93 + 64; ++id) {
         require_result(
             capsid_worker_begin_request(
@@ -597,27 +622,21 @@ void test_timeout_once_under_saturation(const char *worker_path,
             "end saturation for timeout");
         ids.push_back(id);
     }
-    require_result(
-        capsid_worker_begin_request(
-            worker, 157, "GET", "https://example.test/hang", NULL, 0),
-        "begin hang for timeout");
-    require_result(
-        capsid_worker_end_request(worker, 157),
-        "end hang for timeout");
-    ids.push_back(157);
 
     // Phase A: read until every request produced its first frame, then
     // release deferred credits (per request 65536 + accumulated) so the
-    // worker can fill its 4 MiB outbound buffer.
+    // worker can fill its 1 MiB outbound buffer.
     const std::chrono::steady_clock::time_point first_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(3);
     std::set<uint64_t> seen_first;
     bool fired = false;
     std::map<uint64_t, uint64_t> held;
+    Collector phase_a;
     while (std::chrono::steady_clock::now() < first_deadline && !fired) {
         pump(worker);
         capsid_event event;
         while (next_event(worker, &event)) {
+            collect_event(phase_a, event);
             if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
                 seen_first.insert(event.request_id);
                 if (fired) {
@@ -637,6 +656,12 @@ void test_timeout_once_under_saturation(const char *worker_path,
                      held.begin();
                  it != held.end();
                  ++it) {
+                // The ABI rejects credit after a terminal has retired the
+                // request. Keep that terminal and omit only its stale grant.
+                if (phase_a.terminal_counts.count(it->first) != 0) {
+                    held[it->first] = 0;
+                    continue;
+                }
                 require_result(
                     capsid_worker_grant_response_credit(
                         worker, it->first,
@@ -648,9 +673,28 @@ void test_timeout_once_under_saturation(const char *worker_path,
     }
     require(fired, "all saturation requests produced first frames");
 
+    // Publish the queued WINDOW_UPDATE frames before withholding reads.
+    // Otherwise Phase B leaves the worker blocked on credit rather than
+    // exercising its outbound wire queue.
+    bool credits_flushed = false;
+    while (std::chrono::steady_clock::now() < first_deadline && !credits_flushed) {
+        const capsid_result result = capsid_worker_flush(worker);
+        if (result == CAPSID_OK) {
+            credits_flushed = true;
+        } else if (result == CAPSID_WOULD_BLOCK) {
+            capsid_pollfd descriptor = {};
+            descriptor.fd = capsid_worker_fd(worker);
+            descriptor.events = POLLOUT;
+            capsid::win32::capsid_poll(&descriptor, 1, 10);
+        } else {
+            require_result(result, "flush deferred response credit");
+        }
+    }
+    require(credits_flushed, "deferred credits reached the Worker before Phase B");
+
     // Phase B: stop reading for 1.5 s. The worker keeps appending
     // (credits were released), its socket and outbound buffer fill to
-    // the 4 MiB wire limit, and the hang request times out at ~300 ms
+    // the 1 MiB wire limit, and the hang request times out at ~300 ms
     // with its error terminal wedged behind the full queue — several
     // timer ticks pass, enough for a re-cancel bug to inflate the
     // abort counter.
@@ -665,9 +709,11 @@ void test_timeout_once_under_saturation(const char *worker_path,
     }
 
     // Phase C: read + grant everything, then probe the abort counter.
-    Collector collector = drive(worker, ids, GrantMode::kImmediate, 15);
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 15, phase_a);
+    require(collector.outcomes.size() == ids.size(),
+            "every observed outcome belongs to the submitted requests");
     require(!collector.saw_exit, "worker must not exit");
-    const auto hang = collector.outcomes.find(157);
+    const auto hang = collector.outcomes.find(92);
     if (hang == collector.outcomes.end() || !hang->second.errored) {
         std::fprintf(stderr,
                      "timeout saturation diagnostics: outcomes=%zu head=%llu "
@@ -677,14 +723,14 @@ void test_timeout_once_under_saturation(const char *worker_path,
                      static_cast<unsigned long long>(collector.body_frames),
                      static_cast<unsigned long long>(collector.end_frames),
                      static_cast<unsigned long long>(collector.error_frames),
-                     collector.terminal_counts[157]);
+                     collector.terminal_counts[92]);
     }
     require(hang != collector.outcomes.end() && hang->second.errored,
             "hang request errored via deadline");
     // The 64 saturation requests also hit the 300 ms deadline (they are
     // wedged behind the full queue) — each gets exactly one error
     // terminal; the hang request must also produce exactly one.
-    require(collector.terminal_counts[157] == 1,
+    require(collector.terminal_counts[92] == 1,
             "hang request produced exactly one terminal");
     for (uint64_t id = 93; id < 157; ++id) {
         require(collector.terminal_counts[id] == 1,
@@ -705,6 +751,8 @@ void test_timeout_once_under_saturation(const char *worker_path,
             "hang-count probe completed");
     require(count->second.body.size() == 4 && count->second.body[0] == '1',
             "cancel bridge delivered exactly once");
+    require(capsid_test::shutdown_and_wait(worker, 5000).clean(),
+            "timeout pressure Worker exited cleanly with its fixture verdict");
     capsid_worker_destroy(worker);
 }
 
@@ -908,10 +956,102 @@ void test_native_string_final_utf8(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
+// #18: establish sixteen producers before starting the deadline subject.
+// The original 64-request case remains #11. This case isolates the full
+// wire queue from the cost of dispatching 64 ASan-instrumented handlers.
+// Each producer contributes a real 64 KiB pump quantum to the 1 MiB queue.
+void test_established_timeout_pressure(const char *worker_path,
+                                       const std::string &bundle) {
+    capsid_worker *worker =
+        spawn_with(worker_path, bundle, 1024u * 1024u, 16u * 1024u, 300);
+#if defined(_WIN32)
+    // The controlled writer cannot piggyback ACKs on body output. Publish
+    // this test's small input frames without Nagle batching delays.
+    const SOCKET input_socket = static_cast<SOCKET>(_get_osfhandle(capsid_worker_fd(worker)));
+    const int no_delay = 1;
+    int observed_no_delay = 0;
+    int option_size = sizeof(observed_no_delay);
+    require(setsockopt(input_socket, IPPROTO_TCP, TCP_NODELAY,
+                      reinterpret_cast<const char *>(&no_delay), sizeof(no_delay)) == 0,
+            "disable batching on the private pressure input socket");
+    require(getsockopt(input_socket, IPPROTO_TCP, TCP_NODELAY,
+                      reinterpret_cast<char *>(&observed_no_delay), &option_size) == 0 &&
+            observed_no_delay == 1, "observe unbatched private pressure input");
+    std::fprintf(stderr, "QUEUE_FIXTURE input_nodelay=%d\n", observed_no_delay);
+#endif
+    std::vector<uint64_t> ids{92};
+    for (uint64_t id = 93; id < 109; ++id) {
+        require_result(capsid_worker_begin_request(
+            worker, id, "GET", "https://example.test/timeout-pressure-body", NULL, 0),
+            "begin pressure producer");
+        require_result(capsid_worker_end_request(worker, id), "end pressure producer");
+        ids.push_back(id);
+    }
+    const auto first_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    Collector phase_a;
+    std::set<uint64_t> seen_first;
+    while (std::chrono::steady_clock::now() < first_deadline && seen_first.size() != 16) {
+        pump(worker);
+        capsid_event event;
+        while (next_event(worker, &event)) {
+            collect_event(phase_a, event);
+            if (event.type == CAPSID_EVENT_RESPONSE_BODY) seen_first.insert(event.request_id);
+        }
+    }
+    require(seen_first.size() == 16, "all sixteen producers established their first windows");
+    for (uint64_t id = 93; id < 109; ++id) {
+        require(phase_a.outcomes[id].body.size() == 16384 && phase_a.terminal_counts[id] == 0,
+                "producer still live after its original initial window");
+    }
+    require_result(capsid_worker_begin_request(
+        worker, 92, "GET", "https://example.test/hang", NULL, 0), "begin pressure hang");
+    require_result(capsid_worker_end_request(worker, 92), "end pressure hang");
+    for (uint64_t id = 93; id < 109; ++id) {
+        require_result(capsid_worker_grant_response_credit(worker, id, 128u * 1024u),
+                       "grant established producers enough for a full native pump pass");
+    }
+    bool flushed = false;
+    while (std::chrono::steady_clock::now() < first_deadline && !flushed) {
+        const capsid_result result = capsid_worker_flush(worker);
+        if (result == CAPSID_OK) flushed = true;
+        else if (result == CAPSID_WOULD_BLOCK) {
+            capsid_pollfd descriptor = {};
+            descriptor.fd = capsid_worker_fd(worker); descriptor.events = POLLOUT;
+            capsid::win32::capsid_poll(&descriptor, 1, 10);
+        } else require_result(result, "publish pressure input and credit");
+    }
+    require(flushed, "pressure input reached the Worker");
+    const auto held_until = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+    while (std::chrono::steady_clock::now() < held_until) {
+        capsid_pollfd descriptor = {};
+        descriptor.fd = capsid_worker_fd(worker);
+        capsid::win32::capsid_poll(&descriptor, 1, 10);
+    }
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 15, phase_a);
+    require(!collector.saw_exit && collector.outcomes.size() == ids.size(),
+            "all submitted pressure requests survived to a terminal");
+    for (uint64_t id : ids) require(collector.terminal_counts[id] == 1,
+                                  "each pressure request produced exactly one terminal");
+    require(collector.outcomes[92].errored && !collector.outcomes[92].ended,
+            "hang reached its unchanged request deadline");
+    require_result(capsid_worker_begin_request(
+        worker, 158, "GET", "https://example.test/hang-count", NULL, 0), "begin abort-count probe");
+    require_result(capsid_worker_end_request(worker, 158), "end abort-count probe");
+    Collector probe = drive(worker, {158}, GrantMode::kImmediate, 3);
+    require(probe.outcomes[158].ended && !probe.outcomes[158].errored &&
+            probe.outcomes[158].body == "1111" && probe.terminal_counts[158] == 1,
+            "abort bridge delivered once and the same Worker remains usable");
+    require(capsid_test::shutdown_and_wait(worker, 5000).clean(),
+            "established pressure Worker exited cleanly with its fixture verdict");
+    capsid_worker_destroy(worker);
+}
+
 }  // namespace
 
-// Optional argv[3]: run only the numbered test (1..8). Without it the
-// whole suite runs in order; a failing test stops the run, so the
+// Optional argv[3]: run only the numbered test (1..18). Without it the
+// original seventeen cases run in order. Case 18 requires the explicit
+// controlled-writer selector used by worker_response_timeout_queue_pressure.
+// A failing test stops the run, so the
 // selector is how the RED matrix is captured per test.
 void run_sel(const std::string &only,
              const char *worker_path,
@@ -946,6 +1086,9 @@ int main(int argc, char **argv) {
     run_sel(only, argv[1], bundle, 15, test_accessed_string_body_falls_back);
     run_sel(only, argv[1], bundle, 16, test_replaced_string_body_falls_back);
     run_sel(only, argv[1], bundle, 17, test_native_string_final_utf8);
+    if (only == "18") {
+        test_established_timeout_pressure(argv[1], bundle);
+    }
     std::printf("all queue-saturation RED tests passed\n");
     return 0;
 }

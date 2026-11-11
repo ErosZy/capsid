@@ -587,9 +587,38 @@ void test_successful_result_owns_all_strings() {
             "normalized request retained caller-owned storage");
 }
 
+void test_websocket_handshake_fields() {
+    using Check = capsid::host::WebSocketUpgradeCheck;
+    const auto check = [](const std::vector<PublicRequestHeaderView>& views,
+                          std::string_view method = "GET", unsigned version = 11) {
+        return capsid::host::check_websocket_upgrade(views, method, version);
+    };
+    std::vector<PublicRequestHeaderView> fields = {
+        {"Connection", "keep-alive, Upgrade"}, {"Upgrade", "other/2, WebSocket"},
+        {"Sec-WebSocket-Key", " dGhlIHNhbXBsZSBub25jZQ==\t"},
+        {"Sec-WebSocket-Version", " 13 "}, {"Sec-WebSocket-Protocol", "chat, other"},
+    };
+    require(check(fields) == Check::kValid, "WebSocket tokens and OWS validate");
+    require(check(fields, "POST") == Check::kBadHandshake, "upgrade requires GET");
+    require(check(fields, "GET", 10) == Check::kBadHandshake, "upgrade requires HTTP/1.1+");
+    fields.push_back({"Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="});
+    require(check(fields) == Check::kBadKey, "duplicate key rejected after upgrade detection");
+    require(check({{"Sec-WebSocket-Key", "one"}, {"Sec-WebSocket-Key", "two"}}) == Check::kNone,
+            "ordinary HTTP with duplicate WS fields bypasses no required gate");
+    fields.pop_back();
+    fields[4].value = "chat, chat";
+    require(check(fields) == Check::kBadHandshake, "duplicate subprotocol rejected");
+    fields[4].value = R"(chat, "other")";
+    require(check(fields) == Check::kBadHandshake, "quoted subprotocol rejected");
+    fields[4].value = "chat";
+    fields[0].value = "keep-alive";
+    require(check(fields) == Check::kBadHandshake, "missing Connection Upgrade rejected");
+}
+
 }  // namespace
 
 int main() {
+    test_websocket_handshake_fields();
     test_forwarded_headers_never_change_subdomain_url();
     test_path_rewrite_table_and_fixed_origin();
     test_trusted_header_route_uses_only_capsid_app();

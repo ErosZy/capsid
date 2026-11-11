@@ -1,4 +1,5 @@
 #include "host/config.h"
+#include "host/policy_compiler.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -685,6 +686,71 @@ void test_config_resource_limits_precede_json_dom_work() {
                   "brackets inside an App string");
 }
 
+void test_request_timeout_reaches_typed_app_request() {
+    capsid::host::AppRequest app;
+    std::string error;
+    const auto document = [](const std::string& request) {
+        const std::string text = std::string(R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","pool":{"minReady":1,"maxWorkers":1},"request":)json") + request + "}";
+        return std::vector<std::uint8_t>(text.begin(), text.end());
+    };
+    require(capsid::host::parse_app_request(
+                document(R"({"timeout":"120ms"})"), &app, &error),
+            "typed request timeout rejected: " + error);
+    require(app.request_timeout_ms == 120,
+            "accepted request.timeout was discarded by typed parsing");
+    for (const auto& duration : std::vector<std::string>{"0ms", "invalid", "9223372036854775808ms"}) {
+        require(!capsid::host::parse_app_request(
+                    document("{\"timeout\":\"" + duration + "\"}"),
+                    &app, &error),
+                "invalid request timeout accepted: " + duration);
+    }
+    app = {};
+    require(capsid::host::parse_app_request(document("{}"), &app, &error),
+            "omitted request timeout rejected");
+    require(app.request_timeout_ms == 0, "omitted request timeout acquired an override");
+}
+
+void test_ipv6_fetch_authorities_reach_the_app_policy() {
+    using capsid::host::FetchTarget;
+    using capsid::host::parse_fetch_target_text;
+    const auto document = [](const std::string& authority) {
+        const auto text = std::string(R"({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","pool":{"minReady":1,"maxWorkers":1},"permissions":{"fetch":{"allow":[")") +
+            authority + R"("]}}})";
+        return std::vector<std::uint8_t>(text.begin(), text.end());
+    };
+    for (const auto& authority : std::vector<std::string>{
+            "[::1]:443,8443", "[0000:0000:0000:0000:0000:0000:0000:0001]:443,8443"}) {
+        capsid::host::AppRequest app;
+        std::string error;
+        require(capsid::host::parse_app_request(document(authority), &app, &error),
+                "bracketed IPv6 App fetch authority rejected: " + error);
+        require(app.fetch.size() == 1 && app.fetch[0].host == "::1" &&
+                    app.fetch[0].ports == std::vector<std::uint16_t>({443, 8443}),
+                "IPv6 fetch authority or explicit ports changed in App policy");
+    }
+    FetchTarget target;
+    require(parse_fetch_target_text("[::1]", &target) && target.host == "::1" && target.ports.empty(),
+            "bare bracketed IPv6 authority lost any-port semantics");
+    require(parse_fetch_target_text("api.example:443", &target) && target.host == "api.example" &&
+                target.ports == std::vector<std::uint16_t>({443}), "existing hostname authority changed");
+    require(parse_fetch_target_text("api.example:0000443", &target) &&
+                target.ports == std::vector<std::uint16_t>({443}), "existing decimal leading-zero port changed");
+    for (const auto& authority : std::vector<std::string>{
+            "", "::1", "[::1", "[localhost]:443", "[::1]extra:443", "[::1]:", "[::1]:0", "[::1]:65536",
+            "[::1]:443,", "[::1]:443,,8443", "[::1]: 443", "[::1]:+443", "[::1]:-1",
+            "[fe80::1%1]:443", "[::1/128]:443", "api.example:443,",
+            std::string("[::1") + '\0' + "ignored]:443", std::string("api.example") + '\0' + ":443"}) {
+        FetchTarget retained{"unchanged.example", {123}};
+        require(!parse_fetch_target_text(authority, &retained) && retained.host == "unchanged.example" &&
+                    retained.ports == std::vector<std::uint16_t>({123}),
+                "malformed fetch authority changed the policy destination: " + authority);
+        capsid::host::AppRequest app;
+        std::string error;
+        require(!capsid::host::parse_app_request(document(authority), &app, &error),
+                "malformed App fetch authority accepted: " + authority);
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -701,5 +767,7 @@ int main() {
     test_unknown_fields_precede_value_validation();
     test_static_pool_is_explicit_positive_and_fixed_size();
     test_config_resource_limits_precede_json_dom_work();
+    test_request_timeout_reaches_typed_app_request();
+    test_ipv6_fetch_authorities_reach_the_app_policy();
     return 0;
 }

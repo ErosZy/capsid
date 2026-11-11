@@ -1,0 +1,265 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -330,6 +330,9 @@
+     void *host_promise_rejection_tracker_opaque;
+ 
+     struct list_head job_list; /* list of JSJobEntry.link */
++    struct list_head deferred_promise_jobs; /* cross-scope delivery turns */
++    JSPromiseContextHooks promise_ctx_hooks;
++    void *promise_ctx_opaque;
+ 
+     bool module_normalize_has_attr;
+     union {
+@@ -2008,6 +2011,7 @@
+     init_list_head(&rt->string_list);
+ #endif
+     init_list_head(&rt->job_list);
++    init_list_head(&rt->deferred_promise_jobs);
+ 
+     if (JS_InitAtoms(rt))
+         goto fail;
+@@ -2168,6 +2172,14 @@
+ {
+     rt->microtask_exception_hook = report;
+     rt->microtask_exception_opaque = opaque;
++}
++
++void JS_SetPromiseContextHooks(JSRuntime *rt,
++                               const JSPromiseContextHooks *hooks, void *opaque)
++{
++    if (hooks) rt->promise_ctx_hooks = *hooks;
++    else memset(&rt->promise_ctx_hooks, 0, sizeof(rt->promise_ctx_hooks));
++    rt->promise_ctx_opaque = opaque;
+ }
+ 
+ void JS_SetCanBlock(JSRuntime *rt, bool can_block)
+@@ -2198,8 +2210,12 @@
+     assert(!rt->in_free);
+ 
+     e = js_malloc(ctx, sizeof(*e) + argc * sizeof(JSValue));
+-    if (!e)
++    if (!e) {
++        /* Supplied context ownership is consumed on every return path. */
++        if (has_job_ctx && job_ctx && rt->job_ctx_hooks.release)
++            rt->job_ctx_hooks.release(job_ctx, rt->job_ctx_opaque);
+         return -1;
++    }
+     e->ctx = ctx;
+     e->job_func = job_func;
+     e->argc = argc;
+@@ -2230,6 +2246,34 @@
+     return js_enqueue_job_ex(ctx, job_func, argc, argv, NULL, false);
+ }
+ 
++static int js_enqueue_deferred_promise_job(JSContext *ctx, JSJobFunc *func,
++                                           int argc, JSValueConst *argv,
++                                           void *job_ctx, bool has_job_ctx)
++{
++    int ret = js_enqueue_job_ex(ctx, func, argc, argv, job_ctx, has_job_ctx);
++    if (ret == 0) {
++        JSRuntime *rt = ctx->rt;
++        struct list_head *entry = rt->job_list.prev;
++        list_del(entry);
++        list_add_tail(entry, &rt->deferred_promise_jobs);
++    }
++    return ret;
++}
++
++bool JS_IsDeferredPromiseJobPending(JSRuntime *rt)
++{
++    return !list_empty(&rt->deferred_promise_jobs);
++}
++
++void JS_PromoteDeferredPromiseJobs(JSRuntime *rt)
++{
++    while (!list_empty(&rt->deferred_promise_jobs)) {
++        struct list_head *entry = rt->deferred_promise_jobs.next;
++        list_del(entry);
++        list_add_tail(entry, &rt->job_list);
++    }
++}
++
+ bool JS_IsJobPending(JSRuntime *rt)
+ {
+     return !list_empty(&rt->job_list);
+@@ -2242,6 +2286,10 @@
+     if (!job_context)
+         return false;
+     list_for_each(el, &rt->job_list) {
++        if (list_entry(el, JSJobEntry, link)->job_ctx == job_context)
++            return true;
++    }
++    list_for_each(el, &rt->deferred_promise_jobs) {
+         if (list_entry(el, JSJobEntry, link)->job_ctx == job_context)
+             return true;
+     }
+@@ -2395,6 +2443,7 @@
+ 
+     rt->in_free = true;
+     JS_FreeValueRT(rt, rt->current_exception);
++    JS_PromoteDeferredPromiseJobs(rt);
+ 
+     list_for_each_safe(el, el1, &rt->job_list) {
+         JSJobEntry *e = list_entry(el, JSJobEntry, link);
+@@ -2405,6 +2454,7 @@
+         js_free_rt(rt, e);
+     }
+     init_list_head(&rt->job_list);
++    init_list_head(&rt->deferred_promise_jobs);
+ 
+     JS_RunGC(rt);
+ 
+@@ -54515,6 +54565,7 @@
+     struct list_head promise_reactions[2];
+     bool is_handled; /* Note: only useful to debug */
+     JSValue promise_result;
++    void *origin; /* non-owning request lifetime, retained by origin hooks */
+ } JSPromiseData;
+ 
+ typedef struct JSPromiseFunctionDataResolved {
+@@ -54648,6 +54699,17 @@
+ }
+ 
+ static void fulfill_or_reject_promise(JSContext *ctx, JSValueConst promise,
++                                      JSValueConst value, bool is_reject);
++
++static JSValue promise_cross_scope_settle_job(JSContext *ctx, int argc,
++                                             JSValueConst *argv)
++{
++    assert(argc == 3);
++    fulfill_or_reject_promise(ctx, argv[0], argv[1], JS_ToBool(ctx, argv[2]));
++    return JS_UNDEFINED;
++}
++
++static void fulfill_or_reject_promise(JSContext *ctx, JSValueConst promise,
+                                       JSValueConst value, bool is_reject)
+ {
+     JSPromiseData *s = JS_GetOpaque(promise, JS_CLASS_PROMISE);
+@@ -54657,6 +54719,19 @@
+ 
+     if (!s || s->promise_state != JS_PROMISE_PENDING)
+         return; /* should never happen */
++    JSRuntime *rt = ctx->rt;
++    if (s->origin && rt->promise_ctx_hooks.can_run &&
++            !rt->promise_ctx_hooks.can_run(ctx, s->origin, rt->promise_ctx_opaque))
++        return;
++    if (s->origin && rt->promise_ctx_hooks.same_context &&
++            !rt->promise_ctx_hooks.same_context(ctx, s->origin, NULL, rt->promise_ctx_opaque)) {
++        JSValueConst settle_args[3] = { promise, value, js_bool(is_reject) };
++        void *previous = rt->promise_ctx_hooks.enter(ctx, s->origin, rt->promise_ctx_opaque);
++        js_enqueue_deferred_promise_job(ctx, promise_cross_scope_settle_job,
++                                       3, settle_args, NULL, false);
++        rt->promise_ctx_hooks.leave(ctx, previous, rt->promise_ctx_opaque);
++        return;
++    }
+     set_value(ctx, &s->promise_result, js_dup(value));
+     s->promise_state = JS_PROMISE_FULFILLED + is_reject;
+ 
+@@ -54687,8 +54762,15 @@
+         /* the reaction carries the context captured when .then() (or the
+            await) was created; the settle job runs under that identity,
+            not the resolving job's */
+-        js_enqueue_job_ex(ctx, promise_reaction_job, 5, args,
+-                          rd->ctx_data, true);
++        bool inherited_scope = rt->promise_ctx_hooks.capture && !s->origin;
++        bool cross_scope = s->origin && rd->ctx_data && rt->promise_ctx_hooks.same_context &&
++            !rt->promise_ctx_hooks.same_context(ctx, s->origin, rd->ctx_data, rt->promise_ctx_opaque);
++        if (cross_scope)
++            js_enqueue_deferred_promise_job(ctx, promise_reaction_job, 5, args,
++                                           rd->ctx_data, true);
++        else
++            js_enqueue_job_ex(ctx, promise_reaction_job, 5, args,
++                              rd->ctx_data, !inherited_scope);
+         rd->ctx_data = NULL; /* ownership moved to the job entry */
+         list_del(&rd->link);
+         promise_reaction_data_free(ctx->rt, rd);
+@@ -54878,6 +54960,8 @@
+         }
+     }
+     JS_FreeValueRT(rt, s->promise_result);
++    if (s->origin && rt->promise_ctx_hooks.release)
++        rt->promise_ctx_hooks.release(s->origin, rt->promise_ctx_opaque);
+     js_free_rt(rt, s);
+ }
+ 
+@@ -54925,6 +55009,11 @@
+     init_list_head(&s->promise_reactions[1]);
+     s->promise_result = JS_UNDEFINED;
+     JS_SetOpaqueInternal(obj, s);
++    if (ctx->rt->promise_ctx_hooks.capture &&
++            ctx->rt->promise_ctx_hooks.capture(ctx, ctx->rt->promise_ctx_opaque, &s->origin) < 0) {
++        JS_FreeValue(ctx, obj);
++        return JS_EXCEPTION;
++    }
+     if (js_create_resolving_functions(ctx, resolving_funcs, obj)) {
+         JS_FreeValue(ctx, obj);
+         return JS_EXCEPTION;
+@@ -55465,6 +55554,7 @@
+            reaction may settle from a different job's context and the
+            settle job must still run under the caller's identity */
+         if (ctx->rt->job_ctx_hooks.capture &&
++            !(ctx->rt->promise_ctx_hooks.capture && !s->origin && s->promise_state == JS_PROMISE_PENDING) &&
+             ctx->rt->job_ctx_hooks.capture(ctx, ctx->rt->job_ctx_opaque,
+                                            &rd->ctx_data) < 0) {
+             promise_reaction_data_free(ctx->rt, rd);
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1176,6 +1176,24 @@
+  * filename is a caller-owned value; non-Errors yield undefined,0,-1. */
+ JS_EXTERN void JS_GetErrorSourceLocation(JSContext *ctx, JSValueConst error,
+     JSValue *filename, int *line, int *column);
++/* Optional Promise creation scopes, separate from the four-field job hooks.
++ * An origin is an inert lifetime identity, not an active job/resource lease.
++ * same_context compares it with a captured job, or the current scope if NULL.
++ * Hooks must remain installed until all Promise objects have been destroyed. */
++typedef struct JSPromiseContextHooks {
++    int (*capture)(JSContext *, void *, void **origin);
++    void *(*enter)(JSContext *, void *origin, void *);
++    void (*leave)(JSContext *, void *previous, void *);
++    void (*release)(void *origin, void *);
++    bool (*can_run)(JSContext *, void *origin, void *);
++    bool (*same_context)(JSContext *, void *origin, void *job_context, void *);
++} JSPromiseContextHooks;
++JS_EXTERN void JS_SetPromiseContextHooks(JSRuntime *rt,
++    const JSPromiseContextHooks *hooks, void *opaque);
++/* Cross-scope delivery is an event-loop turn, not part of the resolving
++ * scope's microtask drain. The loop promotes only the current queued batch. */
++JS_EXTERN bool JS_IsDeferredPromiseJobPending(JSRuntime *rt);
++JS_EXTERN void JS_PromoteDeferredPromiseJobs(JSRuntime *rt);
+ /* Capsid: true when at least one pending job carries exactly job_context.
+  * Unlike JS_IsJobPending, this is per-request so an unrelated request's
+  * jobs cannot defer another request's poison decision. */
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -811,7 +811,11 @@
+ }
+ 
+ static void uv__idle_cb(uv_idle_t *handle) {
+-    // Noop
++    TJSRuntime *qrt = handle->data;
++    CHECK_NOT_NULL(qrt);
++    /* A cross-request Promise wakes its destination on the next loop turn,
++     * after the resolving request's current microtasks and due timers. */
++    JS_PromoteDeferredPromiseJobs(qrt->rt);
+ }
+ 
+ static bool tjs__has_handled_rejections(TJSRuntime *qrt) {
+@@ -826,7 +830,8 @@
+ }
+ 
+ static void uv__maybe_idle(TJSRuntime *qrt) {
+-    if (JS_IsJobPending(qrt->rt) || !list_empty(&qrt->pending_rejections) ||
++    if (JS_IsJobPending(qrt->rt) || JS_IsDeferredPromiseJobPending(qrt->rt) ||
++        !list_empty(&qrt->pending_rejections) ||
+         tjs__has_handled_rejections(qrt)) {
+         CHECK_EQ(uv_idle_start(&qrt->jobs.idle, uv__idle_cb), 0);
+     } else {
+@@ -1079,7 +1084,7 @@
+         do {
+             uv__maybe_idle(qrt);
+             r = uv_run(&qrt->loop, UV_RUN_DEFAULT);
+-        } while (r == 0 && JS_IsJobPending(qrt->rt));
++        } while (r == 0 && (JS_IsJobPending(qrt->rt) || JS_IsDeferredPromiseJobPending(qrt->rt)));
+ 
+         /* Only fire beforeunload for main runtime, not workers. */
+         if (qrt->is_worker || qrt->options.skip_run_main) {

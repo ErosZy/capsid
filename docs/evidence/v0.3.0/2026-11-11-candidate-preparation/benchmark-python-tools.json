@@ -1,0 +1,68 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 335,
+  "priorNetworkTimeoutRetainedSHA256": "0dee2534a8349668e597eec2c05a69ac22cc5e264d5d7fa645d80ac51f8f3d11",
+  "recovery": "R2 completed and cached the uvloop wheel, then the public CDN read timed out at watchfiles. Reuse the same isolated prefix, exact requested versions and completed wheel cache; perform a separately recorded network retry without changing benchmark protocol or required dependencies.",
+  "deno": {
+    "path": "/root/capsid-verification-20261109/toolchains/deno-v2.9.7-linux-x64/deno",
+    "sha256": "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a116a3c841f21",
+    "release": "v2.9.7",
+    "archiveSHA256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490",
+    "archiveBytes": 41596794
+  },
+  "requestedReferenceVersions": [
+    "fastapi==0.143.0",
+    "starlette==1.7.0",
+    "Flask==3.1.3",
+    "gunicorn==26.2.0",
+    "uvicorn[standard]==0.54.0"
+  ],
+  "publicPypiOnly": true,
+  "globalPythonUnmodified": true,
+  "formalMeasurementNotStarted": true,
+  "fullV030GoalComplete": false,
+  "command": [
+    "/root/capsid-verification-20261109/toolchains/qps-reference-r1/bin/python",
+    "-m",
+    "pip",
+    "install",
+    "--timeout",
+    "120",
+    "--retries",
+    "3",
+    "--progress-bar",
+    "off",
+    "--only-binary=:all:",
+    "--report",
+    "/mnt/d/capsid-verification-20261108/evidence/r8-wsl-python-benchmark-tools-r3/pip-install-report.json",
+    "fastapi==0.143.0",
+    "starlette==1.7.0",
+    "Flask==3.1.3",
+    "gunicorn==26.2.0",
+    "uvicorn[standard]==0.54.0"
+  ],
+  "activeCommandPid": 429,
+  "exitCode": 0,
+  "seconds": 12.057057900000002,
+  "pipStdoutSHA256": "b1392f14ea6648463e15d6b6c45ecdb703416346bc98d96ef1e9b7f28bd44fd4",
+  "pipStderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "python": {
+    "path": "/root/capsid-verification-20261109/toolchains/qps-reference-r1/bin/python",
+    "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "prefix": "/root/capsid-verification-20261109/toolchains/qps-reference-r1",
+    "packages": {
+      "fastapi": "0.143.0",
+      "starlette": "1.7.0",
+      "Flask": "3.1.3",
+      "gunicorn": "26.2.0",
+      "uvicorn": "0.54.0",
+      "uvloop": "0.23.0",
+      "httptools": "0.9.0"
+    }
+  },
+  "installedDependencyLockSHA256": "85719fcd1c3d68cace0bd7dbcb658975ccfb03a06244bc95aa2abfd94b7b4e90",
+  "allPreviouslyMissingMeasuredExecutablesNowRestored": true,
+  "quietSessionAndFinalCandidateStillRequired": true
+}

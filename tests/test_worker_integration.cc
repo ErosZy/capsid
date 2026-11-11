@@ -1,5 +1,6 @@
 #include "capsid/runtime.h"
 #include "egress_test_policy.h"
+#include "graceful_worker_exit.h"
 #include "wpt_report.h"
 
 #include "win32_compat.h"
@@ -45,6 +46,38 @@ void fail(const std::string &message) {
 void require_result(capsid_result result, const char *operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
+    }
+}
+
+void require_clean_exit(capsid_worker *worker) {
+    const auto result = capsid_test::shutdown_and_wait(worker, 2500);
+    capsid_worker_destroy(worker);
+    std::cout << "WORKER_EXIT {\"clean\":" << (result.clean() ? "true" : "false")
+              << ",\"observed\":" << (result.reaped ? "true" : "false")
+              << ",\"channelClosed\":" << (result.channel_closed ? "true" : "false")
+              << ",\"status\":" << result.status
+              << ",\"waitError\":" << result.wait_error
+              << ",\"eventResult\":" << result.event_result
+              << ",\"errorEvents\":" << result.error_events << "}" << std::endl;
+    if (!result.clean()) fail("Worker did not complete a clean graceful exit");
+}
+
+void require_retained_timer_exit(capsid_worker *worker, bool shutdown) {
+    const auto result = capsid_test::wait_for_worker_exit(worker, 2500, shutdown);
+    capsid_worker_destroy(worker);
+    std::cout << "WORKER_EXIT_RETAINED {\"shutdownRequested\":"
+              << (shutdown ? "true" : "false")
+              << ",\"observed\":" << (result.reaped ? "true" : "false")
+              << ",\"channelClosed\":" << (result.channel_closed ? "true" : "false")
+              << ",\"status\":" << result.status
+              << ",\"waitError\":" << result.wait_error
+              << ",\"clean\":" << (result.clean() ? "true" : "false")
+              << "}" << std::endl;
+    if (result.shutdown_result != CAPSID_OK || result.flush_result != CAPSID_OK ||
+        result.event_result != CAPSID_OK || !result.channel_closed ||
+        !result.reaped || result.wait_error != 0 ||
+        !WIFEXITED(result.status) || WEXITSTATUS(result.status) != 1 || result.clean()) {
+        fail("retained timer Worker did not report a failed process exit");
     }
 }
 
@@ -446,6 +479,13 @@ int main(int argc, char **argv) {
     const bool hostname_egress = mode == "fetch-hostname-egress";
     const bool address_explicit_deny =
         mode == "fetch-address-explicit-deny";
+    const bool exit_fixture = mode == "exit-cleared-timer" ||
+                              mode == "exit-retained-timer" ||
+                              mode == "exit-poisoned-timer" ||
+                              mode == "exit-gc-cycle" ||
+                              mode == "exit-denied-empty" ||
+                              mode == "exit-denied-known" ||
+                              mode == "exit-denied-stream";
     LocalHttpServer *server =
         mode == "fetch" || hostname_egress || address_explicit_deny
             ? new LocalHttpServer()
@@ -456,6 +496,7 @@ int main(int argc, char **argv) {
                          ? "localhost"
                          : "127.0.0.1")
                : "https://example.test/integration";
+    if (exit_fixture) request_url = "https://example.test/" + mode;
     if (mode == "fetch-host-denied") {
         request_url =
             "https://example.test/fetch?"
@@ -591,7 +632,7 @@ int main(int argc, char **argv) {
             "\"cloneProbe\":\"trusted-input\"}") {
             fail("incoming Request lost its normalized header");
         }
-        capsid_worker_destroy(worker);
+        require_clean_exit(worker);
         return 0;
     }
 
@@ -615,6 +656,14 @@ int main(int argc, char **argv) {
 
     const std::string body = run_request(worker, request_url.c_str());
 
+    if (exit_fixture) {
+        if (body != mode) fail("exit fixture did not complete the actual response");
+        if (mode == "exit-retained-timer" || mode == "exit-poisoned-timer")
+            require_retained_timer_exit(worker, mode == "exit-retained-timer");
+        else require_clean_exit(worker);
+        return 0;
+    }
+
     if (mode == "wasm") {
         if (!contains(body, "\"profile\":\"CAPSID-MIN-2025-subset-v0\"") ||
             !contains(body, "\"passed\":true") ||
@@ -628,12 +677,6 @@ int main(int argc, char **argv) {
             fail(std::string("unexpected platform contract report: ") + body);
         }
     } else if (mode == "wpt") {
-        if (!contains(body, "\"profile\":\"CAPSID-MIN-2025-subset-v0\"") ||
-            !contains(body, "\"source\":\"web-platform-tests/wpt\"") ||
-            !contains(body, "\"passed\":true") ||
-            !contains(body, "\"failures\":[]")) {
-            fail(std::string("unexpected WPT report: ") + body);
-        }
         /*
          * Independently reject a realm that executed no subtests. app.js also
          * guards this via `ranNothing`, but that guard lives in the artifact
@@ -641,10 +684,13 @@ int main(int argc, char **argv) {
          * fixture cannot turn an empty run into a green test.
          */
         std::string report_error;
-        if (!capsid_test::validate_wpt_nonzero_report(body, &report_error)) {
+        if (!capsid_test::validate_wpt_success_report(body, &report_error)) {
             fail(std::string("invalid WPT execution evidence: ") +
                  report_error + ": " + body);
         }
+        // Retain accepted deviations and their full diagnostics in LastTest.log
+        // as well as failures. A green CTest status alone is not the WPT report.
+        std::cout << "WPT_REPORT " << body << std::endl;
     } else if (mode == "fetch" || hostname_egress) {
         if (!contains(body, "\"passed\":true") ||
             !contains(body, "\"status\":200") ||
@@ -695,6 +741,6 @@ int main(int argc, char **argv) {
         server->wait();
     }
     delete server;
-    capsid_worker_destroy(worker);
+    require_clean_exit(worker);
     return 0;
 }

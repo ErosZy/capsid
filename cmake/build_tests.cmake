@@ -1,4 +1,69 @@
 if(BUILD_TESTING)
+    add_executable(test-bytecode-publish tests/test_bytecode_publish.cc)
+    target_include_directories(test-bytecode-publish PRIVATE tools)
+    target_link_libraries(test-bytecode-publish PRIVATE capsid_sanitizers)
+    set_target_properties(test-bytecode-publish PROPERTIES
+        CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    if(CAPSID_STRICT_WARNINGS)
+        if(MSVC)
+            target_compile_options(test-bytecode-publish PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-bytecode-publish PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
+    add_test(NAME bytecode_publish_operations COMMAND test-bytecode-publish)
+    set_tests_properties(bytecode_publish_operations PROPERTIES
+        LABELS "compiler;bytecode;filesystem" TIMEOUT 10)
+    if(TARGET capsid-bytecode-compile)
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
+        add_test(NAME bytecode_output_publication
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_bytecode_output_publication.py"
+                --compiler "$<TARGET_FILE:capsid-bytecode-compile>")
+        set_tests_properties(bytecode_output_publication PROPERTIES
+            LABELS "compiler;bytecode;filesystem" TIMEOUT 60)
+        add_test(NAME txiki_upgrade_report_contract_controls
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_txiki_upgrade_report.py")
+        set_tests_properties(txiki_upgrade_report_contract_controls PROPERTIES
+            LABELS "build;provenance;negative-controls" TIMEOUT 30)
+    endif()
+    if(NOT CAPSID_PYTHON3_EXECUTABLE)
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
+    endif()
+    add_test(NAME asan_memory_acceptance_controls
+        COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_asan_memory_acceptance.py")
+    set_tests_properties(asan_memory_acceptance_controls PROPERTIES
+        TIMEOUT 30 LABELS "build;sanitizer;negative-controls")
+    # Portable measurement rules are tested on both native platforms. The
+    # actual C-ABI/PSS probe and its real-process tests require Linux /proc.
+    add_executable(test-benchmark-cold-measurement
+        tests/test_benchmark_cold_measurement.cc)
+    target_include_directories(test-benchmark-cold-measurement PRIVATE bench)
+    target_link_libraries(test-benchmark-cold-measurement PRIVATE capsid_sanitizers)
+    set_target_properties(test-benchmark-cold-measurement PROPERTIES
+        CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    if(CAPSID_STRICT_WARNINGS)
+        if(MSVC)
+            target_compile_options(test-benchmark-cold-measurement PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-benchmark-cold-measurement PRIVATE
+                -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
+    add_test(NAME benchmark_cold_measurement COMMAND test-benchmark-cold-measurement)
+    set_tests_properties(benchmark_cold_measurement PROPERTIES
+        LABELS "benchmark;measurement" TIMEOUT 10)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CAPSID_BUILD_WORKER)
+        add_executable(benchmark-cold-start bench/cold-start.cc)
+        target_link_libraries(benchmark-cold-start PRIVATE capsid_runtime)
+        set_target_properties(benchmark-cold-start PROPERTIES
+            OUTPUT_NAME cold-start CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            target_compile_options(benchmark-cold-start PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
     # Test sources include "win32_compat.h" and other src/-relative
     # internals; expose the directory scope once instead of duplicating
     # the include dir on every test target. (build_tests.cmake is
@@ -11,6 +76,47 @@ if(BUILD_TESTING)
         # the Winsock import library for inet_pton/ntohs/htons.
         link_libraries(ws2_32)
     endif()
+    if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
+        add_test(NAME msvc_header_dependencies
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_PREFIX_MODULE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/msvc_dependency_prefix.cmake"
+                "-DCAPSID_PREFIX_TEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/msvc-header-dependency-tests"
+                "-DCAPSID_PREFIX_C_COMPILER=${CMAKE_C_COMPILER}"
+                "-DCAPSID_PREFIX_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DCAPSID_PREFIX_NINJA=${CMAKE_MAKE_PROGRAM}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestMsvcDependencyPrefix.cmake")
+        set_tests_properties(msvc_header_dependencies PROPERTIES TIMEOUT 60 LABELS "build;windows")
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
+        add_test(NAME msvc_header_dependency_encodings
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_msvc_header_dependency_encodings.py"
+                --cmake "${CMAKE_COMMAND}"
+                --prefix-module "${CMAKE_CURRENT_SOURCE_DIR}/cmake/msvc_dependency_prefix.cmake"
+                --fixture-script "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestMsvcDependencyPrefix.cmake"
+                --test-root "${CMAKE_CURRENT_BINARY_DIR}/mhd"
+                --c-compiler "${CMAKE_C_COMPILER}"
+                --cxx-compiler "${CMAKE_CXX_COMPILER}"
+                --ninja "${CMAKE_MAKE_PROGRAM}")
+        set_tests_properties(msvc_header_dependency_encodings PROPERTIES
+            TIMEOUT 150 LABELS "build;windows;contract")
+    endif()
+    if(TARGET capsid_host_core)
+        add_executable(test-host-parent-stop-monitor tests/test_host_parent_stop_monitor.cc)
+        target_include_directories(test-host-parent-stop-monitor PRIVATE src)
+        target_link_libraries(test-host-parent-stop-monitor PRIVATE capsid_host_core capsid_sanitizers)
+        set_target_properties(test-host-parent-stop-monitor PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-parent-stop-monitor PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-parent-stop-monitor PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_parent_stop_monitor COMMAND test-host-parent-stop-monitor)
+        set_tests_properties(host_parent_stop_monitor PROPERTIES TIMEOUT 10 LABELS "host;lifecycle;descriptor")
+    endif()
+
     if(CAPSID_BUILD_HOST)
         find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 
@@ -72,6 +178,15 @@ if(BUILD_TESTING)
             endif()
         endif()
         add_test(NAME host_config_model COMMAND test-host-config-model)
+        endif()
+
+        # Binding v1 (docs/binding-technical-design.md §7.1): one target
+        if(Boost_FOUND)
+            add_executable(test-host-client-disconnect tests/test_host_client_disconnect.cc)
+            target_link_libraries(test-host-client-disconnect PRIVATE Boost::system capsid_sanitizers)
+            set_target_properties(test-host-client-disconnect PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            add_test(NAME host_client_disconnect_probe COMMAND test-host-client-disconnect)
+            set_tests_properties(host_client_disconnect_probe PROPERTIES TIMEOUT 10 LABELS "host;http;lifecycle")
         endif()
 
         # Binding v1 (docs/binding-technical-design.md §7.1): one target
@@ -568,7 +683,9 @@ if(BUILD_TESTING)
                         host_managed_executable_rejects_oversized_workers_total
                         host_managed_executable_rejects_negative_max_inflight
                         host_managed_executable_rejects_zero_or_negative_pool_bounds
-                        host_managed_executable_active_state_validation_fail_closed
+                        host_managed_executable_active_state_directory
+                        host_managed_executable_active_state_oversized
+                        host_managed_executable_active_state_foreign_owner
                         host_managed_executable_enforces_global_worker_capacity
                         host_managed_executable_enforces_queue_maximums
                         host_managed_executable_binding_deploy
@@ -584,7 +701,9 @@ if(BUILD_TESTING)
                         host_managed_executable_crash_orphan_generation
                         host_managed_executable_crash_quarantined_not_resurrected
                         host_managed_executable_crash_replaced
+                        host_managed_executable_deploy_overlaps_quarantine
                         host_managed_executable_crash_loop_quarantines
+                        host_managed_executable_quarantine_releases_capacity
                         host_managed_executable_quarantine_cleared_by_deploy
                         host_managed_executable_boot_recovery_bounded
                         host_managed_executable_crash_loop_does_not_starve_other_app
@@ -601,8 +720,11 @@ if(BUILD_TESTING)
                             $<TARGET_FILE:capsid-worker>)
                     set_tests_properties(
                         "${CAPSID_MANAGED_EXECUTABLE_TEST_ID}"
-                        PROPERTIES TIMEOUT 40 SKIP_RETURN_CODE 77)
+                        PROPERTIES TIMEOUT 40)
                 endforeach()
+                set_tests_properties(
+                    host_managed_executable_active_state_foreign_owner
+                    PROPERTIES SKIP_RETURN_CODE 77)
                 # The item-5a crash matrix drives repeated real worker
                 # replacements (SIGKILL + backoff + spawn/READY) and, in
                 # the boot test, a full restart; give the cycles headroom
@@ -639,6 +761,17 @@ if(BUILD_TESTING)
                 capsid_jansson
                 OpenSSL::Crypto
                 capsid_sanitizers)
+            if(Boost_FOUND)
+                # ActivationPlan owns the legacy StaticPoolServer facade.
+                # Its Debug destructor pulls the single-worker transport
+                # from the static host core even for generation-only tests.
+                target_sources(test-host-managed PRIVATE src/host/single_worker_server.cc)
+                target_link_libraries(test-host-managed PRIVATE Boost::system)
+                if(CAPSID_STRICT_WARNINGS AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+                    # Same Boost.Beast false-positive allowance as capsid-host.
+                    target_compile_options(test-host-managed PRIVATE -Wno-maybe-uninitialized)
+                endif()
+            endif()
             set_target_properties(test-host-managed PROPERTIES
                 CXX_STANDARD 20
                 CXX_STANDARD_REQUIRED ON
@@ -663,6 +796,22 @@ if(BUILD_TESTING)
                     host_managed_write_timeout_config_deploy
                     host_managed_fixed_pool_deploy_and_recover
                     host_managed_generation_factory_replacement
+                    host_managed_admin_generation_replacement_exit_status
+                    host_managed_admin_fixed_generation_replacement_exit_status
+                    host_managed_request_cancel_exit_status
+                    host_managed_fixed_request_cancel_exit_status
+                    host_managed_health_recycle_quarantine_exit_status
+                    host_managed_quarantine_stale_generation
+                    host_managed_quarantine_same_generation_reactivation
+                    host_managed_quarantine_aborted_generation
+                    host_managed_quarantine_prepared_generation_commits
+                    host_managed_quarantine_retire_stale
+                    host_managed_quarantine_persist_failure
+                    host_managed_quarantine_pending_shutdown
+                    host_managed_quarantine_expired_notifications
+                    host_managed_quarantine_stale_handles
+                    host_managed_prepare_failure_capacity
+                    host_managed_misconfigured_activation_capacity
                     host_managed_fixed_pool_warm_failure_is_atomic
                     host_managed_admin_fixed_pool_handoff
                     host_managed_admin_worker_lifecycle
@@ -743,6 +892,10 @@ if(BUILD_TESTING)
                 set_tests_properties(
                     "${CAPSID_MANAGED_TEST_ID}" PROPERTIES TIMEOUT 120)
             endforeach()
+            if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_TSAN)
+                set_tests_properties(host_managed_recovery_rejects_oversized_snapshot
+                    PROPERTIES SKIP_RETURN_CODE 77)
+            endif()
             endif()  # CMAKE_SYSTEM_NAME STREQUAL "Linux" — worker-spawn suite
         endif()
 
@@ -916,7 +1069,9 @@ if(BUILD_TESTING)
                 ledger_fresh_budget
                 ledger_replace_surge_gate
                 ledger_retire_drain_release
-                ledger_no_surge_refuses)
+                ledger_no_surge_refuses
+                ledger_retired_headroom
+                ledger_overflow_limits)
             add_test(
                 NAME "host_worker_capacity_ledger_${CAPSID_LEDGER_TEST_ID}"
                 COMMAND test-host-worker-capacity-ledger
@@ -924,6 +1079,25 @@ if(BUILD_TESTING)
             set_tests_properties(
                 "host_worker_capacity_ledger_${CAPSID_LEDGER_TEST_ID}"
                 PROPERTIES TIMEOUT 10)
+        endforeach()
+
+        add_executable(test-host-worker-capacity-lease tests/test_worker_capacity_lease.cc)
+        target_include_directories(test-host-worker-capacity-lease PRIVATE src)
+        target_link_libraries(test-host-worker-capacity-lease PRIVATE capsid_host_core capsid_sanitizers)
+        set_target_properties(test-host-worker-capacity-lease PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-worker-capacity-lease PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-worker-capacity-lease PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_LEASE_CASE IN ITEMS lifecycle reaped-before-activation aborted-warm commit-reap-race)
+            string(REPLACE "-" "_" CAPSID_LEASE_ID "${CAPSID_LEASE_CASE}")
+            add_test(NAME "host_worker_capacity_lease_${CAPSID_LEASE_ID}"
+                COMMAND test-host-worker-capacity-lease "${CAPSID_LEASE_CASE}")
+            set_tests_properties("host_worker_capacity_lease_${CAPSID_LEASE_ID}" PROPERTIES TIMEOUT 20)
         endforeach()
 
         # The operation registry lives in the managed coordinator, which
@@ -1165,6 +1339,23 @@ if(BUILD_TESTING)
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
+            capsid_add_binding_test(
+                test-worker-binding-ready tests/test_worker_binding_ready.cc)
+            target_link_libraries(test-worker-binding-ready PRIVATE capsid_runtime)
+            add_test(NAME worker_binding_ready_zero
+                COMMAND test-worker-binding-ready $<TARGET_FILE:capsid-worker> zero)
+            set_tests_properties(worker_binding_ready_zero PROPERTIES
+                TIMEOUT 40 LABELS "host;worker;binding;integration")
+            # Windows Job limits bound committed memory and support ASan.
+            # POSIX RLIMIT_AS cannot accommodate sanitizer shadow mappings;
+            # Darwin rejects nonzero process-memory limits in the public API.
+            if(WIN32 OR (NOT APPLE AND NOT CAPSID_ENABLE_ASAN AND NOT CAPSID_ENABLE_TSAN))
+                add_test(NAME worker_binding_ready_finite
+                    COMMAND test-worker-binding-ready $<TARGET_FILE:capsid-worker> finite)
+                set_tests_properties(worker_binding_ready_finite PROPERTIES
+                    TIMEOUT 40 LABELS "host;worker;binding;integration")
+            endif()
+
             # Batch B begins RED before the production source exists. The
             # CONFIGURE_DEPENDS glob adds it to this isolated test target as
             # soon as the implementation is created, without requiring the
@@ -1206,9 +1397,8 @@ if(BUILD_TESTING)
                     endif()
                 endif()
             endif()
-            # Multi-shard scenarios run on every platform: Linux/macOS use
-            # SO_REUSEPORT, Windows uses the pool's single shared acceptor
-            # with round-robin dispatch (see docs/platform-support.md).
+            # Multi-shard scenarios run on every platform through the pool's
+            # shared acceptor (see docs/platform-support.md).
             add_test(
                 NAME host_static_pool_server_shared_port_lifecycle
                 COMMAND test-host-static-pool-server lifecycle
@@ -1217,6 +1407,17 @@ if(BUILD_TESTING)
                 host_static_pool_server_shared_port_lifecycle PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
+            foreach(CAPSID_WS_POOL_WORKERS IN ITEMS 1 4)
+                add_test(
+                    NAME host_static_pool_websocket_io_${CAPSID_WS_POOL_WORKERS}
+                    COMMAND test-host-static-pool-server
+                        websocket-io-${CAPSID_WS_POOL_WORKERS}
+                        $<TARGET_FILE:capsid-worker>)
+                set_tests_properties(
+                    host_static_pool_websocket_io_${CAPSID_WS_POOL_WORKERS} PROPERTIES
+                    LABELS "host;integration;websocket;platform"
+                    TIMEOUT 45)
+            endforeach()
             add_test(
                 NAME host_static_pool_server_binding_local_policy
                 COMMAND test-host-static-pool-server binding-local-policy
@@ -1319,6 +1520,19 @@ if(BUILD_TESTING)
                 NAME host_admission_keepalive_streamed
                 COMMAND test-host-admission keepalive-streamed
                     $<TARGET_FILE:capsid-worker>)
+            add_test(
+                NAME host_admission_keepalive_streamed_drain
+                COMMAND test-host-admission keepalive-streamed-drain
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(host_admission_keepalive_streamed
+                host_admission_keepalive_streamed_drain PROPERTIES TIMEOUT 20)
+            foreach(mode IN ITEMS idle-drain keepalive-streamed-drain-deadline
+                                  keepalive-streamed-drain-no-signals)
+                string(REPLACE "-" "_" case_suffix "${mode}")
+                add_test(NAME host_admission_${case_suffix}
+                    COMMAND test-host-admission ${mode} $<TARGET_FILE:capsid-worker>)
+                set_tests_properties(host_admission_${case_suffix} PROPERTIES TIMEOUT 8)
+            endforeach()
             if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(
                 NAME host_admission_worker_death_returns_503
@@ -1474,13 +1688,30 @@ if(BUILD_TESTING)
                 COMMAND test-host-write-timeout worker-deadline-independent
                     $<TARGET_FILE:capsid-worker>)
             add_test(
+                NAME host_worker_deadline_cooperative
+                COMMAND test-host-write-timeout worker-deadline-cooperative
+                    $<TARGET_FILE:capsid-worker>)
+            add_test(
                 NAME host_fast_response_untouched
                 COMMAND test-host-write-timeout fast-response-untouched
                     $<TARGET_FILE:capsid-worker>)
+            add_test(NAME host_write_timeout_disabled
+                COMMAND test-host-write-timeout write-timeout-disabled $<TARGET_FILE:capsid-worker>)
+            add_test(NAME host_pool_write_timeout_cancels
+                COMMAND test-host-write-timeout pool-write-timeout-cancels $<TARGET_FILE:capsid-worker>)
+            add_test(NAME host_pool_drain_write_deadline
+                COMMAND test-host-write-timeout pool-drain-write-deadline $<TARGET_FILE:capsid-worker>)
+            add_test(NAME host_pool_stop_pending_write
+                COMMAND test-host-write-timeout pool-stop-pending-write $<TARGET_FILE:capsid-worker>)
             set_tests_properties(
                 host_write_timeout_cancels
                 host_worker_deadline_independent
-                host_fast_response_untouched PROPERTIES
+                host_worker_deadline_cooperative
+                host_fast_response_untouched
+                host_write_timeout_disabled
+                host_pool_write_timeout_cancels
+                host_pool_drain_write_deadline
+                host_pool_stop_pending_write PROPERTIES
                 LABELS "host;integration;m2"
                 TIMEOUT 30)
 
@@ -1546,6 +1777,72 @@ if(BUILD_TESTING)
             endif()
 
             find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
+            # The public development data planes are portable; managed
+            # requires Linux. Use one mode list for every WebSocket family.
+            set(CAPSID_WS_SECONDARY_MODES static-pool)
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                list(APPEND CAPSID_WS_SECONDARY_MODES managed)
+            endif()
+            set(CAPSID_WS_BACKEND_MODES single-worker ${CAPSID_WS_SECONDARY_MODES})
+            # Original ABI v7 consumer: compiled against the frozen
+            # v0.2.2 snapshot with compile-time size assertions.
+            add_executable(
+                test-abi-v7-original-consumer
+                tests/test_abi_v7_original_consumer.c)
+            target_include_directories(
+                test-abi-v7-original-consumer PRIVATE tests/compat)
+            target_link_libraries(
+                test-abi-v7-original-consumer PRIVATE capsid_runtime)
+            add_test(
+                NAME abi_v7_original_consumer
+                COMMAND test-abi-v7-original-consumer
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                abi_v7_original_consumer PROPERTIES
+                LABELS "abi"
+                TIMEOUT 20)
+
+            # Protocol options descriptor: two-way size negotiation,
+            # spawn_ex gating, protocol-info lifecycle.
+            add_executable(
+                test-protocol-options
+                tests/test_protocol_options.cc)
+            target_include_directories(
+                test-protocol-options PRIVATE include src
+                "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-protocol-options PRIVATE capsid_runtime)
+            add_test(
+                NAME protocol_options_size_negotiation
+                COMMAND test-protocol-options
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                protocol_options_size_negotiation PROPERTIES
+                LABELS "abi;protocol"
+                TIMEOUT 30)
+
+            # Spawn failure recovery (T02): rejected spawns leave no
+            # processes or descriptors behind.
+            add_executable(
+                test-spawn-failure-recovery
+                tests/test_spawn_failure_recovery.cc)
+            target_include_directories(
+                test-spawn-failure-recovery PRIVATE include
+                "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(
+                test-spawn-failure-recovery PRIVATE capsid_runtime)
+            add_test(
+                NAME spawn_failure_recovery
+                COMMAND test-spawn-failure-recovery
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(
+                spawn_failure_recovery PROPERTIES
+                LABELS "worker;abi"
+                TIMEOUT 60)
+            if(NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Windows)$")
+                set_tests_properties(spawn_failure_recovery PROPERTIES SKIP_RETURN_CODE 77)
+            endif()
+
             add_executable(
                 test-worker-v4-negotiation
                 tests/test_worker_v4_negotiation.cc)
@@ -1562,6 +1859,776 @@ if(BUILD_TESTING)
                 worker_v4_negotiation PROPERTIES
                 LABELS "worker;protocol"
                 TIMEOUT 30)
+            add_executable(test-worker-websocket tests/test_worker_websocket.cc)
+            target_include_directories(test-worker-websocket PRIVATE include src)
+            target_link_libraries(test-worker-websocket PRIVATE capsid_runtime)
+            add_dependencies(test-worker-websocket capsid-worker)
+            add_test(NAME worker_websocket COMMAND test-worker-websocket $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(worker_websocket PROPERTIES LABELS "worker;protocol;websocket" TIMEOUT 30)
+            add_executable(test-worker-channel-discard tests/test_worker_channel_discard.cc)
+            target_include_directories(test-worker-channel-discard PRIVATE include src)
+            target_link_libraries(test-worker-channel-discard PRIVATE capsid_runtime)
+            add_dependencies(test-worker-channel-discard capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-worker-channel-discard PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-worker-channel-discard PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(NAME worker_channel_cancel_inflight_data
+                COMMAND test-worker-channel-discard $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(worker_channel_cancel_inflight_data PROPERTIES
+                LABELS "worker;protocol;fetch;backpressure" TIMEOUT 30)
+            add_executable(test-fetch-response-limits tests/test_fetch_response_limits.cc)
+            target_include_directories(test-fetch-response-limits PRIVATE include src)
+            target_link_libraries(test-fetch-response-limits PRIVATE capsid_runtime)
+            add_dependencies(test-fetch-response-limits capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-fetch-response-limits PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-fetch-response-limits PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(NAME fetch_response_limits_native_abi
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fetch_response_limits.mjs"
+                    $<TARGET_FILE:test-fetch-response-limits> $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(fetch_response_limits_native_abi PROPERTIES
+                LABELS "worker;protocol;fetch;backpressure" TIMEOUT 60)
+            add_test(NAME fetch_response_limit_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fetch_response_limit_contract.mjs")
+            set_tests_properties(fetch_response_limit_contract_controls PROPERTIES
+                LABELS "worker;fetch;compatibility" TIMEOUT 30)
+            add_test(NAME fetch_response_limits_encoded_upgrade_abi
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fetch_response_limits.mjs"
+                    $<TARGET_FILE:test-fetch-response-limits> $<TARGET_FILE:capsid-worker>
+                    --encoded-headers)
+            set_tests_properties(fetch_response_limits_encoded_upgrade_abi PROPERTIES
+                LABELS "worker;protocol;fetch;backpressure" TIMEOUT 60)
+            # Header readiness and per-read acknowledgments keep source EOF
+            # behind the consumer. Gzip and raw run against the same locked
+            # primary program, including cancellation and whole-body controls.
+            if(TARGET capsid-host)
+                foreach(CAPSID_DEFAULT_READER_TRANSPORT ordinary upgrade)
+                    add_test(NAME native_fetch_default_reader_gates_${CAPSID_DEFAULT_READER_TRANSPORT}
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_default_reader_gates.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --transport ${CAPSID_DEFAULT_READER_TRANSPORT})
+                    set_tests_properties(native_fetch_default_reader_gates_${CAPSID_DEFAULT_READER_TRANSPORT}
+                        PROPERTIES TIMEOUT 120 LABELS "worker;fetch;compatibility;backpressure;lifecycle")
+                endforeach()
+            endif()
+            add_test(NAME native_fetch_default_reader_gates_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_default_reader_gates_contract.mjs")
+            set_tests_properties(native_fetch_default_reader_gates_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;fetch;compatibility;backpressure;lifecycle")
+
+            # Ordinary HTTP uses a real TCP source and the configured C ABI.
+            # Workerd supplies the unrestricted native state; Capsid's decoded
+            # quota extension has an independent policy and byte/backing model.
+            add_executable(test-native-fetch-response-limits tests/test_native_fetch_response_limits.cc)
+            target_include_directories(test-native-fetch-response-limits PRIVATE include src)
+            target_link_libraries(test-native-fetch-response-limits PRIVATE capsid_runtime)
+            add_dependencies(test-native-fetch-response-limits capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-native-fetch-response-limits PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-native-fetch-response-limits PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            # Ordinary native fetch arguments use the same actual default
+            # reference program as the archived argument captures, outside RPC
+            # and Upgrade. Keep the helper's5s event and2.5s natural-exit limits.
+            foreach(CAPSID_NATIVE_ARGUMENT_KIND raw gzip)
+                foreach(CAPSID_NATIVE_ARGUMENT_ROUTE getReader direct prototype subclass reflect)
+                    add_test(NAME native_fetch_arguments_${CAPSID_NATIVE_ARGUMENT_KIND}_${CAPSID_NATIVE_ARGUMENT_ROUTE}
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_arguments.mjs"
+                            --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                            --worker $<TARGET_FILE:capsid-worker>
+                            --kind ${CAPSID_NATIVE_ARGUMENT_KIND}
+                            --route ${CAPSID_NATIVE_ARGUMENT_ROUTE})
+                    set_tests_properties(native_fetch_arguments_${CAPSID_NATIVE_ARGUMENT_KIND}_${CAPSID_NATIVE_ARGUMENT_ROUTE}
+                        PROPERTIES TIMEOUT 120 LABELS "worker;fetch;compatibility;lifecycle")
+                endforeach()
+            endforeach()
+            add_test(NAME native_fetch_arguments_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_arguments_contract.mjs")
+            set_tests_properties(native_fetch_arguments_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;fetch;compatibility;lifecycle")
+
+            # Two overlapping ordinary HTTP requests borrow one held BYOB
+            # reader; a third request proves reuse before natural OS exit.
+            add_executable(test-native-reader-context tests/test_native_reader_context.cc)
+            target_include_directories(test-native-reader-context PRIVATE include src tests)
+            target_link_libraries(test-native-reader-context PRIVATE capsid_runtime)
+            add_dependencies(test-native-reader-context capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-native-reader-context PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-native-reader-context PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(CAPSID_NATIVE_READER_CONTEXT_SHARD released retained)
+                add_test(NAME native_reader_context_${CAPSID_NATIVE_READER_CONTEXT_SHARD}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_reader_context.mjs"
+                        --helper $<TARGET_FILE:test-native-reader-context>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --shard ${CAPSID_NATIVE_READER_CONTEXT_SHARD})
+                set_tests_properties(native_reader_context_${CAPSID_NATIVE_READER_CONTEXT_SHARD}
+                    PROPERTIES TIMEOUT 60 LABELS "worker;fetch;compatibility;lifecycle;context")
+            endforeach()
+            add_test(NAME native_reader_context_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_reader_context_contract.mjs")
+            set_tests_properties(native_reader_context_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;fetch;compatibility;lifecycle;context")
+
+            # A pending owner read must outrank a foreign-context failure.
+            # Each group retains the helper's original5s event and2500ms exit
+            # deadlines and also checks source FIN, wire credit and reuse.
+            foreach(CAPSID_READER_MATRIX_BODY raw gzip)
+                foreach(CAPSID_READER_MATRIX_OWNER none pending)
+                    foreach(CAPSID_READER_MATRIX_ROUTE getReader direct prototype subclass reflect)
+                        set(CAPSID_READER_MATRIX_NAME
+                            native_reader_context_matrix_${CAPSID_READER_MATRIX_BODY}_${CAPSID_READER_MATRIX_OWNER}_${CAPSID_READER_MATRIX_ROUTE})
+                        add_test(NAME ${CAPSID_READER_MATRIX_NAME}
+                            COMMAND "${CAPSID_HOST_TEST_NODE}"
+                                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_reader_context_matrix.mjs"
+                                --helper $<TARGET_FILE:test-native-reader-context>
+                                --worker $<TARGET_FILE:capsid-worker>
+                                --body-kind ${CAPSID_READER_MATRIX_BODY}
+                                --owner-mode ${CAPSID_READER_MATRIX_OWNER}
+                                --route ${CAPSID_READER_MATRIX_ROUTE})
+                        set_tests_properties(${CAPSID_READER_MATRIX_NAME}
+                            PROPERTIES TIMEOUT 60 LABELS "worker;fetch;compatibility;lifecycle;context")
+                    endforeach()
+                endforeach()
+            endforeach()
+            add_test(NAME native_reader_context_matrix_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_reader_context_matrix_contract.mjs")
+            set_tests_properties(native_reader_context_matrix_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;fetch;compatibility;lifecycle;context")
+
+            # Native HTTP branch graphs retain a real3-byte source prefix
+            # and hold the suffix through two request barriers. The helper
+            # retains its5s event and2500ms natural-exit budgets.
+            foreach(CAPSID_NATIVE_BRANCH_GRAPH_GROUP
+                    held_raw held_gzip checkpoints cancel controls_raw controls_gzip priority_raw priority_gzip)
+                add_test(NAME native_fetch_branch_graph_${CAPSID_NATIVE_BRANCH_GRAPH_GROUP}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_branch_graph.mjs"
+                        --helper $<TARGET_FILE:test-native-reader-context>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --group ${CAPSID_NATIVE_BRANCH_GRAPH_GROUP})
+                set_tests_properties(native_fetch_branch_graph_${CAPSID_NATIVE_BRANCH_GRAPH_GROUP}
+                    PROPERTIES TIMEOUT 60 LABELS "worker;fetch;compatibility;lifecycle;ownership")
+            endforeach()
+            add_test(NAME native_branch_graph_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_branch_graph_contract.mjs")
+            set_tests_properties(native_branch_graph_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;fetch;compatibility;lifecycle;ownership")
+
+            add_executable(test-native-retired-ownership tests/test_native_retired_ownership.cc)
+            target_include_directories(test-native-retired-ownership PRIVATE include src tests)
+            target_link_libraries(test-native-retired-ownership PRIVATE capsid_runtime)
+            add_dependencies(test-native-retired-ownership capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-native-retired-ownership PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-native-retired-ownership PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            # Retire the actual owner and upstream before the observer request.
+            # Every group preserves the native5s event and2500ms exit budgets.
+            foreach(CAPSID_RETIRED_OWNERSHIP_GROUP
+                    promise_direct promise_await promise_await-then promise_await-prelude promise_await-nested promise_new-promise-adopt promise_resolve-adopt promise_all-one promise_all-resolved promise_race-one promise_any-one promise_all-settled promise_finally promise_catch promise_then-adopt promise_async-return branches iterator_next iterator_prevent iterator_loop iterator_prelude controls)
+                add_test(NAME native_retired_ownership_${CAPSID_RETIRED_OWNERSHIP_GROUP}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_retired_ownership.mjs"
+                        --helper $<TARGET_FILE:test-native-retired-ownership>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --group ${CAPSID_RETIRED_OWNERSHIP_GROUP})
+                set_tests_properties(native_retired_ownership_${CAPSID_RETIRED_OWNERSHIP_GROUP}
+                    PROPERTIES TIMEOUT 60 LABELS "worker;fetch;compatibility;lifecycle;ownership")
+            endforeach()
+            add_test(NAME native_retired_ownership_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_retired_ownership_contract.mjs")
+            set_tests_properties(native_retired_ownership_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;fetch;compatibility;lifecycle;ownership")
+
+            # Exact programs and both native workerd primary assets are archived.
+            # Keep the C ABI helper's original5s event and2500ms exit budgets.
+            foreach(CAPSID_RUNTIME_EVENT_KIND api mutations)
+                add_test(NAME native_runtime_event_${CAPSID_RUNTIME_EVENT_KIND}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_runtime_events.mjs"
+                        --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --kind ${CAPSID_RUNTIME_EVENT_KIND})
+            endforeach()
+            set_tests_properties(native_runtime_event_api
+                PROPERTIES TIMEOUT 30 LABELS "worker;events;compatibility;lifecycle")
+            set_tests_properties(native_runtime_event_mutations
+                PROPERTIES TIMEOUT 60 LABELS "worker;events;compatibility;lifecycle")
+            add_test(NAME native_runtime_event_primary_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_runtime_events_contract.mjs")
+            set_tests_properties(native_runtime_event_primary_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;events;compatibility;lifecycle")
+
+            # Keep the ordinary helper's5s deadline. This separate composed
+            # probe can also wait for the unchanged3s owner-held source gate.
+            add_executable(test-native-fetch-encoded-owner tests/test_native_fetch_response_limits.cc)
+            target_compile_definitions(test-native-fetch-encoded-owner PRIVATE CAPSID_TEST_FETCH_EVENT_SECONDS=10)
+            target_include_directories(test-native-fetch-encoded-owner PRIVATE include src)
+            target_link_libraries(test-native-fetch-encoded-owner PRIVATE capsid_runtime)
+            add_dependencies(test-native-fetch-encoded-owner capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-native-fetch-encoded-owner PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-native-fetch-encoded-owner PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(CAPSID_ENCODED_KIND IN ITEMS finished held owner)
+                set(CAPSID_ENCODED_HELPER test-native-fetch-response-limits)
+                set(CAPSID_ENCODED_TIMEOUT 420)
+                if(CAPSID_ENCODED_KIND STREQUAL "held")
+                    set(CAPSID_ENCODED_TIMEOUT 180)
+                elseif(CAPSID_ENCODED_KIND STREQUAL "owner")
+                    set(CAPSID_ENCODED_HELPER test-native-fetch-encoded-owner)
+                    set(CAPSID_ENCODED_TIMEOUT 90)
+                endif()
+                add_test(NAME native_fetch_encoded_${CAPSID_ENCODED_KIND}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_encoded_branches.mjs"
+                        --helper $<TARGET_FILE:${CAPSID_ENCODED_HELPER}>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --kind "${CAPSID_ENCODED_KIND}")
+                set_tests_properties(native_fetch_encoded_${CAPSID_ENCODED_KIND} PROPERTIES
+                    TIMEOUT ${CAPSID_ENCODED_TIMEOUT}
+                    LABELS "worker;fetch;compression;compatibility;lifecycle")
+            endforeach()
+            add_test(NAME native_fetch_encoded_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_encoded_contract.mjs")
+            set_tests_properties(native_fetch_encoded_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;compression;compatibility;lifecycle")
+
+            # The embedding host returns consumed response credit. Exercise
+            # both sides of the default256KiB window and three full windows;
+            # keep the original helper event deadline and healthy request.
+            add_test(NAME native_fetch_response_credit
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_response_credit.mjs"
+                    --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(native_fetch_response_credit PROPERTIES
+                LABELS "worker;protocol;fetch;backpressure" TIMEOUT 30)
+            add_test(NAME native_fetch_response_credit_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_response_credit_contract.mjs")
+            set_tests_properties(native_fetch_response_credit_contract_controls PROPERTIES
+                LABELS "worker;protocol;fetch;backpressure" TIMEOUT 30)
+
+            foreach(CAPSID_NATIVE_LIMIT_SHARD IN ITEMS boundaries geometry)
+                add_test(NAME native_fetch_limits_${CAPSID_NATIVE_LIMIT_SHARD}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_response_limits.mjs"
+                        --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --shard ${CAPSID_NATIVE_LIMIT_SHARD})
+                set_tests_properties(native_fetch_limits_${CAPSID_NATIVE_LIMIT_SHARD} PROPERTIES
+                    LABELS "worker;protocol;fetch;backpressure;compatibility" TIMEOUT 60)
+            endforeach()
+            add_test(NAME native_fetch_limit_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_limit_contract.mjs")
+            set_tests_properties(native_fetch_limit_contract_controls PROPERTIES
+                LABELS "worker;fetch;compatibility" TIMEOUT 30)
+            # Real ordinary-response cancellation/retirement, with actual
+            # pinned workerd state and separate per-request cleanup policy.
+            # Exact gzip member boundaries, including empty members, keep
+            # their independent actual-workerd state and full backing hashes.
+            add_test(NAME native_fetch_gzip_members
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_gzip_members.mjs"
+                    --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(native_fetch_gzip_members PROPERTIES
+                TIMEOUT 60 LABELS "worker;fetch;compression;compatibility")
+            add_test(NAME native_fetch_gzip_member_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_gzip_member_contract.mjs")
+            set_tests_properties(native_fetch_gzip_member_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;compression;compatibility")
+
+            # Large ordinary gzip reads stay within the default64MiB JS heap
+            # and the original5s C API event deadline. Check every payload and
+            # backing byte, actual producer EOF and natural worker exit.
+            add_test(NAME native_fetch_large_gzip
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_large_gzip.mjs"
+                    --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(native_fetch_large_gzip PROPERTIES
+                TIMEOUT 60 LABELS "worker;fetch;compression;compatibility")
+            add_test(NAME native_fetch_large_gzip_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_large_gzip_contract.mjs")
+            set_tests_properties(native_fetch_large_gzip_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;compression;compatibility")
+
+            # After a real64-byte read, raw abort rejects further input;
+            # gzip drains its accepted encoded prefix before the same error.
+            add_test(NAME native_fetch_abort_prefix
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_abort_prefix.mjs"
+                    --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(native_fetch_abort_prefix PROPERTIES
+                TIMEOUT 60 LABELS "worker;fetch;compression;compatibility;lifecycle")
+            add_test(NAME native_fetch_abort_prefix_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_abort_prefix_contract.mjs")
+            set_tests_properties(native_fetch_abort_prefix_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;compression;compatibility;lifecycle")
+
+            # A real native read is pending while a separate control request
+            # proves no source body byte has been released. Keep full typed
+            # results, backing, promise order and natural process exits.
+            foreach(CAPSID_NATIVE_PENDING_SHARD IN ITEMS
+                    raw_overlap raw_cancel raw_abort gzip_overlap gzip_cancel gzip_abort)
+                add_test(NAME native_fetch_pending_${CAPSID_NATIVE_PENDING_SHARD}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_pending.mjs"
+                        --helper $<TARGET_FILE:test-native-fetch-response-limits>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --shard ${CAPSID_NATIVE_PENDING_SHARD})
+                set_tests_properties(native_fetch_pending_${CAPSID_NATIVE_PENDING_SHARD} PROPERTIES
+                    TIMEOUT 60 LABELS "worker;fetch;lifecycle;compatibility")
+            endforeach()
+            add_test(NAME native_fetch_pending_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_pending_contract.mjs")
+            set_tests_properties(native_fetch_pending_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;compatibility")
+
+            # Actual native I/O at public signal timeout and host request
+            # deadline. Keep real pending/unread state, full ABI events,
+            # peer closure before cleanup, healthy reuse and natural exit.
+            add_executable(test-native-fetch-deadline tests/test_native_fetch_deadline.cc)
+            target_include_directories(test-native-fetch-deadline PRIVATE include src)
+            target_link_libraries(test-native-fetch-deadline PRIVATE capsid_runtime)
+            add_dependencies(test-native-fetch-deadline capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-native-fetch-deadline PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-native-fetch-deadline PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(CAPSID_NATIVE_DEADLINE_SHARD IN ITEMS raw_signal gzip_signal raw_host gzip_host)
+                add_test(NAME native_fetch_deadline_${CAPSID_NATIVE_DEADLINE_SHARD}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_deadline.mjs"
+                        --helper $<TARGET_FILE:test-native-fetch-deadline>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --shard ${CAPSID_NATIVE_DEADLINE_SHARD})
+                set_tests_properties(native_fetch_deadline_${CAPSID_NATIVE_DEADLINE_SHARD} PROPERTIES
+                    TIMEOUT 60 LABELS "worker;fetch;lifecycle;compatibility")
+            endforeach()
+            add_test(NAME native_fetch_deadline_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_deadline_contract.mjs")
+            set_tests_properties(native_fetch_deadline_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;compatibility")
+
+            # Partial snapshot and Promise-backed response retirement.
+            add_executable(test-worker-response-retirement tests/test_worker_response_retirement.cc)
+            target_include_directories(test-worker-response-retirement PRIVATE include src)
+            target_link_libraries(test-worker-response-retirement PRIVATE capsid_runtime)
+            add_dependencies(test-worker-response-retirement capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-worker-response-retirement PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-worker-response-retirement PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            if(APPLE OR CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_TSAN)
+                set(CAPSID_RETIREMENT_PROCESS_MEMORY 0)
+            else()
+                set(CAPSID_RETIREMENT_PROCESS_MEMORY 268435456)
+            endif()
+            foreach(CAPSID_RETIREMENT_ACTION IN ITEMS timeout cancel grant shutdown)
+                add_test(NAME worker_response_retirement_${CAPSID_RETIREMENT_ACTION}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_worker_response_retirement.mjs"
+                        --helper $<TARGET_FILE:test-worker-response-retirement>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --action ${CAPSID_RETIREMENT_ACTION}
+                        --process-memory ${CAPSID_RETIREMENT_PROCESS_MEMORY}
+                        --identity-header "${CAPSID_GENERATED_DIR}/build_identity.h")
+                set_tests_properties(worker_response_retirement_${CAPSID_RETIREMENT_ACTION} PROPERTIES
+                    TIMEOUT 30 LABELS "worker;fetch;lifecycle;backpressure")
+            endforeach()
+            add_test(NAME worker_response_retirement_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_worker_response_retirement_contract.mjs")
+            set_tests_properties(worker_response_retirement_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;fetch;lifecycle;backpressure")
+
+            add_executable(test-worker-poll-shutdown tests/test_worker_poll_shutdown.cc)
+            target_include_directories(test-worker-poll-shutdown PRIVATE include src)
+            target_link_libraries(test-worker-poll-shutdown PRIVATE capsid_runtime)
+            add_dependencies(test-worker-poll-shutdown capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-worker-poll-shutdown PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-worker-poll-shutdown PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(CAPSID_POLL_SHUTDOWN_ORDER IN ITEMS before after)
+                add_test(NAME worker_poll_shutdown_${CAPSID_POLL_SHUTDOWN_ORDER}
+                    COMMAND test-worker-poll-shutdown $<TARGET_FILE:capsid-worker>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/response-retirement.mjs"
+                        ${CAPSID_POLL_SHUTDOWN_ORDER})
+                set_tests_properties(worker_poll_shutdown_${CAPSID_POLL_SHUTDOWN_ORDER} PROPERTIES
+                    TIMEOUT 10 LABELS "worker;protocol;lifecycle")
+            endforeach()
+
+            # Small explicit response windows keep the existing helper
+            # protocols and prove consumed credit is returned on every path.
+            foreach(CAPSID_HELPER_CREDIT_KIND IN ITEMS deadline limits limits_encoded discard negotiation)
+                if(CAPSID_HELPER_CREDIT_KIND STREQUAL "deadline")
+                    set(CAPSID_HELPER_CREDIT_TARGET test-native-fetch-deadline)
+                elseif(CAPSID_HELPER_CREDIT_KIND MATCHES "^limits")
+                    set(CAPSID_HELPER_CREDIT_TARGET test-fetch-response-limits)
+                elseif(CAPSID_HELPER_CREDIT_KIND STREQUAL "discard")
+                    set(CAPSID_HELPER_CREDIT_TARGET test-worker-channel-discard)
+                else()
+                    set(CAPSID_HELPER_CREDIT_TARGET test-worker-v4-negotiation)
+                endif()
+                add_test(NAME helper_response_credit_${CAPSID_HELPER_CREDIT_KIND}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_helper_response_credit.mjs"
+                        --helper $<TARGET_FILE:${CAPSID_HELPER_CREDIT_TARGET}>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --kind ${CAPSID_HELPER_CREDIT_KIND})
+                if(CAPSID_HELPER_CREDIT_KIND MATCHES "^limits")
+                    set(CAPSID_HELPER_CREDIT_TIMEOUT 60)
+                else()
+                    set(CAPSID_HELPER_CREDIT_TIMEOUT 30)
+                endif()
+                set_tests_properties(helper_response_credit_${CAPSID_HELPER_CREDIT_KIND} PROPERTIES
+                    TIMEOUT ${CAPSID_HELPER_CREDIT_TIMEOUT} LABELS "worker;protocol;fetch;backpressure")
+            endforeach()
+            add_test(NAME helper_response_credit_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_helper_response_credit_contract.mjs")
+            set_tests_properties(helper_response_credit_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;protocol;fetch;backpressure")
+
+            # Real Binding VM I/O and structured RPC, with pinned User I/O
+            # primaries and separate models for Capsid's clone/context policy.
+            capsid_add_binding_test(
+                test-binding-fetch-body tests/test_binding_fetch_body.cc)
+            target_link_libraries(test-binding-fetch-body PRIVATE capsid_runtime)
+            add_dependencies(test-binding-fetch-body capsid-worker)
+            foreach(CAPSID_BINDING_FETCH_KIND raw gzip)
+                add_test(NAME binding_fetch_body_${CAPSID_BINDING_FETCH_KIND}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_body.mjs"
+                        --helper $<TARGET_FILE:test-binding-fetch-body>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --kind ${CAPSID_BINDING_FETCH_KIND})
+                set_tests_properties(binding_fetch_body_${CAPSID_BINDING_FETCH_KIND}
+                    PROPERTIES TIMEOUT 60 LABELS "worker;binding;fetch;compatibility;lifecycle")
+            endforeach()
+            add_test(NAME binding_fetch_body_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_body_contract.mjs")
+            set_tests_properties(binding_fetch_body_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+
+            # Full argument/retry semantics in the actual Binding VM. Each
+            # route/kind shard covers13 views and44 read/40 readAtLeast inputs.
+            # Reuse the existing C API helper; its15s event and45s peer limits
+            # and the default JS heap/RPC clone policy remain unchanged.
+            foreach(CAPSID_BINDING_ARGUMENT_KIND raw gzip)
+                foreach(CAPSID_BINDING_ARGUMENT_ROUTE getReader direct prototype subclass reflect)
+                    add_test(NAME binding_fetch_arguments_${CAPSID_BINDING_ARGUMENT_KIND}_${CAPSID_BINDING_ARGUMENT_ROUTE}
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_arguments.mjs"
+                            --helper $<TARGET_FILE:test-binding-fetch-body>
+                            --worker $<TARGET_FILE:capsid-worker>
+                            --kind ${CAPSID_BINDING_ARGUMENT_KIND}
+                            --route ${CAPSID_BINDING_ARGUMENT_ROUTE})
+                    set_tests_properties(binding_fetch_arguments_${CAPSID_BINDING_ARGUMENT_KIND}_${CAPSID_BINDING_ARGUMENT_ROUTE}
+                        PROPERTIES TIMEOUT 120 LABELS "worker;binding;fetch;compatibility;lifecycle")
+                endforeach()
+            endforeach()
+            add_test(NAME binding_fetch_arguments_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_arguments_contract.mjs")
+            set_tests_properties(binding_fetch_arguments_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+
+            # A BindingID owns native handles across calls and User requests.
+            # Hold the actual source at headers until request1 has ended and
+            # the host begins request2; then check every read and real FIN/exit.
+            capsid_add_binding_test(
+                test-binding-fetch-retained tests/test_binding_fetch_retained.cc)
+            target_link_libraries(test-binding-fetch-retained PRIVATE capsid_runtime)
+            add_dependencies(test-binding-fetch-retained capsid-worker)
+            foreach(CAPSID_RETAINED_BINDING_KIND raw gzip)
+                foreach(CAPSID_RETAINED_BINDING_ROUTE getReader direct prototype subclass reflect)
+                    add_test(NAME binding_fetch_retained_${CAPSID_RETAINED_BINDING_KIND}_${CAPSID_RETAINED_BINDING_ROUTE}
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_retained.mjs"
+                            --helper $<TARGET_FILE:test-binding-fetch-retained>
+                            --worker $<TARGET_FILE:capsid-worker>
+                            --kind ${CAPSID_RETAINED_BINDING_KIND}
+                            --route ${CAPSID_RETAINED_BINDING_ROUTE})
+                    set_tests_properties(binding_fetch_retained_${CAPSID_RETAINED_BINDING_KIND}_${CAPSID_RETAINED_BINDING_ROUTE}
+                        PROPERTIES TIMEOUT 60 LABELS "worker;binding;fetch;compatibility;lifecycle")
+                endforeach()
+            endforeach()
+            add_test(NAME binding_fetch_retained_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_retained_contract.mjs")
+            set_tests_properties(binding_fetch_retained_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+
+            # Binding-owned unread or pending native resources survive both
+            # User requests, then close on actual C API Worker stop. Exercise
+            # one/four independent peers without a fixture-provided body/EOF.
+            foreach(CAPSID_UNREAD_BINDING_KIND raw gzip)
+                add_test(NAME binding_fetch_unread_${CAPSID_UNREAD_BINDING_KIND}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_unread.mjs"
+                        --helper $<TARGET_FILE:test-binding-fetch-retained>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --kind ${CAPSID_UNREAD_BINDING_KIND})
+                set_tests_properties(binding_fetch_unread_${CAPSID_UNREAD_BINDING_KIND} PROPERTIES
+                    TIMEOUT 60 LABELS "worker;binding;fetch;lifecycle;compatibility")
+            endforeach()
+            add_test(NAME binding_fetch_unread_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_unread_contract.mjs")
+            set_tests_properties(binding_fetch_unread_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;binding;fetch;lifecycle;compatibility")
+
+            # Native fetch state must not call application replacements of
+            # WeakMap get/set. Compare both request results to actual pinned
+            # workerd observations, including real source FIN before teardown.
+            foreach(CAPSID_INTRINSIC_FETCH_KIND raw gzip)
+                add_test(NAME native_fetch_intrinsic_${CAPSID_INTRINSIC_FETCH_KIND}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_intrinsic.mjs"
+                        --helper $<TARGET_FILE:test-binding-fetch-retained>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --kind ${CAPSID_INTRINSIC_FETCH_KIND})
+                set_tests_properties(native_fetch_intrinsic_${CAPSID_INTRINSIC_FETCH_KIND} PROPERTIES
+                    TIMEOUT 60 LABELS "worker;binding;fetch;compatibility;lifecycle")
+            endforeach()
+            add_test(NAME native_fetch_intrinsic_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_intrinsic_contract.mjs")
+            set_tests_properties(native_fetch_intrinsic_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+
+            # Both native branches stay pending after a real137-byte prefix
+            # until the issued32KiB/64KiB minimum, EOF, cancel or abort settles.
+            # Keep full backing, exact control wire and the original C ABI helper.
+            foreach(CAPSID_BRANCH_PREFIX_METHOD IN ITEMS wide full)
+                add_test(NAME native_fetch_branch_prefix_${CAPSID_BRANCH_PREFIX_METHOD}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_branch_prefix.mjs"
+                        --helper $<TARGET_FILE:test-binding-fetch-retained>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --method ${CAPSID_BRANCH_PREFIX_METHOD})
+                set_tests_properties(native_fetch_branch_prefix_${CAPSID_BRANCH_PREFIX_METHOD} PROPERTIES
+                    TIMEOUT 60 LABELS "worker;binding;fetch;compatibility;lifecycle")
+            endforeach()
+            add_test(NAME native_fetch_branch_prefix_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_branch_prefix_contract.mjs")
+            set_tests_properties(native_fetch_branch_prefix_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+
+            # Request completion cancels pending Binding calls. A call.signal
+            # fetch/read must close while an unrelated BindingID-owned retained
+            # connection survives and is fully read by the next User request.
+            # Reuse the real two-request helper and original event/heap bounds.
+            foreach(CAPSID_CANCEL_BINDING_KIND raw gzip)
+                foreach(CAPSID_CANCEL_BINDING_ROUTE getReader direct prototype subclass reflect)
+                    add_test(NAME binding_fetch_cancel_${CAPSID_CANCEL_BINDING_KIND}_${CAPSID_CANCEL_BINDING_ROUTE}
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_cancel.mjs"
+                            --helper $<TARGET_FILE:test-binding-fetch-retained>
+                            --worker $<TARGET_FILE:capsid-worker>
+                            --kind ${CAPSID_CANCEL_BINDING_KIND}
+                            --route ${CAPSID_CANCEL_BINDING_ROUTE})
+                    set_tests_properties(binding_fetch_cancel_${CAPSID_CANCEL_BINDING_KIND}_${CAPSID_CANCEL_BINDING_ROUTE}
+                        PROPERTIES TIMEOUT 60 LABELS "worker;binding;fetch;compatibility;lifecycle")
+                endforeach()
+            endforeach()
+            add_test(NAME binding_fetch_cancel_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_cancel_contract.mjs")
+            set_tests_properties(binding_fetch_cancel_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+
+            # Pure Headers API: same99-case function in pinned workerd and
+            # actual User/Binding VMs, each Binding case a separate real RPC.
+            # Independent Python input model is checked against its artifact.
+            add_test(NAME headers_compatibility_actual_vms
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_headers_compatibility.mjs"
+                    --helper $<TARGET_FILE:test-binding-fetch-body>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(headers_compatibility_actual_vms
+                PROPERTIES TIMEOUT 60 LABELS "worker;binding;fetch;compatibility")
+            add_test(NAME headers_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_headers_contract.mjs")
+            set_tests_properties(headers_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;negative-controls")
+            if(NOT CAPSID_PYTHON3_EXECUTABLE)
+                find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
+            endif()
+            add_test(NAME headers_expected_model_source
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/headers-input-model.py" --check)
+            set_tests_properties(headers_expected_model_source
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;provenance")
+
+            # Binding quotas are Capsid policy:64 outstanding calls/request,
+            #1024/worker. Real C API requests prove pre-clone refusal, explicit
+            # host cancellation isolation, slot refill and natural exit.
+            capsid_add_binding_test(test-binding-quota-worker tests/test_binding_quota_worker.cc)
+            target_link_libraries(test-binding-quota-worker PRIVATE capsid_runtime)
+            add_dependencies(test-binding-quota-worker capsid-worker)
+            add_test(NAME binding_rpc_request_quota
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_quota.mjs"
+                    --helper $<TARGET_FILE:test-binding-fetch-retained>
+                    --worker $<TARGET_FILE:capsid-worker> --kind request)
+            add_test(NAME binding_rpc_worker_quota
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_quota.mjs"
+                    --helper $<TARGET_FILE:test-binding-quota-worker>
+                    --worker $<TARGET_FILE:capsid-worker> --kind worker)
+            set_tests_properties(binding_rpc_request_quota binding_rpc_worker_quota
+                PROPERTIES TIMEOUT 60 LABELS "worker;binding;quota;lifecycle")
+            add_test(NAME binding_rpc_quota_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_quota_contract.mjs")
+            set_tests_properties(binding_rpc_quota_contract_controls
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;quota;lifecycle;negative-controls")
+
+            add_executable(test-native-fetch-owner tests/test_native_fetch_owner.cc)
+            target_include_directories(test-native-fetch-owner PRIVATE include src)
+            target_link_libraries(test-native-fetch-owner PRIVATE capsid_runtime)
+            add_dependencies(test-native-fetch-owner capsid-worker)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-native-fetch-owner PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-native-fetch-owner PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(CAPSID_NATIVE_OWNER_SHARD IN ITEMS cancel retirement)
+                add_test(NAME native_fetch_owner_${CAPSID_NATIVE_OWNER_SHARD}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_owner.mjs"
+                        --helper $<TARGET_FILE:test-native-fetch-owner>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --shard ${CAPSID_NATIVE_OWNER_SHARD})
+                set_tests_properties(native_fetch_owner_${CAPSID_NATIVE_OWNER_SHARD} PROPERTIES
+                    LABELS "worker;protocol;fetch;lifecycle;compatibility" TIMEOUT 60)
+            endforeach()
+            add_test(NAME native_fetch_owner_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test --test-reporter=tap
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_fetch_owner_contract.mjs")
+            set_tests_properties(native_fetch_owner_contract_controls PROPERTIES
+                LABELS "worker;fetch;compatibility" TIMEOUT 30)
+            add_executable(test-worker-outbound tests/test_worker_outbound.cc)
+            target_include_directories(test-worker-outbound PRIVATE include src)
+            target_link_libraries(test-worker-outbound PRIVATE capsid_runtime)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-worker-outbound PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-worker-outbound PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_executable(test-worker-writer-gate tests/test_worker_writer_gate.cc)
+            target_include_directories(test-worker-writer-gate PRIVATE src)
+            target_link_libraries(test-worker-writer-gate PRIVATE capsid_runtime)
+            target_compile_features(test-worker-writer-gate PRIVATE cxx_std_11)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-worker-writer-gate PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-worker-writer-gate PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            add_test(NAME worker_writer_gate_contract_controls COMMAND test-worker-writer-gate)
+            set_tests_properties(worker_writer_gate_contract_controls PROPERTIES
+                LABELS "worker;protocol;backpressure;contract" TIMEOUT 10)
+            # Embed the same Worker sources, bootstrap and launch path. The
+            # fixture only injects socket EAGAIN and observes actual queue
+            # transitions; it cannot manufacture protocol/JS events.
+            get_target_property(CAPSID_WRITER_SOURCES capsid-worker SOURCES)
+            add_executable(test-worker-writer-fixture ${CAPSID_WRITER_SOURCES} tests/worker_writer_fixture.cc)
+            foreach(CAPSID_WRITER_PROPERTY IN ITEMS INCLUDE_DIRECTORIES COMPILE_OPTIONS COMPILE_DEFINITIONS
+                    CXX_STANDARD CXX_STANDARD_REQUIRED CXX_EXTENSIONS INTERPROCEDURAL_OPTIMIZATION)
+                get_target_property(CAPSID_WRITER_VALUE capsid-worker "${CAPSID_WRITER_PROPERTY}")
+                if(NOT CAPSID_WRITER_VALUE STREQUAL "CAPSID_WRITER_VALUE-NOTFOUND")
+                    set_property(TARGET test-worker-writer-fixture PROPERTY "${CAPSID_WRITER_PROPERTY}" "${CAPSID_WRITER_VALUE}")
+                endif()
+            endforeach()
+            target_compile_definitions(test-worker-writer-fixture PRIVATE CAPSID_WORKER_CUSTOM_ENTRY=1)
+            target_link_libraries(test-worker-writer-fixture PRIVATE tjs capsid_sanitizers)
+            add_dependencies(test-worker-writer-fixture capsid-worker)
+            add_dependencies(test-worker-outbound capsid-worker test-worker-writer-fixture)
+            add_test(NAME worker_outbound_websocket COMMAND test-worker-outbound $<TARGET_FILE:capsid-worker> $<TARGET_FILE:test-worker-writer-fixture>)
+            set_tests_properties(worker_outbound_websocket PROPERTIES LABELS "worker;protocol;websocket" TIMEOUT 30)
+            add_test(NAME worker_outbound_result_ack_pressure
+                COMMAND test-worker-outbound $<TARGET_FILE:test-worker-writer-fixture> ack-pressure)
+            set_tests_properties(worker_outbound_result_ack_pressure PROPERTIES LABELS "worker;protocol;backpressure" TIMEOUT 30)
+            foreach(head_version IN ITEMS v3 v4)
+                add_test(NAME "worker_response_head_pressure_${head_version}"
+                    COMMAND test-worker-outbound $<TARGET_FILE:capsid-worker> "head-pressure-${head_version}")
+                set_tests_properties("worker_response_head_pressure_${head_version}" PROPERTIES
+                    LABELS "worker;protocol;backpressure" TIMEOUT 30)
+            endforeach()
+            add_executable(test-host-outbound-policy tests/test_host_outbound_policy.cc)
+            set_target_properties(test-host-outbound-policy PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            target_include_directories(test-host-outbound-policy PRIVATE include src)
+            target_link_libraries(test-host-outbound-policy PRIVATE capsid_host_core Boost::system)
+            add_dependencies(test-host-outbound-policy capsid-worker)
+            add_test(NAME host_outbound_policy COMMAND test-host-outbound-policy $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(host_outbound_policy PROPERTIES LABELS "host;protocol;websocket" TIMEOUT 30)
             add_test(
                 NAME host_ws_upgrade_gates
                 COMMAND "${CAPSID_HOST_TEST_NODE}"
@@ -1572,6 +2639,24 @@ if(BUILD_TESTING)
                 host_ws_upgrade_gates PROPERTIES
                 LABELS "host;integration"
                 TIMEOUT 30)
+            foreach(ws_mode IN LISTS CAPSID_WS_SECONDARY_MODES)
+                add_test(
+                    NAME host_ws_upgrade_gates_${ws_mode}
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_ws_upgrade.mjs"
+                        --host "$<TARGET_FILE:capsid-host>"
+                        --worker "$<TARGET_FILE:capsid-worker>"
+                        --mode ${ws_mode})
+                set_tests_properties(host_ws_upgrade_gates_${ws_mode} PROPERTIES
+                    LABELS "host;integration" TIMEOUT 45)
+            endforeach()
+            add_test(NAME host_cli_unknown_arguments
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_cli_unknown_arguments.mjs"
+                    --host "$<TARGET_FILE:capsid-host>"
+                    --worker "$<TARGET_FILE:capsid-worker>")
+            set_tests_properties(host_cli_unknown_arguments PROPERTIES
+                LABELS "host;integration;cli" TIMEOUT 60)
             add_test(
                 NAME host_single_worker_integration
                 COMMAND "${CAPSID_HOST_TEST_NODE}"
@@ -1585,6 +2670,207 @@ if(BUILD_TESTING)
                 PROPERTIES
                     LABELS "host;integration;m1"
                     TIMEOUT 30)
+
+            # Read SDK defaults before registering any client that needs
+            # them, including the first configure with environment-only inputs.
+            set(CAPSID_WS_INTEROP_PYTHON "$ENV{CAPSID_WS_INTEROP_PYTHON}" CACHE FILEPATH
+                "Python interpreter with the locked WebSocket interop client")
+            set(CAPSID_WS_INTEROP_NODE_PACKAGE "$ENV{CAPSID_WS_INTEROP_NODE_PACKAGE}" CACHE PATH
+                "Installed source of the locked Node ws test package")
+
+            # Each stop case executes a real Host and its actual Workers.
+            # Windows uses the explicit parent pipe; POSIX also keeps the
+            # process-signal route under the same terminal assertions.
+            set(CAPSID_PARENT_STOP_CASES idle parent-eof repeat-stop active-ws
+                no-close-reply pending-dial startup-fail invalid-fd ready-alias
+                stdio-fd malformed-fd file-fd)
+            if(NOT WIN32)
+                list(APPEND CAPSID_PARENT_STOP_CASES signal)
+            endif()
+            foreach(stop_mode IN ITEMS single-worker static-pool)
+                foreach(stop_case IN LISTS CAPSID_PARENT_STOP_CASES)
+                    add_test(NAME "host_parent_stop_${stop_mode}_${stop_case}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_parent_stop.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${stop_mode}" --case "${stop_case}")
+                    set_tests_properties("host_parent_stop_${stop_mode}_${stop_case}" PROPERTIES
+                        LABELS "host;integration;websocket;lifecycle" TIMEOUT 40)
+                    if(stop_case STREQUAL "active-ws")
+                        set_tests_properties("host_parent_stop_${stop_mode}_${stop_case}" PROPERTIES
+                            ENVIRONMENT "CAPSID_WS_INTEROP_NODE_PACKAGE=${CAPSID_WS_INTEROP_NODE_PACKAGE}")
+                    endif()
+                endforeach()
+            endforeach()
+            add_executable(test-host-static-pool-faults
+                tests/test_host_static_pool_faults.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(test-host-static-pool-faults PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-static-pool-faults PRIVATE
+                capsid_runtime capsid_host_core Boost::system capsid_sanitizers)
+            set_target_properties(test-host-static-pool-faults PROPERTIES
+                CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-host-static-pool-faults PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-host-static-pool-faults PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(test-host-static-pool-faults PRIVATE -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            set(CAPSID_POOL_FAULT_CLIENT_ARGS)
+            if(CAPSID_WS_INTEROP_NODE_PACKAGE)
+                list(APPEND CAPSID_POOL_FAULT_CLIENT_ARGS --node-package "${CAPSID_WS_INTEROP_NODE_PACKAGE}")
+            endif()
+            foreach(pool_fault IN ITEMS first-worker-exit last-worker-exit first-worker-exit-websocket
+                all-workers-exit last-ready-worker-exit all-workers-exit-websocket)
+                add_test(NAME "host_static_pool_fault_${pool_fault}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_static_pool_faults.mjs"
+                        --fixture $<TARGET_FILE:test-host-static-pool-faults>
+                        --worker $<TARGET_FILE:capsid-worker> --case "${pool_fault}"
+                        ${CAPSID_POOL_FAULT_CLIENT_ARGS})
+                set_tests_properties("host_static_pool_fault_${pool_fault}" PROPERTIES
+                    LABELS "host;integration;lifecycle;websocket" TIMEOUT 45)
+            endforeach()
+            add_executable(test-host-static-pool-adoption
+                tests/test_host_static_pool_adoption.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            target_include_directories(test-host-static-pool-adoption PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-static-pool-adoption PRIVATE
+                capsid_runtime capsid_host_core Boost::system capsid_sanitizers)
+            set_target_properties(test-host-static-pool-adoption PROPERTIES
+                CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            # Only this fixture needs local function symbols to identify a
+            # real adoption allocation. Optimization remains the build's own.
+            if(MSVC)
+                target_compile_options(test-host-static-pool-adoption PRIVATE /Zi)
+                target_link_options(test-host-static-pool-adoption PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF)
+                target_link_libraries(test-host-static-pool-adoption PRIVATE dbghelp)
+                if(CAPSID_STRICT_WARNINGS)
+                    target_compile_options(test-host-static-pool-adoption PRIVATE /W4 /WX)
+                endif()
+            else()
+                target_compile_options(test-host-static-pool-adoption PRIVATE -g -fno-omit-frame-pointer)
+                target_link_libraries(test-host-static-pool-adoption PRIVATE ${CMAKE_DL_LIBS})
+                if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+                   CMAKE_EXE_LINKER_FLAGS MATCHES "(^| )-static( |$)")
+                    target_compile_definitions(test-host-static-pool-adoption PRIVATE
+                        CAPSID_TEST_STATIC_SYMBOLS=1
+                        "CAPSID_TEST_NM_PATH=\"${CMAKE_NM}\"")
+                else()
+                    set_target_properties(test-host-static-pool-adoption PROPERTIES ENABLE_EXPORTS ON)
+                endif()
+                if(CAPSID_STRICT_WARNINGS)
+                    target_compile_options(test-host-static-pool-adoption PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(test-host-static-pool-adoption PRIVATE -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            foreach(pool_adoption IN ITEMS reselect-worker-exit reselect-last-workers-exit
+                pre-post-stop pre-post-drain active-drain)
+                add_test(NAME "host_static_pool_adoption_${pool_adoption}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_static_pool_adoption.mjs"
+                        --fixture $<TARGET_FILE:test-host-static-pool-adoption>
+                        --worker $<TARGET_FILE:capsid-worker> --case "${pool_adoption}"
+                        ${CAPSID_POOL_FAULT_CLIENT_ARGS})
+                set_tests_properties("host_static_pool_adoption_${pool_adoption}" PROPERTIES
+                    LABELS "host;integration;lifecycle;websocket" TIMEOUT 60)
+            endforeach()
+            add_executable(test-host-external-drain
+                tests/test_host_external_drain.cc
+                src/host/single_worker_server.cc)
+            target_include_directories(test-host-external-drain PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-external-drain PRIVATE
+                capsid_runtime capsid_host_core Boost::system capsid_sanitizers)
+            set_target_properties(test-host-external-drain PROPERTIES
+                CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-host-external-drain PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-host-external-drain PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                        target_compile_options(test-host-external-drain PRIVATE -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            foreach(drain_case IN ITEMS drain-before-submit drain-during-prepare queued-before-drain
+                owner-drain-before-submit healthy-control)
+                add_test(NAME "host_external_drain_${drain_case}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_external_drain.mjs"
+                        --fixture $<TARGET_FILE:test-host-external-drain>
+                        --worker $<TARGET_FILE:capsid-worker> --case "${drain_case}"
+                        ${CAPSID_POOL_FAULT_CLIENT_ARGS})
+                set_tests_properties("host_external_drain_${drain_case}" PROPERTIES
+                    LABELS "host;integration;lifecycle;websocket" TIMEOUT 60)
+            endforeach()
+            add_executable(test-host-unavailable-lifecycle
+                tests/test_host_unavailable_lifecycle.cc
+                src/host/single_worker_server.cc)
+            add_executable(test-host-static-pool-local-shutdown
+                tests/test_host_static_pool_local_shutdown.cc
+                src/host/single_worker_server.cc
+                ${CAPSID_STATIC_POOL_SERVER_TEST_SOURCE})
+            foreach(local_target IN ITEMS test-host-unavailable-lifecycle test-host-static-pool-local-shutdown)
+                target_include_directories(${local_target} PRIVATE include src "${CAPSID_GENERATED_DIR}")
+                target_link_libraries(${local_target} PRIVATE
+                    capsid_runtime capsid_host_core Boost::system capsid_sanitizers)
+                set_target_properties(${local_target} PROPERTIES
+                    CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+                if(CAPSID_STRICT_WARNINGS)
+                    if(MSVC)
+                        target_compile_options(${local_target} PRIVATE /W4 /WX)
+                    else()
+                        target_compile_options(${local_target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                            target_compile_options(${local_target} PRIVATE -Wno-maybe-uninitialized)
+                        endif()
+                    endif()
+                endif()
+            endforeach()
+            foreach(local_case IN ITEMS get-close-before-completion head-close-before-completion get-normal-completion)
+                add_test(NAME "host_unavailable_lifecycle_${local_case}"
+                    COMMAND $<TARGET_FILE:test-host-unavailable-lifecycle> "${local_case}")
+                set_tests_properties("host_unavailable_lifecycle_${local_case}" PROPERTIES
+                    LABELS "host;integration;lifecycle" TIMEOUT 20)
+            endforeach()
+            foreach(local_case IN ITEMS stop drain)
+                add_test(NAME "host_static_pool_local_shutdown_${local_case}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_static_pool_local_shutdown.mjs"
+                        --fixture $<TARGET_FILE:test-host-static-pool-local-shutdown>
+                        --worker $<TARGET_FILE:capsid-worker> --case "${local_case}"
+                        ${CAPSID_POOL_FAULT_CLIENT_ARGS})
+                set_tests_properties("host_static_pool_local_shutdown_${local_case}" PROPERTIES
+                    LABELS "host;integration;lifecycle;websocket" TIMEOUT 45)
+            endforeach()
+            foreach(exit_case IN ITEMS before-completion before-adoption cancel-pending queued-before-exit
+                idle-after-adoption keepalive-after-adoption pre-post-worker-exit pre-post-stop pre-post-drain)
+                add_test(NAME "host_external_accept_exit_${exit_case}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_external_accept_exit.mjs"
+                        --fixture $<TARGET_FILE:test-host-single-worker-lifecycle>
+                        --worker $<TARGET_FILE:capsid-worker> --case "${exit_case}")
+                set_tests_properties("host_external_accept_exit_${exit_case}" PROPERTIES
+                    LABELS "host;integration;lifecycle" TIMEOUT 45)
+            endforeach()
+            add_test(NAME websocket_host_cleanup_contract
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ws_host_cleanup.mjs")
+            set_tests_properties(websocket_host_cleanup_contract PROPERTIES
+                LABELS "host;websocket;lifecycle" TIMEOUT 30)
 
             # M2 concurrent-wait gate: two threads calling wait() at once
             # must not double-join, and the concurrent caller must block
@@ -1682,6 +2968,7 @@ if(BUILD_TESTING)
                     TIMEOUT 600
                     SKIP_RETURN_CODE 77)
 
+            find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
             add_test(
                 NAME benchmark_tool_boundaries
                 COMMAND "${CAPSID_HOST_TEST_NODE}"
@@ -1689,7 +2976,8 @@ if(BUILD_TESTING)
                     --collector
                         "${CMAKE_CURRENT_SOURCE_DIR}/bench/collect-perf-point.py"
                     --qps-lane
-                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps-lane.sh")
+                        "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps-lane.sh"
+                    --python "${CAPSID_PYTHON3_EXECUTABLE}")
             set_tests_properties(
                 benchmark_tool_boundaries
                 PROPERTIES
@@ -1697,15 +2985,765 @@ if(BUILD_TESTING)
                     TIMEOUT 30)
 
             add_test(
+                NAME benchmark_evidence_contract
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_perf_evidence.py"
+                    --collector "${CMAKE_CURRENT_SOURCE_DIR}/bench/collect-perf-point.py")
+            set_tests_properties(
+                benchmark_evidence_contract PROPERTIES
+                LABELS "host;benchmark;evidence" TIMEOUT 90)
+
+            add_test(
+                NAME benchmark_measurement_runtime
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_measurement_runtime.py"
+                    --runtime "${CMAKE_CURRENT_SOURCE_DIR}/bench/measurement_runtime.py")
+            set_tests_properties(
+                benchmark_measurement_runtime PROPERTIES
+                LABELS "host;benchmark;lifecycle" TIMEOUT 30)
+            add_test(
+                NAME benchmark_density_control
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_density_control.py"
+                    --module "${CMAKE_CURRENT_SOURCE_DIR}/bench/density_control.py"
+                    --node "${CAPSID_HOST_TEST_NODE}")
+            set_tests_properties(
+                benchmark_density_control PROPERTIES
+                LABELS "host;benchmark;evidence" TIMEOUT 30)
+            add_test(
+                NAME benchmark_density_producer
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_density_lane.py"
+                    --lane "${CMAKE_CURRENT_SOURCE_DIR}/bench/density-lane.py")
+            set_tests_properties(
+                benchmark_density_producer PROPERTIES
+                LABELS "host;benchmark;evidence" TIMEOUT 30)
+            add_test(NAME benchmark_qps_control
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_qps_control.py"
+                    --module "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps_control.py")
+            set_tests_properties(benchmark_qps_control PROPERTIES
+                LABELS "host;benchmark;measurement" TIMEOUT 30)
+            add_test(NAME benchmark_qps_producer
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_qps_lane.py"
+                    --lane "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps-lane.py")
+            set_tests_properties(benchmark_qps_producer PROPERTIES
+                LABELS "host;benchmark;evidence" TIMEOUT 60)
+            add_test(NAME benchmark_cold_control
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_control.py"
+                    --module "${CMAKE_CURRENT_SOURCE_DIR}/bench/cold_control.py")
+            set_tests_properties(benchmark_cold_control PROPERTIES
+                LABELS "host;benchmark;measurement" TIMEOUT 60)
+            add_test(NAME benchmark_cold_producer
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_lane.py"
+                    --lane "${CMAKE_CURRENT_SOURCE_DIR}/bench/cold-start.py")
+            set_tests_properties(benchmark_cold_producer PROPERTIES
+                LABELS "host;benchmark;measurement;lifecycle;evidence" TIMEOUT 60)
+
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                # Go is optional for runtime consumers. When available, ALL
+                # builds the actual repository loadgen and CTest exercises its
+                # HTTP correctness, including timeout and warm-up failures.
+                find_program(CAPSID_GO_EXECUTABLE NAMES go)
+                if(CAPSID_GO_EXECUTABLE)
+                    set(CAPSID_BENCH_LOADGEN "${CMAKE_CURRENT_BINARY_DIR}/benchmark-tools/loadgen")
+                    add_custom_command(OUTPUT "${CAPSID_BENCH_LOADGEN}"
+                        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/benchmark-tools"
+                        COMMAND "${CMAKE_COMMAND}" -E env "GOWORK=off" "GOPROXY=off" "GOFLAGS=" "GOTOOLCHAIN=local"
+                            "${CAPSID_GO_EXECUTABLE}" build -trimpath -buildvcs=false
+                            -o "${CAPSID_BENCH_LOADGEN}" .
+                        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bench/loadgen"
+                        DEPENDS bench/loadgen/main.go bench/loadgen/go.mod
+                        COMMENT "Building the repository benchmark load generator" VERBATIM)
+                    add_custom_target(benchmark-loadgen ALL DEPENDS "${CAPSID_BENCH_LOADGEN}")
+                    add_test(NAME benchmark_loadgen_correctness
+                        COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_loadgen.py"
+                            --loadgen "${CAPSID_BENCH_LOADGEN}")
+                    set_tests_properties(benchmark_loadgen_correctness PROPERTIES
+                        LABELS "host;benchmark;correctness" TIMEOUT 90)
+                    add_test(NAME benchmark_qps_probe
+                        COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_qps_probe.py"
+                            --loadgen "${CAPSID_BENCH_LOADGEN}"
+                            --probe "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps_probe.py")
+                    set_tests_properties(benchmark_qps_probe PROPERTIES
+                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 90)
+                endif()
+                if(TARGET benchmark-cold-start)
+                    add_test(NAME benchmark_cold_tool
+                        COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_tool.py"
+                            --tool "$<TARGET_FILE:benchmark-cold-start>"
+                            --worker "$<TARGET_FILE:capsid-worker>")
+                    set_tests_properties(benchmark_cold_tool PROPERTIES
+                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 100)
+                endif()
+                add_test(
+                    NAME benchmark_fake_worker_lifecycle
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_fake_worker_lifecycle.mjs")
+                set_tests_properties(
+                    benchmark_fake_worker_lifecycle PROPERTIES
+                    LABELS "host;benchmark;lifecycle" TIMEOUT 10)
+            endif()
+
+            add_test(
                 NAME workerd_ws_fixtures
                 COMMAND "${CAPSID_HOST_TEST_NODE}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ws_fixtures.mjs")
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ws_fixtures.mjs"
+                    --host $<TARGET_FILE:capsid-host>
+                    --worker $<TARGET_FILE:capsid-worker>
+                    --mode single-worker)
             set_tests_properties(
                 workerd_ws_fixtures
                 PROPERTIES
                     LABELS "host"
-                    TIMEOUT 30
-                    SKIP_RETURN_CODE 77)
+                    TIMEOUT 240)
+            foreach(CAPSID_WS_MODE IN LISTS CAPSID_WS_SECONDARY_MODES)
+                add_test(NAME "workerd_ws_fixtures_${CAPSID_WS_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ws_fixtures.mjs"
+                        --host $<TARGET_FILE:capsid-host>
+                        --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_WS_MODE}")
+                set_tests_properties("workerd_ws_fixtures_${CAPSID_WS_MODE}" PROPERTIES TIMEOUT 240 LABELS "host;websocket")
+            endforeach()
+            if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                foreach(CAPSID_MESSAGE_PORT_MODE IN LISTS CAPSID_WS_BACKEND_MODES)
+                    add_test(NAME "native_message_port_order_${CAPSID_MESSAGE_PORT_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_message_port_order.mjs"
+                            --host $<TARGET_FILE:capsid-host>
+                            --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${CAPSID_MESSAGE_PORT_MODE}")
+                    set_tests_properties("native_message_port_order_${CAPSID_MESSAGE_PORT_MODE}" PROPERTIES
+                        TIMEOUT 60 LABELS "host;events;messagechannel;reference-gate")
+                endforeach()
+            endif()
+            add_test(NAME workerd_ws_mutation_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ws_mutations.mjs"
+                    --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(workerd_ws_mutation_controls PROPERTIES
+                TIMEOUT 120 LABELS "host;websocket;reference-gate")
+            add_test(NAME workerd_throw_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_throw_contract.mjs")
+            set_tests_properties(workerd_throw_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;reference-gate")
+            add_test(NAME workerd_handler_error_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_handler_error_contract.mjs")
+            set_tests_properties(workerd_handler_error_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;reference-gate")
+            add_test(NAME workerd_owner_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_owner_contract.mjs")
+            set_tests_properties(workerd_owner_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;lifecycle;reference-gate")
+            add_test(NAME workerd_async_callback_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_async_callback_contract.mjs")
+            set_tests_properties(workerd_async_callback_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;lifecycle;reference-gate")
+            add_test(NAME workerd_cross_context_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_cross_context_contract.mjs")
+            set_tests_properties(workerd_cross_context_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;lifecycle;reference-gate")
+            add_test(NAME workerd_fetch_resource_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_resource_contract.mjs")
+            set_tests_properties(workerd_fetch_resource_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;lifecycle;reference-gate")
+            add_test(NAME workerd_ordinary_fetch_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ordinary_fetch_contract.mjs")
+            set_tests_properties(workerd_ordinary_fetch_contract_controls PROPERTIES
+                TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_http_codec_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_http_codec_contract.mjs")
+            set_tests_properties(workerd_http_codec_contract_controls PROPERTIES
+                TIMEOUT 120 LABELS "host;websocket;fetch;compression;reference-gate")
+            add_test(NAME workerd_fetch_upgrade_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_upgrade_contract.mjs")
+            set_tests_properties(workerd_fetch_upgrade_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_fetch_upgrade_lifetime_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_upgrade_lifetime_contract.mjs")
+            set_tests_properties(workerd_fetch_upgrade_lifetime_contract_controls PROPERTIES
+                TIMEOUT 15 LABELS "host;websocket;lifecycle;reference-gate")
+            add_test(NAME workerd_fetch_proxy_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_proxy_contract.mjs")
+            set_tests_properties(workerd_fetch_proxy_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;reference-gate")
+            find_program(CAPSID_TEST_OPENSSL_EXECUTABLE NAMES openssl)
+            add_test(NAME workerd_fetch_boundary_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_boundary_contract.mjs")
+            set_tests_properties(workerd_fetch_boundary_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_fetch_transition_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_transition_contract.mjs")
+            set_tests_properties(workerd_fetch_transition_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_fetch_byob_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_byob_contract.mjs")
+            set_tests_properties(workerd_fetch_byob_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_fetch_arguments_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_arguments_contract.mjs")
+            set_tests_properties(workerd_fetch_arguments_contract_controls PROPERTIES
+                TIMEOUT 60 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_fetch_reader_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fetch_reader_contract.mjs")
+            set_tests_properties(workerd_fetch_reader_contract_controls PROPERTIES
+                TIMEOUT 60 LABELS "host;websocket;fetch;reference-gate")
+            add_test(NAME workerd_reader_intrinsic_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reader_intrinsic_contract.mjs")
+            set_tests_properties(workerd_reader_intrinsic_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;streams;reference-gate")
+            add_test(NAME workerd_native_reader_lifecycle_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_native_reader_lifecycle_contract.mjs")
+            set_tests_properties(workerd_native_reader_lifecycle_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+            add_test(NAME workerd_reader_scope_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reader_scope_contract.mjs")
+            set_tests_properties(workerd_reader_scope_contract_controls PROPERTIES
+                TIMEOUT 60 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+            add_test(NAME workerd_standard_reader_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_standard_reader_contract.mjs")
+            set_tests_properties(workerd_standard_reader_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+            add_test(NAME web_streams_source_contract
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --experimental-vm-modules --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_web_streams_source.mjs")
+            set_tests_properties(web_streams_source_contract PROPERTIES
+                TIMEOUT 10 LABELS "worker;streams;compatibility")
+            add_test(NAME workerd_crypto_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_crypto_contract.mjs")
+            set_tests_properties(workerd_crypto_contract_controls PROPERTIES
+                TIMEOUT 10 LABELS "host;websocket;crypto;reference-gate")
+            foreach(CAPSID_OUTBOUND_MODE IN LISTS CAPSID_WS_BACKEND_MODES)
+                add_test(NAME "websocket_crypto_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_crypto.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_crypto_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;crypto;reference-gate")
+                add_test(NAME "websocket_cross_context_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_cross_context.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_cross_context_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME "websocket_fetch_resources_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_resources.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_fetch_resources_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                # Five mandatory shards retain every case under the existing
+                # per-test 120 second limit: 600 seconds total per backend.
+                foreach(CAPSID_ORDINARY_FETCH_SHARD core pipelines gated views bodies)
+                    add_test(NAME "websocket_ordinary_fetch_${CAPSID_ORDINARY_FETCH_SHARD}_${CAPSID_OUTBOUND_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_ordinary_fetch.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${CAPSID_OUTBOUND_MODE}" --shard "${CAPSID_ORDINARY_FETCH_SHARD}")
+                    set_tests_properties("websocket_ordinary_fetch_${CAPSID_ORDINARY_FETCH_SHARD}_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                endforeach()
+                # Additional compression coverage has two mandatory shards;
+                # the existing ordinary-fetch shards and budgets are unchanged.
+                foreach(CAPSID_HTTP_CODEC_SHARD decode metadata)
+                    add_test(NAME "websocket_http_codec_${CAPSID_HTTP_CODEC_SHARD}_${CAPSID_OUTBOUND_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_http_codec.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${CAPSID_OUTBOUND_MODE}" --shard "${CAPSID_HTTP_CODEC_SHARD}")
+                    set_tests_properties("websocket_http_codec_${CAPSID_HTTP_CODEC_SHARD}_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;compression;reference-gate")
+                endforeach()
+                add_test(NAME "websocket_fetch_upgrade_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_upgrade.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_fetch_upgrade_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME "websocket_fetch_upgrade_lifetime_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_upgrade_lifetime.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_fetch_upgrade_lifetime_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME "websocket_fetch_proxy_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_proxy.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_fetch_proxy_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 180 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME "websocket_fetch_boundaries_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_boundaries.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties("websocket_fetch_boundaries_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME "websocket_fetch_transitions_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_transitions.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties("websocket_fetch_transitions_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                foreach(CAPSID_BYOB_SHARD readers constructors reflect-standard views-brands bodies standard-edges standard-close)
+                    add_test(NAME "websocket_fetch_byob_${CAPSID_BYOB_SHARD}_${CAPSID_OUTBOUND_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_byob.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${CAPSID_OUTBOUND_MODE}" --shard "${CAPSID_BYOB_SHARD}"
+                            --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                    set_tests_properties("websocket_fetch_byob_${CAPSID_BYOB_SHARD}_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                endforeach()
+                foreach(CAPSID_ARGUMENT_ROUTE getReader direct prototype subclass reflect)
+                    add_test(NAME "websocket_fetch_arguments_${CAPSID_ARGUMENT_ROUTE}_${CAPSID_OUTBOUND_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_arguments.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${CAPSID_OUTBOUND_MODE}" --shard "${CAPSID_ARGUMENT_ROUTE}"
+                            --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                    set_tests_properties("websocket_fetch_arguments_${CAPSID_ARGUMENT_ROUTE}_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                endforeach()
+                add_test(NAME "websocket_fetch_readers_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_readers.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties("websocket_fetch_readers_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME "websocket_async_callbacks_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_async_callbacks.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_async_callbacks_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME "websocket_reader_intrinsics_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_reader_intrinsics.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_reader_intrinsics_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 60 LABELS "host;websocket;streams;reference-gate")
+                add_test(NAME "websocket_native_reader_lifecycle_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_native_reader_lifecycle.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties("websocket_native_reader_lifecycle_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                add_test(NAME "websocket_reader_scope_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_reader_scope.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties("websocket_reader_scope_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                foreach(CAPSID_STANDARD_READER_SHARD IN ITEMS shapes ownership transfers)
+                    add_test(NAME "websocket_standard_readers_${CAPSID_STANDARD_READER_SHARD}_${CAPSID_OUTBOUND_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_standard_readers.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --shard "${CAPSID_STANDARD_READER_SHARD}" --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                    set_tests_properties("websocket_standard_readers_${CAPSID_STANDARD_READER_SHARD}_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                endforeach()
+                add_test(NAME "websocket_async_budget_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_async_callbacks.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}" --budgets 1)
+                set_tests_properties("websocket_async_budget_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;budget;reference-gate")
+                add_test(NAME "websocket_owner_lifecycle_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_owner_lifecycle.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_owner_lifecycle_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME "websocket_throw_wire_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_throw_wire.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_throw_wire_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    LABELS "host;websocket;framing;reference-gate" TIMEOUT 45)
+                add_test(NAME "websocket_frame_boundaries_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_frame_boundaries.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_frame_boundaries_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                    LABELS "host;websocket;framing" TIMEOUT 120)
+                if(NOT CAPSID_OUTBOUND_MODE STREQUAL "managed" OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                    add_test(NAME "host_session_tracking_${CAPSID_OUTBOUND_MODE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_session_tracking.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                            --mode "${CAPSID_OUTBOUND_MODE}")
+                    set_tests_properties("host_session_tracking_${CAPSID_OUTBOUND_MODE}" PROPERTIES
+                        TIMEOUT 45 LABELS "host;http;lifecycle")
+                endif()
+                add_test(NAME "websocket_outbound_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_outbound.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker> --mode "${CAPSID_OUTBOUND_MODE}" --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties("websocket_outbound_${CAPSID_OUTBOUND_MODE}" PROPERTIES TIMEOUT 120 LABELS "host;websocket")
+                add_test(NAME "websocket_budget_${CAPSID_OUTBOUND_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_budget.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker> --mode "${CAPSID_OUTBOUND_MODE}")
+                set_tests_properties("websocket_budget_${CAPSID_OUTBOUND_MODE}" PROPERTIES TIMEOUT 120 LABELS "host;websocket;capacity;metrics")
+            endforeach()
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                set(CAPSID_MANAGED_SOAK_MEMORY_MODE production)
+                if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
+                    set(CAPSID_MANAGED_SOAK_MEMORY_MODE sanitizer)
+                endif()
+                add_test(NAME websocket_managed_soak_controls
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_managed_websocket_soak.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                        --memory-mode "${CAPSID_MANAGED_SOAK_MEMORY_MODE}")
+                set_tests_properties(websocket_managed_soak_controls PROPERTIES TIMEOUT 90 LABELS "host;websocket;managed;lifecycle;soak")
+                add_test(NAME websocket_managed_local_owner
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_managed_local_owner.mjs"
+                        --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker> --mode managed)
+                set_tests_properties(websocket_managed_local_owner PROPERTIES TIMEOUT 45 LABELS "host;websocket;managed;lifecycle")
+                foreach(CAPSID_MANAGED_WS_CASE IN ITEMS deploy retire-deadline replacement replacement-recursion deploy-persist-failure reclamation-idle)
+                    add_test(NAME "websocket_managed_${CAPSID_MANAGED_WS_CASE}"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_managed_lifecycle.mjs"
+                            --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker> --case "${CAPSID_MANAGED_WS_CASE}")
+                    set_tests_properties("websocket_managed_${CAPSID_MANAGED_WS_CASE}" PROPERTIES TIMEOUT 120 LABELS "host;websocket;managed;lifecycle")
+                endforeach()
+                if(CAPSID_ENABLE_ASAN)
+                    foreach(CAPSID_ASAN_RESOURCE_CASE IN ITEMS replacement-recursion reclamation-idle)
+                        add_test(NAME "websocket_managed_asan_resources_${CAPSID_ASAN_RESOURCE_CASE}"
+                            COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_managed_lifecycle.mjs"
+                                --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                                --case "${CAPSID_ASAN_RESOURCE_CASE}" --memory-acceptance asan-resources
+                                --report "${CMAKE_CURRENT_BINARY_DIR}/asan-memory-${CAPSID_ASAN_RESOURCE_CASE}.json")
+                        set_tests_properties("websocket_managed_asan_resources_${CAPSID_ASAN_RESOURCE_CASE}" PROPERTIES
+                            TIMEOUT 120 LABELS "host;websocket;managed;lifecycle;asan-resources"
+                            ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:strict_string_checks=1;LSAN_OPTIONS=")
+                    endforeach()
+                endif()
+                if(CAPSID_ENABLE_TSAN)
+                    foreach(CAPSID_TSAN_RESOURCE_CASE IN ITEMS replacement-recursion reclamation-idle)
+                        add_test(NAME "websocket_managed_tsan_resources_${CAPSID_TSAN_RESOURCE_CASE}"
+                            COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_managed_lifecycle.mjs"
+                                --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                                --case "${CAPSID_TSAN_RESOURCE_CASE}" --memory-acceptance tsan-resources
+                                --report "${CMAKE_CURRENT_BINARY_DIR}/tsan-memory-${CAPSID_TSAN_RESOURCE_CASE}.json")
+                        set_tests_properties("websocket_managed_tsan_resources_${CAPSID_TSAN_RESOURCE_CASE}" PROPERTIES
+                            TIMEOUT 120 LABELS "host;websocket;managed;lifecycle;tsan-resources"
+                            ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1:exitcode=66")
+                    endforeach()
+                endif()
+            endif()
+            # Always registered (review §7: conditional registration
+            # silently vanishes the gate when configure runs without
+            # the env); the runner itself skips at TEST time when
+            # CAPSID_WORKERD_REF is unset.
+            add_test(NAME websocket_outbound_reference
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_outbound.mjs"
+                    --reference-from-env --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+            set_tests_properties(websocket_outbound_reference PROPERTIES
+                TIMEOUT 120 LABELS "host;websocket;reference"
+                SKIP_RETURN_CODE 77)
+            # locked workerd binary with Node's native WebSocket client.
+            # Runs only when CAPSID_WORKERD_REF is set at TEST time and
+            # points at the binary whose SHA-256 matches
+            # tests/fixtures/workerd-ws/reference-lock.json; otherwise
+            # skips (77) so the reference gate never silently vanishes.
+            add_test(
+                NAME workerd_ws_reference
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_ws_fixtures.mjs"
+                    --reference-from-env)
+            set_tests_properties(
+                workerd_ws_reference PROPERTIES
+                LABELS "host;workerd-reference"
+                TIMEOUT 180
+                ENVIRONMENT "CAPSID_WDREF_UNSET_GUARD=1"
+                SKIP_RETURN_CODE 77)
+            set(CAPSID_WS_INTEROP_PYTHON_ARGS --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+            if(CAPSID_WS_INTEROP_PYTHON)
+                list(APPEND CAPSID_WS_INTEROP_PYTHON_ARGS --python "${CAPSID_WS_INTEROP_PYTHON}")
+            endif()
+            if(CAPSID_WS_INTEROP_NODE_PACKAGE)
+                list(APPEND CAPSID_WS_INTEROP_PYTHON_ARGS --node-package "${CAPSID_WS_INTEROP_NODE_PACKAGE}")
+            endif()
+            foreach(CAPSID_PYTHON_PEER_CASE idle exchange tls-reset reset-session close-reset)
+                add_test(NAME "websocket_python_peer_${CAPSID_PYTHON_PEER_CASE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_python_peer_lifecycle.mjs"
+                        --case "${CAPSID_PYTHON_PEER_CASE}" ${CAPSID_WS_INTEROP_PYTHON_ARGS})
+                set_tests_properties("websocket_python_peer_${CAPSID_PYTHON_PEER_CASE}" PROPERTIES
+                    TIMEOUT 45 LABELS "host;websocket;independent-client;peer-lifecycle")
+            endforeach()
+            set(CAPSID_WS_COMPAT_MODES ${CAPSID_WS_BACKEND_MODES})
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
+                list(PREPEND CAPSID_WS_COMPAT_MODES reference)
+                add_test(NAME websocket_async_callbacks_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_async_callbacks.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_async_callbacks_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME websocket_cross_context_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_cross_context.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_cross_context_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME websocket_fetch_resources_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_resources.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_fetch_resources_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                foreach(CAPSID_ORDINARY_FETCH_SHARD core pipelines gated views bodies)
+                    add_test(NAME "websocket_ordinary_fetch_${CAPSID_ORDINARY_FETCH_SHARD}_reference"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_ordinary_fetch.mjs"
+                            --reference-from-env 1 --shard "${CAPSID_ORDINARY_FETCH_SHARD}")
+                    set_tests_properties("websocket_ordinary_fetch_${CAPSID_ORDINARY_FETCH_SHARD}_reference" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                endforeach()
+                foreach(CAPSID_HTTP_CODEC_SHARD decode metadata)
+                    add_test(NAME "websocket_http_codec_${CAPSID_HTTP_CODEC_SHARD}_reference"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_http_codec.mjs"
+                            --reference-from-env 1 --shard "${CAPSID_HTTP_CODEC_SHARD}")
+                    set_tests_properties("websocket_http_codec_${CAPSID_HTTP_CODEC_SHARD}_reference" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;compression;reference-gate")
+                endforeach()
+                add_test(NAME websocket_fetch_upgrade_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_upgrade.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_fetch_upgrade_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME websocket_fetch_upgrade_lifetime_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_upgrade_lifetime.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_fetch_upgrade_lifetime_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME websocket_fetch_proxy_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_proxy.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_fetch_proxy_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME websocket_fetch_boundaries_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_boundaries.mjs"
+                        --reference-from-env 1 --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties(websocket_fetch_boundaries_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME websocket_fetch_transitions_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_transitions.mjs"
+                        --reference-from-env 1 --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties(websocket_fetch_transitions_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                foreach(CAPSID_BYOB_SHARD readers constructors reflect-standard views-brands bodies standard-edges standard-close)
+                    add_test(NAME "websocket_fetch_byob_${CAPSID_BYOB_SHARD}_reference"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_byob.mjs"
+                            --reference-from-env 1 --shard "${CAPSID_BYOB_SHARD}"
+                            --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                    set_tests_properties("websocket_fetch_byob_${CAPSID_BYOB_SHARD}_reference" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                endforeach()
+                foreach(CAPSID_ARGUMENT_ROUTE getReader direct prototype subclass reflect)
+                    add_test(NAME "websocket_fetch_arguments_${CAPSID_ARGUMENT_ROUTE}_reference"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_arguments.mjs"
+                            --reference-from-env 1 --shard "${CAPSID_ARGUMENT_ROUTE}"
+                            --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                    set_tests_properties("websocket_fetch_arguments_${CAPSID_ARGUMENT_ROUTE}_reference" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                endforeach()
+                add_test(NAME websocket_fetch_readers_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_fetch_readers.mjs"
+                        --reference-from-env 1 --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties(websocket_fetch_readers_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;reference-gate")
+                add_test(NAME websocket_reader_intrinsics_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_reader_intrinsics.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_reader_intrinsics_reference PROPERTIES
+                    TIMEOUT 60 LABELS "host;websocket;streams;reference-gate")
+                add_test(NAME websocket_native_reader_lifecycle_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_native_reader_lifecycle.mjs"
+                        --reference-from-env 1 --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties(websocket_native_reader_lifecycle_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                add_test(NAME websocket_reader_scope_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_reader_scope.mjs"
+                        --reference-from-env 1 --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                set_tests_properties(websocket_reader_scope_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                foreach(CAPSID_STANDARD_READER_SHARD IN ITEMS shapes ownership transfers)
+                    add_test(NAME "websocket_standard_readers_${CAPSID_STANDARD_READER_SHARD}_reference"
+                        COMMAND "${CAPSID_HOST_TEST_NODE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_standard_readers.mjs"
+                            --shard "${CAPSID_STANDARD_READER_SHARD}" --reference-from-env 1 --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}")
+                    set_tests_properties("websocket_standard_readers_${CAPSID_STANDARD_READER_SHARD}_reference" PROPERTIES
+                        TIMEOUT 120 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                endforeach()
+                add_test(NAME websocket_crypto_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_crypto.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_crypto_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;crypto;reference-gate")
+                add_test(NAME websocket_owner_lifecycle_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_owner_lifecycle.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_owner_lifecycle_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;lifecycle;reference-gate")
+                add_test(NAME websocket_frame_boundaries_reference
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_frame_boundaries.mjs"
+                        --reference-from-env 1)
+                set_tests_properties(websocket_frame_boundaries_reference PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;framing;reference-gate")
+            endif()
+            add_test(NAME websocket_frame_contract_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_frame_contract.mjs")
+            set_tests_properties(websocket_frame_contract_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;websocket;framing;contract")
+            foreach(CAPSID_INTEROP_MODE IN LISTS CAPSID_WS_COMPAT_MODES)
+                if(CAPSID_INTEROP_MODE STREQUAL "reference")
+                    set(CAPSID_INTEROP_BACKEND_ARGS --reference-from-env 1)
+                else()
+                    set(CAPSID_INTEROP_BACKEND_ARGS --host $<TARGET_FILE:capsid-host>
+                        --worker $<TARGET_FILE:capsid-worker> --mode "${CAPSID_INTEROP_MODE}")
+                endif()
+                add_test(NAME "websocket_interop_${CAPSID_INTEROP_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_interop.mjs"
+                        ${CAPSID_INTEROP_BACKEND_ARGS} ${CAPSID_WS_INTEROP_PYTHON_ARGS})
+                set_tests_properties("websocket_interop_${CAPSID_INTEROP_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;independent-client;reference-gate")
+            endforeach()
+            set(CAPSID_FANOUT_NODE_ARGS)
+            if(CAPSID_WS_INTEROP_NODE_PACKAGE)
+                list(APPEND CAPSID_FANOUT_NODE_ARGS --node-package "${CAPSID_WS_INTEROP_NODE_PACKAGE}")
+            endif()
+            foreach(CAPSID_FANOUT_MODE IN LISTS CAPSID_WS_COMPAT_MODES)
+                if(CAPSID_FANOUT_MODE STREQUAL "reference")
+                    set(CAPSID_FANOUT_BACKEND_ARGS --reference-from-env 1)
+                else()
+                    set(CAPSID_FANOUT_BACKEND_ARGS --host $<TARGET_FILE:capsid-host>
+                        --worker $<TARGET_FILE:capsid-worker> --mode "${CAPSID_FANOUT_MODE}")
+                endif()
+                add_test(NAME "workerd_fanout_${CAPSID_FANOUT_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fanout.mjs"
+                        ${CAPSID_FANOUT_BACKEND_ARGS} ${CAPSID_FANOUT_NODE_ARGS})
+                set_tests_properties("workerd_fanout_${CAPSID_FANOUT_MODE}" PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;multiworker;reference-gate")
+            endforeach()
+            set(CAPSID_ENCODING_MODES single-worker static-pool)
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                list(APPEND CAPSID_ENCODING_MODES managed)
+            endif()
+            foreach(CAPSID_ENCODING_MODE IN LISTS CAPSID_ENCODING_MODES)
+                add_test(NAME "gb18030_compatibility_${CAPSID_ENCODING_MODE}"
+                    COMMAND "${CAPSID_HOST_TEST_NODE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_gb18030_compatibility.mjs"
+                        $<TARGET_FILE:capsid-host> $<TARGET_FILE:capsid-worker>
+                        "${CAPSID_ENCODING_MODE}")
+                set_tests_properties("gb18030_compatibility_${CAPSID_ENCODING_MODE}" PROPERTIES
+                    TIMEOUT 60 LABELS "host;encoding;compatibility")
+            endforeach()
+            add_test(NAME websocket_platform_matrix
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_platform_matrix.mjs"
+                    --ctest "${CMAKE_CTEST_COMMAND}" --build-dir "${CMAKE_BINARY_DIR}"
+                    --system "${CMAKE_SYSTEM_NAME}")
+            set_tests_properties(websocket_platform_matrix PROPERTIES
+                TIMEOUT 40 LABELS "host;websocket;platform;registration")
+            add_test(NAME websocket_platform_matrix_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_platform_matrix_contract.mjs")
+            set_tests_properties(websocket_platform_matrix_controls PROPERTIES
+                TIMEOUT 60 LABELS "host;websocket;platform;registration"
+                ENVIRONMENT "CAPSID_PLATFORM_TEST_CTEST=${CMAKE_CTEST_COMMAND}")
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
+                add_test(NAME workerd_ws_gate_controls
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reference_gate.mjs")
+                add_test(NAME workerd_ws_gate_archive_controls
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reference_gate.mjs")
+                add_test(NAME workerd_ws_gate_extension_controls
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reference_gate.mjs")
+                add_test(NAME workerd_ws_gate_support_controls
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_outbound_contract.mjs"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_response_contract.mjs"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_interop_contract.mjs"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_fanout_contract.mjs"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_frame_contract.mjs")
+                set(CAPSID_WORKERD_CONTROL_TESTS workerd_ws_gate_controls
+                    workerd_ws_gate_archive_controls workerd_ws_gate_extension_controls workerd_ws_gate_support_controls)
+                set_tests_properties(${CAPSID_WORKERD_CONTROL_TESTS} PROPERTIES
+                    TIMEOUT 120 LABELS "host;websocket;reference-gate"
+                    ENVIRONMENT "CAPSID_FANOUT_TEST_HOST=$<TARGET_FILE:capsid-host>;CAPSID_FANOUT_TEST_WORKER=$<TARGET_FILE:capsid-worker>")
+                if(CAPSID_WS_INTEROP_PYTHON AND CAPSID_WS_INTEROP_NODE_PACKAGE)
+                    set_tests_properties(${CAPSID_WORKERD_CONTROL_TESTS} PROPERTIES
+                        ENVIRONMENT "CAPSID_WS_INTEROP_PYTHON=${CAPSID_WS_INTEROP_PYTHON};CAPSID_WS_INTEROP_NODE_PACKAGE=${CAPSID_WS_INTEROP_NODE_PACKAGE};CAPSID_FANOUT_TEST_HOST=$<TARGET_FILE:capsid-host>;CAPSID_FANOUT_TEST_WORKER=$<TARGET_FILE:capsid-worker>")
+                endif()
+                set_property(TEST workerd_ws_gate_controls APPEND PROPERTY ENVIRONMENT "CAPSID_WS_GATE_CONTROL_SHARD=primary")
+                set_property(TEST workerd_ws_gate_archive_controls APPEND PROPERTY ENVIRONMENT "CAPSID_WS_GATE_CONTROL_SHARD=archives")
+                set_property(TEST workerd_ws_gate_extension_controls APPEND PROPERTY ENVIRONMENT "CAPSID_WS_GATE_CONTROL_SHARD=extensions")
+            endif()
         endif()
 
         add_executable(test-build-identity tests/test_build_identity.cc)
@@ -1786,13 +3824,19 @@ if(BUILD_TESTING)
         endif()
 
         if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
+            find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
             add_test(
                 NAME host_sanitizer_instrumentation
                 COMMAND "${CMAKE_COMMAND}"
                     "-DCAPSID_COMPILE_COMMANDS=${CMAKE_BINARY_DIR}/compile_commands.json"
+                    "-DCAPSID_NODE_EXECUTABLE=${CAPSID_HOST_TEST_NODE}"
+                    "-DCAPSID_VENDOR_ROOT=${CAPSID_TXIKI_OVERLAY}"
+                    "-DCAPSID_WORKER_WRITER_FIXTURE=$<TARGET_EXISTS:test-worker-writer-fixture>"
+                    "-DCAPSID_WORKER_TIMEOUT_WRITER_FIXTURE=$<TARGET_EXISTS:test-worker-timeout-writer-fixture>"
                     "-DCAPSID_EXPECT_ASAN=${CAPSID_ENABLE_ASAN}"
                     "-DCAPSID_EXPECT_UBSAN=${CAPSID_ENABLE_UBSAN}"
                     "-DCAPSID_EXPECT_TSAN=${CAPSID_ENABLE_TSAN}"
+                    "-DCAPSID_EXPECT_FUZZERS=${CAPSID_BUILD_FUZZERS}"
                     -P
                     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestHostSanitizerInstrumentation.cmake"
             )
@@ -1800,6 +3844,13 @@ if(BUILD_TESTING)
                 host_sanitizer_instrumentation
                 PROPERTIES LABELS "host;security;sanitizer")
         endif()
+        find_program(CAPSID_HOST_TEST_NODE NAMES node REQUIRED)
+        add_test(NAME host_sanitizer_audit_controls
+            COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_sanitizers.mjs")
+        set_tests_properties(host_sanitizer_audit_controls PROPERTIES
+            ENVIRONMENT "CAPSID_SANITIZER_AUDIT_CMAKE=${CMAKE_COMMAND}"
+            TIMEOUT 30)
     endif()
 
     add_executable(test-protocol tests/test_protocol.cc src/protocol.cc)
@@ -1807,23 +3858,204 @@ if(BUILD_TESTING)
     target_link_libraries(test-protocol PRIVATE capsid_sanitizers)
     add_test(NAME protocol COMMAND test-protocol)
 
+    add_executable(test-fetch-upgrade-metadata
+        tests/test_fetch_upgrade_metadata.cc src/protocol.cc
+        src/channel_registry.cc src/channel_io.cc)
+    target_include_directories(test-fetch-upgrade-metadata PRIVATE src)
+    target_link_libraries(test-fetch-upgrade-metadata PRIVATE capsid_sanitizers)
+    if(CAPSID_STRICT_WARNINGS)
+        if(MSVC)
+            target_compile_options(test-fetch-upgrade-metadata PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-fetch-upgrade-metadata PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
+    add_test(NAME fetch_upgrade_metadata COMMAND test-fetch-upgrade-metadata)
+    set_tests_properties(fetch_upgrade_metadata PROPERTIES TIMEOUT 10 LABELS "protocol;fetch;websocket")
+    add_executable(test-fetch-upgrade-abi tests/test_fetch_upgrade_abi.cc)
+    target_include_directories(test-fetch-upgrade-abi PRIVATE src)
+    target_link_libraries(test-fetch-upgrade-abi PRIVATE capsid_runtime)
+    if(CAPSID_STRICT_WARNINGS)
+        if(MSVC)
+            target_compile_options(test-fetch-upgrade-abi PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-fetch-upgrade-abi PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
+    add_test(NAME fetch_upgrade_abi COMMAND test-fetch-upgrade-abi)
+    set_tests_properties(fetch_upgrade_abi PROPERTIES TIMEOUT 30 LABELS "protocol;fetch;websocket;abi")
+
     add_executable(
         test-fetchrpc-v4
         tests/test_fetchrpc_v4.cc
+        src/capability_policy.cc
+        src/egress_policy.cc
+        src/ipc_validation.cc
         src/protocol.cc
+        src/response_headers.cc
     )
     # RFC 6455 host codec (FetchRPC v4 WS-C3)
     add_executable(test-ws-codec tests/test_ws_codec.cc src/host/ws_codec.cc)
     target_include_directories(test-ws-codec PRIVATE src src/host)
     target_link_libraries(test-ws-codec PRIVATE capsid_sanitizers)
     add_test(NAME ws_codec COMMAND test-ws-codec)
-    target_include_directories(test-fetchrpc-v4 PRIVATE src)
+    target_include_directories(test-fetchrpc-v4 PRIVATE
+        include src "${CAPSID_GENERATED_DIR}")
     target_compile_definitions(test-fetchrpc-v4 PRIVATE FETCHRPC_V4_SURFACE)
-    target_link_libraries(test-fetchrpc-v4 PRIVATE capsid_sanitizers)
+    target_link_libraries(test-fetchrpc-v4 PRIVATE
+        capsid_sanitizers capsid_jansson)
     add_test(
         NAME fetchrpc_v4_boundary
         COMMAND test-fetchrpc-v4
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fetchrpc-v4/vectors.json")
+
+    # GLM T08: channel capacity ledger + protocol identity Red tests
+    add_executable(
+        test-host-channel-ledger
+        tests/test_host_channel_ledger.cc
+        src/host/channel_ledger.cc
+        src/host/generation_identity.cc
+    )
+    target_include_directories(test-host-channel-ledger PRIVATE
+        include src src/host "${CAPSID_GENERATED_DIR}")
+    target_link_libraries(test-host-channel-ledger PRIVATE
+        capsid_host_core
+        OpenSSL::Crypto
+        capsid_sanitizers capsid_jansson)
+    set_target_properties(test-host-channel-ledger PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON)
+    add_test(NAME host_channel_ledger COMMAND test-host-channel-ledger)
+    add_executable(test-host-channel-budget tests/test_host_channel_budget.cc)
+    target_include_directories(test-host-channel-budget PRIVATE include src)
+    target_link_libraries(test-host-channel-budget PRIVATE capsid_host_core capsid_sanitizers)
+    set_target_properties(test-host-channel-budget PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    add_test(NAME host_channel_budget COMMAND test-host-channel-budget)
+    set_tests_properties(host_channel_budget PROPERTIES TIMEOUT 30 LABELS "host;websocket;capacity;metrics")
+
+    # GLM T07: C11 embedding example, built and executed as a test
+    # (real worker, real request, gated channel surface)
+    add_executable(c11-channel-probe examples/c11-embed/channel_probe.c)
+    target_include_directories(c11-channel-probe PRIVATE include)
+    target_link_libraries(c11-channel-probe PRIVATE capsid_runtime)
+    if(TARGET capsid-worker)
+        add_test(
+            NAME c11_channel_probe
+            COMMAND c11-channel-probe "$<TARGET_FILE:capsid-worker>")
+    endif()
+
+    # GLM T07: fake worker-side peer + the channel C ABI tests
+    # No sanitizers: the peer runs under the worker's spawn preamble
+    # (closed stdio, restricted env) where sanitizer runtimes are not
+    # part of the contract; it mirrors the production worker binary.
+    # Native Windows channel-peer coverage is still a release gate.
+    # This fixture uses the POSIX --ipc-fd bootstrap and unistd APIs.
+    if(NOT WIN32)
+        add_executable(fake-worker-peer tests/fake_worker_peer.cc
+            src/protocol.cc)
+        target_include_directories(fake-worker-peer PRIVATE src)
+
+        add_executable(
+            test-channel-abi
+            tests/test_channel_abi.cc
+        )
+        target_include_directories(test-channel-abi PRIVATE
+            include src)
+        target_compile_definitions(test-channel-abi PRIVATE
+            CAPSID_FAKE_PEER_PATH="${CMAKE_CURRENT_BINARY_DIR}/fake-worker-peer")
+        target_link_libraries(test-channel-abi PRIVATE capsid_runtime)
+        add_dependencies(test-channel-abi fake-worker-peer)
+        add_test(NAME channel_abi COMMAND test-channel-abi)
+        set_tests_properties(channel_abi PROPERTIES TIMEOUT 60)
+
+    endif()
+
+    # GLM T06: production channel registry runs the frozen v4
+    # sequences plus its budget-guarantee units
+    add_executable(
+        test-channel-registry
+        tests/test_channel_registry.cc
+        src/channel_registry.cc
+        src/protocol.cc
+    )
+    target_include_directories(test-channel-registry PRIVATE
+        src)
+    target_link_libraries(test-channel-registry PRIVATE
+        capsid_sanitizers capsid_jansson)
+    add_test(
+        NAME channel_registry
+        COMMAND test-channel-registry
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fetchrpc-v4/vectors.json")
+
+    add_executable(test-channel-races
+        tests/test_channel_races.cc src/channel_registry.cc src/protocol.cc)
+    target_include_directories(test-channel-races PRIVATE src)
+    target_link_libraries(test-channel-races PRIVATE capsid_sanitizers)
+    set_target_properties(test-channel-races PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON)
+    add_test(NAME channel_two_peer_races COMMAND test-channel-races)
+    set_tests_properties(channel_two_peer_races PROPERTIES TIMEOUT 15)
+
+    add_executable(test-channel-io tests/test_channel_io.cc
+        src/channel_io.cc src/channel_registry.cc src/protocol.cc)
+    target_include_directories(test-channel-io PRIVATE src)
+    target_link_libraries(test-channel-io PRIVATE capsid_sanitizers)
+    set_target_properties(test-channel-io PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON)
+    if(MSVC)
+        # Global allocation faults must not target Debug STL's diagnostic
+        # _Container_proxy allocation in noexcept basic_string construction.
+        # Keep every actual receive/send/control fault and rollback assertion
+        # in this standalone target, using the production iterator ABI.
+        target_compile_definitions(test-channel-io PRIVATE _ITERATOR_DEBUG_LEVEL=0)
+        # Independently execute the real Debug iterator contracts with no
+        # synthetic heap failure inside the CRT's noexcept diagnostics.
+        # Product, sanitizer and warning flags remain unchanged.
+        add_executable(test-channel-io-debug tests/test_channel_io.cc
+            src/channel_io.cc src/channel_registry.cc src/protocol.cc)
+        target_include_directories(test-channel-io-debug PRIVATE src)
+        target_link_libraries(test-channel-io-debug PRIVATE capsid_sanitizers)
+        target_compile_definitions(test-channel-io-debug PRIVATE
+            _ITERATOR_DEBUG_LEVEL=2 CAPSID_CHANNEL_IO_NO_FAULT_SWEEP=1)
+        set_target_properties(test-channel-io-debug PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON
+            MSVC_RUNTIME_LIBRARY MultiThreadedDebug)
+        add_test(NAME channel_owned_io_debug COMMAND test-channel-io-debug)
+        set_tests_properties(channel_owned_io_debug PROPERTIES TIMEOUT 15 LABELS "windows;protocol;debug")
+    endif()
+    add_test(NAME channel_owned_io COMMAND test-channel-io)
+    add_executable(test-ws-stream tests/test_ws_stream.cc src/host/ws_stream.cc src/protocol.cc)
+    target_include_directories(test-ws-stream PRIVATE src)
+    target_link_libraries(test-ws-stream PRIVATE capsid_sanitizers)
+    add_test(NAME ws_incremental_stream COMMAND test-ws-stream)
+    set_tests_properties(ws_incremental_stream PROPERTIES TIMEOUT 15 LABELS "host;websocket")
+    if(TARGET capsid_host_core AND Boost_FOUND)
+        add_executable(test-host-websocket-session tests/test_host_websocket_session.cc)
+        target_include_directories(test-host-websocket-session PRIVATE include src)
+        target_link_libraries(test-host-websocket-session PRIVATE capsid_host_core Boost::system capsid_sanitizers)
+        set_target_properties(test-host-websocket-session PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        add_test(NAME host_websocket_session_lifecycle COMMAND test-host-websocket-session)
+        set_tests_properties(host_websocket_session_lifecycle PROPERTIES TIMEOUT 15 LABELS "host;websocket;lifecycle")
+        add_executable(test-host-dns-dialer tests/test_host_dns_dialer.cc)
+        target_include_directories(test-host-dns-dialer PRIVATE include src)
+        target_link_libraries(test-host-dns-dialer PRIVATE capsid_host_core Boost::system capsid_sanitizers)
+        set_target_properties(test-host-dns-dialer PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_definitions(test-host-dns-dialer PRIVATE CAPSID_TEST_WRAP_CONNECT=1)
+            target_link_options(test-host-dns-dialer PRIVATE "LINKER:--wrap=connect")
+        endif()
+        add_test(NAME host_dns_dialer_lifecycle COMMAND test-host-dns-dialer)
+        set_tests_properties(host_dns_dialer_lifecycle PROPERTIES TIMEOUT 30 LABELS "host;websocket;lifecycle")
+        add_test(NAME host_dns_reserved_invalid COMMAND test-host-dns-dialer --reserved-invalid)
+        set_tests_properties(host_dns_reserved_invalid PROPERTIES TIMEOUT 30 LABELS "host;websocket;lifecycle")
+        if(TARGET capsid-worker)
+            add_executable(test-host-channel-lifecycle tests/test_host_channel_lifecycle.cc)
+            target_include_directories(test-host-channel-lifecycle PRIVATE include src)
+            target_link_libraries(test-host-channel-lifecycle PRIVATE capsid_host_core Boost::system capsid_sanitizers)
+            set_target_properties(test-host-channel-lifecycle PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            add_dependencies(test-host-channel-lifecycle capsid-worker)
+            add_test(NAME host_channel_generation_lifecycle COMMAND test-host-channel-lifecycle $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(host_channel_generation_lifecycle PROPERTIES TIMEOUT 45 LABELS "host;websocket;lifecycle")
+        endif()
+    endif()
+    set_tests_properties(channel_owned_io PROPERTIES TIMEOUT 15)
 
     add_executable(
         test-outbound-buffer
@@ -1904,13 +4136,33 @@ if(BUILD_TESTING)
     if(NOT CAPSID_ENABLE_TSAN)
     add_executable(test-abi-guard tests/test_abi_guard.cc)
     target_link_libraries(test-abi-guard PRIVATE capsid_runtime)
+    if(CAPSID_STRICT_WARNINGS)
+        if(MSVC)
+            target_compile_options(test-abi-guard PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-abi-guard PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+    endif()
     if(TARGET capsid-worker)
         add_test(
             NAME abi_guard_oom_countdown
             COMMAND test-abi-guard $<TARGET_FILE:capsid-worker>)
+        foreach(CAPSID_ABI_OOM_MODE IN ITEMS
+                egress-empty egress-rules capability-empty permission-rule
+                capability-snapshot v4-carriage v4-channels snapshot-v4-channels)
+            string(REPLACE "-" "_" CAPSID_ABI_OOM_CASE "${CAPSID_ABI_OOM_MODE}")
+            set(CAPSID_ABI_OOM_TEST "abi_guard_oom_${CAPSID_ABI_OOM_CASE}")
+            add_test(NAME "${CAPSID_ABI_OOM_TEST}"
+                COMMAND test-abi-guard $<TARGET_FILE:capsid-worker> "${CAPSID_ABI_OOM_MODE}")
+            set_tests_properties("${CAPSID_ABI_OOM_TEST}" PROPERTIES
+                TIMEOUT 60 LABELS "abi;memory")
+        endforeach()
     else()
         add_test(NAME abi_guard_oom_countdown COMMAND test-abi-guard)
     endif()
+    add_test(NAME abi_guard_without_worker COMMAND test-abi-guard)
+    set_tests_properties(abi_guard_oom_countdown abi_guard_without_worker PROPERTIES
+        TIMEOUT 60 LABELS "abi;memory")
     endif()
 
     add_executable(test-abi-guard-c tests/test_abi_guard_c.c)
@@ -1961,6 +4213,16 @@ if(BUILD_TESTING)
     add_test(NAME audit COMMAND test-audit)
 
     if(CAPSID_BUILD_FUZZERS)
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
+        add_custom_target(verify-fetchrpc-fuzz-corpus
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-fetchrpc-fuzz-corpus.py" --check
+            VERBATIM)
+        add_test(NAME fetchrpc_fuzz_corpus_generated
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-fetchrpc-fuzz-corpus.py" --check)
+        set_tests_properties(fetchrpc_fuzz_corpus_generated PROPERTIES
+            LABELS "fuzz;source" TIMEOUT 10)
         file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus"
             DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/fuzz")
 
@@ -1969,11 +4231,13 @@ if(BUILD_TESTING)
             target_include_directories("${TARGET_NAME}" PRIVATE
                 include src "${CAPSID_GENERATED_DIR}")
             target_compile_options("${TARGET_NAME}" PRIVATE
+                -O1
                 -fsanitize=fuzzer,address,undefined
                 -fno-omit-frame-pointer
                 -fno-sanitize-recover=all
             )
             target_link_options("${TARGET_NAME}" PRIVATE
+                -O1
                 -fsanitize=fuzzer,address,undefined
             )
             if(CAPSID_STRICT_WARNINGS)
@@ -1993,6 +4257,7 @@ if(BUILD_TESTING)
                     -max_len=65536
                     -timeout=2
                     -rss_limit_mb=512
+                    -print_final_stats=1
             )
             set_tests_properties("${TARGET_NAME}_smoke" PROPERTIES
                 LABELS "fuzz"
@@ -2029,6 +4294,58 @@ if(BUILD_TESTING)
             src/audit.cc
             src/protocol.cc
         )
+        capsid_add_fuzzer(
+            fuzz-channel-registry
+            tests/fuzz/fuzz_channel_registry.cc
+            channel_registry
+            src/channel_registry.cc
+            src/protocol.cc
+        )
+        capsid_add_fuzzer(
+            fuzz-websocket-frames
+            tests/fuzz/fuzz_websocket_frames.cc
+            websocket_frames
+            src/host/ws_codec.cc
+            src/host/ws_stream.cc
+            src/protocol.cc
+        )
+        # Compile every exercised project source with fuzzer/ASan/UBSan flags.
+        # OpenSSL is only an independent digest oracle. Do not substitute
+        # an ordinary, uninstrumented capsid_host_core archive here.
+        find_package(Boost 1.74 REQUIRED)
+        find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
+        capsid_add_fuzzer(
+            fuzz-websocket-handshake
+            tests/fuzz/fuzz_websocket_handshake.cc
+            websocket_handshake
+            src/host/ws_codec.cc
+            src/host/request_normalization.cc
+            src/host/websocket_session.cc
+            src/host/ws_stream.cc
+            src/host/channel_ledger.cc
+            src/protocol.cc
+        )
+        set_target_properties(fuzz-websocket-handshake PROPERTIES CXX_STANDARD 20)
+        target_link_libraries(fuzz-websocket-handshake PRIVATE OpenSSL::Crypto)
+        if(TARGET Boost::headers)
+            target_link_libraries(fuzz-websocket-handshake PRIVATE Boost::headers)
+        else()
+            target_include_directories(fuzz-websocket-handshake SYSTEM PRIVATE ${Boost_INCLUDE_DIRS})
+        endif()
+        add_custom_target(verify-channel-websocket-fuzz-corpus
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-channel-websocket-fuzz-corpus.py" --check
+            VERBATIM)
+        add_test(NAME channel_websocket_fuzz_corpus_generated
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-channel-websocket-fuzz-corpus.py" --check)
+        set_tests_properties(channel_websocket_fuzz_corpus_generated PROPERTIES
+            LABELS "fuzz;source" TIMEOUT 10)
+        add_dependencies(fuzz-channel-registry verify-channel-websocket-fuzz-corpus)
+        add_dependencies(fuzz-websocket-frames verify-channel-websocket-fuzz-corpus)
+        add_dependencies(fuzz-websocket-handshake verify-channel-websocket-fuzz-corpus)
+        add_dependencies(fuzz-protocol-parser verify-fetchrpc-fuzz-corpus)
+        add_dependencies(fuzz-worker-protocol verify-fetchrpc-fuzz-corpus)
     endif()
 
     if(CAPSID_BUILD_WORKER)
@@ -2297,6 +4614,18 @@ if(BUILD_TESTING)
             testing_validity_workflow_audit
             PROPERTIES TIMEOUT 20 LABELS "security;ci;audit"
         )
+        add_test(NAME testing_validity_workflow_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_testing_validity_workflow.mjs")
+        set_tests_properties(testing_validity_workflow_controls PROPERTIES
+            TIMEOUT 30 LABELS "ci;audit;contract")
+        if(CAPSID_PYTHON3_EXECUTABLE)
+            add_test(NAME native_provider_patch_controls
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_native_provider_patches.py")
+            set_tests_properties(native_provider_patch_controls PROPERTIES
+                TIMEOUT 20 LABELS "build;dependency;sanitizer;contract")
+        endif()
         add_test(
             NAME current_documentation_audit
             COMMAND "${CAPSID_NODE_EXECUTABLE}"
@@ -2307,6 +4636,11 @@ if(BUILD_TESTING)
             current_documentation_audit
             PROPERTIES TIMEOUT 20 LABELS "documentation;audit"
         )
+        add_test(NAME cli_entrypoint_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_entrypoints.mjs")
+        set_tests_properties(cli_entrypoint_controls PROPERTIES
+            TIMEOUT 30 LABELS "audit")
         # WP-03 §7.3: every async entry point into JS from the txiki
         # overlay must be classified (context-wired / profile-unreachable /
         # synchronous-reentry / value-only) in
@@ -2607,8 +4941,12 @@ if(BUILD_TESTING)
         capsid_add_elysia_fixture(NAMED entry-named.js)
 
         if(CAPSID_WPT_ROOT)
+            set(CAPSID_WPT_CONFIGURE_MANIFEST
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/manifest.json")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                "${CAPSID_WPT_CONFIGURE_MANIFEST}")
             file(READ
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/manifest.json"
+                "${CAPSID_WPT_CONFIGURE_MANIFEST}"
                 CAPSID_WPT_MANIFEST_JSON)
             string(JSON CAPSID_WPT_REVISION ERROR_VARIABLE CAPSID_WPT_JSON_ERROR
                 GET "${CAPSID_WPT_MANIFEST_JSON}" commit)
@@ -2655,6 +4993,12 @@ if(BUILD_TESTING)
                 string(JSON CAPSID_EXPECTED_DEVIATION GET
                     "${CAPSID_WPT_MANIFEST_JSON}"
                     expectedFailures ${CAPSID_EXPECTED_INDEX} deviation)
+                string(JSON CAPSID_EXPECTED_ERROR_NAME GET
+                    "${CAPSID_WPT_MANIFEST_JSON}"
+                    expectedFailures ${CAPSID_EXPECTED_INDEX} errorName)
+                string(JSON CAPSID_EXPECTED_MESSAGE GET
+                    "${CAPSID_WPT_MANIFEST_JSON}"
+                    expectedFailures ${CAPSID_EXPECTED_INDEX} message)
                 string(REPLACE "\\" "\\\\" CAPSID_EXPECTED_SUBTEST_JS
                     "${CAPSID_EXPECTED_SUBTEST}")
                 string(REPLACE "'" "\\'" CAPSID_EXPECTED_SUBTEST_JS
@@ -2663,12 +5007,20 @@ if(BUILD_TESTING)
                     "${CAPSID_EXPECTED_DEVIATION}")
                 string(REPLACE "'" "\\'" CAPSID_EXPECTED_DEVIATION_JS
                     "${CAPSID_EXPECTED_DEVIATION_JS}")
+                foreach(CAPSID_EXPECTED_FIELD ERROR_NAME MESSAGE)
+                    string(REPLACE "\\" "\\\\"
+                        CAPSID_EXPECTED_${CAPSID_EXPECTED_FIELD}_JS
+                        "${CAPSID_EXPECTED_${CAPSID_EXPECTED_FIELD}}")
+                    string(REPLACE "'" "\\'"
+                        CAPSID_EXPECTED_${CAPSID_EXPECTED_FIELD}_JS
+                        "${CAPSID_EXPECTED_${CAPSID_EXPECTED_FIELD}_JS}")
+                endforeach()
                 string(MAKE_C_IDENTIFIER
                     "${CAPSID_EXPECTED_PATH}" CAPSID_EXPECTED_PATH_ID)
                 set(CAPSID_EXPECTED_VARIABLE
                     "CAPSID_WPT_EXPECTED_FAILURES_${CAPSID_EXPECTED_PATH_ID}")
                 set(CAPSID_EXPECTED_OBJECT
-                    "{ name: '${CAPSID_EXPECTED_SUBTEST_JS}', deviation: '${CAPSID_EXPECTED_DEVIATION_JS}' }")
+                    "{ name: '${CAPSID_EXPECTED_SUBTEST_JS}', deviation: '${CAPSID_EXPECTED_DEVIATION_JS}', errorName: '${CAPSID_EXPECTED_ERROR_NAME_JS}', message: '${CAPSID_EXPECTED_MESSAGE_JS}' }")
                 if(DEFINED ${CAPSID_EXPECTED_VARIABLE})
                     set("${CAPSID_EXPECTED_VARIABLE}"
                         "${${CAPSID_EXPECTED_VARIABLE}}, ${CAPSID_EXPECTED_OBJECT}")
@@ -2773,6 +5125,7 @@ if(BUILD_TESTING)
                 CONTENT "${CAPSID_WPT_REGISTERED_PATHS_TEXT}\n")
             set(CAPSID_WPT_FIXTURE_TARGETS)
             set(CAPSID_WPT_TEST_IDS)
+            set(CAPSID_WPT_INPUT_PATHS resources/testharness.js)
             foreach(CAPSID_WPT_PATH IN LISTS CAPSID_WPT_BATCH1)
                 if(NOT EXISTS "${CAPSID_WPT_ROOT}/${CAPSID_WPT_PATH}")
                     message(FATAL_ERROR
@@ -3182,6 +5535,23 @@ if(BUILD_TESTING)
                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/concat-sources.mjs"
                         ${CAPSID_WPT_WASM_SUPPORT})
                 endif()
+                if(CAPSID_WPT_PATH STREQUAL
+                   "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js")
+                    set(CAPSID_WPT_SOURCE
+                        "${CAPSID_GENERATED_DIR}/wpt-${CAPSID_WPT_TEST_ID}-guarded.js")
+                    add_custom_command(
+                        OUTPUT "${CAPSID_WPT_SOURCE}"
+                        COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/guard-rejection-events.mjs"
+                            "${CAPSID_WPT_ROOT}/${CAPSID_WPT_PATH}"
+                            "${CAPSID_WPT_SOURCE}"
+                        DEPENDS
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/guard-rejection-events.mjs"
+                            "${CAPSID_WPT_ROOT}/${CAPSID_WPT_PATH}"
+                        VERBATIM)
+                    list(APPEND CAPSID_WPT_SOURCE_DEPS
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/guard-rejection-events.mjs")
+                endif()
                 set(CAPSID_WPT_ENV
                     "${CAPSID_GENERATED_DIR}/wpt-${CAPSID_WPT_TEST_ID}-env.js")
                 set(CAPSID_WPT_ENV_SOURCE
@@ -3273,9 +5643,49 @@ if(BUILD_TESTING)
                 list(APPEND CAPSID_WPT_FIXTURE_TARGETS
                     "${CAPSID_WPT_FIXTURE_TARGET}")
                 list(APPEND CAPSID_WPT_TEST_IDS "${CAPSID_WPT_TEST_ID}")
+                foreach(CAPSID_WPT_DEP IN LISTS CAPSID_WPT_SOURCE_DEPS)
+                    string(FIND "${CAPSID_WPT_DEP}" "${CAPSID_WPT_ROOT}/"
+                        CAPSID_WPT_DEP_PREFIX)
+                    if(CAPSID_WPT_DEP_PREFIX EQUAL 0)
+                        file(RELATIVE_PATH CAPSID_WPT_RELATIVE_DEP
+                            "${CAPSID_WPT_ROOT}" "${CAPSID_WPT_DEP}")
+                        list(APPEND CAPSID_WPT_INPUT_PATHS "${CAPSID_WPT_RELATIVE_DEP}")
+                    endif()
+                endforeach()
                 set("CAPSID_WPT_FIXTURE_${CAPSID_WPT_TEST_ID}"
                     "${CAPSID_WPT_FIXTURE}")
             endforeach()
+            list(REMOVE_DUPLICATES CAPSID_WPT_INPUT_PATHS)
+            list(SORT CAPSID_WPT_INPUT_PATHS)
+            string(REPLACE ";" "\n" CAPSID_WPT_INPUT_PATHS_TEXT "${CAPSID_WPT_INPUT_PATHS}")
+            set(CAPSID_WPT_INPUT_LIST "${CAPSID_GENERATED_DIR}/wpt-input-paths.txt")
+            file(GENERATE OUTPUT "${CAPSID_WPT_INPUT_LIST}"
+                CONTENT "${CAPSID_WPT_INPUT_PATHS_TEXT}\n")
+            set(CAPSID_WPT_AUDIT_COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/audit-source.mjs"
+                "${CAPSID_WPT_ROOT}" "${CAPSID_WPT_REVISION}" "${CAPSID_WPT_INPUT_LIST}")
+            add_custom_target(test-wpt-source-integrity
+                COMMAND ${CAPSID_WPT_AUDIT_COMMAND} VERBATIM)
+            foreach(CAPSID_WPT_FIXTURE_TARGET IN LISTS CAPSID_WPT_FIXTURE_TARGETS)
+                add_dependencies("${CAPSID_WPT_FIXTURE_TARGET}" test-wpt-source-integrity)
+            endforeach()
+            add_test(NAME wpt_source_integrity COMMAND ${CAPSID_WPT_AUDIT_COMMAND})
+            set_tests_properties(wpt_source_integrity PROPERTIES
+                TIMEOUT 60 LABELS "conformance" FIXTURES_SETUP capsid_wpt_source)
+            add_test(NAME gb18030_ranges_generated
+                COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-gb18030-ranges.mjs"
+                    "${CAPSID_WPT_ROOT}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/js/encoding-data/gb18030-ranges.js" --check)
+            set_tests_properties(gb18030_ranges_generated PROPERTIES
+                TIMEOUT 30 LABELS "conformance;encoding" FIXTURES_REQUIRED capsid_wpt_source)
+            add_test(NAME multibyte_indexes_generated
+                COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate-multibyte-indexes.mjs"
+                    "${CAPSID_WPT_ROOT}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/js/encoding-data/multibyte-indexes.js" --check)
+            set_tests_properties(multibyte_indexes_generated PROPERTIES
+                TIMEOUT 30 LABELS "conformance;encoding" FIXTURES_REQUIRED capsid_wpt_source)
         endif()
 
         find_package(Threads REQUIRED)
@@ -3339,6 +5749,17 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js"
         )
         set_tests_properties(worker_exit_fields PROPERTIES TIMEOUT 20)
+        foreach(CAPSID_EXIT_MODE IN ITEMS cleared-timer retained-timer poisoned-timer
+                gc-cycle denied-empty denied-known denied-stream)
+            string(REPLACE "-" "_" CAPSID_EXIT_NAME "${CAPSID_EXIT_MODE}")
+            add_test(NAME "worker_exit_${CAPSID_EXIT_NAME}"
+                COMMAND test-worker-integration
+                    $<TARGET_FILE:capsid-worker>
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/worker-exit-timer.js"
+                    "exit-${CAPSID_EXIT_MODE}")
+            set_tests_properties("worker_exit_${CAPSID_EXIT_NAME}"
+                PROPERTIES TIMEOUT 20 LABELS "worker;exit")
+        endforeach()
         add_test(
             NAME worker_bodyless_end_failure
             COMMAND test-worker-integration
@@ -3431,9 +5852,69 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/manifest.json"
                 "${CMAKE_CURRENT_SOURCE_DIR}/docs/conformance.md"
         )
+        add_test(
+            NAME wpt_report_contract_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/report-contract.test.mjs"
+        )
+        add_test(
+            NAME wpt_adapter_contract_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/adapter-contract.test.mjs"
+        )
+        add_test(
+            NAME wpt_source_integrity_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/audit-source.test.mjs"
+        )
+        add_test(NAME workerd_wpt_profile_metadata
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/workerd-wpt-profile.mjs" metadata)
+        add_test(NAME workerd_wpt_profile_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_wpt_profile.mjs")
+        set_tests_properties(workerd_wpt_profile_metadata workerd_wpt_profile_controls
+            PROPERTIES TIMEOUT 30 LABELS "conformance;workerd-profile")
+        # v1 remains a historical two-file contract. The accepted default
+        # behavior now has a separately versioned five-file comparison.
+        add_test(NAME workerd_wpt_profile_v2_metadata
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/workerd-wpt-profile-v2.mjs" metadata)
+        add_test(NAME workerd_wpt_profile_v2_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_wpt_profile_v2.mjs")
+        set_tests_properties(workerd_wpt_profile_v2_metadata workerd_wpt_profile_v2_controls
+            PROPERTIES TIMEOUT 30 LABELS "conformance;workerd-profile")
+        if(CAPSID_WPT_ROOT)
+            add_test(NAME wpt_rejection_presence_controls
+                COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/guard-rejection-events.test.mjs")
+            set_tests_properties(wpt_rejection_presence_controls PROPERTIES
+                TIMEOUT 30 LABELS "conformance"
+                FIXTURES_REQUIRED capsid_wpt_source
+                ENVIRONMENT "CAPSID_WPT_ROOT=${CAPSID_WPT_ROOT}")
+            add_test(NAME wpt_rejection_presence_runtime_controls
+                COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/wpt/guard-rejection-runtime.mjs"
+                    --source "${CMAKE_CURRENT_SOURCE_DIR}"
+                    --wpt-root "${CAPSID_WPT_ROOT}"
+                    --integration $<TARGET_FILE:test-worker-integration>
+                    --worker $<TARGET_FILE:capsid-worker>
+                    --esbuild "${CAPSID_ESBUILD}")
+            set_tests_properties(wpt_rejection_presence_runtime_controls PROPERTIES
+                TIMEOUT 60 LABELS "conformance"
+                FIXTURES_REQUIRED capsid_wpt_source)
+            set_tests_properties(wpt_adapter_contract_controls PROPERTIES
+                FIXTURES_REQUIRED capsid_wpt_source
+                ENVIRONMENT
+                    "CAPSID_WPT_HARNESS=${CAPSID_WPT_ROOT}/resources/testharness.js")
+        endif()
         set_tests_properties(
             wpt_metadata_manifest
             wpt_metadata_negative_controls
+            wpt_report_contract_controls
+            wpt_adapter_contract_controls
+            wpt_source_integrity_controls
             PROPERTIES TIMEOUT 30 LABELS "conformance")
         add_test(
             NAME txiki_vendor_patch_integrity
@@ -3521,6 +6002,8 @@ if(BUILD_TESTING)
                 "-DCAPSID_TXIKI_PREPARE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareTxiki.cmake"
                 "-DCAPSID_TXIKI_KEY_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/cmake/ComputeTxikiOverlayKey.cmake"
                 "-DCAPSID_CAPABILITY_MANIFEST=${CAPSID_CAPABILITY_MANIFEST}"
+                "-DCAPSID_LOCKED_IDENTITY_MANIFEST=${CAPSID_LOCKED_IDENTITY_MANIFEST}"
+                "-DCAPSID_WPT_MANIFEST=${CAPSID_WPT_CONFIGURE_MANIFEST}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestTxikiOverlayConfigureDependencies.cmake"
         )
         set_tests_properties(
@@ -3592,7 +6075,7 @@ if(BUILD_TESTING)
                 )
                 set_tests_properties(
                     "${CAPSID_WPT_TEST_NAME}"
-                    PROPERTIES TIMEOUT 20
+                    PROPERTIES TIMEOUT 20 FIXTURES_REQUIRED capsid_wpt_source
                 )
             endforeach()
 
@@ -3638,8 +6121,8 @@ if(BUILD_TESTING)
             # If it silently does not run, `ctest` reports all-green while the
             # conformance surface is entirely untested. Register a test that fails
             # loudly so that absence of coverage can never be mistaken for a pass.
-            # The WPT harness itself is Linux-only (see docs/windows.md), so the
-            # loud-fail gate does not apply to Windows builds.
+            # Windows supports the same opt-in WPT build. Its default build
+            # still omits the loud-fail gate; that build alone is not WPT evidence.
             if(NOT WIN32)
             add_test(
                 NAME wpt_conformance_not_configured
@@ -3948,6 +6431,8 @@ if(BUILD_TESTING)
         target_link_libraries(
             test-permissions-integration PRIVATE capsid_runtime
         )
+        target_compile_definitions(test-permissions-integration PRIVATE
+            "CAPSID_TEST_RUNTIME_VERSION=\"${PROJECT_VERSION}\"")
         add_test(
             NAME worker_permissions_contract
             COMMAND test-permissions-integration
@@ -4010,7 +6495,7 @@ if(BUILD_TESTING)
             NAME escape_capability_configure_negative_controls
             COMMAND "${CMAKE_COMMAND}"
                 "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
-                "-DCAPSID_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/Testing/escape-capability-configure"
+                "-DCAPSID_BINARY_ROOT=${CMAKE_CURRENT_BINARY_DIR}/Testing/ec"
                 "-DCAPSID_GENERATOR=${CMAKE_GENERATOR}"
                 "-DCAPSID_C_COMPILER=${CMAKE_C_COMPILER}"
                 "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
@@ -4037,6 +6522,7 @@ if(BUILD_TESTING)
                 "-DCAPSID_NM=${CMAKE_NM}"
                 "-DCAPSID_AR=${CMAKE_AR}"
                 "-DCAPSID_EXPECT_LTO=${CAPSID_RESTRICTED_AUDIT_EXPECT_LTO}"
+                "-DCAPSID_EXPECT_RETAINED_TU_MARKERS=${CAPSID_RESTRICTED_RETAINED_TU_MARKERS}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AuditRestrictedWorker.cmake"
         )
         set_tests_properties(worker_binary_audit PROPERTIES TIMEOUT 120)
@@ -4058,6 +6544,7 @@ if(BUILD_TESTING)
                 "-DCAPSID_OBJCOPY=${CMAKE_OBJCOPY}"
                 "-DCAPSID_ENABLE_BINARY_INJECTION=${CAPSID_RESTRICTED_AUDIT_CAN_INJECT}"
                 "-DCAPSID_EXPECT_LTO=${CAPSID_RESTRICTED_AUDIT_EXPECT_LTO}"
+                "-DCAPSID_EXPECT_RETAINED_TU_MARKERS=${CAPSID_RESTRICTED_RETAINED_TU_MARKERS}"
                 "-DCAPSID_TEST_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/Testing/restricted-worker-audit"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestRestrictedWorkerAuditNegative.cmake"
         )
@@ -4089,12 +6576,17 @@ if(BUILD_TESTING)
         add_executable(
             test-host-worker-executor
             tests/test_host_worker_executor.cc)
+        # Debug also pulls the pool implementation from the Host core.
+        # Supply its single-worker implementation without relying on DCE.
+        target_sources(test-host-worker-executor PRIVATE
+            src/host/single_worker_server.cc)
         target_include_directories(
             test-host-worker-executor PRIVATE
             include src "${CAPSID_GENERATED_DIR}")
         target_link_libraries(test-host-worker-executor PRIVATE
             capsid_runtime
             capsid_host_core
+            Boost::system
             capsid_jansson
             OpenSSL::Crypto
             capsid_sanitizers)
@@ -4110,6 +6602,11 @@ if(BUILD_TESTING)
                 target_compile_options(
                     test-host-worker-executor PRIVATE
                     -Wall -Wextra -Wpedantic -Werror)
+                # Match the existing Beast data-plane test compilation policy.
+                if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                    target_compile_options(test-host-worker-executor PRIVATE
+                        -Wno-maybe-uninitialized)
+                endif()
             endif()
         endif()
         add_dependencies(test-host-worker-executor capsid-worker)
@@ -4118,6 +6615,105 @@ if(BUILD_TESTING)
             COMMAND test-host-worker-executor $<TARGET_FILE:capsid-worker>)
         set_tests_properties(host_worker_executor_contract PROPERTIES
             TIMEOUT 40)
+        add_test(NAME host_ipc_metrics_retirement
+            COMMAND test-host-worker-executor $<TARGET_FILE:capsid-worker> --metrics-retirement)
+        set_tests_properties(host_ipc_metrics_retirement PROPERTIES TIMEOUT 40 LABELS "host;metrics;lifecycle")
+        add_test(NAME host_ipc_metrics_concurrency
+            COMMAND test-host-worker-executor $<TARGET_FILE:capsid-worker> --metrics-concurrency)
+        set_tests_properties(host_ipc_metrics_concurrency PROPERTIES TIMEOUT 40 LABELS "host;metrics;lifecycle")
+        add_test(NAME host_ipc_metrics_bank
+            COMMAND test-host-worker-executor $<TARGET_FILE:capsid-worker> --metrics-bank)
+        set_tests_properties(host_ipc_metrics_bank PROPERTIES TIMEOUT 15 LABELS "host;metrics;unit")
+
+        add_executable(test-host-ipc-metrics-format tests/test_ipc_metrics_format.cc)
+        target_include_directories(test-host-ipc-metrics-format PRIVATE include src)
+        target_link_libraries(test-host-ipc-metrics-format PRIVATE capsid_host_core capsid_runtime capsid_sanitizers)
+        set_target_properties(test-host-ipc-metrics-format PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-ipc-metrics-format PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-ipc-metrics-format PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME host_ipc_metrics_format COMMAND test-host-ipc-metrics-format)
+        set_tests_properties(host_ipc_metrics_format PROPERTIES TIMEOUT 15 LABELS "host;metrics;format")
+        if(CAPSID_HOST_TEST_NODE)
+            set(CAPSID_HOST_QUALIFICATION_WPT_ARGS)
+            if(CAPSID_WPT_ROOT)
+                list(APPEND CAPSID_HOST_QUALIFICATION_WPT_ARGS --wpt-root "${CAPSID_WPT_ROOT}")
+            endif()
+            add_test(NAME host_qualification_matrix
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_qualification_matrix.mjs"
+                    --ctest "${CMAKE_CTEST_COMMAND}" --build "${CMAKE_BINARY_DIR}"
+                    --source "${CMAKE_CURRENT_SOURCE_DIR}" --system "${CMAKE_SYSTEM_NAME}"
+                    --host $<TARGET_FILE:capsid-host> --worker $<TARGET_FILE:capsid-worker>
+                    --node "${CAPSID_HOST_TEST_NODE}" --build-node "${CAPSID_NODE_EXECUTABLE}"
+                    --tsan "$<BOOL:${CAPSID_ENABLE_TSAN}>"
+                    ${CAPSID_HOST_QUALIFICATION_WPT_ARGS})
+            set_tests_properties(host_qualification_matrix PROPERTIES TIMEOUT 60 LABELS "host;registration")
+            add_test(NAME host_qualification_matrix_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_host_qualification_contract.mjs")
+            set_tests_properties(host_qualification_matrix_controls PROPERTIES
+                TIMEOUT 30 LABELS "host;registration;contract"
+                ENVIRONMENT "CAPSID_HOST_QUALIFICATION_CTEST=${CMAKE_CTEST_COMMAND}")
+        endif()
+
+        add_executable(test-host-worker-supervisor tests/test_host_worker_supervisor.cc)
+        target_include_directories(test-host-worker-supervisor PRIVATE include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-worker-supervisor PRIVATE
+            capsid_runtime capsid_host_core capsid_jansson OpenSSL::Crypto capsid_sanitizers)
+        set_target_properties(test-host-worker-supervisor PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-worker-supervisor PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-worker-supervisor PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        foreach(CAPSID_SUPERVISOR_CASE IN ITEMS local local-no-external external destructor)
+            string(REPLACE "-" "_" CAPSID_SUPERVISOR_SUFFIX "${CAPSID_SUPERVISOR_CASE}")
+            add_test(NAME "host_worker_supervisor_${CAPSID_SUPERVISOR_SUFFIX}"
+                COMMAND test-host-worker-supervisor "${CAPSID_SUPERVISOR_CASE}")
+            set_tests_properties("host_worker_supervisor_${CAPSID_SUPERVISOR_SUFFIX}" PROPERTIES
+                TIMEOUT 10 LABELS "host;lifecycle")
+        endforeach()
+
+        add_executable(test-host-worker-supervisor-ownership tests/test_host_worker_supervisor_ownership.cc)
+        target_include_directories(test-host-worker-supervisor-ownership PRIVATE include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-worker-supervisor-ownership PRIVATE
+            capsid_runtime capsid_host_core capsid_jansson OpenSSL::Crypto capsid_sanitizers)
+        if(Boost_FOUND AND NOT WIN32)
+            # ManagedHostOptions owns legacy activation callbacks whose
+            # Debug destructors reference the single-worker transport.
+            # Keep the actual dependency, including under project TSan.
+            target_sources(test-host-worker-supervisor-ownership PRIVATE src/host/single_worker_server.cc)
+            target_link_libraries(test-host-worker-supervisor-ownership PRIVATE Boost::system)
+            if(CAPSID_STRICT_WARNINGS AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+                target_compile_options(test-host-worker-supervisor-ownership PRIVATE -Wno-maybe-uninitialized)
+            endif()
+        endif()
+        set_target_properties(test-host-worker-supervisor-ownership PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-worker-supervisor-ownership PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-worker-supervisor-ownership PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-host-worker-supervisor-ownership capsid-worker)
+        foreach(CAPSID_SUPERVISOR_CASE IN ITEMS pool-lease executor-lease stale-pool stop-local stop-external active-probe exit-notifier)
+            string(REPLACE "-" "_" CAPSID_SUPERVISOR_SUFFIX "${CAPSID_SUPERVISOR_CASE}")
+            add_test(NAME "host_worker_supervisor_${CAPSID_SUPERVISOR_SUFFIX}"
+                COMMAND test-host-worker-supervisor-ownership $<TARGET_FILE:capsid-worker> "${CAPSID_SUPERVISOR_CASE}")
+            set_tests_properties("host_worker_supervisor_${CAPSID_SUPERVISOR_SUFFIX}" PROPERTIES
+                TIMEOUT 40 LABELS "host;lifecycle")
+        endforeach()
 
         # WP-04 PR-07 (spec §8.2/§8.4): the GenerationPool fleet +
         # replacement contract — N→READY barrier, least-loaded pick,
@@ -4156,9 +6752,99 @@ if(BUILD_TESTING)
         add_test(
             NAME host_generation_pool_contract
             COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker>)
+        add_test(NAME host_generation_pool_portable_contract
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker> --portable)
+        set_tests_properties(host_generation_pool_portable_contract PROPERTIES TIMEOUT 40 LABELS "host;managed;lifecycle")
         set_tests_properties(host_generation_pool_contract PROPERTIES
-            TIMEOUT 90
-            SKIP_RETURN_CODE 77)
+            TIMEOUT 90)
+        if(NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Windows)$")
+            set_tests_properties(host_generation_pool_contract PROPERTIES SKIP_RETURN_CODE 77)
+        endif()
+        add_test(NAME host_generation_reclamation_idle
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker> --reclamation)
+        set_tests_properties(host_generation_reclamation_idle PROPERTIES
+            TIMEOUT 20 LABELS "host;lifecycle")
+        add_test(NAME host_generation_replacement_observer_drain
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker> --observer-drain)
+        set_tests_properties(host_generation_replacement_observer_drain PROPERTIES
+            TIMEOUT 30 LABELS "host;lifecycle")
+        add_test(NAME host_generation_quarantine_callback_lock
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker> --quarantine-lock)
+        add_test(NAME host_generation_retired_exit_barrier
+            COMMAND test-host-generation-pool $<TARGET_FILE:capsid-worker> --retired-exit)
+        set_tests_properties(host_generation_quarantine_callback_lock host_generation_retired_exit_barrier
+            PROPERTIES TIMEOUT 40 LABELS "host;lifecycle")
+        if(Boost_FOUND)
+            target_sources(test-host-generation-pool PRIVATE src/host/single_worker_server.cc)
+            target_link_libraries(test-host-generation-pool PRIVATE Boost::system)
+            if(CAPSID_STRICT_WARNINGS AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+                target_compile_options(test-host-generation-pool PRIVATE -Wno-maybe-uninitialized)
+            endif()
+
+            add_executable(test-host-process-observation
+                tests/test_host_process_observation.cc src/host/single_worker_server.cc)
+            if(WIN32)
+                target_sources(test-host-process-observation PRIVATE src/host/routing_snapshot.cc)
+            endif()
+            target_include_directories(test-host-process-observation PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-process-observation PRIVATE
+                capsid_runtime capsid_host_core Boost::system capsid_jansson OpenSSL::Crypto
+                capsid_sanitizers)
+            set_target_properties(test-host-process-observation PROPERTIES
+                CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-host-process-observation PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-host-process-observation PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+                        target_compile_options(test-host-process-observation PRIVATE -Wno-maybe-uninitialized)
+                    endif()
+                endif()
+            endif()
+            add_dependencies(test-host-process-observation capsid-worker)
+            foreach(CAPSID_PROCESS_CASE IN ITEMS publication replacement)
+                add_test(NAME "host_process_observation_${CAPSID_PROCESS_CASE}"
+                    COMMAND test-host-process-observation "${CAPSID_PROCESS_CASE}" $<TARGET_FILE:capsid-worker>)
+                set_tests_properties("host_process_observation_${CAPSID_PROCESS_CASE}" PROPERTIES
+                    TIMEOUT 45 LABELS "host;lifecycle")
+            endforeach()
+        endif()
+
+        add_executable(test-host-generation-adoption
+            tests/test_host_generation_adoption.cc
+            src/host/single_worker_server.cc)
+        target_include_directories(test-host-generation-adoption PRIVATE
+            include src "${CAPSID_GENERATED_DIR}")
+        target_link_libraries(test-host-generation-adoption PRIVATE
+            capsid_runtime capsid_host_core Boost::system capsid_jansson OpenSSL::Crypto
+            capsid_sanitizers)
+        set_target_properties(test-host-generation-adoption PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-host-generation-adoption PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-host-generation-adoption PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+                if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                    target_compile_options(test-host-generation-adoption PRIVATE
+                        -Wno-maybe-uninitialized)
+                endif()
+            endif()
+        endif()
+        add_dependencies(test-host-generation-adoption capsid-worker)
+        foreach(CAPSID_ADOPTION_CASE IN ITEMS
+                null-first null-middle null-last count zero identity policy factory success)
+            string(REPLACE "-" "_" CAPSID_ADOPTION_TEST "${CAPSID_ADOPTION_CASE}")
+            add_test(NAME "host_generation_adoption_${CAPSID_ADOPTION_TEST}"
+                COMMAND test-host-generation-adoption "${CAPSID_ADOPTION_CASE}"
+                    $<TARGET_FILE:capsid-worker>)
+            set_tests_properties("host_generation_adoption_${CAPSID_ADOPTION_TEST}" PROPERTIES
+                TIMEOUT 20 LABELS "host;lifecycle")
+        endforeach()
         endif()  # TARGET capsid_host_core
 
         # WP-05 PR-09 §9.2: RoutingSnapshot / RoutingTable + the adopt-create
@@ -4262,6 +6948,36 @@ if(BUILD_TESTING)
             test-hono-OBJECT-fixture
             test-hono-NAMED-fixture
         )
+        add_test(NAME worker_framework_concurrent_diagnostics
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_framework_concurrent_diagnostics.mjs"
+                --driver $<TARGET_FILE:test-hono-worker-driver>
+                --worker $<TARGET_FILE:capsid-worker>
+                --bundle "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/framework-concurrent-failure.js")
+        set_tests_properties(worker_framework_concurrent_diagnostics PROPERTIES
+            TIMEOUT 30 LABELS "framework;lifecycle;diagnostics")
+        add_test(NAME worker_quickjs_call_regexp
+            COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_quickjs_call_regexp.mjs"
+                --driver $<TARGET_FILE:test-hono-worker-driver>
+                --worker $<TARGET_FILE:capsid-worker>
+                --bundle "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/quickjs-call-regexp.mjs")
+        set_tests_properties(worker_quickjs_call_regexp PROPERTIES
+            TIMEOUT 45 LABELS "worker;engine;conformance")
+        foreach(stack_mode default 262144)
+            add_test(NAME worker_js_stack_limits_${stack_mode}
+                COMMAND "${CAPSID_NODE_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_worker_stack_limits.mjs"
+                    --driver $<TARGET_FILE:test-hono-worker-driver>
+                    --worker $<TARGET_FILE:capsid-worker>
+                    --bundle "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/js-stack-limits.js"
+                    --stack-bytes ${stack_mode})
+            set_tests_properties(worker_js_stack_limits_${stack_mode} PROPERTIES
+                TIMEOUT 30 LABELS "worker;resource;lifecycle")
+        endforeach()
+        # Bytecode value helpers keep ordinary and instrumented Debug Hono
+        # on the public default, also enforced by the overflow/recovery tests.
+        set(CAPSID_HONO_TEST_STACK_BYTES 1048576)
         add_test(
             NAME worker_hono_compatibility
             COMMAND "${CAPSID_NODE_EXECUTABLE}"
@@ -4269,6 +6985,7 @@ if(BUILD_TESTING)
                 --driver $<TARGET_FILE:test-hono-worker-driver>
                 --worker $<TARGET_FILE:capsid-worker>
                 --bundle "${CAPSID_HONO_DEFAULT_FIXTURE}"
+                --js-stack-bytes ${CAPSID_HONO_TEST_STACK_BYTES}
         )
         add_test(
             NAME worker_hono_entry_object
@@ -4278,6 +6995,7 @@ if(BUILD_TESTING)
                 --worker $<TARGET_FILE:capsid-worker>
                 --bundle "${CAPSID_HONO_OBJECT_FIXTURE}"
                 --smoke true
+                --js-stack-bytes ${CAPSID_HONO_TEST_STACK_BYTES}
         )
         add_test(
             NAME worker_hono_entry_named
@@ -4287,6 +7005,7 @@ if(BUILD_TESTING)
                 --worker $<TARGET_FILE:capsid-worker>
                 --bundle "${CAPSID_HONO_NAMED_FIXTURE}"
                 --smoke true
+                --js-stack-bytes ${CAPSID_HONO_TEST_STACK_BYTES}
         )
         add_test(
             NAME worker_hono_lifecycle
@@ -4295,6 +7014,7 @@ if(BUILD_TESTING)
                 --driver $<TARGET_FILE:test-hono-worker-driver>
                 --worker $<TARGET_FILE:capsid-worker>
                 --bundle "${CAPSID_HONO_DEFAULT_FIXTURE}"
+                --js-stack-bytes ${CAPSID_HONO_TEST_STACK_BYTES}
         )
         set_tests_properties(
             worker_hono_compatibility
@@ -4588,6 +7308,81 @@ if(BUILD_TESTING)
         set_tests_properties(quickjs_job_context_hooks
             PROPERTIES TIMEOUT 20)
 
+        add_executable(test-quickjs-iterator-storage tests/test_quickjs_iterator_storage.cc)
+        target_link_libraries(test-quickjs-iterator-storage PRIVATE tjs)
+        target_compile_features(test-quickjs-iterator-storage PRIVATE cxx_std_17)
+        if(MSVC)
+            target_compile_options(test-quickjs-iterator-storage PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-quickjs-iterator-storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+        add_test(NAME quickjs_iterator_storage COMMAND test-quickjs-iterator-storage)
+        set_tests_properties(quickjs_iterator_storage
+            PROPERTIES TIMEOUT 20 LABELS "worker;quickjs;iterators;lifecycle;allocation")
+
+        add_executable(test-quickjs-async-gc tests/test_quickjs_async_gc.cc)
+        target_link_libraries(test-quickjs-async-gc PRIVATE tjs)
+        add_test(NAME quickjs_async_closure_gc COMMAND test-quickjs-async-gc)
+        add_executable(test-quickjs-call-dispatch tests/test_quickjs_call_dispatch.cc)
+        target_link_libraries(test-quickjs-call-dispatch PRIVATE tjs)
+        target_compile_features(test-quickjs-call-dispatch PRIVATE cxx_std_17)
+        if(MSVC)
+            target_compile_options(test-quickjs-call-dispatch PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-quickjs-call-dispatch PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+        add_test(NAME quickjs_call_dispatch COMMAND test-quickjs-call-dispatch)
+        set_tests_properties(quickjs_call_dispatch PROPERTIES TIMEOUT 10 LABELS "worker;engine;interrupt")
+        set_tests_properties(quickjs_async_closure_gc
+            PROPERTIES TIMEOUT 20 LABELS "worker;quickjs;lifecycle")
+
+        add_executable(test-quickjs-bigint-width tests/test_quickjs_bigint_width.cc)
+        target_link_libraries(test-quickjs-bigint-width PRIVATE tjs)
+        target_compile_features(test-quickjs-bigint-width PRIVATE cxx_std_17)
+        if(MSVC)
+            target_compile_options(test-quickjs-bigint-width PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-quickjs-bigint-width PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+        add_test(NAME quickjs_bigint_width COMMAND test-quickjs-bigint-width)
+        set_tests_properties(quickjs_bigint_width
+            PROPERTIES TIMEOUT 20 LABELS "worker;quickjs;compatibility")
+
+        add_executable(test-quickjs-stream-observers tests/test_quickjs_stream_observers.cc)
+        target_link_libraries(test-quickjs-stream-observers PRIVATE tjs)
+        target_compile_features(test-quickjs-stream-observers PRIVATE cxx_std_17)
+        if(MSVC)
+            target_compile_options(test-quickjs-stream-observers PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-quickjs-stream-observers PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+        add_test(NAME quickjs_stream_observers COMMAND test-quickjs-stream-observers)
+        set_tests_properties(quickjs_stream_observers PROPERTIES TIMEOUT 20 LABELS "worker;streams;lifecycle")
+
+        add_executable(test-quickjs-bytecode-values tests/test_quickjs_bytecode_values.cc)
+        target_link_libraries(test-quickjs-bytecode-values PRIVATE tjs)
+        target_compile_features(test-quickjs-bytecode-values PRIVATE cxx_std_17)
+        if(MSVC)
+            target_compile_options(test-quickjs-bytecode-values PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-quickjs-bytecode-values PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+        add_test(NAME quickjs_bytecode_values COMMAND test-quickjs-bytecode-values)
+        set_tests_properties(quickjs_bytecode_values
+            PROPERTIES TIMEOUT 20 LABELS "worker;quickjs;ownership;exceptions")
+
+        add_executable(test-quickjs-arraybuffer-alias tests/test_quickjs_arraybuffer_alias.cc)
+        target_link_libraries(test-quickjs-arraybuffer-alias PRIVATE tjs)
+        target_compile_features(test-quickjs-arraybuffer-alias PRIVATE cxx_std_17)
+        if(MSVC)
+            target_compile_options(test-quickjs-arraybuffer-alias PRIVATE /W4 /WX)
+        else()
+            target_compile_options(test-quickjs-arraybuffer-alias PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
+        add_test(NAME quickjs_arraybuffer_alias COMMAND test-quickjs-arraybuffer-alias)
+        set_tests_properties(quickjs_arraybuffer_alias
+            PROPERTIES TIMEOUT 20 LABELS "worker;quickjs;streams;lifecycle")
+
         # Binding v1 §7.5: two TJS runtimes on one Capsid-owned loop
         # (0016-capsid-shared-loop.patch). RED until the patch exists.
         add_executable(
@@ -4600,6 +7395,44 @@ if(BUILD_TESTING)
             COMMAND test-tjs-shared-loop
         )
         set_tests_properties(tjs_shared_loop PROPERTIES TIMEOUT 20)
+
+        add_executable(test-http-gzip tests/test_http_gzip.c)
+        set_target_properties(test-http-gzip PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+        target_link_libraries(test-http-gzip PRIVATE tjs)
+        add_test(NAME http_gzip_parser COMMAND test-http-gzip)
+        set_tests_properties(http_gzip_parser PROPERTIES
+            TIMEOUT 60 LABELS "worker;fetch;compression;reference-gate")
+
+        add_executable(test-platform-digest tests/test_platform_digest.c)
+        set_target_properties(test-platform-digest PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+        target_link_libraries(test-platform-digest PRIVATE tjs)
+        add_test(NAME platform_digest_backend COMMAND test-platform-digest)
+        set_tests_properties(platform_digest_backend PROPERTIES
+            TIMEOUT 30 LABELS "worker;crypto;compatibility")
+
+        add_executable(test-tjs-fetch-abort tests/test_tjs_fetch_abort.cc)
+        target_link_libraries(test-tjs-fetch-abort
+            PRIVATE tjs capsid_runtime Threads::Threads)
+        target_include_directories(test-tjs-fetch-abort
+            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CAPSID_TXIKI_OVERLAY}/src")
+        add_test(NAME tjs_fetch_abort_pending_handshake
+            COMMAND test-tjs-fetch-abort)
+        set_tests_properties(tjs_fetch_abort_pending_handshake
+            PROPERTIES TIMEOUT 15 LABELS "worker;fetch;lifecycle")
+        add_test(NAME tjs_fetch_context_cancel_pending_handshake
+            COMMAND test-tjs-fetch-abort --context-cancel)
+        set_tests_properties(tjs_fetch_context_cancel_pending_handshake
+            PROPERTIES TIMEOUT 15 LABELS "worker;fetch;lifecycle")
+        add_test(NAME tjs_fetch_context_cancel_dns
+            COMMAND test-tjs-fetch-abort --dns-context-cancel)
+        set_tests_properties(tjs_fetch_context_cancel_dns
+            PROPERTIES TIMEOUT 15 LABELS "worker;fetch;lifecycle")
+        foreach(context_kind IN ITEMS async binding unowned)
+            add_test(NAME tjs_fetch_policy_${context_kind}_context
+                COMMAND test-tjs-fetch-abort --policy-${context_kind}-context)
+            set_tests_properties(tjs_fetch_policy_${context_kind}_context
+                PROPERTIES TIMEOUT 15 LABELS "worker;fetch;lifecycle")
+        endforeach()
 
         # Binding v1 §7.6: the neutral-value structured clone between the
         # User and Binding Runtimes.
@@ -4703,6 +7536,24 @@ if(BUILD_TESTING)
             set(CAPSID_HOST_TARGET_PRESENT OFF)
         endif()
 
+        add_test(NAME package_freshness_controls
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-freshness-controls"
+                "-DCAPSID_TEST_GENERATOR=${CMAKE_GENERATOR}"
+                "-DCAPSID_TEST_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_freshness_controls.cmake")
+        set_tests_properties(package_freshness_controls PROPERTIES
+            TIMEOUT 120 LABELS "package;contract")
+
+        add_test(NAME package_reproducibility_controls
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-comparison-controls"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_repro_controls.cmake")
+        set_tests_properties(package_reproducibility_controls PROPERTIES
+            TIMEOUT 30 LABELS "package;contract")
+
         add_test(
             NAME worker_install_tree
             COMMAND "${CMAKE_COMMAND}"
@@ -4727,7 +7578,20 @@ if(BUILD_TESTING)
         # stale (e.g. a cold container run right after a reconfigure), so
         # budget like the reproducibility gate — not a tight incremental
         # estimate.
-        set_tests_properties(worker_package_contents PROPERTIES TIMEOUT 1800)
+        # Packaging can rebuild the binaries under test. Never run it beside
+        # tests consuming those binaries, or smoke an archive after setup failed.
+        set_tests_properties(worker_package_contents PROPERTIES
+            TIMEOUT 1800 RUN_SERIAL TRUE FIXTURES_SETUP capsid_package)
+
+        add_test(NAME worker_package_metadata_controls
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-metadata-controls"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_metadata_controls.cmake")
+        set_tests_properties(worker_package_metadata_controls PROPERTIES
+            TIMEOUT 120 LABELS "package;contract"
+            FIXTURES_REQUIRED capsid_package)
 
         # §12.4: consume the archive as a customer would — extract into an
         # empty directory, compile C/C++ samples against the packaged
@@ -4744,6 +7608,9 @@ if(BUILD_TESTING)
                 "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
                 "-DCAPSID_SMOKE_SAMPLE_C=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke_sample.c"
                 "-DCAPSID_SMOKE_SAMPLE_CC=${CMAKE_CURRENT_SOURCE_DIR}/tests/package_smoke_sample.cc"
+                "-DCAPSID_SMOKE_BUILD_TYPE=$<CONFIG>"
+                "-DCAPSID_SMOKE_GENERATOR=${CMAKE_GENERATOR}"
+                "-DCAPSID_SMOKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
                 -DCAPSID_SMOKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
                 -DCAPSID_HOST_TARGET=${CAPSID_HOST_TARGET_PRESENT}
                 "-DCAPSID_NODE_EXECUTABLE=${CAPSID_NODE_EXECUTABLE}"
@@ -4752,7 +7619,22 @@ if(BUILD_TESTING)
         )
         set_tests_properties(worker_package_smoke PROPERTIES
             TIMEOUT 600
-            DEPENDS worker_package_contents)
+            DEPENDS worker_package_contents
+            FIXTURES_REQUIRED capsid_package)
+
+        add_test(NAME worker_package_consumer_controls
+            COMMAND "${CMAKE_COMMAND}"
+                "-DCAPSID_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/Testing/pc"
+                "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DCAPSID_C_COMPILER=${CMAKE_C_COMPILER}"
+                "-DCAPSID_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DCAPSID_SMOKE_BUILD_TYPE=$<CONFIG>"
+                "-DCAPSID_SMOKE_GENERATOR=${CMAKE_GENERATOR}"
+                "-DCAPSID_SMOKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_consumer_controls.cmake")
+        set_tests_properties(worker_package_consumer_controls PROPERTIES
+            TIMEOUT 180 FIXTURES_REQUIRED capsid_package)
 
         # §12.3: reproducibility gate. Two fresh builds from the same inputs
         # must agree on the file name list, the identity records, the SBOM
@@ -4775,6 +7657,7 @@ if(BUILD_TESTING)
                 "-DCAPSID_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
                 "-DCAPSID_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-repro-work"
                 "-DCAPSID_CMAKE_COMMAND=${CMAKE_COMMAND}"
+                "-DCAPSID_REPRO_ESBUILD_EXECUTABLE=${CAPSID_ESBUILD_EXECUTABLE}"
                 "-DCAPSID_REPRO_GENERATOR=${CMAKE_GENERATOR}"
                 "-DCAPSID_REPRO_PARALLEL=${CAPSID_REPRO_PARALLEL}"
                 "-DCAPSID_REPRO_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
@@ -4810,11 +7693,11 @@ if(BUILD_TESTING)
         # 77 (unprivileged / non-Linux) is a failure in the Hosted
         # Validity workflow.
         set(CAPSID_BINDING_SANDBOX_DIR
-            "${CMAKE_CURRENT_BINARY_DIR}/capsid-binding-sandbox-dir")
+            "${CAPSID_SANDBOX_TEST_DATA_DIR}/capsid-binding-sandbox-dir")
         set(CAPSID_BINDING_SANDBOX_ALLOWED_FILE
             "${CAPSID_BINDING_SANDBOX_DIR}/allowed.db")
         set(CAPSID_BINDING_SANDBOX_DENIED_FILE
-            "${CMAKE_CURRENT_BINARY_DIR}/capsid-binding-denied.db")
+            "${CAPSID_SANDBOX_TEST_DATA_DIR}/capsid-binding-denied.db")
         file(MAKE_DIRECTORY "${CAPSID_BINDING_SANDBOX_DIR}")
         file(WRITE "${CAPSID_BINDING_SANDBOX_ALLOWED_FILE}" "allowed\n")
         file(WRITE "${CAPSID_BINDING_SANDBOX_DENIED_FILE}" "denied\n")
@@ -4879,6 +7762,10 @@ if(BUILD_TESTING)
             target_link_libraries(
                 test-sandbox-fd-hygiene PRIVATE capsid_runtime
             )
+            add_test(NAME worker_binding_sandbox_setup_error
+                COMMAND test-sandbox --binding-setup-error)
+            set_tests_properties(worker_binding_sandbox_setup_error PROPERTIES
+                TIMEOUT 10 LABELS "sandbox" SKIP_RETURN_CODE 77)
             add_test(
                 NAME worker_sandbox_fd_hygiene
                 COMMAND test-sandbox-fd-hygiene
@@ -4890,6 +7777,14 @@ if(BUILD_TESTING)
                     TIMEOUT 10
                     LABELS "sandbox"
             )
+
+            add_test(
+                NAME worker_process_environment_hygiene
+                COMMAND test-sandbox-fd-hygiene
+                    $<TARGET_FILE:capsid-worker> --non-strict
+            )
+            set_tests_properties(worker_process_environment_hygiene PROPERTIES
+                TIMEOUT 10 LABELS "host;process")
 
             add_test(
                 NAME worker_sandbox_namespaces
@@ -5012,6 +7907,18 @@ if(BUILD_TESTING)
         endif()  # UNIX — zero-binding regression uses POSIX spawn/socket
 
         if(WIN32)
+            add_executable(test-windows-worker-environment
+                tests/test_windows_worker_environment.cc)
+            target_include_directories(test-windows-worker-environment PRIVATE include src)
+            target_link_libraries(test-windows-worker-environment PRIVATE capsid_runtime capsid_sanitizers)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(test-windows-worker-environment PRIVATE /W4 /WX)
+            endif()
+            add_dependencies(test-windows-worker-environment capsid-worker)
+            add_test(NAME worker_windows_environment
+                COMMAND test-windows-worker-environment $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(worker_windows_environment PROPERTIES
+                TIMEOUT 30 LABELS "worker;platform;environment")
             add_executable(
                 test-worker-binding-windows
                 tests/test_worker_binding_windows.cc
@@ -5050,7 +7957,9 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:capsid-worker>
                 "${CAPSID_P0_FIXTURE}"
         )
-        set_tests_properties(worker_fetch_cancel_lifecycle PROPERTIES TIMEOUT 15)
+        # Immediate cancellation and cancellation after an observed idle
+        # receive timeout each retain their existing bounded stage deadlines.
+        set_tests_properties(worker_fetch_cancel_lifecycle PROPERTIES TIMEOUT 30)
 
         set(CAPSID_QUEUE_SATURATION_FIXTURE
             "${CAPSID_GENERATED_DIR}/test-queue-saturation.js")
@@ -5069,6 +7978,20 @@ if(BUILD_TESTING)
         add_custom_target(test-queue-saturation-fixture
             DEPENDS "${CAPSID_QUEUE_SATURATION_FIXTURE}")
 
+        get_target_property(CAPSID_TIMEOUT_WRITER_SOURCES capsid-worker SOURCES)
+        add_executable(test-worker-timeout-writer-fixture ${CAPSID_TIMEOUT_WRITER_SOURCES}
+            tests/worker_timeout_writer_fixture.cc)
+        foreach(CAPSID_TIMEOUT_WRITER_PROPERTY IN ITEMS INCLUDE_DIRECTORIES COMPILE_OPTIONS COMPILE_DEFINITIONS
+                CXX_STANDARD CXX_STANDARD_REQUIRED CXX_EXTENSIONS INTERPROCEDURAL_OPTIMIZATION)
+            get_target_property(CAPSID_TIMEOUT_WRITER_VALUE capsid-worker "${CAPSID_TIMEOUT_WRITER_PROPERTY}")
+            if(NOT CAPSID_TIMEOUT_WRITER_VALUE STREQUAL "CAPSID_TIMEOUT_WRITER_VALUE-NOTFOUND")
+                set_property(TARGET test-worker-timeout-writer-fixture PROPERTY
+                    "${CAPSID_TIMEOUT_WRITER_PROPERTY}" "${CAPSID_TIMEOUT_WRITER_VALUE}")
+            endif()
+        endforeach()
+        target_compile_definitions(test-worker-timeout-writer-fixture PRIVATE CAPSID_WORKER_CUSTOM_ENTRY=1)
+        target_link_libraries(test-worker-timeout-writer-fixture PRIVATE tjs capsid_sanitizers)
+        add_dependencies(test-worker-timeout-writer-fixture capsid-worker)
         add_executable(
             test-response-queue-saturation
             tests/test_response_queue_saturation.cc
@@ -5079,7 +8002,7 @@ if(BUILD_TESTING)
         )
         add_dependencies(
             test-response-queue-saturation
-            test-queue-saturation-fixture
+            test-queue-saturation-fixture test-worker-timeout-writer-fixture
         )
         add_test(
             NAME worker_response_queue_saturation
@@ -5090,6 +8013,12 @@ if(BUILD_TESTING)
         set_tests_properties(
             worker_response_queue_saturation PROPERTIES TIMEOUT 90
         )
+        add_test(NAME worker_response_timeout_queue_pressure
+            COMMAND test-response-queue-saturation
+                $<TARGET_FILE:test-worker-timeout-writer-fixture>
+                "${CAPSID_QUEUE_SATURATION_FIXTURE}" 18)
+        set_tests_properties(worker_response_timeout_queue_pressure PROPERTIES
+            LABELS "worker;backpressure;lifecycle" TIMEOUT 30)
 
         add_executable(
             test-direct-fetch-matrix
@@ -5113,6 +8042,15 @@ if(BUILD_TESTING)
             worker_direct_fetch_http_matrix
             PROPERTIES TIMEOUT 40
         )
+        add_test(
+            NAME worker_direct_fetch_bodyless
+            COMMAND test-direct-fetch-matrix
+                $<TARGET_FILE:capsid-worker>
+                "${CAPSID_DIRECT_FETCH_MATRIX_FIXTURE}"
+                --bodyless
+        )
+        set_tests_properties(worker_direct_fetch_bodyless PROPERTIES
+            TIMEOUT 40 LABELS "worker;fetch;lifecycle")
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(
                 NAME worker_strict_sandbox_direct_fetch
@@ -5129,6 +8067,10 @@ if(BUILD_TESTING)
 
         set(CAPSID_MBEDTLS_TEST_DATA
             "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/mbedtls/framework/data_files")
+        file(MAKE_DIRECTORY "${CAPSID_SANDBOX_TEST_DATA_DIR}")
+        configure_file(
+            "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
+            "${CAPSID_SANDBOX_TEST_DATA_DIR}/test-ca-sha256.crt" COPYONLY)
         add_executable(
             test-direct-fetch-tls
             tests/test_direct_fetch_tls.cc
@@ -5183,7 +8125,7 @@ if(BUILD_TESTING)
                         "${CAPSID_DIRECT_FETCH_TLS_FIXTURE}"
                         "${CAPSID_MBEDTLS_TEST_DATA}/server2-sha256.crt"
                         "${CAPSID_MBEDTLS_TEST_DATA}/server2.key"
-                        "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
+                        "${CAPSID_SANDBOX_TEST_DATA_DIR}/test-ca-sha256.crt"
                         --strict
                         --openssl "${CAPSID_TEST_OPENSSL_EXECUTABLE}"
                 )
@@ -5201,7 +8143,7 @@ if(BUILD_TESTING)
                     "${CAPSID_DIRECT_FETCH_TLS_FIXTURE}"
                     "${CAPSID_MBEDTLS_TEST_DATA}/server2-sha256.crt"
                     "${CAPSID_MBEDTLS_TEST_DATA}/server2.key"
-                    "${CAPSID_MBEDTLS_TEST_DATA}/test-ca-sha256.crt"
+                    "${CAPSID_SANDBOX_TEST_DATA_DIR}/test-ca-sha256.crt"
                     --strict
             )
             set_tests_properties(
@@ -5211,7 +8153,31 @@ if(BUILD_TESTING)
         endif()
 
         add_executable(test-stubborn-worker tests/stubborn_worker.cc)
+        add_executable(test-worker-destroy-status tests/test_worker_destroy_status.cc)
+        target_include_directories(test-worker-destroy-status PRIVATE tests)
+        target_link_libraries(test-worker-destroy-status PRIVATE capsid_runtime capsid_sanitizers)
+        set_target_properties(test-worker-destroy-status PROPERTIES
+            CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-worker-destroy-status PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-worker-destroy-status PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_dependencies(test-worker-destroy-status capsid-worker)
+        foreach(mode IN ITEMS null clean terminated)
+            add_test(NAME worker_destroy_status_${mode}
+                COMMAND test-worker-destroy-status ${mode} $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(worker_destroy_status_${mode} PROPERTIES TIMEOUT 15)
+        endforeach()
+        if(UNIX)
+            add_test(NAME worker_destroy_status_reaped
+                COMMAND test-worker-destroy-status reaped $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(worker_destroy_status_reaped PROPERTIES TIMEOUT 15)
+        endif()
         add_executable(test-worker-lifecycle tests/test_worker_lifecycle.cc)
+        target_include_directories(test-worker-lifecycle PRIVATE tests)
         target_link_libraries(test-worker-lifecycle PRIVATE capsid_runtime)
         add_test(
             NAME worker_bounded_destroy
@@ -5232,5 +8198,82 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:test-stubborn-worker>
         )
         set_tests_properties(worker_timeout_drain PROPERTIES TIMEOUT 20)
+        add_executable(test-worker-watchdog-observation tests/test_worker_watchdog_observation.cc)
+        target_include_directories(test-worker-watchdog-observation PRIVATE src tests)
+        target_link_libraries(test-worker-watchdog-observation PRIVATE capsid_runtime capsid_sanitizers)
+        set_target_properties(test-worker-watchdog-observation PROPERTIES
+            CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        add_dependencies(test-worker-watchdog-observation test-stubborn-worker)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(test-worker-watchdog-observation PRIVATE /W4 /WX)
+            else()
+                target_compile_options(test-worker-watchdog-observation PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+        endif()
+        add_test(NAME worker_watchdog_active_deadline
+            COMMAND test-worker-watchdog-observation $<TARGET_FILE:test-stubborn-worker> active)
+        add_test(NAME worker_watchdog_late_first_observation
+            COMMAND test-worker-watchdog-observation $<TARGET_FILE:test-stubborn-worker> late)
+        set_tests_properties(worker_watchdog_active_deadline worker_watchdog_late_first_observation
+            PROPERTIES TIMEOUT 10 LABELS "worker;abi;timeout;lifecycle")
     endif()
+endif()
+
+
+# The sanitizer policy has its own positive/negative leak controls. Production
+# sandbox controls remain registered under the production configuration.
+if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CAPSID_SANDBOX_PROFILE STREQUAL "sanitizer" AND CAPSID_ENABLE_ASAN)
+    find_package(Threads REQUIRED)
+    if(NOT CAPSID_PYTHON3_EXECUTABLE)
+        find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
+    endif()
+    add_executable(test-sanitizer-leak-control
+        tests/test_sanitizer_leak_control.cc src/sandbox.cc)
+    target_include_directories(test-sanitizer-leak-control PRIVATE include src)
+    target_link_libraries(test-sanitizer-leak-control PRIVATE capsid_sanitizers Threads::Threads)
+    if(CAPSID_STRICT_WARNINGS)
+        target_compile_options(test-sanitizer-leak-control PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+    foreach(leak_case IN ITEMS clean leak)
+        add_test(NAME "sanitizer_sandbox_${leak_case}"
+            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_sanitizer_leak_control.py"
+                --binary $<TARGET_FILE:test-sanitizer-leak-control> --case "${leak_case}")
+        set_tests_properties("sanitizer_sandbox_${leak_case}" PROPERTIES
+            TIMEOUT 40 LABELS "sanitizer;sandbox;memory"
+            ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:strict_string_checks=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
+    endforeach()
+endif()
+
+# These allocation rollback/admission tests replace global new/delete.
+# Clang's static TSan C++ runtime defines those symbols strongly. Use its
+# shared runtime for these tests to retain the allocator probes and race
+# instrumentation. The Host and Worker keep their ordinary TSan link mode.
+if(BUILD_TESTING AND CAPSID_ENABLE_TSAN AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+   CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    execute_process(
+        COMMAND "${CMAKE_CXX_COMPILER}" -print-runtime-dir
+        RESULT_VARIABLE _capsid_allocation_tsan_result
+        OUTPUT_VARIABLE _capsid_allocation_tsan_dir
+        ERROR_VARIABLE _capsid_allocation_tsan_error
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    file(GLOB _capsid_allocation_tsan_shared
+        "${_capsid_allocation_tsan_dir}/libclang_rt.tsan*.so")
+    if(NOT _capsid_allocation_tsan_result STREQUAL "0" OR
+       NOT _capsid_allocation_tsan_shared)
+        message(FATAL_ERROR
+            "Allocation tests require Clang's shared TSan runtime: "
+            "${_capsid_allocation_tsan_error}")
+    endif()
+    foreach(_capsid_allocation_test IN ITEMS
+            test-channel-io test-host-single-worker-lifecycle
+            test-host-static-pool-adoption test-host-external-drain)
+        if(TARGET "${_capsid_allocation_test}")
+            target_link_options("${_capsid_allocation_test}" PRIVATE -shared-libsan)
+            set_property(TARGET "${_capsid_allocation_test}" APPEND PROPERTY
+                BUILD_RPATH "${_capsid_allocation_tsan_dir}")
+        endif()
+    endforeach()
 endif()

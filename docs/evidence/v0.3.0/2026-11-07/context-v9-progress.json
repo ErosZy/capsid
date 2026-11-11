@@ -1,0 +1,76 @@
+{
+  "complete": true,
+  "scope": "Private v9 context action/read/GC proof plus96 adjacent CTest invocations. Full branch ownership and public gzip chunk partition remain open. No main integration.",
+  "previousPrototypeAudit": {
+    "file": "v9-prototype-audit.json",
+    "sha256": "119161ac6b5373890b43f47ec204b136e85678f22d4197e0db38eba01996fab9"
+  },
+  "configurations": [
+    {
+      "mode": "native",
+      "privateWorkerSHA256": "357195dada0d42d89623c70b5f9774ea424c967608bfa5117f103abb83b4b9aa",
+      "adjacentCTestPairs": 32,
+      "privateWorkerReplacements": 31,
+      "independentlyValidatedReports": 29,
+      "reportObservations": 375,
+      "reviews": {
+        "native-v9-adjacent-archive-review.json": "3da0a497beca13e719e3a05de8d32111b8f45db4edff253145631e6238b2dcb9",
+        "native-v9-adjacent-model-review.json": "14028ad3e298a1ac20dc675659dea2ca18ebf1ea07fc1662a519a7828a397cff",
+        "native-v9-adjacent-review-execution.json": "2ae1eff0090bc153b208544418654703f9e198685e5faf51516eb2d546594225"
+      }
+    },
+    {
+      "mode": "native-asan",
+      "privateWorkerSHA256": "620a0c798d4331070168c3da34b12f19aa5affa238803e197218c5034eba7de8",
+      "adjacentCTestPairs": 32,
+      "privateWorkerReplacements": 31,
+      "independentlyValidatedReports": 29,
+      "reportObservations": 375,
+      "reviews": {
+        "native-asan-v9-adjacent-archive-review.json": "78b584ea57e48cd0fde0365763070a18da3d6f9fae6c117d433817d442eb8dcc",
+        "native-asan-v9-adjacent-model-review.json": "355b9d437f926a44c60c246e9b4feebe3195528c43fff5d8d9fdbabfb947ac80",
+        "native-asan-v9-adjacent-review-execution.json": "394d6b66499b83dabc76281acd6dc8c0166e97650a156c99f970e9cec6963f0a"
+      }
+    },
+    {
+      "mode": "linux",
+      "privateWorkerSHA256": "a2bfeb723556478c311fa13a07ef4bd8e23b8549a8bbf5395e63c17678194731",
+      "adjacentCTestPairs": 32,
+      "privateWorkerReplacements": 31,
+      "independentlyValidatedReports": 29,
+      "reportObservations": 375,
+      "reviews": {
+        "linux-v9-adjacent-archive-review.json": "225e8288e61fd5f4c77764de9ed0757705529146ef8bda1e3b8a5f7df58e4526",
+        "linux-v9-adjacent-model-review.json": "92f2c42867c3ade073920dabf4650523c0dd1c2443f238ef43d1c9ca4d256692",
+        "linux-v9-adjacent-review-execution.json": "59969702661a94a72a97812176819f7d4554d180c2819057cb0d1fb61e520714"
+      }
+    }
+  ],
+  "actionProductCases": 54,
+  "actualActionReferenceCases": 36,
+  "singleReadProductCases": 36,
+  "actualSingleReadReferenceCases": 24,
+  "gcCases": 72,
+  "rejectedControls": 7020,
+  "rawFullPublicStateMatches": 45,
+  "gzipPublicBoundaryDifferences": 45,
+  "originalV8TargetedActionFailuresDetected": 48,
+  "adjacentCTestPairs": 96,
+  "adjacentFailures": 0,
+  "adjacentSkips": 0,
+  "independentlyReplayedReports": 87,
+  "reportObservations": 1125,
+  "mainQualification": {
+    "file": "../response-retirement-20261107/progress-audit.json",
+    "sha256": "6b6f62eb60bea3510e6fc844b0f0a016c9c6b7f0a25173baccfaa73ced528ab1",
+    "distinctMainCTestPairs": 501,
+    "privateResultsAddedToMainCount": false
+  },
+  "currentMain501QualificationUnchanged": true,
+  "privateJsIntegrated": false,
+  "version": "0.2.2",
+  "sdkOverlay": 69,
+  "mainJs": "v5",
+  "fullBranchOwnershipRequirementComplete": false,
+  "fullV030GoalComplete": false
+}

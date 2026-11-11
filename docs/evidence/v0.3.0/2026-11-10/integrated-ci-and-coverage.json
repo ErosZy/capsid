@@ -1,0 +1,93 @@
+{
+  "status": "complete",
+  "complete": true,
+  "changedFiles": [
+    ".github/workflows/testing-validity.yml",
+    "tests/audit-testing-validity-workflow.mjs",
+    "tests/test_testing_validity_workflow.mjs"
+  ],
+  "parentPrivateSnapshot": "3e87fea7c133da0926bb0a301bff607cb20987ab",
+  "mainHeadBefore": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "nativeFocusedProofSHA256": "63602b6b87c457976dac912d39e08a5421dfee672353efecbff1c83e1af7e66a",
+  "priorQualificationErrorRetainedSHA256": "ed636674deb8a6049a4969280a37b84e940184202dea2a4417e9517de7b6b913",
+  "certificatePreflightControlsPassed": 4,
+  "explicitSystemCertificateCliBoundInBothLinuxCiJobs": true,
+  "originalSHA256": {
+    ".github/workflows/testing-validity.yml": "9dd000df329b0a1aa84b6fcfe25795f2c8928aaae92543e6be1ea517f7300634",
+    "tests/audit-testing-validity-workflow.mjs": "dabb5e5fd3b6521fbea6b34c61eaaa01ca347797dbac657cd7867fa9f60ec536",
+    "tests/test_testing_validity_workflow.mjs": "991b90eaa5cedf990b1269f73f2ed5280b4cec2164f4ab5f11bcba51c8a3eae7"
+  },
+  "threeFormerTsanNativeExclusionsRemoved": true,
+  "allThreeSanitizerProfilesProtectThoseNativeRegistrations": true,
+  "unsupportedRlimitProbeRemainsExplicitSkipNotPass": true,
+  "originalRawFullFailuresRetained": true,
+  "hostedCiExecuted": false,
+  "sanitizerRssAcceptanceUnmodified": true,
+  "mainCommitPushTagOrPublicationPerformed": false,
+  "fullV030GoalComplete": false,
+  "checks": [
+    {
+      "platform": "windows",
+      "lineEnding": "lf",
+      "counts": {
+        "tests": 138,
+        "pass": 138,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "3236ea115cb55ee065380c54922e1d3d6d9bbb60738e13b5329afb90dc42381b",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "windows",
+      "lineEnding": "crlf",
+      "counts": {
+        "tests": 138,
+        "pass": 138,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "bad1ce834127d7cb36ad9bfb804ac98fc86ecce062c3bc6e2380e381624f8ddf",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "linux",
+      "lineEnding": "lf",
+      "counts": {
+        "tests": 138,
+        "pass": 138,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "40b18de4a530f03aec2db69f2afc785836cc5f0b7f73efe93e8980787b4575c9",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "platform": "linux",
+      "lineEnding": "crlf",
+      "counts": {
+        "tests": 138,
+        "pass": 138,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "974f9f616affea3469efdb20be672b67392fdefa94cb7f725b851b35cbc42c97",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "rootIntegrated": true,
+  "privateSnapshotCommit": "ef42e7bc5ae7c595ef6fb3ff39b64fc3f77f8f57",
+  "privateSnapshotRef": "refs/capsid-private/sdk78-tsan-native-ci-coverage-20261110",
+  "privateSnapshotTree": "35098c8a211ac5de79a9f72013e4b2b11e75becc",
+  "qualifiedSHA256": {
+    ".github/workflows/testing-validity.yml": "c994924773a8d60284ef2170d4f05178255157ab7a1fe23a86944c7b5da04141",
+    "tests/audit-testing-validity-workflow.mjs": "649dcad971b19bb459118d22d5f45084bb1a6df78eec7ea33e740a5c30cc6fe2",
+    "tests/test_testing_validity_workflow.mjs": "f89437acdf93ea249895f81005d0d73b90caca666f0b2e297f4281a365f827f7"
+  },
+  "mainSourceManifestFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-tsan-native-ci-coverage-main-integration-r2\\main-source-manifest.json",
+  "mainSourceManifestSHA256": "e9baea21f0b355bb8307f3f73a1fba6b1148fcf8940b7eb13cd0112c83909583",
+  "controlsPassed": 552,
+  "mainHeadUnchanged": true,
+  "allOtherRepositorySourcesUnchanged": true,
+  "generatedIdentityAndFinalCombinedArtifactForNewSnapshotNotYetQualified": true
+}

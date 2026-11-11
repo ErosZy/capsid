@@ -1,0 +1,63 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -721,12 +721,22 @@
+ 
+ /* Wire EOF may precede application consumption. Retire the socket at wire
+  * EOF, but keep the captured owner/context until buffered decoding finishes. */
+-static void tjs_httpclient_finish_decoding(TJSHttpClient *h) {
++static void tjs_httpclient_finish_decoding(TJSHttpClient *h, bool synchronous_abort) {
+     if (h->completed || h->input_head || (!h->wire_complete && !h->signal_aborted)) return;
+     if (h->signal_aborted) {
+         h->completed = true;
+         JSValue error = JS_NewString(h->ctx, "ABORTED_BUFFERED");
+-        maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++        if (synchronous_abort) {
++            /* abort() is still on the caller's JS stack. As with ordinary
++             * cancellation, preserve its owner without running promise jobs
++             * before the signal dispatch and the caller have returned. */
++            JSValue callback = h->callbacks[HC_CALLBACK_COMPLETE];
++            if (!h->context_cancelled && !h->qrt->freeing && JS_IsFunction(h->ctx, callback))
++                tjs_call_handler_ctx_sync(h->ctx, h->ctx_data, callback, 1, &error);
++            JS_FreeValue(h->ctx, error);
++        } else {
++            maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++        }
+         tjs_httpclient_done(h);
+         return;
+     }
+@@ -796,7 +806,7 @@
+     if (batch.size && !h->completed) tjs_httpclient_emit_batch(h, &batch, 2);
+     tbuf_free(&batch);
+     h->decode_pumping = false;
+-    tjs_httpclient_finish_decoding(h);
++    tjs_httpclient_finish_decoding(h, false);
+     return 0;
+ }
+ 
+@@ -1068,7 +1078,7 @@
+         case LWS_CALLBACK_COMPLETED_CLIENT_HTTP: {
+             h->wire_complete = true;
+             if (h->signal_aborted) {
+-                tjs_httpclient_finish_decoding(h);
++                tjs_httpclient_finish_decoding(h, false);
+                 tjs_httpclient_teardown(h, wsi);
+                 return 0;
+             }
+@@ -1081,7 +1091,7 @@
+                 if (h->wsi) lws_set_timer_usecs(h->wsi, 1);
+                 return 0;
+             }
+-            tjs_httpclient_finish_decoding(h);
++            tjs_httpclient_finish_decoding(h, false);
+             tjs_httpclient_teardown(h, wsi);
+             /* Always return 0.  Pooled connections stay warm for reuse
+              * (a response that carried "Connection: close" was marked
+@@ -1598,7 +1608,7 @@
+             lws_rx_flow_control(h->wsi, 0);
+             lws_set_timer_usecs(h->wsi, 1);
+         }
+-        tjs_httpclient_finish_decoding(h);
++        tjs_httpclient_finish_decoding(h, true);
+         return JS_TRUE;
+     }
+     tjs_httpclient_cancel(h, true);

@@ -1,0 +1,148 @@
+--- a/src/js/polyfills/abort-controller.js
++++ b/src/js/polyfills/abort-controller.js
+@@ -1,17 +1,31 @@
+ import { defineEventAttribute, EventTarget, Event, registerAbortSignal, runAbortAlgorithms } from './event-target.js';
+ 
+ function defaultAbortReason() {
+-    return new DOMException('This operation was aborted', 'AbortError');
++    return new DOMException('The operation was aborted', 'AbortError');
+ }
+ 
+ // Module-private invoker, captured from inside the class so it can reach the
+ // `#signalAbort` private method without exposing it.
+ let signalAbort;
++let readAbortException;
++let exceptionSerializer;
++
++// The Capsid bootstrap supplies its captured native-exception serializer.
++// The settled snapshot is separate from the public, identity-preserving reason.
++export function configureAbortExceptions(serializer) {
++    exceptionSerializer = serializer;
++}
++
++export function getAbortException(signal) {
++    return readAbortException(signal);
++}
+ 
+ class AbortSignal extends EventTarget {
+     constructor() { super(); registerAbortSignal(this); }
+     #aborted = false;
++    #aborting = false;
+     #reason;
++    #exception;
+ 
+     get aborted() {
+         return this.#aborted;
+@@ -29,13 +43,24 @@
+ 
+     // Flip to aborted state. Returns true if the signal transitioned, false
+     // if it was already aborted. Reachable only via `signalAbort()` below.
+-    #signalAbort(reason, dispatch = true) {
+-        if (this.#aborted) {
++    #signalAbort(reason, dispatch = true, source = undefined) {
++        if (this.#aborted || this.#aborting) {
+             return false;
+         }
+ 
+-        this.#aborted = true;
+-        this.#reason = reason !== undefined ? reason : defaultAbortReason();
++        // Exception conversion can read application properties and re-enter
++        // abort(). Settle only after conversion succeeds, with a re-entry latch.
++        this.#aborting = true;
++        try {
++            const settledReason = reason !== undefined ? reason : defaultAbortReason();
++            const snapshot = source !== undefined ? source.#exception
++                : exceptionSerializer ? exceptionSerializer(settledReason) : settledReason;
++            this.#reason = settledReason;
++            this.#exception = snapshot;
++            this.#aborted = true;
++        } finally {
++            this.#aborting = false;
++        }
+         runAbortAlgorithms(this);
+ 
+         if (dispatch) {
+@@ -47,6 +72,8 @@
+ 
+     static {
+         signalAbort = (signal, reason, dispatch) => signal.#signalAbort(reason, dispatch);
++        readAbortException = signal => exceptionSerializer
++            ? exceptionSerializer(signal.#exception) : signal.#exception;
+     }
+ 
+     static abort(reason) {
+@@ -72,7 +99,7 @@
+ 
+         for (const s of signals) {
+             if (s.aborted) {
+-                signal.#signalAbort(s.reason, false);
++                signal.#signalAbort(s.#reason, false, s);
+ 
+                 return signal;
+             }
+@@ -81,7 +108,7 @@
+         const onAbort = () => {
+             for (const s of signals) {
+                 if (s.aborted) {
+-                    if (signal.#signalAbort(s.reason)) {
++                    if (signal.#signalAbort(s.#reason, true, s)) {
+                         // Clean up all listeners.
+                         for (const s2 of signals) {
+                             s2.removeEventListener('abort', onAbort);
+--- a/src/js/polyfills/fetch/fetch.js
++++ b/src/js/polyfills/fetch/fetch.js
+@@ -1,6 +1,7 @@
+ /* global tjs */
+ 
+ import { HttpClient } from '../http-client.js';
++import { getAbortException } from '../abort-controller.js';
+ 
+ import { Headers } from './headers.js';
+ import { Request } from './request.js';
+@@ -93,7 +94,7 @@
+         const request = new Request(input, init);
+ 
+         if (request.signal && request.signal.aborted) {
+-            return reject(new DOMException('Aborted', 'AbortError'));
++            return reject(request.signal.reason);
+         }
+ 
+         const client = new HttpClient();
+@@ -198,6 +199,11 @@
+             if (error) {
+                 const isAbort = error === 'ABORTED';
+                 const isTimeout = error === 'TIMED_OUT';
++                // In-flight native I/O crosses an exception boundary. Each
++                // consumer gets a fresh reconstruction of the settled snapshot.
++                const abortError = isAbort ? request.signal?.aborted
++                    ? getAbortException(request.signal)
++                    : new DOMException('The operation was aborted', 'AbortError') : null;
+ 
+                 let msg;
+ 
+@@ -213,7 +219,7 @@
+                     if (streamController) {
+                         try {
+                             streamController.error(isAbort
+-                                ? new DOMException('Aborted', 'AbortError')
++                                ? abortError
+                                 : new TypeError(msg));
+                         } catch (_e) { /* already errored/closed */ }
+ 
+@@ -222,14 +228,14 @@
+ 
+                     setTimeout(function() {
+                         if (isAbort) {
+-                            reject(new DOMException('Aborted', 'AbortError'));
++                            reject(abortError);
+                         } else {
+                             reject(new TypeError(msg));
+                         }
+                     }, 0);
+                 } else if (streamController) {
+                     if (isAbort) {
+-                        streamController.error(new DOMException('Aborted', 'AbortError'));
++                        streamController.error(abortError);
+                     } else {
+                         streamController.error(new TypeError(msg));
+                     }

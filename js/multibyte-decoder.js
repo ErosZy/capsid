@@ -1,5 +1,6 @@
 import core from 'tjs:internal/core';
 import { encodingGroups } from './encoding-data/encodings.js';
+import { gb18030RangesCodePoint } from './encoding-data/gb18030-ranges.js';
 import {
     multibyteIndexCodePoint,
 } from './encoding-data/multibyte-indexes.js';
@@ -15,31 +16,6 @@ const supportedNames = new Set([
     'x-user-defined',
 ]);
 const definitionsByLabel = new Map();
-
-const gb18030TwoByteOverrides = new Map([
-    [ 0xA1AD, '\u2026' ],
-    [ 0xA1AB, '\uFF5E' ],
-    [ 0xA3A0, '\u3000' ],
-    [ 0xA6D9, '\uFE10' ],
-    [ 0xA6DA, '\uFE12' ],
-    [ 0xA6DB, '\uFE11' ],
-    [ 0xA6DC, '\uFE13' ],
-    [ 0xA6DD, '\uFE14' ],
-    [ 0xA6DE, '\uFE15' ],
-    [ 0xA6DF, '\uFE16' ],
-    [ 0xA6EC, '\uFE17' ],
-    [ 0xA6ED, '\uFE18' ],
-    [ 0xA6F3, '\uFE19' ],
-    [ 0xA8BC, '\u1E3F' ],
-    [ 0xFE59, '\u9FB4' ],
-    [ 0xFE61, '\u9FB5' ],
-    [ 0xFE66, '\u9FB6' ],
-    [ 0xFE67, '\u9FB7' ],
-    [ 0xFE6D, '\u9FB8' ],
-    [ 0xFE7E, '\u9FB9' ],
-    [ 0xFE90, '\u9FBA' ],
-    [ 0xFEA0, '\u9FBB' ],
-]);
 
 for (const group of encodingGroups) {
     for (const definition of group.encodings) {
@@ -157,15 +133,13 @@ export class MultibyteDecoder {
             const twoByteTrail =
                 second >= 0x40 && second <= 0xFE && second !== 0x7F;
             if (twoByteTrail) {
-                const override =
-                    gb18030TwoByteOverrides.get((first << 8) | second);
-                if (override !== undefined) {
-                    output.push(override);
+                const pointer = (first - 0x81) * 190 +
+                    second - (second < 0x7F ? 0x40 : 0x41);
+                const codePoint = multibyteIndexCodePoint('gb18030', pointer);
+                if (codePoint !== null) {
+                    output.push(String.fromCodePoint(codePoint));
                 } else {
-                    output.push(core.legacyDecode(
-                        this.#definition.nativeEncoding,
-                        new Uint8Array([ first, second ]),
-                        this.#fatal));
+                    this.#error(output);
                 }
                 continue;
             }
@@ -213,19 +187,12 @@ export class MultibyteDecoder {
                 (second - 0x30) * 1260 +
                 (third - 0x81) * 10 +
                 fourth - 0x30;
-            if ((pointer >= 39420 && pointer < 189000) ||
-                pointer > 1237575) {
+            const codePoint = gb18030RangesCodePoint(pointer);
+            if (codePoint === null) {
                 this.#error(output);
                 continue;
             }
-            if (pointer === 7457) {
-                output.push('\uE7C7');
-                continue;
-            }
-            output.push(core.legacyDecode(
-                this.#definition.nativeEncoding,
-                new Uint8Array([ first, second, third, fourth ]),
-                this.#fatal));
+            output.push(String.fromCodePoint(codePoint));
         }
 
         return output.join('');

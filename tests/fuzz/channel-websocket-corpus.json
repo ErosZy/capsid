@@ -1,0 +1,150 @@
+{
+  "schema": "capsid-channel-websocket-fuzz-corpus-v1",
+  "maxInputBytes": 65536,
+  "seeds": {
+    "tests/fuzz/corpus/channel_registry/all-action-selectors": {
+      "bytes": 64,
+      "sha256": "fdeab9acf3710362bd2658cdc9a29e8f9c757fcf9811603a8c447cd1d9151108"
+    },
+    "tests/fuzz/corpus/channel_registry/large-structured-input": {
+      "bytes": 65536,
+      "sha256": "7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2"
+    },
+    "tests/fuzz/corpus/channel_registry/overflow-fields": {
+      "bytes": 256,
+      "sha256": "3d6876a0146de8576eb2395a858de1213d1b92c65b779df3a331cfd5a4584546"
+    },
+    "tests/fuzz/corpus/channel_registry/single-action": {
+      "bytes": 1,
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    },
+    "tests/fuzz/corpus/websocket_frames/actual64k-body": {
+      "bytes": 65536,
+      "sha256": "7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2"
+    },
+    "tests/fuzz/corpus/websocket_frames/close1000": {
+      "bytes": 4,
+      "sha256": "65b3ad9d667d74c69019fc7f9f135460c01eb550f7690e301df3e0f9b2714399"
+    },
+    "tests/fuzz/corpus/websocket_frames/empty-frame": {
+      "bytes": 2,
+      "sha256": "9037f92bc91fdcc764a89d9144c341d887ffc83351cc8cf0530555c89920a47d"
+    },
+    "tests/fuzz/corpus/websocket_frames/fragmented-control": {
+      "bytes": 6,
+      "sha256": "ddb0b60812cd2d2ac7481ebbf4b0e6c6bd9a83f007b61ee63dc67f273467ea44"
+    },
+    "tests/fuzz/corpus/websocket_frames/invalid-close-utf8": {
+      "bytes": 5,
+      "sha256": "ae67dc9b5c5b10634ff935f4529819975ac73c96825bfe12ba053b4eb1b561a5"
+    },
+    "tests/fuzz/corpus/websocket_frames/length126": {
+      "bytes": 130,
+      "sha256": "e17318bc1a8b0ef70af365998ada415cb863b5a589e235ccc026e7b6205bad2a"
+    },
+    "tests/fuzz/corpus/websocket_frames/length64-header": {
+      "bytes": 10,
+      "sha256": "27942632f96be448f9da2bc012e4e5e855e0f3f09e7904b909b9cf1cb9f1871a"
+    },
+    "tests/fuzz/corpus/websocket_frames/masked-empty": {
+      "bytes": 6,
+      "sha256": "4dda017d8c20f9cd76fbaa1d99d678e9d88dddbcd1de87aa17ac57eb18d4dcaa"
+    },
+    "tests/fuzz/corpus/websocket_frames/masked-hello": {
+      "bytes": 11,
+      "sha256": "714a02da61d7702b92f361a4e63542278287582f92f84a83bbe86875932065b4"
+    },
+    "tests/fuzz/corpus/websocket_handshake/bodyful-http": {
+      "bytes": 183,
+      "sha256": "fe377f8b532a838cbbd468799fb946af4a9b2c96537dbde2eecef38fbc4bb322"
+    },
+    "tests/fuzz/corpus/websocket_handshake/duplicate-key": {
+      "bytes": 208,
+      "sha256": "f584254626cd02f86869e37d6cdfd5b712d53181e56d4c4aae34332b8687300f"
+    },
+    "tests/fuzz/corpus/websocket_handshake/header-boundary-65536": {
+      "bytes": 65536,
+      "sha256": "85a2700fcb21021c9e06b2b03a98b5acfca2d988eb6b26e47a6acd89cb0fd4cb"
+    },
+    "tests/fuzz/corpus/websocket_handshake/header-boundary-8000": {
+      "bytes": 8000,
+      "sha256": "410adbcfa2b26f1ae90b407d7131695a34d8d4564a1c751c9c140fbe793495e4"
+    },
+    "tests/fuzz/corpus/websocket_handshake/header-boundary-8191": {
+      "bytes": 8191,
+      "sha256": "6919d644cdbb3d147dd11c5d8812cfcf9ac7db3e76eb3eb9cc8e0c5e1946eb4f"
+    },
+    "tests/fuzz/corpus/websocket_handshake/header-boundary-8192": {
+      "bytes": 8192,
+      "sha256": "fe745f73e8eb34295dbaca77ad3064d52da32a82c260fbde25cd35bfb44fa4f8"
+    },
+    "tests/fuzz/corpus/websocket_handshake/header-boundary-8193": {
+      "bytes": 8193,
+      "sha256": "b169e137f602db27a1dbabdff7529cfaf0d79b34d7ce064cc4adecef529e1d4e"
+    },
+    "tests/fuzz/corpus/websocket_handshake/huge-body-header": {
+      "bytes": 189,
+      "sha256": "db8476845feac3b2a23e96b878daca863ed8d9dd48841bfec95fa279e7d35b2a"
+    },
+    "tests/fuzz/corpus/websocket_handshake/incomplete-http": {
+      "bytes": 16,
+      "sha256": "9da962f9aa12f77f407b1e6e9013cba9db64a392ba86d1b05faec73d905bab67"
+    },
+    "tests/fuzz/corpus/websocket_handshake/multiple-invalid-header": {
+      "bytes": 8675,
+      "sha256": "5d37e9059398df09d7f7cdae6295015629d8df048a7334cd38d7b3418c3ae890"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-0": {
+      "bytes": 1,
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-1": {
+      "bytes": 1,
+      "sha256": "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-10": {
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-11": {
+      "bytes": 1,
+      "sha256": "e7cf46a078fed4fafd0b5e3aff144802b853f8ae459a4f0c14add3314b7cc3a6"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-2": {
+      "bytes": 1,
+      "sha256": "dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-3": {
+      "bytes": 1,
+      "sha256": "084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-4": {
+      "bytes": 1,
+      "sha256": "e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-5": {
+      "bytes": 1,
+      "sha256": "e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-6": {
+      "bytes": 1,
+      "sha256": "67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-7": {
+      "bytes": 1,
+      "sha256": "ca358758f6d27e6cf45272937977a748fd88391db679ceda7dc7bf1f005ee879"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-8": {
+      "bytes": 1,
+      "sha256": "beead77994cf573341ec17b58bbf7eb34d2711c993c1d976b128b3188dc1829a"
+    },
+    "tests/fuzz/corpus/websocket_handshake/request-mutation-9": {
+      "bytes": 1,
+      "sha256": "2b4c342f5433ebe591a1da77e013d1b72475562d48578dca8b84bac6651c3cb9"
+    },
+    "tests/fuzz/corpus/websocket_handshake/valid-http": {
+      "bytes": 163,
+      "sha256": "aee12c6c8ed113fa67e9ad6680787fa167b926d62c07f7d6f958553aa4d7d45d"
+    }
+  }
+}

@@ -322,7 +322,8 @@ void run_success_scenario(const char* worker_path,
     options.binding_registry = std::move(binding_registry);
     capsid::host::SingleWorkerServer server(options);
     std::string error;
-    require(server.start(bundle, &error), name + ": start failed: " + error);
+    const bool started = server.start(bundle, &error);
+    require(started, name + ": start failed: " + error);
     close(ready[1]);
     const std::uint16_t port = ready_port(read_ready_line(ready[0]));
     close(ready[0]);

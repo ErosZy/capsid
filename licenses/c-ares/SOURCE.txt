@@ -1,0 +1,3 @@
+Upstream notices: https://github.com/c-ares/c-ares/tree/v1.34.5
+Capsid uses a system c-ares provider (minimum 1.27), not vendored c-ares source.
+The actual provider version and binary identity must be recorded in release evidence.

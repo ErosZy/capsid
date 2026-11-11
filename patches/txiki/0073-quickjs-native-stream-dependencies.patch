@@ -1,0 +1,144 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -21234,6 +21234,8 @@
+     return 0;
+ }
+ 
++static int js_inherit_passive_async_await(JSContext *ctx, JSValueConst awaited, JSValueConst resolver);
++
+ static bool js_async_function_resume(JSContext *ctx, JSAsyncFunctionState *s)
+ {
+     bool is_success = true;
+@@ -21286,6 +21288,10 @@
+             JS_FreeValue(ctx, value);
+             if (JS_IsException(promise))
+                 goto fail;
++            if (js_inherit_passive_async_await(ctx, promise, s->resolving_funcs[0]) < 0) {
++                JS_FreeValue(ctx, promise);
++                goto fail;
++            }
+             if (js_async_function_resolve_create(ctx, s, resolving_funcs)) {
+                 JS_FreeValue(ctx, promise);
+                 goto fail;
+@@ -54642,12 +54648,65 @@
+     void *observer_origin; /* inert subscriber identity for pending stream observations */
+ } JSPromiseReactionData;
+ 
++/* A suspended result retains the caller identities already subscribed to it.
++   Only the existing private stream observation designates this dependency. */
++static int js_inherit_passive_async_await(JSContext *ctx, JSValueConst awaited,
++                                         JSValueConst resolver)
++{
++    JSPromiseData *input = JS_GetOpaque(awaited, JS_CLASS_PROMISE);
++    if (!input || input->promise_state != JS_PROMISE_PENDING || !input->passive_reactions)
++        return 0;
++    if (!JS_IsObject(resolver) || JS_VALUE_GET_OBJ(resolver)->class_id != JS_CLASS_PROMISE_RESOLVE_FUNCTION)
++        return 0;
++    JSPromiseFunctionData *capability = JS_VALUE_GET_OBJ(resolver)->u.promise_function_data;
++    JSPromiseData *result = JS_GetOpaque(capability->promise, JS_CLASS_PROMISE);
++    if (result && result->promise_state == JS_PROMISE_PENDING)
++        return JS_MarkPromiseReactionsPassive(ctx, capability->promise);
++    return 0;
++}
++
+ int JS_MarkPromiseReactionsPassive(JSContext *ctx, JSValueConst promise)
+ {
+     JSPromiseData *s = JS_GetOpaque2(ctx, promise, JS_CLASS_PROMISE);
++    JSRuntime *rt = ctx->rt;
++    struct list_head *entry;
++    int i;
+     if (!s)
+         return -1;
+     s->passive_reactions = true;
++    if (!rt->promise_ctx_hooks.capture || !rt->promise_ctx_hooks.release ||
++        !rt->job_ctx_hooks.enter || !rt->job_ctx_hooks.leave || !rt->job_ctx_hooks.release)
++        return 0;
++    /* An async prelude can publish its result before reaching the native
++       stream wait. Convert existing parked subscriptions under each original
++       subscriber context, never under the context performing this update. */
++    for (i = 0; i < 2; ++i) {
++        list_for_each(entry, &s->promise_reactions[i]) {
++            JSPromiseReactionData *reaction = list_entry(entry, JSPromiseReactionData, link);
++            void *observer = NULL;
++            void *previous;
++            void *captured;
++            int status;
++            if (unlikely(js_poll_interrupts(ctx)))
++                return -1;
++            if (!reaction->ctx_data || reaction->observer_origin)
++                continue;
++            previous = rt->job_ctx_hooks.enter(ctx, reaction->ctx_data, rt->job_ctx_opaque);
++            status = rt->promise_ctx_hooks.capture(ctx, rt->promise_ctx_opaque, &observer);
++            rt->job_ctx_hooks.leave(ctx, previous, rt->job_ctx_opaque);
++            if (status < 0) {
++                if (observer)
++                    rt->promise_ctx_hooks.release(observer, rt->promise_ctx_opaque);
++                return -1;
++            }
++            if (!observer)
++                continue;
++            captured = reaction->ctx_data;
++            reaction->ctx_data = NULL;
++            reaction->observer_origin = observer;
++            rt->job_ctx_hooks.release(captured, rt->job_ctx_opaque);
++        }
++    }
+     return 0;
+ }
+ 
+@@ -55683,6 +55742,46 @@
+     return 0;
+ }
+ 
++/* Native resolving functions and aggregate element handlers are actual
++   engine forwarding edges. Arbitrary user callbacks, overridden then methods,
++   and unrelated pending promises receive no observation designation here. */
++static int js_mark_native_forwarding_handler_passive(JSContext *ctx, JSValueConst handler)
++{
++    JSObject *object;
++    JSPromiseFunctionData *capability;
++    JSPromiseData *target;
++    if (!JS_IsObject(handler))
++        return 0;
++    object = JS_VALUE_GET_OBJ(handler);
++    if (object->class_id == JS_CLASS_C_FUNCTION_DATA) {
++        JSCFunctionDataRecord *data = JS_GetOpaque(handler, JS_CLASS_C_FUNCTION_DATA);
++        if (!data || data->func != js_promise_all_resolve_element || data->data_len < 5)
++            return 0;
++        handler = data->data[3];
++        if (!JS_IsObject(handler))
++            return 0;
++        object = JS_VALUE_GET_OBJ(handler);
++    }
++    if (object->class_id != JS_CLASS_PROMISE_RESOLVE_FUNCTION &&
++        object->class_id != JS_CLASS_PROMISE_REJECT_FUNCTION)
++        return 0;
++    capability = object->u.promise_function_data;
++    target = JS_GetOpaque(capability->promise, JS_CLASS_PROMISE);
++    if (target && target->promise_state == JS_PROMISE_PENDING)
++        return JS_MarkPromiseReactionsPassive(ctx, capability->promise);
++    return 0;
++}
++
++static int js_forward_passive_native_handlers(JSContext *ctx, int argc, JSValueConst *argv)
++{
++    int i;
++    for (i = 0; i < argc && i < 2; ++i) {
++        if (js_mark_native_forwarding_handler_passive(ctx, argv[i]) < 0)
++            return -1;
++    }
++    return 0;
++}
++
+ static JSValue js_promise_then(JSContext *ctx, JSValueConst this_val,
+                                int argc, JSValueConst *argv)
+ {
+@@ -55719,6 +55818,8 @@
+             result->passive_reactions = true;
+     }
+     ret = perform_promise_then(ctx, this_val, argv, vc(resolving_funcs));
++    if (!ret && s->passive_reactions)
++        ret = js_forward_passive_native_handlers(ctx, argc, argv);
+     for(i = 0; i < 2; i++)
+         JS_FreeValue(ctx, resolving_funcs[i]);
+     if (ret) {

@@ -1,0 +1,135 @@
+Subject: [PATCH] Own aliased ArrayBuffer backing and preserve external transfer ownership
+
+Capsid-local embedding extension for pinned workerd default-reader EOF.
+No JavaScript global is added. Resized external transfers copy before detach;
+same-length transfers preserve the external callback and opaque owner.
+
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -58304,6 +58304,65 @@
+                                         buf, free_func, opaque, false);
+ }
+ 
++typedef struct JSArrayBufferAliasOwner {
++    size_t ref_count;
++    JSFreeArrayBufferDataFunc *free_func;
++    void *opaque;
++} JSArrayBufferAliasOwner;
++
++static void js_array_buffer_alias_free(JSRuntime *rt, void *opaque, void *ptr)
++{
++    JSArrayBufferAliasOwner *owner = opaque;
++    /* Detached wrappers are finalized with a null pointer, after ownership
++       was released by detach or moved by transfer. */
++    if (!ptr)
++        return;
++    assert(owner && owner->ref_count > 0);
++    if (--owner->ref_count == 0) {
++        if (owner->free_func)
++            owner->free_func(rt, owner->opaque, ptr);
++        js_free_rt(rt, owner);
++    }
++}
++
++JSValue JS_NewArrayBufferAlias(JSContext *ctx, JSValueConst obj)
++{
++    JSArrayBuffer *abuf = JS_GetOpaque2(ctx, obj, JS_CLASS_ARRAY_BUFFER);
++    JSArrayBufferAliasOwner *owner;
++    JSValue ret;
++    bool existing;
++    if (!abuf)
++        return JS_EXCEPTION;
++    if (abuf->detached)
++        return JS_ThrowTypeErrorDetachedArrayBuffer(ctx);
++    if (abuf->shared || abuf->immutable || abuf->max_byte_length >= 0)
++        return JS_ThrowTypeError(ctx, "alias requires a mutable fixed-length ArrayBuffer");
++    existing = abuf->free_func == js_array_buffer_alias_free;
++    if (existing) {
++        owner = abuf->opaque;
++        if (owner->ref_count == SIZE_MAX)
++            return JS_ThrowOutOfMemory(ctx);
++    } else {
++        owner = js_malloc(ctx, sizeof(*owner));
++        if (!owner)
++            return JS_EXCEPTION;
++        owner->ref_count = 1;
++        owner->free_func = abuf->free_func;
++        owner->opaque = abuf->opaque;
++    }
++    ret = JS_NewArrayBuffer(ctx, abuf->data, abuf->byte_length,
++                            js_array_buffer_alias_free, owner, false);
++    if (JS_IsException(ret)) {
++        if (!existing)
++            js_free(ctx, owner);
++        return ret;
++    }
++    ++owner->ref_count;
++    abuf->free_func = js_array_buffer_alias_free;
++    abuf->opaque = owner;
++    return ret;
++}
++
+ bool JS_IsArrayBuffer(JSValueConst obj) {
+     return JS_GetClassID(obj) == JS_CLASS_ARRAY_BUFFER;
+ }
+@@ -58655,13 +58714,42 @@
+     }
+     /* create an empty AB */
+     if (new_len == 0) {
+-        JS_DetachArrayBuffer(ctx, this_val);
+         ret = js_array_buffer_constructor2(ctx, JS_UNDEFINED, 0, pmax_len,
+                                            JS_CLASS_ARRAY_BUFFER);
++        if (!JS_IsException(ret))
++            JS_DetachArrayBuffer(ctx, this_val);
+         goto fini;
+     }
+     bs = abuf->data;
+     old_len = abuf->byte_length;
++    if (abuf->free_func != js_array_buffer_free) {
++        /* External allocations may be shared or use a different allocator.
++           Resizing copies into engine-owned storage. An immutable result also
++           needs independent bytes, since an external owner can still write. */
++        if (new_len != old_len || magic == JS_ARRAY_BUFFER_TRANSFER_TO_IMMUTABLE) {
++            ret = js_array_buffer_constructor2(ctx, JS_UNDEFINED, new_len, pmax_len,
++                                               JS_CLASS_ARRAY_BUFFER);
++            if (JS_IsException(ret))
++                return ret;
++            JSArrayBuffer *dest = JS_GetOpaque(ret, JS_CLASS_ARRAY_BUFFER);
++            memcpy(dest->data, bs, new_len < old_len ? new_len : old_len);
++            JS_DetachArrayBuffer(ctx, this_val);
++        } else {
++            /* Publish the destination before detaching, so OOM leaves the
++               original allocation and its callback/opaque owner intact. */
++            ret = js_array_buffer_constructor3(ctx, JS_UNDEFINED, new_len, pmax_len,
++                                               JS_CLASS_ARRAY_BUFFER, bs,
++                                               abuf->free_func, abuf->opaque, false);
++            if (JS_IsException(ret))
++                return ret;
++            abuf->data = NULL;
++            abuf->byte_length = 0;
++            abuf->detached = true;
++            abuf->opaque = NULL;
++            js_array_buffer_update_typed_arrays(abuf);
++        }
++        goto fini;
++    }
+     /* if length mismatch, realloc. Otherwise, use the same backing buffer. */
+     if (new_len != old_len) {
+         new_bs = js_realloc(ctx, bs, new_len);
+diff --git a/deps/quickjs/quickjs.h b/deps/quickjs/quickjs.h
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1055,7 +1055,11 @@
+ JS_EXTERN JSValue JS_NewArrayBufferCopy(JSContext *ctx, const uint8_t *buf, size_t len);
+ JS_EXTERN void JS_DetachArrayBuffer(JSContext *ctx, JSValueConst obj);
+ JS_EXTERN uint8_t *JS_GetArrayBuffer(JSContext *ctx, size_t *psize, JSValueConst obj);
+-JS_EXTERN bool JS_IsArrayBuffer(JSValueConst obj);
++JS_EXTERN /* Create an ordinary fixed-length buffer sharing the source backing. Both
++ * wrappers keep the allocation alive; detaching either wrapper is independent.
++ * Rejects detached, immutable, shared, and resizable source buffers. */
++JSValue JS_NewArrayBufferAlias(JSContext *ctx, JSValueConst obj);
++bool JS_IsArrayBuffer(JSValueConst obj);
+ // returns true or false if obj is an ArrayBuffer, -1 otherwise
+ JS_EXTERN int JS_IsImmutableArrayBuffer(JSValueConst obj);
+ // returns 0 if obj is an ArrayBuffer, -1 otherwise

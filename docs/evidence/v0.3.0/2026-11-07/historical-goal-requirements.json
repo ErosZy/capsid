@@ -1,0 +1,101 @@
+{
+  "objective": "继续完成 v0.3.0 的目标直到你觉得目标可以结束为止",
+  "status": "active",
+  "updatedUTC": "2026-11-07T06:16:09.777386+00:00",
+  "supersededHistoricalBoundary": "The old stop-before-final-combination boundary is historical and superseded by the current full-goal instruction.",
+  "historicalLedger": {
+    "file": "build-v030-dev/evidence/response-retirement-20261107/documents-before/historical-goal-requirements.json",
+    "sha256": "1fd45c4e287b32df185726d08eaecd88796b6967e0869295e9b738d39ac9df1e"
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "status": "complete_for_targeted_requirement",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R1"
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "status": "complete_for_targeted_requirement",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R2"
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R3",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-lifetime-20261107/v8-progress-audit.json",
+        "../fetch-branch-context-20261107/progress-audit.json"
+      ]
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "status": "complete_for_targeted_requirement",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R4"
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R5",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-lifetime-20261107/v8-progress-audit.json",
+        "../fetch-branch-context-20261107/progress-audit.json"
+      ]
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R6",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-lifetime-20261107/v8-progress-audit.json",
+        "../fetch-branch-context-20261107/progress-audit.json"
+      ]
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R7",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-lifetime-20261107/v8-progress-audit.json",
+        "../fetch-branch-context-20261107/progress-audit.json"
+      ]
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R8",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-lifetime-20261107/v8-progress-audit.json",
+        "../fetch-branch-context-20261107/progress-audit.json"
+      ]
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "status": "incomplete",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R9"
+    }
+  ],
+  "currentMainQualification": {
+    "file": "build-v030-dev/evidence/response-retirement-20261107/progress-audit.json",
+    "sha256": "6b6f62eb60bea3510e6fc844b0f0a016c9c6b7f0a25173baccfaa73ced528ab1"
+  },
+  "currentVersion": "0.2.2",
+  "sdkOverlay": 69,
+  "mainJs": "v5",
+  "nextAction": "Extend the private branch ownership fix for foreign release/cancel, pending-read order and iterator error retention, then solve encoded-layer gzip branching and remaining requirements before final combined acceptance.",
+  "commitPushReleasePerformed": false,
+  "fullV030GoalComplete": false
+}

@@ -39,6 +39,8 @@ const driverPath = args.get('--driver');
 const workerPath = args.get('--worker');
 const bundlePath = args.get('--bundle');
 const smokeOnly = args.get('--smoke') === 'true';
+const stackArguments = args.has('--js-stack-bytes')
+    ? ['--js-stack-bytes', args.get('--js-stack-bytes')] : [];
 if (!driverPath || !workerPath || !bundlePath) {
     throw new Error('expected --driver, --worker and --bundle');
 }
@@ -219,6 +221,7 @@ const child = spawn(driverPath, [
     bundlePath,
     '--loopback-port',
     String(upstreamPort),
+    ...stackArguments,
 ], {
     stdio: [ 'pipe', 'pipe', 'inherit' ],
 });

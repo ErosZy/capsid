@@ -168,6 +168,8 @@ constexpr Schema kRoutingSchema{
     Schema::Kind::kObject, std::span<const Member>(kRoutingMembers)};
 
 constexpr std::array kListenerLimitMembers{
+    Member{"channels", &kPositiveIntegerSchema, false},
+    Member{"channelQueueBytes", &kStringSchema, false},
     Member{"connections", &kIntegerSchema, false},
     Member{"headerBytes", &kStringSchema, false},
     Member{"headerTimeout", &kStringSchema, false},
@@ -280,6 +282,9 @@ constexpr Schema kTierSchema{
     Schema::Kind::kObject, std::span<const Member>(kTierMembers)};
 
 constexpr std::array kCapacityMembers{
+    Member{"channelsTotal", &kPositiveIntegerSchema, false},
+    Member{"pendingDialsTotal", &kPositiveIntegerSchema, false},
+    Member{"channelQueueBytesTotal", &kStringSchema, false},
     Member{"workersTotal", &kPositiveIntegerSchema, false},
     // §9.4: non-negative (0 = default); the surge budget is optional and
     // absence means zero-downtime replaces are refused.
@@ -318,6 +323,22 @@ constexpr std::array kRecoveryMembers{
 constexpr Schema kRecoverySchema{
     Schema::Kind::kObject, std::span<const Member>(kRecoveryMembers)};
 
+// GLM T08: host-level channel limits (FetchRPC v4 A2). All members
+// optional positive integers; the typed projection validates the
+// frozen A2 bounds and compiles them into the generation snapshot.
+constexpr std::array kChannelsMembers{
+    Member{"maxChannels", &kPositiveIntegerSchema, false},
+    Member{"maxMessageBytes", &kPositiveIntegerSchema, false},
+    Member{"reassemblyBudgetBytes", &kPositiveIntegerSchema, false},
+    Member{"sendBudgetBytes", &kPositiveIntegerSchema, false},
+    Member{"closeTimeoutMs", &kPositiveIntegerSchema, false},
+    Member{"dialTimeoutMs", &kPositiveIntegerSchema, false},
+    Member{"idleTimeoutMs", &kPositiveIntegerSchema, false},
+    Member{"perChannelQueueBytes", &kPositiveIntegerSchema, false},
+};
+constexpr Schema kChannelsSchema{
+    Schema::Kind::kObject, std::span<const Member>(kChannelsMembers)};
+
 constexpr std::array kHostMembers{
     Member{"apiVersion", &kHostApiVersionSchema, true},
     Member{"applicationsRoot", &kStringSchema, false},
@@ -331,6 +352,7 @@ constexpr std::array kHostMembers{
     Member{"defaults", &kTierSchema, false},
     Member{"maximums", &kTierSchema, false},
     Member{"capacity", &kCapacitySchema, false},
+    Member{"channels", &kChannelsSchema, false},
     Member{"recovery", &kRecoverySchema, false},
 };
 constexpr Schema kHostSchema{
@@ -1559,40 +1581,54 @@ bool parse_duration_ms(const std::string& text, std::uint64_t* out) {
     return true;
 }
 
-namespace {
-
-// "host" / "host:443" / "host:443,8443". A bare host covers any port;
-// an empty or malformed port list is rejected.
-bool parse_fetch_target(const std::string& text, FetchTarget* out) {
-    const std::string::size_type colon = text.find(':');
-    if (colon == std::string::npos) {
-        if (text.empty()) {
-            return false;
+bool parse_fetch_target_text(std::string_view text, FetchTarget* out) {
+    if (!out || text.empty() || text.find('\0') != std::string_view::npos) return false;
+    FetchTarget parsed;
+    std::string_view ports;
+    bool has_ports = false;
+    if (text.front() == '[') {
+        const auto close = text.find(']');
+        if (close == std::string_view::npos) return false;
+        const std::string literal(text.substr(1, close - 1));
+        in6_addr address;
+        char canonical[INET6_ADDRSTRLEN];
+        if (inet_pton(AF_INET6, literal.c_str(), &address) != 1 ||
+            !inet_ntop(AF_INET6, &address, canonical, sizeof(canonical))) return false;
+        parsed.host = canonical;
+        if (close + 1 < text.size()) {
+            if (text[close + 1] != ':') return false;
+            ports = text.substr(close + 2); has_ports = true;
         }
-        out->host = text;
-        return true;
-    }
-    out->host = text.substr(0, colon);
-    if (out->host.empty()) {
-        return false;
-    }
-    std::istringstream ports(text.substr(colon + 1));
-    std::string part;
-    while (std::getline(ports, part, ',')) {
-        if (part.empty()) {
-            return false;
+    } else {
+        const auto colon = text.find(':');
+        parsed.host = text.substr(0, colon);
+        if (parsed.host.empty() || text.find(']') != std::string_view::npos) return false;
+        if (colon != std::string_view::npos) {
+            ports = text.substr(colon + 1); has_ports = true;
         }
-        char* end = nullptr;
-        const long value = std::strtol(part.c_str(), &end, 10);
-        if (end == nullptr || *end != '\0' || value <= 0 || value > 65535) {
-            return false;
-        }
-        out->ports.push_back(static_cast<std::uint16_t>(value));
     }
-    return !out->ports.empty();
+    if (has_ports) {
+        std::size_t begin = 0;
+        for (;;) {
+            const auto comma = ports.find(',', begin);
+            const auto part = ports.substr(begin, comma == std::string_view::npos
+                ? std::string_view::npos : comma - begin);
+            if (part.empty()) return false;
+            std::uint32_t value = 0;
+            for (const char digit : part) {
+                if (digit < '0' || digit > '9') return false;
+                value = value * 10 + static_cast<unsigned>(digit - '0');
+                if (value > 65535) return false;
+            }
+            if (value == 0) return false;
+            parsed.ports.push_back(static_cast<std::uint16_t>(value));
+            if (comma == std::string_view::npos) break;
+            begin = comma + 1;
+        }
+    }
+    *out = std::move(parsed);
+    return true;
 }
-
-}  // namespace
 
 // Parse capsid.json (the authoritative capsid/app-v1 shape) into the
 // AppRequest. The authoritative schema boundary runs first in the deploy
@@ -1700,7 +1736,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
             }
             for (const std::string& target : targets) {
                 FetchTarget parsed;
-                if (!parse_fetch_target(target, &parsed)) {
+                if (!parse_fetch_target_text(target, &parsed)) {
                     *error = "invalid capsid.json permissions.fetch.allow entry";
                     json_decref(root);
                     return false;
@@ -1877,6 +1913,18 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
     // window to the worker (max_inflight_requests).
     json_t* request = json_object_get(root, "request");
     if (request != nullptr && json_is_object(request)) {
+        json_t* timeout = json_object_get(request, "timeout");
+        if (json_is_string(timeout)) {
+            if (!parse_duration_ms(json_string_value(timeout),
+                                   &app->request_timeout_ms) ||
+                app->request_timeout_ms == 0 ||
+                app->request_timeout_ms > static_cast<std::uint64_t>(
+                    std::numeric_limits<std::int64_t>::max())) {
+                *error = "invalid capsid.json request.timeout";
+                json_decref(root);
+                return false;
+            }
+        }
         json_t* max_inflight = json_object_get(request, "maxInflightPerWorker");
         if (json_is_integer(max_inflight)) {
             const json_int_t value = json_integer_value(max_inflight);

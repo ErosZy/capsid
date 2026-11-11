@@ -9,6 +9,8 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const driverPath = args.get('--driver');
 const workerPath = args.get('--worker');
 const bundlePath = args.get('--bundle');
+const stackArguments = args.has('--js-stack-bytes')
+    ? ['--js-stack-bytes', args.get('--js-stack-bytes')] : [];
 if (!driverPath || !workerPath || !bundlePath) {
     throw new Error('expected --driver, --worker and --bundle');
 }
@@ -48,6 +50,7 @@ const child = spawn(driverPath, [
     '500',
     '--collect-events',
     '1',
+    ...stackArguments,
 ], {
     stdio: [ 'pipe', 'pipe', 'inherit' ],
 });

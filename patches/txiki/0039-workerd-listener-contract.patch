@@ -1,0 +1,317 @@
+diff --git a/src/js/polyfills/event-target.js b/src/js/polyfills/event-target.js
+--- a/src/js/polyfills/event-target.js
++++ b/src/js/polyfills/event-target.js
+@@ -347,6 +347,42 @@
+  * @private
+  */
+ const listenersMap = new WeakMap();
++const abortSignals = new WeakMap();
++const callbackObservers = new WeakMap();
++
++function registerAbortSignal(signal) {
++    abortSignals.set(signal, { aborted: false, algorithms: new Set() });
++}
++
++function runAbortAlgorithms(signal) {
++    const state = abortSignals.get(signal);
++    state.aborted = true;
++    const algorithms = [...state.algorithms];
++    state.algorithms.clear();
++    for (const algorithm of algorithms) algorithm();
++}
++
++function findListener(listeners, type, callback, listenerType) {
++    for (let node = listeners.get(type); node; node = node.next) {
++        if (node.listener === callback && node.listenerType === listenerType) return node;
++    }
++    return null;
++}
++
++function unlinkListener(listeners, type, removed) {
++    let previous = null;
++    for (let node = listeners.get(type); node; node = node.next) {
++        if (node === removed) {
++            if (previous) previous.next = node.next;
++            else if (node.next) listeners.set(type, node.next);
++            else listeners.delete(type);
++            node.abortCleanup?.();
++            node.abortCleanup = null;
++            return;
++        }
++        previous = node;
++    }
++}
+ 
+ // Listener types
+ const CAPTURE = 1;
+@@ -487,56 +523,39 @@
+      * @returns {void}
+      */
+     addEventListener(eventName, listener, options) {
+-        if (!listener) {
+-            return;
+-        }
+-
+-        if (typeof listener !== 'function' && !isObject(listener)) {
+-            throw new TypeError('\'listener\' should be a function or an object.');
+-        }
+-
++        const type = toEventString(eventName);
++        if (listener === null || listener === undefined) return;
++        const callback = typeof listener === 'function' ? listener : listener.handleEvent;
++        if (typeof callback !== 'function') throw new TypeError('Invalid event listener');
+         const self = this ?? globalThis;
+         const listeners = getListeners(self);
+-        const optionsIsObj = isObject(options);
+-        const capture = optionsIsObj
+-            ? Boolean(options.capture)
+-            : Boolean(options);
+-        const listenerType = capture ? CAPTURE : BUBBLE;
+-        const newNode = {
+-            listener,
+-            listenerType,
+-            passive: optionsIsObj && Boolean(options.passive),
+-            once: optionsIsObj && Boolean(options.once),
+-            next: null,
+-        };
+-
+-        // Set it as the first node if the first node is null.
+-        let node = listeners.get(eventName);
+-
+-        if (node === undefined) {
+-            listeners.set(eventName, newNode);
+-
+-            return;
+-        }
+-
+-        // Traverse to the tail while checking duplication..
+-        let prev = null;
+-
+-        while (node) {
+-            if (
+-                node.listener === listener &&
+-                node.listenerType === listenerType
+-            ) {
+-                // Should ignore duplication.
+-                return;
+-            }
+-
+-            prev = node;
+-            node = node.next;
+-        }
+-
+-        // Add it.
+-        prev.next = newNode;
++        const dictionary = options !== null && (typeof options === 'object' || typeof options === 'function');
++        const capture = dictionary ? !!options.capture : !!options;
++        const passive = dictionary ? !!options.passive : false;
++        const once = dictionary ? !!options.once : false;
++        const signal = dictionary ? options.signal : undefined;
++        const signalState = signal === undefined ? null : abortSignals.get(signal);
++        if (signal !== undefined && !signalState) throw new TypeError('Invalid AbortSignal');
++        if (capture || passive) throw new TypeError('capture and passive must be false');
++        if (signalState?.aborted) return;
++        if (findListener(listeners, type, listener, BUBBLE)) return;
++        const node = { listener, callback, listenerType: BUBBLE, once, passive: false,
++            receiver: typeof listener === 'function' ? null : listener, abortCleanup: null, next: null };
++        let tail = listeners.get(type);
++        if (!tail) listeners.set(type, node);
++        else {
++            while (tail.next) tail = tail.next;
++            tail.next = node;
++        }
++        if (signalState) {
++            const weakTarget = new WeakRef(self);
++            const abort = () => {
++                const target = weakTarget.deref();
++                if (target) unlinkListener(getListeners(target), type, node);
++            };
++            signalState.algorithms.add(abort);
++            node.abortCleanup = () => signalState.algorithms.delete(abort);
++        }
+     }
+ 
+     /**
+@@ -547,39 +566,14 @@
+      * @returns {void}
+      */
+     removeEventListener(eventName, listener, options) {
+-        if (!listener) {
+-            return;
+-        }
+-
+-        const self = this ?? globalThis;
+-        const listeners = getListeners(self);
+-        const capture = isObject(options)
+-            ? Boolean(options.capture)
+-            : Boolean(options);
+-        const listenerType = capture ? CAPTURE : BUBBLE;
+-
+-        let prev = null;
+-        let node = listeners.get(eventName);
+-
+-        while (node) {
+-            if (
+-                node.listener === listener &&
+-                node.listenerType === listenerType
+-            ) {
+-                if (prev !== null) {
+-                    prev.next = node.next;
+-                } else if (node.next !== null) {
+-                    listeners.set(eventName, node.next);
+-                } else {
+-                    listeners.delete(eventName);
+-                }
+-
+-                return;
+-            }
+-
+-            prev = node;
+-            node = node.next;
+-        }
++        const type = toEventString(eventName);
++        const dictionary = options !== null && (typeof options === 'object' || typeof options === 'function');
++        const capture = dictionary ? !!options.capture : !!options;
++        if (capture) throw new TypeError('capture must be false');
++        const listeners = getListeners(this ?? globalThis);
++        if (listener === null || listener === undefined) return;
++        const node = findListener(listeners, type, listener, BUBBLE);
++        if (node) unlinkListener(listeners, type, node);
+     }
+ 
+     /**
+@@ -603,69 +597,34 @@
+             throw new DOMException('The event is already being dispatched', 'InvalidStateError');
+         }
+         const listeners = getListeners(self);
+-        data.canceled = data.stopped = data.immediateStopped = false;
++        // The default workerd profile clears cancellation, but retains stop flags.
++        data.canceled = false;
+         setEventPhase(event, 2);
+-        // The pinned workerd default retains target/currentTarget after dispatch.
+         setTarget(event, self);
+         setCurrentTarget(event, self);
+-
+-        // If listeners aren't registered, terminate.
+-        const eventName = data.eventType;
+-        let node = listeners.get(eventName);
+-
+-        if (!node) {
++        const type = data.eventType;
++        const callbacks = [];
++        for (let node = listeners.get(type); node; node = node.next) callbacks.push(node);
++        try {
++            for (const snapshot of callbacks) {
++                if (isStopped(event)) break;
++                // Re-added identities remain eligible, but newly added identities
++                // wait for the next dispatch. Invoke the original callback snapshot.
++                const live = findListener(listeners, type, snapshot.listener, snapshot.listenerType);
++                if (!live) continue;
++                if (snapshot.once) unlinkListener(listeners, type, live);
++                let result;
++                if (snapshot.listenerType === ATTRIBUTE) {
++                    if (typeof snapshot.listener !== 'function') continue;
++                    result = snapshot.listener.call(self, event);
++                } else result = snapshot.callback.call(snapshot.receiver ?? self, event);
++                if (result === true) setCancelFlag(data);
++                callbackObservers.get(event)?.(result);
++            }
++        } finally {
++            setPassiveListener(event, null);
+             setEventPhase(event, 0);
+-            return true;
+-        }
+-
+-        // This doesn't process capturing phase and bubbling phase.
+-        // This isn't participating in a tree.
+-        let prev = null;
+-
+-        while (node) {
+-            // Remove this listener if it's once
+-            if (node.once) {
+-                if (prev !== null) {
+-                    prev.next = node.next;
+-                } else if (node.next !== null) {
+-                    listeners.set(eventName, node.next);
+-                } else {
+-                    listeners.delete(eventName);
+-                }
+-            } else {
+-                prev = node;
+-            }
+-
+-            // Call this listener
+-            setPassiveListener(event, node.passive ? node.listener : null);
+-
+-            if (typeof node.listener === 'function') {
+-                try {
+-                    node.listener.call(self, event);
+-                } catch (e) {
+-                    reportError(e);
+-                }
+-            } else if (node.listenerType !== ATTRIBUTE && typeof node.listener.handleEvent === 'function') {
+-                try {
+-                    node.listener.handleEvent(event);
+-                } catch (e) {
+-                    reportError(e);
+-                }
+-            }
+-
+-            // Dispatch is synchronous. The outer runtime checkpoint runs jobs
+-            // after every listener has returned and eventPhase has been reset.
+-
+-            // Break if `event.stopImmediatePropagation` was called.
+-            if (isStopped(event)) {
+-                break;
+-            }
+-
+-            node = node.next;
+-        }
+-
+-        setPassiveListener(event, null);
+-        setEventPhase(event, 0);
++        }
+ 
+         return !data.canceled;
+     }
+@@ -674,10 +633,12 @@
+ 
+ // Runtime delivery uses the captured implementation, not a user override.
+ const nativeDispatch = EventTarget.prototype.dispatchEvent;
+-function dispatchTrustedEvent(target, event) {
++function dispatchTrustedEvent(target, event, observeResult) {
+     pd(event).isTrusted = true;
+-    return nativeDispatch.call(target, event);
++    if (observeResult) callbackObservers.set(event, observeResult);
++    try { return nativeDispatch.call(target, event); }
++    finally { callbackObservers.delete(event); }
+ }
+ Object.defineProperty(Event.prototype, 'isTrusted', { enumerable: true });
+ 
+-export { defineEventAttribute, EventTarget, Event, CustomEvent, toEventString, dispatchTrustedEvent };
++export { defineEventAttribute, EventTarget, Event, CustomEvent, toEventString, dispatchTrustedEvent, registerAbortSignal, runAbortAlgorithms };
+diff --git a/src/js/polyfills/abort-controller.js b/src/js/polyfills/abort-controller.js
+--- a/src/js/polyfills/abort-controller.js
++++ b/src/js/polyfills/abort-controller.js
+@@ -1,4 +1,4 @@
+-import { defineEventAttribute, EventTarget, Event } from './event-target.js';
++import { defineEventAttribute, EventTarget, Event, registerAbortSignal, runAbortAlgorithms } from './event-target.js';
+ 
+ function defaultAbortReason() {
+     return new DOMException('This operation was aborted', 'AbortError');
+@@ -9,6 +9,7 @@
+ let signalAbort;
+ 
+ class AbortSignal extends EventTarget {
++    constructor() { super(); registerAbortSignal(this); }
+     #aborted = false;
+     #reason;
+ 
+@@ -35,6 +36,7 @@
+ 
+         this.#aborted = true;
+         this.#reason = reason !== undefined ? reason : defaultAbortReason();
++        runAbortAlgorithms(this);
+ 
+         if (dispatch) {
+             this.dispatchEvent(new Event('abort'));

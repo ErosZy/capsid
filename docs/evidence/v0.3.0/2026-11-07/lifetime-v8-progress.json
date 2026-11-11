@@ -1,0 +1,29 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-07T06:16:09.777386+00:00",
+  "scope": "Private v8 context candidate repeated GC resource-policy regression; no public reference GC equivalence.",
+  "cases": 72,
+  "rejectedControls": 2934,
+  "mainRuntimeSHA256": "e84a2e58510c027f2f8f6ddd4255d5253aa70729fc45663646d08d3f77b52ca6",
+  "reviews": [
+    {
+      "file": "build-v030-dev/evidence/fetch-branch-lifetime-20261107/private-v8-context-native-gc-review.json",
+      "sha256": "071551b4991ee2dbf0262e0176f440c64b84c001d77840c09caee8ec4faa7940"
+    },
+    {
+      "file": "build-v030-dev/evidence/fetch-branch-lifetime-20261107/private-v8-context-native-asan-gc-review.json",
+      "sha256": "361b985cf1d2da56e12c54dde3c7f59cd2587f19bdc5097acaf76146e4accb88"
+    },
+    {
+      "file": "build-v030-dev/evidence/fetch-branch-lifetime-20261107/private-v8-context-linux-gc-review.json",
+      "sha256": "2b5edabad898dde863413c4a00d7f233977057e47daaef667d36af3f0dc3db50"
+    }
+  ],
+  "priorV7Evidence": {
+    "file": "build-v030-dev/evidence/fetch-branch-lifetime-20261107/progress-audit.json",
+    "sha256": "3400513a86f93861b519052e3d3f3d50d56624b3a9b638f01f024a9ea63dd5c9"
+  },
+  "privateJsIntegrated": false,
+  "nativeFetchBranchGcRequirementComplete": false,
+  "fullV030GoalComplete": false
+}

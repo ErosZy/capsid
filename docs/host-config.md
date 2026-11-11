@@ -19,11 +19,20 @@ anything is spawned or bound.
 | What it is | One worker serving one app version from a local bundle; the process *is* the service | An arbitrary-size worker pool (each worker owns one shard) sharing one listener over the same bundle — local scale-out | A coordinator machine: many apps and versions, blue-green deployment, Admin API, crash budgets, recovery |
 | Config inputs | CLI + optional local `--capsid-json` (the document is the permission authority; there is no host.json) | same as `single-worker` | `--host-config` host.json + per-version capsid.json under `applicationsRoot` (Host ∩ App intersection) |
 | Worker count | 1 | `--workers` — any positive integer; each shard costs one worker process plus an Asio loop | per-version capsid.json `pool` (`minReady` / `maxWorkers`) |
-| Listener | one `--listen`, listener-level CORS via `--cors-*` | one `--listen` (each shard answers CORS itself), sharded by `SO_REUSEPORT` (Linux/macOS) or a pool-level shared acceptor (Windows) | host.json `listeners` (with CORS per listener) |
+| Listener | one `--listen`, listener-level CORS via `--cors-*` | one pool-owned `--listen` on all platforms; healthy shards answer CORS, the pool stamps CORS on zero-READY 503 responses | host.json `listeners` (with CORS per listener) |
 | Lifecycle | process lifetime; SIGTERM-bounded shutdown | pool keeps the pool-level READY contract; SIGTERM-bounded shutdown | coordinator + supervised workers; `active.json` generations, retirement, quarantine, crash budgets |
 | Deployment | none — direct local run | none — direct local run | staged blue-green: Registry scan → config/artifact snapshot → warm-up/health → atomic switch |
 | Production path | no (development/benchmark) | no (benchmark) | yes, Linux only: the managed coordinator requires the strict sandbox |
 | Platform | Linux / macOS / Windows | Linux / macOS / Windows | Linux only — macOS and Windows exit at the CLI with a message |
+
+The local `static-pool` keeps its listener after all Workers exit. Complete HTTP
+request heads receive `503`, body `worker unavailable`, and `Connection: close`;
+HEAD sends the same length without a body, and WebSocket handshakes receive the
+HTTP error. Listener CORS still runs before this response. The pool retains at
+most 128 such exchanges, closes excess connections, and bounds each request
+head to 8 KiB. Head-read and response-write deadlines are each at most 5 seconds;
+a smaller nonzero request/write timeout takes precedence. Stop/drain closes the
+listener and any incomplete exchanges. Workers are not restarted in this mode.
 
 ### `single-worker` / `static-pool` CLI
 
@@ -44,6 +53,7 @@ Required:
 | `--public-authority host[:port]` | the external authority |
 | `--strict-sandbox on` \| `off` | worker sandbox profile |
 | `--ready-fd <fd>` | readiness descriptor the Host writes the READY record to |
+| `--stop-fd <fd>` | optional parent stop pipe; a byte or EOF requests bounded normal shutdown; fd must be above 2 and distinct from READY; validated before bundle load or Worker spawn |
 | `--workers <positive-integer>` | `static-pool` only, required; 1..4096, each shard is one worker process |
 
 Optional (each keeps the data-plane default when omitted):
@@ -62,6 +72,11 @@ Optional (each keeps the data-plane default when omitted):
 | `--stream-idle-timeout <ms>` | idle stream deadline |
 | `--write-timeout <ms>` | slow-client write deadline (0 = unlimited) |
 | `--initial-stream-window <bytes>` | streaming response window (default 64 KiB) |
+| `--channels-total <n>` | service-wide inbound/outbound WebSocket reservations; positive, default 1024 |
+| `--pending-dials-total <n>` | service-wide outbound handshakes; positive, default 128 |
+| `--channel-queue-bytes-total <size>` | service-wide WebSocket network write buffers, including pending writes; positive, default `16MiB` |
+| `--listener-channels <n>` | inbound WebSocket reservations for the shared listener; positive, default 128 |
+| `--listener-channel-queue-bytes <size>` | inbound listener WebSocket network write buffers; positive, default `16MiB` |
 | `--cors-origins <csv>` | listener-level CORS: allowed origins (`*` or exact `http(s)://host[:port]`, comma-separated). Required with `--cors-methods`; together they engage the listener CORS engine |
 | `--cors-methods <csv>` | allowed preflight methods (comma-separated, uppercased at parse). Required with `--cors-origins` |
 | `--cors-headers <csv>` | allowed preflight headers (comma-separated, lowercased at parse); optional, empty = none allowed |
@@ -210,6 +225,9 @@ All other fields are optional.
 
   "capacity": {
     "workersTotal": 16,
+    "channelsTotal": 1024,
+    "pendingDialsTotal": 128,
+    "channelQueueBytesTotal": "16MiB",
     "activationSurgeWorkers": 0,
     "startupsConcurrent": 2,
     "queuedRequestsTotal": 2048,
@@ -250,6 +268,13 @@ All other fields are optional.
 - `trustedBytecodeKeys`: free mapping from release id to Ed25519 public key file path;
 - `defaults`/`maximums` `worker`/`request` subfields use the same syntax as capsid.json
   (see [How to write capsid.json](capsid-json.md)); `fileDescriptors` must be ≥1;
+- `defaults.request.timeout` supplies the managed Worker duration when the App
+  omits `request.timeout`. Both that default and `maximums.request.timeout`
+  require positive `ms`/`s`/`m` durations within the Runtime's supported range.
+  A default above the Host maximum rejects the Host configuration; an App
+  override above the maximum rejects deployment. When only a maximum is set,
+  it also bounds the Runtime's 30s fallback. The effective duration participates
+  in generation identity and is restored on recovery;
 - `capacity.workersTotal` is the only whole-machine cap on worker count
   (`activationSurgeWorkers` ≥0, default 0 means zero-downtime replacement is refused);
   `workerMemoryCommitTotal` is the total memory commitment across all workers;
@@ -258,6 +283,44 @@ All other fields are optional.
   (percentage) or a bare integer (basis points).
 - Sizes uniformly use the `KiB`/`MiB`/`GiB`/`KB`/`MB`/`GB` suffixes; durations use
   `ms`/`s`/`m`.
+
+### WebSocket aggregate limits and metrics
+
+`capacity.channelsTotal`, `pendingDialsTotal`, and `channelQueueBytesTotal` have
+the same defaults and positive-value rules as the local CLI flags above.
+Each listener can also set `limits.channels` (default 128) and
+`limits.channelQueueBytes` (default `16MiB`). Invalid, zero, or overflowing
+values fail startup. These are Host service/listener limits; the existing
+`channels` protocol limits describe each Worker's immutable generation snapshot.
+
+One service budget is shared by all static-pool shards and by active, draining,
+and replacement generations in managed mode. Each inbound upgrade reserves both
+its listener and service slot before worker admission. An exhausted budget returns
+HTTP 429. A successful 101 releases HTTP inflight while retaining the channel slot
+until close, failure, or shutdown. Outbound constructors also use the service budget,
+with an additional pending-dial slot until the handshake result. Refusal produces
+the constructor's error/1006 close sequence before a TCP connection is opened.
+Standalone outbound connections have no originating listener in the wire contract;
+they use the service budget without being assigned a listener scope.
+
+Queue bytes cover owned WebSocket network write buffers and their metadata,
+including an asynchronous write still in progress after a session stops. They return
+when the final buffer owner releases them. IPC queues, receive/reassembly storage,
+Worker allocations, and process RSS retain their separate limits.
+
+Managed Admin `/metrics` exports live `capsid_channel_active`,
+`capsid_channel_http_inflight`, `capsid_channel_reservations`,
+`capsid_channel_pending_dials`, and `capsid_channel_queue_bytes` gauges. The
+`capsid_channel_budget_limit`, `capsid_channel_budget_high_water`, and
+`capsid_channel_budget_rejections_total` families add `resource="channels|dials|queue_bytes"`.
+All use `scope="service|listener"` and `listener=""|<configured-name>` labels;
+URLs, dial IDs, and channel IDs are excluded. Individual atomics are sampled live,
+so a scrape during a transition is not a transaction across every gauge.
+Local modes can enable `CAPSID_HOST_IPC_METRICS=1` for `capsid-host: channel-metrics`
+JSON diagnostics on stderr when the event pump runs. HTTP completion/cancellation
+and inbound connection teardown also emit diagnostics so the final request is
+observable after its inflight slot returns. Embedders can attach
+the shared budget to `MetricsRegistry` for Prometheus rendering.
 
 ## capsid.json (each app version)
 

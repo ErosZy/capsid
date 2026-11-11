@@ -20,9 +20,8 @@ namespace capsid {
  * increment is never torn or lost.
  */
 struct ClientIpcMetrics {
-    // A snapshot target can outlive the worker handle it was meant to
-    // sample.  Keep the default state deterministic so a skipped snapshot
-    // produces a zero block instead of reading indeterminate atomics.
+    // This bank can also retain the final deltas after its worker handle
+    // is released. An empty bank has deterministic zero values.
     std::atomic<uint64_t> queued_frames{0};
     std::atomic<uint64_t> queued_wire_bytes{0};
     std::atomic<uint64_t> queue_would_block{0};
@@ -45,6 +44,10 @@ void client_ipc_metrics_enable(capsid_worker *worker, bool enabled);
 void client_ipc_metrics_reset(capsid_worker *worker);
 bool client_ipc_metrics_snapshot(capsid_worker *worker,
                                  ClientIpcMetrics *metrics);
+// Transfers each interval counter exactly once, without requiring a live
+// worker handle. Source and destination must be distinct banks.
+bool client_ipc_metrics_drain(ClientIpcMetrics *source,
+                              ClientIpcMetrics *metrics);
 
 }  // namespace capsid
 

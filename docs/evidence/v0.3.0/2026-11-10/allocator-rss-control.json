@@ -1,0 +1,133 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 57718,
+  "sourceSHA256": "e2c8c89b3277b5e27f9c770f15c0add5d2c2dda4056f5cde58430dc41fa41ebb",
+  "compiler": "/usr/lib/llvm-18/bin/clang",
+  "compilerSHA256": "8ef402d453d1ba4902e4ee0f0f847f6cfa01400c95aa43c24e97818b9c0e3f45",
+  "qualificationEnvironment": {
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:strict_string_checks=1",
+    "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+    "MALLOC_MMAP_THRESHOLD_": "65536",
+    "MALLOC_TRIM_THRESHOLD_": "65536"
+  },
+  "steps": [
+    {
+      "label": "compile-production",
+      "command": [
+        "/usr/lib/llvm-18/bin/clang",
+        "-std=c++20",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "/mnt/e/capsid/build-v030-dev/evidence/fetch-encoded-layer-20261107/sdk78-asan-rss-allocator-control-r1.cc",
+        "-o",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-allocator-control-r1/production"
+      ],
+      "exitCode": 0,
+      "seconds": 0.3011560219999865,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-sanitizer",
+      "command": [
+        "/usr/lib/llvm-18/bin/clang",
+        "-std=c++20",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fsanitize=address,undefined",
+        "-fno-sanitize-recover=all",
+        "/mnt/e/capsid/build-v030-dev/evidence/fetch-encoded-layer-20261107/sdk78-asan-rss-allocator-control-r1.cc",
+        "-o",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-allocator-control-r1/sanitizer"
+      ],
+      "exitCode": 0,
+      "seconds": 1.4360351099999207,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "production-healthy",
+      "command": [
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-allocator-control-r1/production"
+      ],
+      "exitCode": 0,
+      "seconds": 0.051733175999970626,
+      "stdoutSHA256": "707420a8ec09a17b096c4a17fbeb2c1b19b58aeab1a462025a771a50e3a6fa74",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "sanitizer-healthy",
+      "command": [
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-allocator-control-r1/sanitizer"
+      ],
+      "exitCode": 0,
+      "seconds": 0.09463787499998944,
+      "stdoutSHA256": "14a6a789027b4a000b5ad6d02669aabbb2751d8420e9cc95c953b71ce5d70035",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "sanitizer-real-leak-negative",
+      "command": [
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-asan-rss-allocator-control-r1/sanitizer",
+        "--retain-one"
+      ],
+      "exitCode": -6,
+      "seconds": 0.4591646879998734,
+      "stdoutSHA256": "2856e1c6d35f983cde2a5969c165f490518bcdd172192a0eb8c36531424d469d",
+      "stderrSHA256": "2c128b2dbca25fbaba3b270af167059ec6e096c8501fbe0ad3231fa06db12091"
+    }
+  ],
+  "quarantineOptionsUnmodified": true,
+  "standaloneAllocatorControlOnly": true,
+  "productRssFailuresNotClassifiedWaivedOrChanged": true,
+  "fullV030GoalComplete": false,
+  "capturedUTC": "2026-11-10T12:24:33.154386+00:00",
+  "observations": {
+    "production-healthy": {
+      "blockBytes": 12582912,
+      "allocatedAndFreedBlocks": 16,
+      "retainedBlocks": 0,
+      "rssBeforeKiB": 1352,
+      "rssAfterKiB": 1604,
+      "rssGrowthKiB": 252,
+      "allocatedBeforeBytes": 0,
+      "allocatedAfterBytes": 0,
+      "heapBeforeBytes": 0,
+      "heapAfterBytes": 0
+    },
+    "sanitizer-healthy": {
+      "blockBytes": 12582912,
+      "allocatedAndFreedBlocks": 16,
+      "retainedBlocks": 0,
+      "rssBeforeKiB": 5348,
+      "rssAfterKiB": 227132,
+      "rssGrowthKiB": 221784,
+      "allocatedBeforeBytes": 148,
+      "allocatedAfterBytes": 148,
+      "heapBeforeBytes": 2629632,
+      "heapAfterBytes": 204087296
+    },
+    "sanitizer-real-leak-negative": {
+      "blockBytes": 12582912,
+      "allocatedAndFreedBlocks": 16,
+      "retainedBlocks": 1,
+      "rssBeforeKiB": 5476,
+      "rssAfterKiB": 239536,
+      "rssGrowthKiB": 234060,
+      "allocatedBeforeBytes": 148,
+      "allocatedAfterBytes": 12583060,
+      "heapBeforeBytes": 2629632,
+      "heapAfterBytes": 216678400
+    }
+  },
+  "healthyFreedAllocationExceedsOriginalSixMiBRssThresholdUnderUnmodifiedAsan": true,
+  "directAllocationCounterReturnsNearBaseline": true,
+  "actualTwelveMiBLeakRejectedByLsan": true,
+  "binarySHA256": {
+    "production": "0a5df6bdc03bec1b5eb32fb40f5ab8bbd3fffa40dd1b84f18ce9e93419d135a3",
+    "sanitizer": "79b363900ff0c5544071f318ab49dc0b6b4f67400c6b83b2132e512378ee1b7e"
+  }
+}

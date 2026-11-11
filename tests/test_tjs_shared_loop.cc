@@ -100,9 +100,6 @@ int noop_bootstrap(TJSRuntime *runtime, JSContext *ctx, void *opaque) {
 }
 
 void test_module_default_export() {
-    char arg0[] = "test-tjs-shared-loop";
-    char *argv[] = { arg0 };
-    TJS_Initialize(1, argv);
     TJSRunOptions options;
     TJS_DefaultOptions(&options);
     options.skip_run_main = true;
@@ -158,9 +155,6 @@ void test_module_default_export() {
 }
 
 void test_shared_loop_two_runtimes() {
-    char arg0[] = "test-tjs-shared-loop";
-    char *argv[] = { arg0 };
-    TJS_Initialize(1, argv);
 
     TJSRunOptions user_options;
     TJS_DefaultOptions(&user_options);
@@ -271,6 +265,10 @@ void test_shared_loop_two_runtimes() {
 }  // namespace
 
 int main() {
+    // libuv argv/process-title setup belongs to the process, not each runtime.
+    static char arg0[] = "test-tjs-shared-loop";
+    static char *argv[] = {arg0, nullptr};
+    TJS_Initialize(1, argv);
     test_module_default_export();
     test_shared_loop_two_runtimes();
     return 0;

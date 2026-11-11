@@ -1,0 +1,9 @@
+{
+  "schema": "capsid-native-fetch-intrinsic-archive-v1",
+  "compressedSHA256": "40ad7e02e867f43d98fa22e4e30962b34ac642af25f84fa373e24bb5b6c2ecf3",
+  "decodedSHA256": "91a34e3cf11abaddfe40c8e2460e029eb8d8c1ed4c43f6550c0830669ecca58a",
+  "platforms": [
+    "win32",
+    "linux"
+  ]
+}

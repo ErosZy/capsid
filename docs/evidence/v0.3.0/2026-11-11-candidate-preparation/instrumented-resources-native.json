@@ -1,0 +1,290 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 6721,
+  "proposalRecordSHA256": "cd0160e0e517c0962fa9813c2f1a9e2ee70dc69911021a330e9af3ee170a1026",
+  "steps": [
+    {
+      "label": "configure-production",
+      "exitCode": 0,
+      "seconds": 0.02185279000002538,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "f90e97e5dc4be395be4f87a8db33ea0d9564ce2236bda7cdb4b11a1f987cc8e2",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "production-original-rss",
+      "exitCode": 0,
+      "seconds": 2.626472643999989,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "871658ca18f82fb5ce6d1a4f4d30a5030e96792f94baf7d48073b1d415573102",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "configure-asan",
+      "exitCode": 0,
+      "seconds": 0.021193152000023474,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "bb754981e0c4418bfa0c0740ea2e0815e07e3dfa24137b9580b6a1709eb87751",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "asan-original-rss",
+      "exitCode": 8,
+      "seconds": 8.090437426999983,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "0aa71ada6b58bfe1a4e15519bdc82aace0e2f66efda72b725c4d030977b74b87",
+      "stderrSHA256": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+    },
+    {
+      "label": "asan-complete-resources",
+      "exitCode": 0,
+      "seconds": 9.241151656,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "63c17f393dbf8fee7561f9e03b8dd94a2bd5a30ca7f1e816387cc9967d007b3e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "asan-actual-acceptor",
+      "exitCode": 0,
+      "seconds": 0.42025587199998427,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "b543790737027cc013439aa52f16991e79428286ec5cdcc19a9d5f91d1e340e9",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "configure-tsan",
+      "exitCode": 0,
+      "seconds": 0.021692243000018152,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "0008c3701f7355ca93d725cb1841213aeb7f057544a21ddf6387bfb530ff5745",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "tsan-original-rss",
+      "exitCode": 8,
+      "seconds": 10.450421038000002,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "fb4734bf88da6925253926de6fe0472f11ce78595ca3dc9e051bdc06cff910a5",
+      "stderrSHA256": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+    },
+    {
+      "label": "tsan-complete-resources",
+      "exitCode": 0,
+      "seconds": 10.896073089000026,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "97d44de564a0430699db4d10985feb004fd46d09e7d965ad63b7c7b58825d531",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "tsan-actual-acceptor",
+      "exitCode": 0,
+      "seconds": 0.3232559890000175,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "28b5212b43773a05e2e6f33e5ec2d692a9c924c3d81da075af244fa164e390fe",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "negative-nonfatal-races",
+      "exitCode": 1,
+      "seconds": 0.07035566700000118,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "bfb75afcc1fdd2140f3a5bf53e9b15b54475d384e04795de39480719509f7508"
+    },
+    {
+      "label": "negative-erased-race-exit",
+      "exitCode": 1,
+      "seconds": 0.07033055499999818,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "ab95e99dc4ed2970f570ba01e03f74766e0cf4594e8a68d9f6e2075fda74e6d7"
+    },
+    {
+      "label": "negative-suppressed-races",
+      "exitCode": 1,
+      "seconds": 0.07055166100002452,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "ff972c20feddb7160fa46980491ca3de57391978acc0d4582b6f0364fa7a7c55"
+    },
+    {
+      "label": "negative-asan-instead-of-tsan",
+      "exitCode": 1,
+      "seconds": 0.2700361809999663,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "92f070b0292fee639e621842f2dc1da0a3a1d30d52667205e9c31143a2c57709"
+    },
+    {
+      "label": "negative-production-instead-of-tsan",
+      "exitCode": 1,
+      "seconds": 0.1219626139999832,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "92f070b0292fee639e621842f2dc1da0a3a1d30d52667205e9c31143a2c57709"
+    },
+    {
+      "label": "negative-tsan-cannot-claim-asan-lsan",
+      "exitCode": 1,
+      "seconds": 0.22028578099997276,
+      "timeoutSeconds": 15,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "6ebd017f8992f492383095f45fbea1209cc6e334fe2f3e353b8fc3fe0a162537"
+    }
+  ],
+  "guardedInputs": {
+    "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs": "6b9341c7b224ec2f5020959c97a5d7ccd6ced326cec551942c661b8632de4eb7",
+    "/mnt/e/capsid/cmake/build_tests.cmake": "16476fff77170d59e8c00c147d7adfef2cff7d591a3a9d7f43c2da8ea5293364",
+    "/mnt/e/capsid/tools/asan-memory-acceptance.py": "15a5b59bf85acc0421d062af779897eed50907f15b169249cd719881d9063c9e",
+    "/mnt/e/capsid/tests/test_asan_memory_acceptance.py": "bb4864718d6c540a2310244b1669a57b50bc758c271e063be8491e0817e359b4",
+    "/root/capsid-verification-20261109/build-production/capsid-host": "0a88b166c6604e7d751a6c4424e1e300bb2e9601a8f271574f84deef4d451429",
+    "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "/root/capsid-verification-20261109/build-production/CMakeCache.txt": "09ee864836c05abe0cd56eaafd2fd997182fabb3bc16f9300ab204c124e64c44",
+    "/root/capsid-verification-20261109/build-production/CTestTestfile.cmake": "85b3383e4d7c6837228a79be46cce702196c58ef54abc77069b83988d499473a",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-r1/inventory.json": "38c9d096e6c2c2cce51694f0a5a032c6f5c449990f281526f54695fcdad8fa58",
+    "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a": "980fe86a76599e8b1981d289ec498c5292ac0a4aa53ec43d8018ceac08dd6413",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a": "63940ed4380eb5f8f47993e72d4e872849774c214d6f68b31bcfc43e2eac5fb6",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a": "66c9e01d07c9d8dd98d117e19c304bf7a7e82888aa0361879433821785c113d9",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-host": "33afa1ad5fc3c6004715e5d5dcd2043b7b0769ecf61151eea56af52fc14a5079",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-worker": "f815d91959b20a5c0dfa0dbf6e6cc58a73d8ca1abfe4b45546d70be90e1e88c9",
+    "/root/capsid-verification-20261109/build-sanitizer/CMakeCache.txt": "04b79591a2e2851cb0cd78ba28890314ae28a3d33208f37b7ce59f90cd754932",
+    "/root/capsid-verification-20261109/build-sanitizer/CTestTestfile.cmake": "c141cb6c930c6050bb8447c092e5ee289a41d5cd5fdba2b8f0cb929539d8293e",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-wpt-soak-sanitizer-linux-build-r1/inventory.json": "253f78314c17ebc8fc73b61040e3d38ba1789e6d118819a0aee40fce86b00a8b",
+    "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libssl.a": "99e76ccc2a399ceaaf7cb9456781eeaae46b8c68051062055cb196a7fcd343ee",
+    "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libcrypto.a": "b817f59d771624f213fe1b412197b5456695c847b786acdb04fd951114ebceaa",
+    "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib/libcares.a": "d9ab44d90c35c7823fe8b0d9474e7214e980b287e5b1cefc678f055c4c27a38b",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host": "27826ad397914bb1aa8d67378daa4550b53bd2b7f2704528e8bfc861f056e4fc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker": "ed828b4021a75ab662f2083709dc40ac6b9e947c586f66b1c9cd82f8fed5f912",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CMakeCache.txt": "ed4aecbb2676ac8f517e1acf91a90fdef18730bfaf9014a91e38a981a72198d0",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CTestTestfile.cmake": "dd94317475d12100f7f2b3944612526346e825c319748f56c9f49781cb6c0907",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-tsan-linux-build-r4/inventory.json": "923a44c0c5487e427e93b0dc553a714df568c159bd2a62e9ed365a53e55abd1c",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libssl.a": "2d4ec0decaf6a9c9630800e72550b7ecf151fdb984ebbcde386debb3ea468349",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libcrypto.a": "659fb5674ccd19863a007eb54dc7ec7eff51c611ca63893d3824debce46aae07",
+    "/root/capsid-verification-20261109/r8-cares-upstream-tsan-build-r3/providers/lib/libcares.a": "47e39c33bcf291d25fe874e8499a989588ad07fcabf73aadbc0433d993e34b75",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-tsan-allocation-link-proposal-r2/apply-exact-proposed-allocation-link-block.cmake": "d83b86ad6466ae959fc8d4d4bab020e49b2490ff396b19971b462b545d37a24a",
+    "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.tsan-x86_64.so": "dfb5ab5d511f84a08fbb380b04b2d3d30db69ee8817c427e73c131ff7e7c596b"
+  },
+  "actualCurrentMainTestAndAcceptorProgramsExecuted": true,
+  "oldRuntimeBinariesUnmodified": true,
+  "originalRawFailuresRetained": true,
+  "originalProductionRssThresholdsAndWorkloadsAndOuterTimeoutsUnchanged": true,
+  "tsanDoesNotClaimLsan": true,
+  "completeAsanLsanStillIndependentlyMandatory": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+    "/mnt/e/capsid/tests/test_websocket_managed_lifecycle.mjs",
+    "--host",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host",
+    "--worker",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker",
+    "--case",
+    "reclamation-idle",
+    "--memory-acceptance",
+    "asan-resources",
+    "--report",
+    "/root/capsid-verification-20261109/memory-profiles-v2-r3/must-not-exist.json"
+  ],
+  "activeCommandPid": 7784,
+  "results": [
+    {
+      "profile": "production",
+      "productionRssPassed": 2
+    },
+    {
+      "profile": "asan",
+      "resourceCasesPassed": 2,
+      "rawFootprintFailedNames": [
+        "websocket_managed_reclamation-idle",
+        "websocket_managed_replacement-recursion"
+      ],
+      "acceptanceSHA256": "9067e4dad59036afb94e72c6f0a367caa41c11e9da97bfe04aac758bfe8fc21d",
+      "reports": [
+        {
+          "scenario": "replacement-recursion",
+          "reportSHA256": "9b2661f4a98f7f4522b82a5a550710d60f590044950f4e413257e1f8106ebbfb",
+          "footprintChecks": [
+            {
+              "passed": false,
+              "message": "16 replacements grow RSS by 198056 KiB; retired pools are reclaimed"
+            },
+            {
+              "passed": false,
+              "message": "16 replacements grow VmSize by 168184 KiB"
+            },
+            {
+              "passed": false,
+              "message": "full retire returns the footprint"
+            }
+          ]
+        },
+        {
+          "scenario": "reclamation-idle",
+          "reportSHA256": "ff3911b86a91ccac62cdfc950ac959f68befdc66fca14dbc2891aef0dcdb82aa",
+          "footprintChecks": [
+            {
+              "passed": false,
+              "message": "last retired large factory returns memory without another admin operation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "profile": "tsan",
+      "resourceCasesPassed": 2,
+      "rawFootprintFailedNames": [
+        "websocket_managed_reclamation-idle"
+      ],
+      "acceptanceSHA256": "7df5a718c3891121140af0c8f8e894576ef031fbc79791e92578689d7a85d5d1",
+      "reports": [
+        {
+          "scenario": "replacement-recursion",
+          "reportSHA256": "ebc885e91fdf44069f60d86efc99a6d7ec26730230a068fba5c2784ed245d0f9",
+          "footprintChecks": [
+            {
+              "passed": true,
+              "message": "16 replacements grow RSS by 4356 KiB; retired pools are reclaimed"
+            },
+            {
+              "passed": true,
+              "message": "16 replacements grow VmSize by 17740 KiB"
+            },
+            {
+              "passed": true,
+              "message": "full retire returns the footprint"
+            }
+          ]
+        },
+        {
+          "scenario": "reclamation-idle",
+          "reportSHA256": "87e656f74713949a42ca9ef4f5b1a14a6bb00c45971d6535b22893e080d4537d",
+          "footprintChecks": [
+            {
+              "passed": false,
+              "message": "last retired large factory returns memory without another admin operation"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actualProductionRssCasesPassed": 2,
+  "actualAsanResourceCasesPassed": 2,
+  "actualTsanResourceCasesPassed": 2,
+  "bothActualTypedAcceptorsPassed": true,
+  "realTsanProfileNegativeControlsRejected": 6,
+  "negativeControls": [
+    "nonfatal-races",
+    "erased-race-exit",
+    "suppressed-races",
+    "asan-instead-of-tsan",
+    "production-instead-of-tsan",
+    "tsan-cannot-claim-asan-lsan"
+  ],
+  "allGuardedInputsUnchanged": true,
+  "focusedRegistrationsNotWholeFinalMatrix": true,
+  "formalTsanCiWiringStillRequired": true
+}

@@ -36,24 +36,33 @@ async function testEventsAndReporting() {
     check(first.detail === 42, 'CustomEvent.detail');
 
     const constructorPromise = Promise.resolve();
-    const rejectionConstructor = new PromiseRejectionEvent('contract', {
-        cancelable: true,
-        promise: constructorPromise,
-        reason: 42,
-    });
-    check(rejectionConstructor.cancelable,
-        'PromiseRejectionEvent cancelable dictionary');
-    check(rejectionConstructor.promise === constructorPromise,
-        'PromiseRejectionEvent promise dictionary');
-    check(rejectionConstructor.reason === 42,
-        'PromiseRejectionEvent reason dictionary');
+    // The pinned workerd profile creates these events internally. Public calls
+    // and construction reject before processing the event dictionary.
+    for (const [name, construct] of [
+        ['new', (...args) => new PromiseRejectionEvent(...args)],
+        ['call', (...args) => PromiseRejectionEvent(...args)],
+    ]) {
+        let dictionaryReads = 0;
+        let rejected = false;
+        try {
+            construct('contract', {
+                get promise() { dictionaryReads++; return constructorPromise; },
+                get reason() { dictionaryReads++; return 42; },
+                get cancelable() { dictionaryReads++; return true; },
+            });
+        } catch (error) {
+            rejected = error instanceof TypeError;
+        }
+        check(rejected, `PromiseRejectionEvent ${name} rejects (workerd profile)`);
+        check(dictionaryReads === 0, `PromiseRejectionEvent ${name} leaves dictionary untouched`);
+    }
     let missingPromiseThrew = false;
     try {
         new PromiseRejectionEvent('contract', {});
     } catch (error) {
         missingPromiseThrew = error instanceof TypeError;
     }
-    check(missingPromiseThrew, 'PromiseRejectionEvent requires promise');
+    check(missingPromiseThrew, 'PromiseRejectionEvent rejects an empty dictionary');
 
     let reported;
     const onError = event => {
@@ -98,19 +107,13 @@ async function testEventsAndReporting() {
     reportError(opaqueError);
     check(!getterInvoked, 'reportError must not invoke error getters');
 
-    let listenerError;
-    addEventListener('error', event => {
-        listenerError = event.error;
-        event.preventDefault();
-    }, { once: true });
     const throwing = new EventTarget();
-    throwing.addEventListener('explode', () => {
-        throw new TypeError('listener-failure');
-    });
-    check(throwing.dispatchEvent(new Event('explode')) === true,
-        'listener exception must not escape dispatchEvent');
-    check(listenerError?.message === 'listener-failure',
-        'listener exception reporting');
+    const listenerError = new TypeError('listener-failure');
+    const event = new Event('explode'); let caught;
+    throwing.addEventListener('explode', () => { throw listenerError; });
+    try { throwing.dispatchEvent(event); } catch (error) { caught = error; }
+    check(caught === listenerError, 'listener exception identity (workerd default profile)');
+    check(event.eventPhase === 0, 'dispatch phase reset after listener exception');
 
     let rejectionEvent;
     const onUnhandled = event => {
@@ -119,13 +122,14 @@ async function testEventsAndReporting() {
     };
     addEventListener('unhandledrejection', onUnhandled, { once: true });
     const reason = new Error('unhandled-by-contract');
-    Promise.reject(reason);
+    const rejectedPromise = Promise.reject(reason);
     await new Promise(resolve => setTimeout(resolve, 0));
     check(
         rejectionEvent instanceof PromiseRejectionEvent,
         'unhandledrejection event',
     );
     check(rejectionEvent?.reason === reason, 'unhandledrejection reason');
+    check(rejectionEvent?.promise === rejectedPromise, 'unhandledrejection exact promise identity');
     check(rejectionEvent?.promise instanceof Promise,
         'unhandledrejection promise');
 
@@ -141,7 +145,9 @@ async function testEventsAndReporting() {
     );
     check(handledEvent?.promise === rejectionEvent?.promise,
         'rejectionhandled promise');
-    check(handledEvent?.reason === reason, 'rejectionhandled reason');
+    // Pinned workerd omits reason on rejectionhandled; unhandledrejection above
+    // still checks the original reason identity. Both are differential-tested.
+    check(handledEvent?.reason === undefined, 'rejectionhandled reason (workerd profile)');
 }
 
 async function testTimers() {

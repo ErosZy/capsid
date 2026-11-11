@@ -1,0 +1,120 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -837,6 +837,12 @@
+     JS_ITERATOR_KIND_VALUE,
+     JS_ITERATOR_KIND_KEY_AND_VALUE,
+ } JSIteratorKindEnum;
++
++typedef struct JSArrayIteratorData {
++    JSValue obj;
++    JSIteratorKindEnum kind;
++    uint32_t idx;
++} JSArrayIteratorData;
+ 
+ typedef enum JSIteratorHelperKindEnum {
+     JS_ITERATOR_HELPER_KIND_DROP,
+@@ -5906,8 +5912,17 @@
+     JSObject *p;
+     int i;
+ 
+-    js_trigger_gc(ctx->rt, sizeof(JSObject));
+-    p = js_malloc(ctx, sizeof(JSObject));
++    bool lazy_iterator_properties;
++
++    /* These two internal classes own their state for the object's lifetime.
++       A single allocation preserves the iterator identity and GC edges. */
++    size_t object_size = sizeof(JSObject);
++    if (class_id == JS_CLASS_ARRAY_ITERATOR || class_id == JS_CLASS_STRING_ITERATOR)
++        object_size += sizeof(JSArrayIteratorData);
++    lazy_iterator_properties = object_size != sizeof(JSObject) && sh->prop_count == 0;
++    _Static_assert(_Alignof(JSObject) >= _Alignof(JSArrayIteratorData), "iterator state alignment");
++    js_trigger_gc(ctx->rt, object_size);
++    p = js_malloc(ctx, object_size);
+     if (unlikely(!p))
+         goto fail;
+     p->class_id = class_id;
+@@ -5923,8 +5938,8 @@
+     p->first_weak_ref = NULL;
+     p->u.opaque = NULL;
+     p->shape = sh;
+-    p->prop = js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);
+-    if (unlikely(!p->prop)) {
++    p->prop = lazy_iterator_properties ? NULL : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);
++    if (unlikely(!p->prop) && !lazy_iterator_properties) {
+         js_free(ctx, p);
+     fail:
+         if (props) {
+@@ -7545,6 +7560,10 @@
+             compute_jsstring_size(p->u.regexp.bytecode, hp);
+             break;
+ 
++        case JS_CLASS_ARRAY_ITERATOR:    /* inline u.array_iterator_data */
++        case JS_CLASS_STRING_ITERATOR:   /* inline u.array_iterator_data */
++            s->obj_size += sizeof(JSArrayIteratorData);
++            break;
+         case JS_CLASS_FOR_IN_ITERATOR:   /* u.for_in_iterator */
+             {
+                 JSForInIterator *it = p->u.for_in_iterator;
+@@ -7589,8 +7608,6 @@
+         case JS_CLASS_WEAKSET:           /* u.map_state */
+         case JS_CLASS_MAP_ITERATOR:      /* u.map_iterator_data */
+         case JS_CLASS_SET_ITERATOR:      /* u.map_iterator_data */
+-        case JS_CLASS_ARRAY_ITERATOR:    /* u.array_iterator_data */
+-        case JS_CLASS_STRING_ITERATOR:   /* u.array_iterator_data */
+         case JS_CLASS_PROXY:             /* u.proxy_data */
+         case JS_CLASS_PROMISE:           /* u.promise_data */
+         case JS_CLASS_PROMISE_RESOLVE_FUNCTION:  /* u.promise_function_data */
+@@ -9973,6 +9990,14 @@
+         }
+     }
+     sh = p->shape;
++    /* Array/string iterators with an empty shape allocate properties only
++       when application code adds the first own property. */
++    if (unlikely(!p->prop)) {
++        assert(sh->prop_count == 0);
++        p->prop = js_malloc(ctx, sizeof(*p->prop) * sh->prop_size);
++        if (!p->prop)
++            return NULL;
++    }
+     if (sh->is_hashed) {
+         /* try to find an existing shape */
+         new_sh = find_hashed_shape_prop(ctx->rt, sh, prop, prop_flags);
+@@ -44372,19 +44397,13 @@
+     return ret;
+ }
+ 
+-typedef struct JSArrayIteratorData {
+-    JSValue obj;
+-    JSIteratorKindEnum kind;
+-    uint32_t idx;
+-} JSArrayIteratorData;
+-
+ static void js_array_iterator_finalizer(JSRuntime *rt, JSValueConst val)
+ {
+     JSObject *p = JS_VALUE_GET_OBJ(val);
+     JSArrayIteratorData *it = p->u.array_iterator_data;
+     if (it) {
+         JS_FreeValueRT(rt, it->obj);
+-        js_free_rt(rt, it);
++        /* The iterator state is released with its owning JSObject. */
+     }
+ }
+ 
+@@ -44444,16 +44463,12 @@
+     enum_obj = JS_NewObjectClass(ctx, class_id);
+     if (JS_IsException(enum_obj))
+         goto fail;
+-    it = js_malloc(ctx, sizeof(*it));
+-    if (!it)
+-        goto fail1;
++    it = (JSArrayIteratorData *)(JS_VALUE_GET_OBJ(enum_obj) + 1);
+     it->obj = arr;
+     it->kind = kind;
+     it->idx = 0;
+     JS_SetOpaqueInternal(enum_obj, it);
+     return enum_obj;
+- fail1:
+-    JS_FreeValue(ctx, enum_obj);
+  fail:
+     JS_FreeValue(ctx, arr);
+     return JS_EXCEPTION;

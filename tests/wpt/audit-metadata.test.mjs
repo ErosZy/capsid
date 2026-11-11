@@ -20,6 +20,20 @@ const rejects = (mutate, pattern) => {
 const result = auditMetadata(original, deviations);
 assert.ok(result.expectedFailures > 0);
 assert.ok(result.notExecuted > 0);
+assert.equal(result.sourceAugmentations, 1);
+
+rejects(value => { delete value.sourceAugmentations; }, /sourceAugmentations/);
+rejects(value => { value.sourceAugmentations[0].tool = 'missing.mjs'; }, /guard tool/);
+rejects(value => { value.sourceAugmentations[0].preservesUpstreamStatements = false; }, /preserve upstream/);
+rejects(value => { value.sourceAugmentations[0].subtests.pop(); }, /both guarded/);
+rejects(value => { value.sourceAugmentations[0].subtests.reverse(); }, /both guarded/);
+rejects(value => { value.sourceAugmentations[0].path = 'unexecuted.js'; }, /augmentation path/);
+rejects(value => { value.sourceAugmentations[0].reason = ''; }, /augmentation reason/);
+
+rejects(value => { delete value.expectedFailures[0].errorName; }, /errorName/);
+rejects(value => { value.expectedFailures[0].errorName = 'TypeError'; }, /must be AssertionError/);
+rejects(value => { delete value.expectedFailures[0].message; }, /message/);
+rejects(value => { value.expectedFailures[0].message = 'one\ntwo'; }, /single diagnostic line/);
 
 rejects(
     value => {

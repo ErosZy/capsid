@@ -1,0 +1,318 @@
+diff --git a/src/httpclient.c b/src/httpclient.c
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -30,6 +30,7 @@
+ #include <miniz.h>
+ 
+ #include "http-gzip.h"
++extern int capsid_lws_http_client_read_windows(struct lws *, char **, int *);
+ 
+ #define TJS__UA_STRING                                                                                                 \
+     "txiki.js/" STRINGIFY(TJS_VERSION_MAJOR) "." STRINGIFY(TJS_VERSION_MINOR) "." STRINGIFY(TJS_VERSION_PATCH)         \
+@@ -109,6 +110,7 @@
+     bool connect_ssl;
+     /* Response decompression. */
+     TJSHttpGzip *decompressor;
++    bool encoded_delivery; /* encoded delivery for independently decoded branches */
+     TJSHttpInput *input_head;
+     TJSHttpInput *input_tail;
+     bool decode_pumping;
+@@ -118,6 +120,7 @@
+ } TJSHttpClient;
+ 
+ static JSClassID tjs_httpclient_class_id;
++static JSClassID tjs_http_gzip_decoder_class_id;
+ 
+ static void tjs_httpclient_clear_input(TJSHttpClient *h, JSRuntime *rt) {
+     while (h->input_head) {
+@@ -981,14 +984,14 @@
+             }
+             /* Compressed input has its own bounded window, independently of
+              * decoded BYOB capacity. The pending pump suspends expansion when
+-             * decoded demand is satisfied. Validate this16KiB hypothesis on
+-             * both pinned primary assets before considering integration. */
+-            int capacity = h->decompressor ? 16384 : h->read_capacity;
++             * decoded demand is satisfied. Fresh chunk-header reads are bounded
++             * separately while previously buffered body bytes remain available. */
++            int capacity = (h->decompressor || h->encoded_delivery) ? 16384 : h->read_capacity;
+             char *buffer = js_malloc(h->ctx, (size_t) capacity + LWS_PRE);
+             if (!buffer) return -1;
+             char *px = buffer + LWS_PRE;
+             int lenx = capacity;
+-            int result = lws_http_client_read(wsi, &px, &lenx);
++            int result = (h->encoded_delivery || h->decompressor) ? capsid_lws_http_client_read_windows(wsi, &px, &lenx) : lws_http_client_read(wsi, &px, &lenx);
+             js_free(h->ctx, buffer);
+             if (result < 0) return -1;
+             if (!h->completed && h->read_paused) lws_rx_flow_control(wsi, 0);
+@@ -1654,6 +1657,106 @@
+     return JS_UNDEFINED;
+ }
+ 
++/* Keep an idle compressed body encoded until each branch starts reading.
++ * The decoder is CPU-only and does not acquire transport resources. */
++static JSValue tjs_httpclient_enable_encoded(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    (void) argc; (void) argv;
++    TJSHttpClient *h = tjs_httpclient_get(ctx, this_val);
++    if (!h) return JS_EXCEPTION;
++    if (h->encoded_delivery) return JS_TRUE;
++    if (!h->decompressor) return JS_FALSE;
++    if (h->read_started || h->input_head || h->completed)
++        return JS_ThrowTypeError(ctx, "Encoded delivery must be selected before the first body read");
++    http_gzip_destroy(h->decompressor, JS_GetRuntime(ctx));
++    h->decompressor = NULL;
++    h->encoded_delivery = true;
++    return JS_TRUE;
++}
++
++static void tjs_http_gzip_decoder_finalizer(JSRuntime *rt, JSValue value) {
++    TJSHttpGzip *decoder = JS_GetOpaque(value, tjs_http_gzip_decoder_class_id);
++    if (decoder) http_gzip_destroy(decoder, rt);
++}
++
++static JSValue tjs_http_gzip_decoder_step(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    TJSHttpGzip *decoder = JS_GetOpaque2(ctx, this_val, tjs_http_gzip_decoder_class_id);
++    if (!decoder) return JS_EXCEPTION;
++    if (argc < 4) return JS_ThrowTypeError(ctx, "Expected encoded buffer, offset, length and output capacity");
++    int64_t offset, length, capacity;
++    if (JS_ToInt64(ctx, &offset, argv[1]) || JS_ToInt64(ctx, &length, argv[2]) || JS_ToInt64(ctx, &capacity, argv[3]))
++        return JS_EXCEPTION;
++    if (offset < 0 || length < 0 || capacity < 1 || capacity > 4096)
++        return JS_ThrowRangeError(ctx, "Invalid encoded decoder bounds");
++    static const uint8_t empty = 0;
++    size_t size = 0;
++    const uint8_t *bytes = &empty;
++    if (!JS_IsNull(argv[0])) {
++        bytes = JS_GetArrayBuffer(ctx, &size, argv[0]);
++        if (!bytes) return JS_EXCEPTION;
++    }
++    if ((uint64_t) offset > size || (uint64_t) length > size - (size_t) offset)
++        return JS_ThrowRangeError(ctx, "Encoded decoder input exceeds buffer");
++    TBuf out;
++    tbuf_init(ctx, &out);
++    size_t consumed = 0;
++    int status = http_gzip_step_capacity(decoder, bytes + (size_t) offset, (size_t) length,
++        &consumed, &out, (size_t) capacity);
++    if (status < 0) {
++        tbuf_free(&out);
++        return JS_ThrowTypeError(ctx, "Gzip decompression failed.");
++    }
++    JSValue result = JS_NewObject(ctx);
++    if (JS_IsException(result)) {tbuf_free(&out); return result;}
++    JSValue data = JS_NewArrayBufferCopy(ctx, out.buf, out.size);
++    tbuf_free(&out);
++    if (JS_IsException(data)) {JS_FreeValue(ctx, result); return data;}
++    if (JS_SetPropertyStr(ctx, result, "data", data) < 0
++        || JS_SetPropertyStr(ctx, result, "consumed", JS_NewInt64(ctx, (int64_t) consumed)) < 0
++        || JS_SetPropertyStr(ctx, result, "status", JS_NewInt32(ctx, status)) < 0
++        || JS_SetPropertyStr(ctx, result, "atMemberEnd", JS_NewBool(ctx, decoder->state == HTTP_GZIP_DONE)) < 0) {
++        JS_FreeValue(ctx, result); return JS_EXCEPTION;
++    }
++    return result;
++}
++
++static JSValue tjs_http_gzip_decoder_finish(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    (void) argc; (void) argv;
++    TJSHttpGzip *decoder = JS_GetOpaque2(ctx, this_val, tjs_http_gzip_decoder_class_id);
++    if (!decoder) return JS_EXCEPTION;
++    if (decoder->state != HTTP_GZIP_DONE)
++        return JS_ThrowTypeError(ctx, "Gzip compressed stream ended prematurely.");
++    return JS_UNDEFINED;
++}
++
++static JSValue tjs_http_gzip_decoder_dispose(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    (void) argc; (void) argv;
++    TJSHttpGzip *decoder = JS_GetOpaque2(ctx, this_val, tjs_http_gzip_decoder_class_id);
++    if (!decoder) return JS_EXCEPTION;
++    JS_SetOpaque(this_val, NULL);
++    http_gzip_destroy(decoder, JS_GetRuntime(ctx));
++    return JS_UNDEFINED;
++}
++
++static JSValue tjs_httpclient_create_gzip_decoder(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
++    (void) argc; (void) argv;
++    if (!tjs_httpclient_get(ctx, this_val)) return JS_EXCEPTION;
++    TJSHttpGzip *decoder = http_gzip_create(ctx);
++    if (!decoder) return JS_EXCEPTION;
++    JSValue value = JS_NewObjectClass(ctx, tjs_http_gzip_decoder_class_id);
++    if (JS_IsException(value)) {http_gzip_destroy(decoder, JS_GetRuntime(ctx)); return value;}
++    JS_SetOpaque(value, decoder);
++    return value;
++}
++
++static const JSClassDef tjs_http_gzip_decoder_class = {
++    "HttpGzipDecoder", .finalizer = tjs_http_gzip_decoder_finalizer,
++};
++static const JSCFunctionListEntry tjs_http_gzip_decoder_funcs[] = {
++    TJS_CFUNC_DEF("step", 4, tjs_http_gzip_decoder_step),
++    TJS_CFUNC_DEF("finish", 0, tjs_http_gzip_decoder_finish),
++    TJS_CFUNC_DEF("dispose", 0, tjs_http_gzip_decoder_dispose),
++};
++
+ static const JSCFunctionListEntry tjs_httpclient_proto_funcs[] = {
+     JS_CGETSET_MAGIC_DEF("onstatus", tjs_httpclient_callback_get, tjs_httpclient_callback_set, HC_CALLBACK_STATUS),
+     JS_CGETSET_MAGIC_DEF("onurl", tjs_httpclient_callback_get, tjs_httpclient_callback_set, HC_CALLBACK_URL),
+@@ -1674,11 +1777,19 @@
+     TJS_CFUNC_DEF("sendData", 1, tjs_httpclient_senddata),
+     TJS_CFUNC_DEF("abort", 0, tjs_httpclient_abort),
+     TJS_CFUNC_DEF("setReadState", 2, tjs_httpclient_read_state),
++    TJS_CFUNC_DEF("enableEncodedRead", 0, tjs_httpclient_enable_encoded),
++    TJS_CFUNC_DEF("createGzipDecoder", 0, tjs_httpclient_create_gzip_decoder),
+ };
+ 
+ void tjs__mod_httpclient_init(JSContext *ctx, JSValue ns) {
+     JSRuntime *rt = JS_GetRuntime(ctx);
+     JSValue proto, obj;
++
++    JS_NewClassID(rt, &tjs_http_gzip_decoder_class_id);
++    JS_NewClass(rt, tjs_http_gzip_decoder_class_id, &tjs_http_gzip_decoder_class);
++    proto = JS_NewObject(ctx);
++    JS_SetPropertyFunctionList(ctx, proto, tjs_http_gzip_decoder_funcs, countof(tjs_http_gzip_decoder_funcs));
++    JS_SetClassProto(ctx, tjs_http_gzip_decoder_class_id, proto);
+ 
+     /* HttpClient class */
+     JS_NewClassID(rt, &tjs_httpclient_class_id);
+diff --git a/src/http-gzip.h b/src/http-gzip.h
+--- a/src/http-gzip.h
++++ b/src/http-gzip.h
+@@ -91,8 +91,9 @@
+ /* Returns -1 on malformed input, 0 when more input is needed, 1 at a
+  * validated member boundary, or 2 when a complete 4096-byte output block
+  * is available. No input beyond the current member is consumed. */
+-static int http_gzip_step(TJSHttpGzip *d, const uint8_t *input, size_t length,
+-                          size_t *consumed, TBuf *out) {
++static int http_gzip_step_capacity(TJSHttpGzip *d, const uint8_t *input, size_t length,
++                                   size_t *consumed, TBuf *out, size_t output_capacity) {
++    if (output_capacity < 1 || output_capacity > 4096) return -1;
+     size_t position = 0;
+     *consumed = 0;
+     if (d->state == HTTP_GZIP_FAILED) {
+@@ -166,7 +167,7 @@
+             d->stream.next_in = input + position;
+             d->stream.avail_in = offered;
+             d->stream.next_out = buffer;
+-            d->stream.avail_out = (mz_uint32) (sizeof(buffer) - out->size);
++            d->stream.avail_out = (mz_uint32) (output_capacity - out->size);
+             mz_uint32 room = d->stream.avail_out;
+             int status = mz_inflate(&d->stream, MZ_SYNC_FLUSH);
+             size_t used = offered - d->stream.avail_in;
+@@ -180,7 +181,7 @@
+             }
+             if (status == MZ_STREAM_END) {
+                 d->state = HTTP_GZIP_TRAILER;
+-            } else if (out->size == sizeof(buffer)) {
++            } else if (out->size == output_capacity) {
+                 *consumed = position;
+                 return 2;
+             } else if (position == length) {
+@@ -213,4 +214,10 @@
+     return -1;
+ }
+ 
++/* Preserve the original HTTP client's fixed block policy. */
++static int http_gzip_step(TJSHttpGzip *d, const uint8_t *input, size_t length,
++                          size_t *consumed, TBuf *out) {
++    return http_gzip_step_capacity(d, input, length, consumed, out, 4096);
++}
++
+ #endif
+diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwebsockets/lib/roles/http/client/client-http.c
+--- a/deps/libwebsockets/lib/roles/http/client/client-http.c
++++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
+@@ -2223,12 +2223,13 @@
+ 
+ #endif
+ 
+-int
+-lws_http_client_read(struct lws *wsi, char **buf, int *len)
++static int
++lws_http_client_read_impl(struct lws *wsi, char **buf, int *len, int windowed)
+ {
+ 	struct lws_context_per_thread *pt = &wsi->a.context->pt[(int)wsi->tsi];
+ 	struct lws_tokens eb;
+ 	int buffered, n, consumed = 0;
++	int body_capacity = *len;
+ 
+ 	/*
+ 	 * If the caller provided a non-NULL *buf and nonzero *len, we should
+@@ -2240,6 +2241,13 @@
+ 
+ 	eb.token = (unsigned char *)*buf;
+ 	eb.len = *len;
++	/* Buffered response/header bytes already belong to the input window.
++	 * Clamp only fresh reads: KJ limits chunk-header acquisition to 32 bytes
++	 * and leaves previously buffered body data available to the decoder. */
++	if (windowed && wsi->chunked && !wsi->buflist) {
++		int available = wsi->chunk_parser == ELCP_CONTENT ? wsi->chunk_remaining : 32;
++		if (available > 0 && eb.len > available) eb.len = available;
++	}
+ 
+ 	buffered = lws_buflist_aware_read(pt, wsi, &eb, 0, __func__);
+ 	*buf = (char *)eb.token; /* may be pointing to buflist or pt_serv_buf */
+@@ -2398,6 +2406,7 @@
+ 	if (wsi->chunked && wsi->chunk_remaining &&
+ 	    wsi->chunk_remaining < n)
+ 		n = wsi->chunk_remaining;
++	if (windowed && n > body_capacity) n = body_capacity;
+ 
+ #if defined(LWS_WITH_HTTP_PROXY) && defined(LWS_WITH_HUBBUB)
+ 	/* hubbub */
+@@ -2444,6 +2453,9 @@
+ 	if (wsi->chunked && !wsi->chunk_remaining)
+ 		wsi->chunk_parser = ELCP_POST_CR;
+ 
++	if (windowed && wsi->chunked && n > 0)
++		goto account_and_ret;
++
+ 	if (wsi->chunked && *len)
+ 		goto spin_chunks;
+ 
+@@ -2475,6 +2487,19 @@
+ 		return -1;
+ 
+ 	return 0;
++}
++
++int
++lws_http_client_read(struct lws *wsi, char **buf, int *len)
++{
++	return lws_http_client_read_impl(wsi, buf, len, 0);
++}
++
++/* Private, opt-in prototype; existing LWS callers retain their read behavior. */
++int
++capsid_lws_http_client_read_windows(struct lws *wsi, char **buf, int *len)
++{
++	return lws_http_client_read_impl(wsi, buf, len, 1);
+ }
+ 
+ #endif
+diff --git a/src/js/polyfills/http-client.js b/src/js/polyfills/http-client.js
+--- a/src/js/polyfills/http-client.js
++++ b/src/js/polyfills/http-client.js
+@@ -27,6 +27,7 @@
+     #client = null;
+     #readCapacity = 8192;
+     #readPaused = false;
++    #decoderFactory = null;
+ 
+     get onstatus() {
+         return this._onstatus ?? null;
+@@ -140,6 +141,18 @@
+         if (this.#client) {
+             this.#client.setAllowInsecure(allow);
+         }
++    }
++
++    enableEncodedRead() {
++        const client = this.#client;
++        if (!client || !client.enableEncodedRead()) return false;
++        this.#decoderFactory = () => client.createGzipDecoder();
++        return true;
++    }
++
++    createGzipDecoder() {
++        if (!this.#decoderFactory) throw new TypeError('Encoded delivery is not active');
++        return this.#decoderFactory();
+     }
+ 
+     setReadState(capacity, paused) {

@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <random>
 #include <string>
 #include <thread>
@@ -37,7 +38,12 @@ struct WorkerSupervisorOptions {
     WorkerRecoveryPolicy policy;
     // The App's generation pool (direction A). nullptr when the App has
     // no pool (never deployed, quarantined, retired): nothing to probe.
-    std::function<GenerationPool*()> current_pool;
+    // Copy ownership under the publisher's lock; a raw pointer can expire
+    // immediately after that lock is released.
+    std::function<std::shared_ptr<GenerationPool>()> current_pool;
+    // Optional health-config provider. The default reads the committed
+    // managed snapshot; readers may block on a concurrent App operation.
+    std::function<HealthCheckConfig(const std::string&)> health_check_reader;
     // Process-level stop signal: when set, the thread stops scheduling
     // probes and exits without counting anything (shutdown is never
     // instability).
@@ -75,9 +81,14 @@ private:
     // (Re)arm the probe schedule for the executor the pool currently
     // hands out: clears the consecutive-failure streak and re-reads the
     // committed healthCheck config for the pool's generation.
-    void rearm_probe(GenerationPool* pool, WorkerExecutor* executor);
+    void rearm_probe(const std::shared_ptr<GenerationPool>& pool,
+                     const std::shared_ptr<WorkerExecutor>& executor);
+    void clear_probe_target();
+    bool target_is_current(const std::shared_ptr<GenerationPool>& pool,
+                           const std::shared_ptr<WorkerExecutor>& executor) const;
     void probe_success();
-    void probe_failure(WorkerExecutor* executor);
+    void probe_failure(const std::shared_ptr<GenerationPool>& pool,
+                       const std::shared_ptr<WorkerExecutor>& executor);
     void schedule_next_probe();
     bool sleep_interruptible(std::uint64_t milliseconds);
     bool stop_requested() const;
@@ -88,7 +99,8 @@ private:
     std::thread thread_;
     std::atomic<bool> stopped_ = false;
     // Only the supervisor thread touches these.
-    WorkerExecutor* probe_target_ = nullptr;
+    std::shared_ptr<GenerationPool> probe_pool_;
+    std::shared_ptr<WorkerExecutor> probe_target_;
     std::string anchored_generation_;
     HealthCheckConfig health_check_;
     // supervisor-side probe lifecycle: probe_in_flight_ is true between

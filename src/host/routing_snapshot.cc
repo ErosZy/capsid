@@ -52,17 +52,38 @@ bool RoutingSnapshot::retired(std::string_view application) const {
 // toolchain the Host supports. GCC 15 deprecates the free functions — this
 // is the documented trade-off, so silence just this diagnostic class here
 // instead of weakening the target-wide -Werror.
+#if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+// The same intentional compatibility API has MSVC diagnostic C4996.
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
 void RoutingTable::publish(std::shared_ptr<const RoutingSnapshot> snapshot) {
     std::atomic_store_explicit(&snapshot_, std::move(snapshot),
                                std::memory_order_release);
     generation_.fetch_add(1, std::memory_order_relaxed);
 }
 
+std::int64_t RoutingTable::worker_process_id() const {
+    const auto snapshot = load();
+    if (snapshot) {
+        for (const auto& route : snapshot->routes()) {
+            const auto pid = route.second->worker_process_id();
+            if (pid > 0) return pid;
+        }
+    }
+    return 0;
+}
+
 std::shared_ptr<const RoutingSnapshot> RoutingTable::load() const {
     return std::atomic_load_explicit(&snapshot_, std::memory_order_acquire);
 }
+#if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 }  // namespace capsid::host

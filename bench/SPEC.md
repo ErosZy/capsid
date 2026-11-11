@@ -22,9 +22,11 @@ two disagree, this file wins and the docs are stale.
 4. **Append-only history.** `data.js` keeps one point per version;
    re-measuring a version replaces its point, earlier points are never
    edited.
-5. **Production posture.** capsid is measured through the managed
-   coordinator with the mandatory Linux strict sandbox (namespaces,
-   Landlock, seccomp). Sandbox-off numbers are not publishable.
+5. **Production posture.** Serving and density measure capsid through the
+   managed coordinator with the mandatory Linux strict sandbox (namespaces,
+   Landlock, seccomp). Cold-start uses the public C ABI with strict workers;
+   its footprint excludes the C-ABI measurement process. Sandbox-off numbers
+   are not publishable.
 6. **Symmetric optimality.** Every comparison stack runs its
    framework-optimal single-serving-process configuration; the page
    states the configuration next to the numbers.
@@ -37,11 +39,12 @@ two disagree, this file wins and the docs are stale.
   connections / 64 in-flight, 5 s warm-up + 5 measured rounds of 15 s
   per workload; exact-body verdict every round (a mismatch fails the
   lane); SUT pinned via `taskset` to `SUT_CPUSET` (default `0-3`);
-  ports are prechecked and fail closed.
+  ports are reserved by the parent and checked against owned listeners.
 - **Workloads:** `matrix-json-1k`, `matrix-json-16k`, `stream` (1 KiB
   frozen b/c/d thirds). Payload bytes are shared across all stacks and
   verified per round.
-- **Serving topology:** exactly one serving process per stack —
+- **Serving topology:** one serving worker per stack, with the entire
+  service forest counted —
   capsid: managed coordinator + strict sandbox, one-worker fixed pool,
   Admin-API blue-green deploy, production stream-window defaults
   (`CAPSID_MANAGED=1`); workerd: single process, minimal capnp;
@@ -56,6 +59,31 @@ two disagree, this file wins and the docs are stale.
 - **Output:** `cells.txt` lines `stack [workload] qps_med/p50/p95`,
   `serving_pss_mb[=role:mb;…]`, `lowqps_pss_mb[=…]`.
 
+Serving response evidence uses `exact-bytes-v2`: the two raw phase rows and
+correctness verdict identify the workload, exact expected body SHA-256 and byte
+length, dispatched requests and fully checked responses. Both counts must equal
+completed requests in each successful phase. The frozen three workloads compare
+every byte; the stream is exactly 341 b, 341 c and 342 d bytes. Errors, timeouts,
+wrong status and wrong/truncated/extra bytes cannot count as success. A failed
+warm-up prevents measurement; a failed verdict exits nonzero. Formal samples
+record a 30000 ms request timeout; the explicit shorter correctness-fixture
+setting is rejected by publication validation.
+
+The shell entry now execs the owned Python controller. The full five-stack
+producer implements these defaults, requires managed/strict posture and keeps
+PHP's two roots and every Go client in separate owned sessions. An exact
+application-readiness response precedes traffic and is separate from the 150
+trickle responses. Low-load cleanup completes before a fresh loaded forest;
+after traffic, settle for 1 s and require two equal positive recursive PSS reads
+within eight attempts at 1 s intervals. Every process, role, client, response,
+raw sample, configuration and cleanup record is retained and sealed.
+
+Formal archives require clean measured-build/session metadata, four available
+CPU indices, all stacks/workloads/rounds and independent build provenance. The
+producer self-validates its sealed output. Restricted `--observation` output
+has no `lane.json`; actual five-stack short smoke does not qualify a formal
+performance point. See [QPS producer](perf-evidence.md#qps-producer).
+
 ### 2.2 Cold-start lane — `bench/cold-start.sh` + `bench/cold-start.cc`
 
 - **Metric:** process start → first **validated** response. Warm
@@ -67,16 +95,77 @@ two disagree, this file wins and the docs are stale.
   and reports the median of five.
 - **capsid:** C-ABI tool with `--strict` (full sandbox in the spawned
   worker); source and trusted-bytecode paths both measured. Node/Deno:
-  stdout READY then first curl. workerd: first TCP connect (its
+  stdout READY plus an owned listener, then the first exact HTTP response.
+  workerd: first owned-listener TCP connect (its
   isolate initializes lazily on the first request, so the
   ready→first-response span carries that cost).
 
+The C-ABI probe now gets the spawned child's PID from the public
+`capsid_worker_pid()` API. Inherited socketpair credentials identify the socket
+creator and must not select the measured process. First and warm responses
+require one HTTP 200 head, the correct request ID and the exact frozen body;
+any failure aborts that iteration without a success row. The default worker
+posture is strict. `total_ms` stops at the first validated response, before
+warm-up, settling or memory sampling. Warm latency is the median of every
+successful warm request (the mean of the middle pair for an even count).
+
+Worker-tree PSS excludes the C-ABI probe/controller itself. The outer owner
+must monitor and clean that launched tree without adding the measurement
+process back into the reported worker footprint.
+
+Worker-tree membership is pinned after the first response and before warming.
+Recursive PSS includes pinned reparented descendants. Missing/reaped/replaced
+or additional members fail; unreadable, zero or overflowing memory fails.
+After a one-second settle, the probe takes at most eight PSS reads one second
+apart and requires two equal positive readings. Raw output includes round,
+correctness counts, PID/start identities, both PSS samples and warm latencies.
+SIGINT/SIGTERM and request failures reap the C-ABI worker through abortive
+destroy. This does not qualify graceful shutdown or complete descendant cleanup;
+the future lane controller must also own and clean its entire launched tree.
+
+`cold-start.sh` execs the Python controller. Every cell launches a fresh process
+for one discarded run and five measured rounds. All six runs require exact
+first/warm responses, pinned process membership, stable positive PSS and zero
+remaining owned processes. Discarded raw/correctness records are sealed and
+validated separately; a failed discarded run aborts the cell. The summary uses
+only measured rounds. Reusing a measured root PID/start identity fails.
+
+Node/Deno/workerd requests use a fresh Python-standard-library loopback HTTP
+connection per request (`httpClient: python-http-exact-v1`). The old curl process
+startup floor describes historical points only. C-ABI IPC and HTTP transports
+remain different and are stated beside warm results. Both the controller/client
+and SUT use SUT_CPUSET; formal runs require four available CPU indices. Calling
+the producer as a library restores the caller's original affinity, even on error.
+
+Ports are reserved by the parent, and readiness corroborates listener ownership.
+Each process tree, log, runtime listener config and output archive belongs to one
+controller. The common owner cleans descendants before the parent and reaps
+observed orphans on failure/cancellation. C-ABI raw PSS is validated against the
+outer owner's observed worker identities without including the tool's memory.
+
+Inputs are verified against the frozen generator and snapshotted before use.
+Trusted bytecode, attestation and message are freshly compiled in a private
+Linux `/tmp` directory and copied into the archive; shared APPS is never written
+and stale `.qjsb` files are never reused. The private native compilation directory
+remains the benchmark's isolation boundary. The compiler also supports mounted
+output directories via a no-replace `linkat`/`unlinkat` fallback when
+RENAME_NOREPLACE is unsupported; ordinary errors remain failures. This does not
+make three separate output paths atomic across a process crash or power loss;
+deployment still needs an outer staging generation directory.
+
+Formal mode requires clean measured-build/session metadata, all five stacks and
+three sizes, complete sealed raw/correctness/identity evidence and self-validation
+against the collector. Restricted `--observation` output has no publication
+envelope. Actual quiet-session candidate/v0.2.2/workerd measurements remain T17
+work; controller tests and restricted smoke do not qualify a performance point.
+
 ### 2.3 Density lane — `bench/density-lane.sh`
 
-- **Metric:** the largest pool whose **whole descendant-tree PSS**
-  stays under the budget (default 2048 MB), found by doubling to the
-  boundary, binary search, and a jitter guard that steps the recorded
-  count down until it verifies under budget.
+- **Metric:** an independently verified pool whose **whole descendant-tree
+  PSS** stays under the budget (default 2048 MiB), found by doubling to the
+  boundary, binary search, and bounded final verification. A configured cap
+  reached without a memory boundary is explicitly a lower-bound observation,
+  not a measured maximum.
 - **Phases:** each cell is reported twice — **cold** (one real request
   per worker/cell; initialization, not static loading) and **warmed**
   (100 requests through each, then settle). A pool that dies under the
@@ -84,36 +173,75 @@ two disagree, this file wins and the docs are stale.
 - **Warm-phase gating:** request failures are counted and fatal (a warm
   pass that cannot reach its targets understates a pool that is quietly
   shedding); the post-settle sample requires two consecutive **equal**
-  PSS readings and a positive value; the recorded count is only ever one
-  whose own final probe verified under budget — a failed verification is
-  retried twice, then the count steps down. A cell is never recorded with
-  a failed reading. For capsid's shared-acceptor pool the warm request
-  count is doubled because per-worker distribution is connection-hash
-  approximate.
-- **Stacks:** capsid static-pool with the same strict sandbox
-  (`CAPSID_STRICT=1`); workerd N cells in one process (minimal capnp,
+  PSS readings and a positive value. Process membership is pinned after
+  readiness; a missing, reaped or replaced member fails the sample instead
+  of reducing its total. The recorded count is only ever one
+  whose own final probe verified under budget. PSS drift gets at most two
+  fresh final-probe retries; persistent drift fails the cell. A stable but
+  over-budget final probe steps down at most eight counts and verifies the
+  new count again. Wrong content, unreadable/nonpositive PSS, dead processes,
+  incomplete coverage or cleanup failure abort. A cell is never recorded with
+  a failed reading. Shared-acceptor pools require observed per-worker request
+  coverage. Doubling a total request count does not prove that every worker
+  reached the target. Use benchmark-only counters; public responses and the
+  production protocol must not gain diagnostic fields.
+- **Stacks:** formal capsid points require managed/strict posture; a
+  static-pool diagnostic is an observation and cannot qualify publication.
+  workerd uses N cells in one process (minimal capnp,
   cells touched through per-cell sockets).
-- **Measurement hygiene:** PSS walks are recursive (grandchildren
-  count); probe ports increment in the parent shell (command
-  substitution silently drops counters); teardown kills children
-  before the parent; readiness waits for real readiness (e.g. celld
+- **Measurement hygiene:** PSS walks are recursive (grandchildren count).
+  A Python control layer owns reserved OS ports and PID/start-time identities;
+  consecutive probes use different ports and concurrent controllers cannot
+  reserve each other's sockets. Readiness verifies listener ownership as well
+  as application activation. Teardown freezes the owned tree, kills descendants
+  before the parent and reaps observed orphans. This is benchmark teardown,
+  not evidence of graceful product shutdown. Readiness requires real application
+  readiness (e.g. celld
   accepts TCP before the app exists — a lesson recorded here after a
   503 storm produced flat lines).
 
+`density-lane.sh` now execs `density-lane.py`, using injectable control and
+process/PSS helpers. Formal mode requires clean measured-build/session metadata
+and the complete protocol. `--observation` is explicit and never writes a
+publication envelope. Counter instrumentation is confined to generated benchmark
+fixtures and their logs; public response bytes/headers and the production
+protocol are unchanged. Counters record actual per-worker request totals, with
+at least one cold or 100 warm requests each; a shared total is insufficient.
+
+The density producer has small-pool managed/strict and locked-workerd smoke
+coverage plus synthetic complete-archive validation. Actual fill-to-budget
+measurement and same-session T17 qualification are
+still pending. Do not promote the smoke or synthetic fixtures to performance
+conclusions.
+
 ## 3. Data pipeline
+
+The publication contract is now specified in
+[perf-evidence.md](perf-evidence.md). It supersedes the permissive collection
+rules below: all supplied lanes need complete sealed `lane.json` records,
+raw samples, correctness and isolation records. The CLI has no legacy or
+parser-only publication bypass. All three lanes now have producers for this
+contract; independent build and complete-session qualification remain. No new qualified
+0.3.0 point has been measured. Historical points remain unverified observations.
 
 - `bench/collect-perf-point.py --cold-start D1 --qps D2 [--density D3]`
   parses the three `cells.txt` formats, validates, and merges the point
   into `perf-site/data.js` (same-version points are replaced).
-- **Validations (fail-closed):** duplicate cold cells abort; a point
-  may not carry deno/node/workerd results whose identity the
-  fingerprint lacks (`machine.<key>` missing or `absent`).
+- **Validations (fail-closed):** duplicates or missing cells in any lane,
+  malformed/non-finite values, incomplete raw/correctness records, digest
+  mismatches, unknown posture and conflicting machine/source/binary identities
+  abort. Density participates in every provenance check. Summary values must
+  reconstruct from their sealed raw records.
 - **density keying:** `density[stack][phase@size] = {count, unit,
   pssMb}`; the site renders cold and warmed rows per stack and falls
   back to footprint-arithmetic `est` values only for unmeasured sizes.
-- **Provenance:** `git` commit/tag are recorded verbatim; the site
+- **Provenance:** `git` commit/tag identify the measured binaries; collector
+  identity and explicit generation time are separate. The site
   shows `release · commit <sha8>` unless a tag verifies the release.
 - Do not hand-edit `data.js`; regenerate it.
+- `prepare-perf-site.py` revalidates qualified points and stages their actual
+  evidence files beside the page before upload. Missing-contract historical
+  points are labeled unverified and have no fabricated evidence links.
 
 ## 4. Evidence
 

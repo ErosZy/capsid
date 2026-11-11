@@ -1,0 +1,5484 @@
+{
+  "schema": "capsid-outbound-contract-samples-v3",
+  "provenance": [
+    {
+      "mode": "workerd",
+      "report": "fanout-outbound-workerd-recapture.json",
+      "sha256": "4423dd02aa351516591da82274f3bbf8c887bdb32bb577e178a75c3433a6f3f2"
+    },
+    {
+      "mode": "single-worker",
+      "report": "fanout-outbound-single-worker-recapture.json",
+      "sha256": "1e7ddefad884fd26174efd239522e1c35ac4a9a1a111bc06efc5ffd748b4acb3"
+    },
+    {
+      "mode": "static-pool",
+      "report": "fanout-outbound-static-pool-recapture.json",
+      "sha256": "6d795b2cc6e6dff433c49763d499d1f6c8ca451b4405c5da39f0dfe73209d79c"
+    },
+    {
+      "mode": "managed",
+      "report": "fanout-outbound-managed-recapture.json",
+      "sha256": "ebf2fe461c8ae815940f66069eec30c464c1549f4c0e7a2640e236f0bc6a939f"
+    }
+  ],
+  "compression": "Exactly 140 repeated badkey invocations omitted; ownership observations are copied unchanged from actual reports. Previous sample preserved in fanout-outbound-sample-before-refresh.json.",
+  "reference": {
+    "complete": true,
+    "mode": "workerd",
+    "caseInvocations": 38,
+    "scenarioTypes": 35,
+    "assertions": 3021,
+    "cases": [
+      {
+        "name": "owned-pending-success",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "ended"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-pending-success"
+              }
+            ],
+            "returnedState": 0,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "",
+            "extensions": ""
+          },
+          "peer": {
+            "closed": true,
+            "messages": [],
+            "closes": []
+          }
+        }
+      },
+      {
+        "name": "owned-pending-reject",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "ended"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-pending-reject"
+              }
+            ],
+            "returnedState": 0,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "",
+            "extensions": ""
+          },
+          "peer": {
+            "closed": true,
+            "messages": [],
+            "closes": []
+          }
+        }
+      },
+      {
+        "name": "owned-pending-stall",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "ended"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-pending-stall-0"
+              }
+            ],
+            "returnedState": 0,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "",
+            "extensions": ""
+          },
+          "peer": {
+            "closed": true,
+            "messages": [],
+            "closes": []
+          }
+        }
+      },
+      {
+        "name": "owned-pending-stall",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "ended"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-pending-stall-1"
+              }
+            ],
+            "returnedState": 0,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "",
+            "extensions": ""
+          },
+          "peer": {
+            "closed": true,
+            "messages": [],
+            "closes": []
+          }
+        }
+      },
+      {
+        "name": "owned-pending-stall",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "ended"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-pending-stall-2"
+              }
+            ],
+            "returnedState": 0,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "",
+            "extensions": ""
+          },
+          "peer": {
+            "closed": true,
+            "messages": [],
+            "closes": []
+          }
+        }
+      },
+      {
+        "name": "owned-accepted-after-HTTP",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "ended"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-accepted-success"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "after HTTP"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "returnedState": 1,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "chat",
+            "extensions": null
+          },
+          "peer": {
+            "closed": true,
+            "messages": [
+              "reply:after HTTP"
+            ],
+            "closes": [
+              1000
+            ]
+          }
+        }
+      },
+      {
+        "name": "owned-streamed-before-HTTP-end",
+        "result": {
+          "response": {
+            "status": 202,
+            "text": "streamed"
+          },
+          "state": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/owner-streamed-success"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "after HTTP"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "returnedState": 0,
+            "sendRejected": true,
+            "acceptRejected": true,
+            "readyState": {
+              "error": "Error",
+              "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+            },
+            "protocol": "chat",
+            "extensions": null
+          },
+          "peer": {
+            "closed": true,
+            "messages": [
+              "reply:after HTTP"
+            ],
+            "closes": [
+              1000
+            ]
+          }
+        }
+      },
+      {
+        "name": "constructor-invalid-url-protocols",
+        "result": [
+          "SyntaxError",
+          "SyntaxError",
+          "SyntaxError",
+          "SyntaxError",
+          "SyntaxError"
+        ]
+      },
+      {
+        "name": "ws://127.0.0.1/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://127.0.0.1:33451/echo"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": "hello"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/echo"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": "hello"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/typed:typed",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://user:secret@localhost:33451/typed"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": {
+                "size": 3,
+                "correct": true
+              }
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/large:large",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/large"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": {
+                "size": 180000,
+                "correct": true
+              }
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/coalesced:coalesced",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/coalesced"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": "coalesced"
+            },
+            {
+              "type": "message",
+              "data": "界"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "wss://localhost/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "wss://localhost:40911/echo"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": "hello"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "wss://127.0.0.1/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "wss://127.0.0.1:40911/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = m13fimgk6kqise7ckbl27521",
+              "error": "Error: internal error; reference = m13fimgk6kqise7ckbl27521",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = m13fimgk6kqise7ckbl27521"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/badkey:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/badkey"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = rgpnvaf5nt9a908s44i5omsl",
+              "error": "Error: internal error; reference = rgpnvaf5nt9a908s44i5omsl",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = rgpnvaf5nt9a908s44i5omsl"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/not101:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/not101"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+              "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "TypeError",
+              "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead."
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/redirect:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/redirect"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+              "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "TypeError",
+              "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead."
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://example.invalid/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://example.invalid/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = 4gnd822jp33omdatu15eser3",
+              "error": "Error: internal error; reference = 4gnd822jp33omdatu15eser3",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = 4gnd822jp33omdatu15eser3"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://169.254.169.254/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://169.254.169.254/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = 2rjsra2bu5glukef9jngr6k8",
+              "error": "Error: internal error; reference = 2rjsra2bu5glukef9jngr6k8",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = 2rjsra2bu5glukef9jngr6k8"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "wss://localhost/untrusted:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "wss://localhost:34995/untrusted"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = cfo2sq2nqn4biin51jmkp2ru",
+              "error": "Error: internal error; reference = cfo2sq2nqn4biin51jmkp2ru",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = cfo2sq2nqn4biin51jmkp2ru"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://does-not-exist.invalid/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://does-not-exist.invalid/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = 9ro4l6bhq2qqc932gdm4p38g",
+              "error": "Error: internal error; reference = 9ro4l6bhq2qqc932gdm4p38g",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = 9ro4l6bhq2qqc932gdm4p38g"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/badprotocol:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/badprotocol"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "unrequested"
+            },
+            {
+              "type": "message",
+              "data": "hello"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/echo:cancel",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: Network connection lost.",
+              "error": "Error: Network connection lost.",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "Network connection lost."
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/stall:cancel-later",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/stall"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: Network connection lost.",
+              "error": "Error: Network connection lost.",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "Network connection lost."
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "wss://localhost/echo:cancel-later",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "wss://localhost:41243/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: Network connection lost.",
+              "error": "Error: Network connection lost.",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "Network connection lost."
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:abrupt-observe",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true,
+          "lifecycle": {
+            "operation": "observe",
+            "closes": 1,
+            "afterCallbackMethods": 1,
+            "microtask": 2,
+            "timer": 2,
+            "afterTimerMethods": 2
+          }
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:abrupt-send-in",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true,
+          "lifecycle": {
+            "operation": "send-in",
+            "closes": 1,
+            "call": {
+              "result": "undefined",
+              "state": 1
+            },
+            "afterCallbackMethods": 1,
+            "microtask": 2,
+            "timer": 2,
+            "afterTimerMethods": 2
+          }
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:abrupt-close-in",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true,
+          "lifecycle": {
+            "operation": "close-in",
+            "closes": 1,
+            "call": {
+              "result": "undefined",
+              "state": 1
+            },
+            "afterCallbackMethods": 1,
+            "microtask": 2,
+            "timer": 2,
+            "afterTimerMethods": 2
+          }
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:abrupt-send-after",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true,
+          "lifecycle": {
+            "operation": "send-after",
+            "closes": 1,
+            "afterCallbackMethods": 1,
+            "microtask": 2,
+            "timer": 2,
+            "call": {
+              "result": "undefined",
+              "state": 2
+            },
+            "afterTimerMethods": 2
+          }
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:abrupt-close-after",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true,
+          "lifecycle": {
+            "operation": "close-after",
+            "closes": 1,
+            "afterCallbackMethods": 1,
+            "microtask": 2,
+            "timer": 2,
+            "call": {
+              "result": "undefined",
+              "state": 2
+            },
+            "afterTimerMethods": 2
+          }
+        }
+      },
+      {
+        "name": "ws://localhost/abrupt:abrupt-both-after",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/abrupt"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "close",
+              "state": 1,
+              "code": 1006,
+              "reason": "WebSocket disconnected without sending Close frame.",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true,
+          "lifecycle": {
+            "operation": "both-after",
+            "closes": 1,
+            "afterCallbackMethods": 1,
+            "microtask": 2,
+            "timer": 2,
+            "calls": [
+              {
+                "result": "undefined",
+                "state": 2
+              },
+              {
+                "result": "undefined",
+                "state": 2
+              }
+            ],
+            "afterTimerMethods": 2
+          }
+        }
+      },
+      {
+        "name": "ws://localhost/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/echo"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": "hello"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "out-of-order-dials",
+        "result": [
+          {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/slow"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          },
+          {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          },
+          {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:33451/medium"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        ]
+      },
+      {
+        "name": "pending-after-HTTP",
+        "result": []
+      },
+      {
+        "name": "accepted-after-HTTP",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/echo"
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": "hello"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: Network connection lost.",
+              "error": "Error: Network connection lost.",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "Network connection lost."
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "done\u0000终",
+              "clean": true
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      },
+      {
+        "name": "denied:ws://localhost/echo:echo",
+        "result": {
+          "events": [
+            {
+              "type": "construct",
+              "state": 0,
+              "url": "ws://localhost:33451/echo"
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "message": "Uncaught Error: internal error; reference = 5i4iqfs35jmdtd9hdlurd967",
+              "error": "Error: internal error; reference = 5i4iqfs35jmdtd9hdlurd967",
+              "errorType": "object",
+              "errorIsError": true,
+              "errorName": "Error",
+              "errorMessage": "internal error; reference = 5i4iqfs35jmdtd9hdlurd967"
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ],
+          "sendRejected": true,
+          "acceptRejected": true
+        }
+      }
+    ],
+    "referenceParity": false,
+    "deviations": [
+      "unrequested-subprotocol"
+    ],
+    "referenceLock": {
+      "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "release_tag": "v1.20261010.1",
+      "binary": "workerd-linux-64",
+      "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "binary_version_string": "workerd 2026-10-10",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": [],
+      "client": {
+        "runtime": "node",
+        "websocket": "native (undici) - no external dependency",
+        "node_version": "v24.14.0",
+        "undici_version": "7.21.0"
+      },
+      "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+      "release_asset": "workerd-linux-64.gz",
+      "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+      "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+    },
+    "sourceSHA256": "b3f6fd8752c234e710a2f465a32549cf9beeab1ab469eb7da62e5c21723a68e6",
+    "hostSHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "client": {
+      "node": "v24.14.0",
+      "undici": "7.21.0",
+      "peer": "independent raw Node TCP/TLS peer"
+    },
+    "frames": 35,
+    "masks": 35,
+    "nonces": 170,
+    "sni": "localhost",
+    "shutdowns": [
+      {
+        "label": "denied",
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      {
+        "label": "owned",
+        "code": 0,
+        "signal": null,
+        "forced": false
+      },
+      {
+        "label": "allowed",
+        "code": 0,
+        "signal": null,
+        "forced": false
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "complete": true,
+      "mode": "single-worker",
+      "caseInvocations": 39,
+      "scenarioTypes": 36,
+      "assertions": 3035,
+      "cases": [
+        {
+          "name": "owned-pending-success",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-pending-success"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-reject",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-pending-reject"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-pending-stall-0"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-pending-stall-1"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-pending-stall-2"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-accepted-after-HTTP",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-accepted-success"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "after HTTP"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "returnedState": 1,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "chat",
+              "extensions": null
+            },
+            "peer": {
+              "closed": true,
+              "messages": [
+                "reply:after HTTP"
+              ],
+              "closes": [
+                1000
+              ]
+            }
+          }
+        },
+        {
+          "name": "owned-streamed-before-HTTP-end",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "streamed"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/owner-streamed-success"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "after HTTP"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "chat",
+              "extensions": null
+            },
+            "peer": {
+              "closed": true,
+              "messages": [
+                "reply:after HTTP"
+              ],
+              "closes": [
+                1000
+              ]
+            }
+          }
+        },
+        {
+          "name": "constructor-invalid-url-protocols",
+          "result": [
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError"
+          ]
+        },
+        {
+          "name": "ws://127.0.0.1/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://127.0.0.1:38599/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/typed:typed",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://user:secret@localhost:38599/typed"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": {
+                  "size": 3,
+                  "correct": true
+                }
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/large:large",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/large"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": {
+                  "size": 180000,
+                  "correct": true
+                }
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/coalesced:coalesced",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/coalesced"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "coalesced"
+              },
+              {
+                "type": "message",
+                "data": "界"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:36089/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://127.0.0.1/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://127.0.0.1:36089/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket TLS verification failed",
+                "error": "Error: WebSocket TLS verification failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket TLS verification failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/badkey:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/badkey"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: Invalid WebSocket handshake response",
+                "error": "Error: Invalid WebSocket handshake response",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "Invalid WebSocket handshake response"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/not101:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/not101"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+                "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "TypeError",
+                "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead."
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/redirect:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/redirect"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+                "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "TypeError",
+                "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead."
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://example.invalid/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://example.invalid/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://169.254.169.254/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://169.254.169.254/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/untrusted:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:37435/untrusted"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket TLS verification failed",
+                "error": "Error: WebSocket TLS verification failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket TLS verification failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://does-not-exist.invalid/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://does-not-exist.invalid/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket DNS failed",
+                "error": "Error: WebSocket DNS failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket DNS failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/badprotocol:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/badprotocol"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: Unrequested WebSocket subprotocol",
+                "error": "Error: Unrequested WebSocket subprotocol",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "Unrequested WebSocket subprotocol"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/echo:cancel",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/stall:cancel-later",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/stall"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/echo:cancel-later",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:37885/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-observe",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "observe",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-send-in",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "send-in",
+              "closes": 1,
+              "call": {
+                "result": "undefined",
+                "state": 1
+              },
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-close-in",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "close-in",
+              "closes": 1,
+              "call": {
+                "result": "undefined",
+                "state": 1
+              },
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-send-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "send-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "call": {
+                "result": "undefined",
+                "state": 2
+              },
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-close-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "close-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "call": {
+                "result": "undefined",
+                "state": 2
+              },
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-both-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "both-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "calls": [
+                {
+                  "result": "undefined",
+                  "state": 2
+                },
+                {
+                  "result": "undefined",
+                  "state": 2
+                }
+              ],
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/stall:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/stall"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket dial timed out",
+                "error": "Error: WebSocket dial timed out",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket dial timed out"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "elapsedMs": 10726
+          }
+        },
+        {
+          "name": "ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "out-of-order-dials",
+          "result": [
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/slow"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            },
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/echo"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            },
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:38599/medium"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            }
+          ]
+        },
+        {
+          "name": "pending-after-HTTP",
+          "result": []
+        },
+        {
+          "name": "accepted-after-HTTP",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "denied:ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:38599/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        }
+      ],
+      "referenceParity": false,
+      "deviations": [
+        "unrequested-subprotocol"
+      ],
+      "referenceLock": {
+        "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+        "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+        "release_tag": "v1.20261010.1",
+        "binary": "workerd-linux-64",
+        "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+        "binary_version_string": "workerd 2026-10-10",
+        "compatibility_date": "2026-08-20",
+        "compatibility_flags": [],
+        "client": {
+          "runtime": "node",
+          "websocket": "native (undici) - no external dependency",
+          "node_version": "v24.14.0",
+          "undici_version": "7.21.0"
+        },
+        "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+        "release_asset": "workerd-linux-64.gz",
+        "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+        "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+      },
+      "sourceSHA256": "b3f6fd8752c234e710a2f465a32549cf9beeab1ab469eb7da62e5c21723a68e6",
+      "hostSHA256": "b0cf1050b06fb0243c66289dc9ff19b783474cf8783adf77fb361717ea67d3de",
+      "workerSHA256": "b6767ae2bce143726fd02dc529964e2c5b12d74923766f998df9a1620499611d",
+      "client": {
+        "node": "v24.14.0",
+        "undici": "7.21.0",
+        "peer": "independent raw Node TCP/TLS peer"
+      },
+      "frames": 33,
+      "masks": 33,
+      "nonces": 171,
+      "sni": "localhost",
+      "shutdowns": [
+        {
+          "label": "denied",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        {
+          "label": "owned",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        {
+          "label": "allowed",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        }
+      ]
+    },
+    {
+      "complete": true,
+      "mode": "static-pool",
+      "caseInvocations": 39,
+      "scenarioTypes": 36,
+      "assertions": 3034,
+      "cases": [
+        {
+          "name": "owned-pending-success",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-pending-success"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-reject",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-pending-reject"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-pending-stall-0"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-pending-stall-1"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-pending-stall-2"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-accepted-after-HTTP",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-accepted-success"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "after HTTP"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "returnedState": 1,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "chat",
+              "extensions": null
+            },
+            "peer": {
+              "closed": true,
+              "messages": [
+                "reply:after HTTP"
+              ],
+              "closes": [
+                1000
+              ]
+            }
+          }
+        },
+        {
+          "name": "owned-streamed-before-HTTP-end",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "streamed"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/owner-streamed-success"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "after HTTP"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "chat",
+              "extensions": null
+            },
+            "peer": {
+              "closed": true,
+              "messages": [
+                "reply:after HTTP"
+              ],
+              "closes": [
+                1000
+              ]
+            }
+          }
+        },
+        {
+          "name": "constructor-invalid-url-protocols",
+          "result": [
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError"
+          ]
+        },
+        {
+          "name": "ws://127.0.0.1/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://127.0.0.1:42479/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/typed:typed",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://user:secret@localhost:42479/typed"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": {
+                  "size": 3,
+                  "correct": true
+                }
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/large:large",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/large"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": {
+                  "size": 180000,
+                  "correct": true
+                }
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/coalesced:coalesced",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/coalesced"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "coalesced"
+              },
+              {
+                "type": "message",
+                "data": "界"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:40299/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://127.0.0.1/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://127.0.0.1:40299/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket TLS verification failed",
+                "error": "Error: WebSocket TLS verification failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket TLS verification failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/badkey:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/badkey"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: Invalid WebSocket handshake response",
+                "error": "Error: Invalid WebSocket handshake response",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "Invalid WebSocket handshake response"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/not101:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/not101"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+                "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "TypeError",
+                "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead."
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/redirect:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/redirect"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+                "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "TypeError",
+                "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead."
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://example.invalid/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://example.invalid/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://169.254.169.254/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://169.254.169.254/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/untrusted:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:39459/untrusted"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket TLS verification failed",
+                "error": "Error: WebSocket TLS verification failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket TLS verification failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://does-not-exist.invalid/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://does-not-exist.invalid/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket DNS failed",
+                "error": "Error: WebSocket DNS failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket DNS failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/badprotocol:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/badprotocol"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: Unrequested WebSocket subprotocol",
+                "error": "Error: Unrequested WebSocket subprotocol",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "Unrequested WebSocket subprotocol"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/echo:cancel",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/stall:cancel-later",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/stall"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/echo:cancel-later",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:36313/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-observe",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "observe",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-send-in",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "send-in",
+              "closes": 1,
+              "call": {
+                "result": "undefined",
+                "state": 1
+              },
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-close-in",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "close-in",
+              "closes": 1,
+              "call": {
+                "result": "undefined",
+                "state": 1
+              },
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-send-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "send-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "call": {
+                "result": "undefined",
+                "state": 2
+              },
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-close-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "close-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "call": {
+                "result": "undefined",
+                "state": 2
+              },
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-both-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "both-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "calls": [
+                {
+                  "result": "undefined",
+                  "state": 2
+                },
+                {
+                  "result": "undefined",
+                  "state": 2
+                }
+              ],
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/stall:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/stall"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket dial timed out",
+                "error": "Error: WebSocket dial timed out",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket dial timed out"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "elapsedMs": 10725
+          }
+        },
+        {
+          "name": "ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "out-of-order-dials",
+          "result": [
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/slow"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            },
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/echo"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            },
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:42479/medium"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            }
+          ]
+        },
+        {
+          "name": "pending-after-HTTP",
+          "result": []
+        },
+        {
+          "name": "accepted-after-HTTP",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "denied:ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:42479/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        }
+      ],
+      "referenceParity": false,
+      "deviations": [
+        "unrequested-subprotocol"
+      ],
+      "referenceLock": {
+        "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+        "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+        "release_tag": "v1.20261010.1",
+        "binary": "workerd-linux-64",
+        "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+        "binary_version_string": "workerd 2026-10-10",
+        "compatibility_date": "2026-08-20",
+        "compatibility_flags": [],
+        "client": {
+          "runtime": "node",
+          "websocket": "native (undici) - no external dependency",
+          "node_version": "v24.14.0",
+          "undici_version": "7.21.0"
+        },
+        "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+        "release_asset": "workerd-linux-64.gz",
+        "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+        "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+      },
+      "sourceSHA256": "b3f6fd8752c234e710a2f465a32549cf9beeab1ab469eb7da62e5c21723a68e6",
+      "hostSHA256": "b0cf1050b06fb0243c66289dc9ff19b783474cf8783adf77fb361717ea67d3de",
+      "workerSHA256": "b6767ae2bce143726fd02dc529964e2c5b12d74923766f998df9a1620499611d",
+      "client": {
+        "node": "v24.14.0",
+        "undici": "7.21.0",
+        "peer": "independent raw Node TCP/TLS peer"
+      },
+      "frames": 33,
+      "masks": 33,
+      "nonces": 171,
+      "sni": "localhost",
+      "shutdowns": [
+        {
+          "label": "denied",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        {
+          "label": "owned",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        {
+          "label": "allowed",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        }
+      ]
+    },
+    {
+      "complete": true,
+      "mode": "managed",
+      "caseInvocations": 39,
+      "scenarioTypes": 36,
+      "assertions": 3035,
+      "cases": [
+        {
+          "name": "owned-pending-success",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-pending-success"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-reject",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-pending-reject"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-pending-stall-0"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-pending-stall-1"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-pending-stall",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-pending-stall-2"
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "",
+              "extensions": ""
+            },
+            "peer": {
+              "closed": true,
+              "messages": [],
+              "closes": []
+            }
+          }
+        },
+        {
+          "name": "owned-accepted-after-HTTP",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "ended"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-accepted-success"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "after HTTP"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "returnedState": 1,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "chat",
+              "extensions": null
+            },
+            "peer": {
+              "closed": true,
+              "messages": [
+                "reply:after HTTP"
+              ],
+              "closes": [
+                1000
+              ]
+            }
+          }
+        },
+        {
+          "name": "owned-streamed-before-HTTP-end",
+          "result": {
+            "response": {
+              "status": 202,
+              "text": "streamed"
+            },
+            "state": {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/owner-streamed-success"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "after HTTP"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "returnedState": 0,
+              "sendRejected": true,
+              "acceptRejected": true,
+              "readyState": {
+                "error": "Error",
+                "message": "Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)"
+              },
+              "protocol": "chat",
+              "extensions": null
+            },
+            "peer": {
+              "closed": true,
+              "messages": [
+                "reply:after HTTP"
+              ],
+              "closes": [
+                1000
+              ]
+            }
+          }
+        },
+        {
+          "name": "constructor-invalid-url-protocols",
+          "result": [
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError",
+            "SyntaxError"
+          ]
+        },
+        {
+          "name": "ws://127.0.0.1/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://127.0.0.1:32991/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/typed:typed",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://user:secret@localhost:32991/typed"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": {
+                  "size": 3,
+                  "correct": true
+                }
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/large:large",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/large"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": {
+                  "size": 180000,
+                  "correct": true
+                }
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/coalesced:coalesced",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/coalesced"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "coalesced"
+              },
+              {
+                "type": "message",
+                "data": "界"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:39765/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://127.0.0.1/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://127.0.0.1:39765/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket TLS verification failed",
+                "error": "Error: WebSocket TLS verification failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket TLS verification failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/badkey:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/badkey"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: Invalid WebSocket handshake response",
+                "error": "Error: Invalid WebSocket handshake response",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "Invalid WebSocket handshake response"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/not101:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/not101"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+                "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead.",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "TypeError",
+                "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 200 instead."
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/redirect:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/redirect"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+                "error": "TypeError: Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead.",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "TypeError",
+                "errorMessage": "Failed to establish the WebSocket connection: expected server to reply with HTTP status code 101 (switching protocols), but received 302 instead."
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://example.invalid/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://example.invalid/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://169.254.169.254/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://169.254.169.254/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/untrusted:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:46835/untrusted"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket TLS verification failed",
+                "error": "Error: WebSocket TLS verification failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket TLS verification failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://does-not-exist.invalid/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://does-not-exist.invalid/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket DNS failed",
+                "error": "Error: WebSocket DNS failed",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket DNS failed"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/badprotocol:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/badprotocol"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: Unrequested WebSocket subprotocol",
+                "error": "Error: Unrequested WebSocket subprotocol",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "Unrequested WebSocket subprotocol"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/echo:cancel",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/stall:cancel-later",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/stall"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "wss://localhost/echo:cancel-later",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "wss://localhost:45133/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket connection cancelled",
+                "error": "Error: WebSocket connection cancelled",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket connection cancelled"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-observe",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "observe",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-send-in",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "send-in",
+              "closes": 1,
+              "call": {
+                "result": "undefined",
+                "state": 1
+              },
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-close-in",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "close-in",
+              "closes": 1,
+              "call": {
+                "result": "undefined",
+                "state": 1
+              },
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-send-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "send-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "call": {
+                "result": "undefined",
+                "state": 2
+              },
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-close-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "close-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "call": {
+                "result": "undefined",
+                "state": 2
+              },
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/abrupt:abrupt-both-after",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/abrupt"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "close",
+                "state": 1,
+                "code": 1006,
+                "reason": "WebSocket disconnected without sending Close frame.",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "lifecycle": {
+              "operation": "both-after",
+              "closes": 1,
+              "afterCallbackMethods": 1,
+              "microtask": 2,
+              "timer": 2,
+              "calls": [
+                {
+                  "result": "undefined",
+                  "state": 2
+                },
+                {
+                  "result": "undefined",
+                  "state": 2
+                }
+              ],
+              "afterTimerMethods": 2
+            }
+          }
+        },
+        {
+          "name": "ws://localhost/stall:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/stall"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket dial timed out",
+                "error": "Error: WebSocket dial timed out",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket dial timed out"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true,
+            "elapsedMs": 10725
+          }
+        },
+        {
+          "name": "ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "out-of-order-dials",
+          "result": [
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/slow"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            },
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/echo"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            },
+            {
+              "events": [
+                {
+                  "type": "construct",
+                  "state": 0,
+                  "url": "ws://localhost:32991/medium"
+                },
+                {
+                  "type": "open",
+                  "state": 1,
+                  "protocol": "chat"
+                },
+                {
+                  "type": "message",
+                  "data": "hello"
+                },
+                {
+                  "type": "close",
+                  "state": 3,
+                  "code": 1000,
+                  "reason": "done\u0000终",
+                  "clean": true
+                }
+              ],
+              "sendRejected": true,
+              "acceptRejected": true
+            }
+          ]
+        },
+        {
+          "name": "pending-after-HTTP",
+          "result": []
+        },
+        {
+          "name": "accepted-after-HTTP",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/echo"
+              },
+              {
+                "type": "open",
+                "state": 1,
+                "protocol": "chat"
+              },
+              {
+                "type": "message",
+                "data": "hello"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1000,
+                "reason": "done\u0000终",
+                "clean": true
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        },
+        {
+          "name": "denied:ws://localhost/echo:echo",
+          "result": {
+            "events": [
+              {
+                "type": "construct",
+                "state": 0,
+                "url": "ws://localhost:32991/echo"
+              },
+              {
+                "type": "error",
+                "state": 3,
+                "message": "Uncaught Error: WebSocket egress denied",
+                "error": "Error: WebSocket egress denied",
+                "errorType": "object",
+                "errorIsError": true,
+                "errorName": "Error",
+                "errorMessage": "WebSocket egress denied"
+              },
+              {
+                "type": "close",
+                "state": 3,
+                "code": 1006,
+                "reason": "Failed to establish websocket connection",
+                "clean": false
+              }
+            ],
+            "sendRejected": true,
+            "acceptRejected": true
+          }
+        }
+      ],
+      "referenceParity": false,
+      "deviations": [
+        "unrequested-subprotocol"
+      ],
+      "referenceLock": {
+        "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+        "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+        "release_tag": "v1.20261010.1",
+        "binary": "workerd-linux-64",
+        "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+        "binary_version_string": "workerd 2026-10-10",
+        "compatibility_date": "2026-08-20",
+        "compatibility_flags": [],
+        "client": {
+          "runtime": "node",
+          "websocket": "native (undici) - no external dependency",
+          "node_version": "v24.14.0",
+          "undici_version": "7.21.0"
+        },
+        "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+        "release_asset": "workerd-linux-64.gz",
+        "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+        "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+      },
+      "sourceSHA256": "b3f6fd8752c234e710a2f465a32549cf9beeab1ab469eb7da62e5c21723a68e6",
+      "hostSHA256": "b0cf1050b06fb0243c66289dc9ff19b783474cf8783adf77fb361717ea67d3de",
+      "workerSHA256": "b6767ae2bce143726fd02dc529964e2c5b12d74923766f998df9a1620499611d",
+      "client": {
+        "node": "v24.14.0",
+        "undici": "7.21.0",
+        "peer": "independent raw Node TCP/TLS peer"
+      },
+      "frames": 33,
+      "masks": 33,
+      "nonces": 171,
+      "sni": "localhost",
+      "shutdowns": [
+        {
+          "label": "denied",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        {
+          "label": "owned",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        {
+          "label": "allowed",
+          "code": 0,
+          "signal": null,
+          "forced": false
+        }
+      ]
+    }
+  ]
+}

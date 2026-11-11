@@ -1,6 +1,6 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { guardedRejectionTests } from './guard-rejection-events.mjs';
 
 const deviationPattern = /^\|\s*(CAPSID-D\d+)\s*\|/gm;
 
@@ -36,6 +36,26 @@ export const auditMetadata = (manifest, deviationsMarkdown) => {
         throw new Error('executedProfile contains duplicate paths');
     }
 
+    const augmentations = manifest.sourceAugmentations;
+    if (!Array.isArray(augmentations) || augmentations.length !== 1) {
+        throw new Error('sourceAugmentations must declare the rejection event guards');
+    }
+    const augmentation = augmentations[0];
+    if (augmentation.path !== 'html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js' ||
+            !executed.has(augmentation.path)) {
+        throw new Error('source augmentation path must be the executed rejection support source');
+    }
+    if (augmentation.tool !== 'tests/wpt/guard-rejection-events.mjs' ||
+            augmentation.kind !== 'additional-observation-assertions' ||
+            augmentation.preservesUpstreamStatements !== true) {
+        throw new Error('source augmentation must preserve upstream statements and declare its guard tool');
+    }
+    if (!Array.isArray(augmentation.subtests) ||
+            JSON.stringify(augmentation.subtests) !== JSON.stringify(guardedRejectionTests)) {
+        throw new Error('source augmentation must list both guarded rejection subtests exactly');
+    }
+    requireString(augmentation.reason, 'source augmentation reason');
+
     if (!Array.isArray(manifest.expectedFailures) ||
         manifest.expectedFailures.length === 0) {
         throw new Error('expectedFailures must be a non-empty array');
@@ -49,6 +69,14 @@ export const auditMetadata = (manifest, deviationsMarkdown) => {
             expected.deviation,
             `${prefix}.deviation`,
         );
+        requireString(expected.errorName, `${prefix}.errorName`);
+        if (expected.errorName !== 'AssertionError') {
+            throw new Error(`${prefix}.errorName must be AssertionError`);
+        }
+        const message = requireString(expected.message, `${prefix}.message`);
+        if (message.includes('\n') || message.includes('\r')) {
+            throw new Error(`${prefix}.message must be a single diagnostic line`);
+        }
         if (!executed.has(testPath)) {
             throw new Error(`${prefix}.path is not in executedProfile: ${testPath}`);
         }
@@ -128,6 +156,7 @@ export const auditMetadata = (manifest, deviationsMarkdown) => {
         deviations: deviations.size,
         expectedFailures: expectedKeys.size,
         notExecuted: notExecuted.size,
+        sourceAugmentations: augmentations.length,
     };
 };
 
@@ -150,6 +179,6 @@ const main = () => {
 };
 
 if (process.argv[1] &&
-    path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
     main();
 }

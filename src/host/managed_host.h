@@ -5,6 +5,7 @@ struct capsid_worker;
 
 #include "host/activation_transaction.h"
 #include "host/bytecode_attestation.h"
+#include "host/host_config_model.h"
 #include "host/binding_compile.h"
 #include "host/policy_compiler.h"
 #include "host/service_lifecycle.h"
@@ -66,6 +67,10 @@ struct DeployOutcome {
 };
 
 struct ManagedHostOptions {
+    // GLM T08: channel limits from host.json (presence requests the
+    // channel capability set on the worker wire; compiled into the
+    // generation identity by the coordinator).
+    host::ChannelsConfig channels;
     // Pre-opened directory descriptors (safe-read boundary).
     int applications_root_fd = -1;
     // Pre-opened secret root dirfd; the App subdirectory is opened and
@@ -170,13 +175,17 @@ DeployOutcome managed_retire(ManagedHostOptions* options,
                              OperationStatus* status);
 
 // M2 item 5a: persist the crash-budget quarantine tombstone (state
-// quarantined + CRASH_BUDGET_EXCEEDED) for the CURRENT active document,
-// mirroring the retire tombstone path. Idempotent: an already-quarantined
+// quarantined + CRASH_BUDGET_EXCEEDED) for the expected active generation.
+// still_current runs under the App operation lock, without a pool lock;
+// the Host uses it to reject old pool instances even on an idempotent
+// redeploy of the same generation. Idempotent: an already-quarantined
 // or retired App is a successful no-op (the App is already not serving).
 // The caller (the worker supervisor) stops automatic replacement and
 // removes the dead worker from the routing map after this returns.
 DeployOutcome managed_quarantine(ManagedHostOptions* options,
-                                 OperationStatus* status);
+                                 const std::string& expected_generation,
+                                 OperationStatus* status,
+                                 const std::function<bool()>& still_current = {});
 
 // M2 item 5a: reads the current App lifecycle (active-state document +
 // phase) for the supervisor's decision input, through the same verified

@@ -1,4 +1,5 @@
 #include "worker_runtime.h"
+#include "worker_runtime_io.h"
 
 #if defined(__linux__)
 #include <malloc.h>
@@ -7,6 +8,7 @@
 #include "binding_rpc.h"
 #include "build_identity.h"
 #include "capability_policy.h"
+#include "channel_io.h"
 #include <array>
 #include <cstdint>
 
@@ -549,7 +551,37 @@ enum class ResponsePhase {
 // identity. refs: 1 from the registry owner, 1 while a ResponseState owns
 // it, +1 per captured job. Freed only when the bootstrap chain settles and
 // the post-drain reclaim drops the last (registry) ref.
+struct RequestToken;
+// Promise objects remember their creation scope without keeping that request
+// active. The token owns one reference and invalidates the pointer on release;
+// engine Promise finalizers release the remaining inert references.
+struct PromiseCreationScope {
+    RequestToken *token;
+    size_t refs;
+    bool holds_connection_token = false;
+    explicit PromiseCreationScope(RequestToken *owner) : token(owner), refs(1) {}
+};
+
 struct RequestToken {
+    PromiseCreationScope *promise_creation_scope = nullptr;
+    // A connection event has its own finite async owner, independent of
+    // the already-terminal handshake token. Zero denotes an HTTP token.
+    uint32_t connection_id = 0;
+    uint64_t connection_dial_id = 0;
+    // A committed 101 converts its initial HTTP creation scope into the
+    // shared I/O origin. Accepted application sockets keep it live; native
+    // proxy pumps alone do not retain timers or Promise continuations.
+    uint32_t upgrade_source_channel = 0;
+    bool connection_open_event = false;
+    bool connection_event_settled = false;
+    // Event completion and connection lifetime are independent. A settled
+    // callback can leave timers/Promise reactions owned by its live connection.
+    bool connection_jobs_revoked = false;
+    bool connection_cleanup_task = false;
+    bool connection_retired = false;
+    RequestToken *retired_previous = nullptr;
+    RequestToken *retired_next = nullptr;
+    uint64_t origin_generation = 0;
     uint64_t generation;
     uint64_t request_id;
     uint64_t deadline_ns;
@@ -557,8 +589,9 @@ struct RequestToken {
     int refs;
     // Diagnostic ref breakdown: job_refs counts QuickJS job-context
     // captures, async_refs counts txiki async-resource captures
-    // (timers/HttpClient/webcrypto). Sum + 1 registry + ResponseState
-    // owner equals refs.
+    // (timers/HttpClient/webcrypto). Sum + 1 registry + ResponseState or
+    // provisional coupling owner, plus the optional connection Promise
+    // identity reference, equals refs. HTTP Promise identities are weak.
     int job_refs;
     int async_refs;
     // §7.4: refs observed by the previous reclaim round. A chain that is
@@ -589,14 +622,26 @@ struct RequestToken {
           last_reclaim_refs_(0),
           reclaim_deadline_ns(0),
           reclaim_grace(false) {}
+
+    ~RequestToken() {
+        if (promise_creation_scope) {
+            promise_creation_scope->token = nullptr;
+            if (--promise_creation_scope->refs == 0) delete promise_creation_scope;
+        }
+    }
 };
 
 struct ResponseState {
+    uint32_t upgrade_channel_id = 0;
     uint64_t credit;
     uint64_t request_credit;
     uint64_t response_body_bytes_accepted;
     uint64_t deadline_ns;
     bool request_ended;
+    // One bounded response head may wait for wire space. Its body and
+    // terminal cannot pass it, including when initial body credit is zero.
+    capsid::protocol::Frame pending_head;
+    bool head_pending;
     std::deque<PendingWrite> pending;
     // C++11 target: no std::optional; the flag marks a deferred terminal.
     TerminalPending terminal;
@@ -617,6 +662,7 @@ struct ResponseState {
           response_body_bytes_accepted(0),
           deadline_ns(0),
           request_ended(false),
+          head_pending(false),
           terminal_pending(false),
           phase(ResponsePhase::kOpen),
           token(NULL),
@@ -643,6 +689,51 @@ enum class WorkerPhase {
 };
 
 class WorkerRuntime {
+    struct ConnectionEvent {
+        const char *type = nullptr;
+        std::shared_ptr<const capsid::ChannelMessage> message;
+        uint16_t code = 1005;
+        std::string reason;
+        bool clean = true;
+        bool has_http_response = false;
+        capsid::protocol::FetchUpgradeResponse http_response;
+    };
+    struct ConnectionOwner {
+        uint64_t dial_id = 0;
+        bool cancel_requested = false;
+        bool http_owned_dial = false;
+        bool fetch_upgrade = false;
+        bool fetch_body = false;
+        bool fetch_accepted = false;
+        bool connection_promoted = false;
+        bool local_outgoing_open = false;
+        bool transport_disconnected = false;
+        bool lifetime_pinned = false;
+        uint32_t proxy_peer = 0;
+        bool proxy_stopped = false;
+        bool proxy_send_closed = false;
+        bool fetch_response_started = false;
+        uint64_t withheld_credit = 0;
+        bool abandoned = false;
+        bool awaiting_activation = false;
+        // A committed 101 may wait for the local peer's accept(). This is a
+        // finite native owner of the original job, not detached HTTP work.
+        RequestToken *coupling_token = nullptr;
+        uint64_t coupling_deadline_ns = 0;
+        uint64_t request_id = 0;
+        uint64_t origin_generation = 0;
+        JSValue callback = JS_UNDEFINED;
+        JSValue resolve = JS_UNDEFINED;
+        JSValue reject = JS_UNDEFINED;
+        capsid::protocol::Frame handshake;
+        bool committed = false;
+        bool close_event_queued = false;
+        bool resources_closed = false;
+        bool resources_reclaimed = false;
+        uint64_t active_event = 0;
+        std::shared_ptr<const capsid::ChannelMessage> active_message;
+        std::deque<ConnectionEvent> events;
+    };
     // §5.1: one QuickJS runtime/context per Binding, created only when
     // bindings exist. Each attaches to the User runtime's loop
     // (shared_loop) and is pumped by it; heaps, globals, module loaders and
@@ -727,9 +818,10 @@ class WorkerRuntime {
     // binding id -> index into binding_tables_.
     std::map<std::string, size_t> binding_table_index_;
 public:
-    WorkerRuntime(int fd, int network_namespace_fd)
+    WorkerRuntime(int fd, int network_namespace_fd, const CapsidWorkerIo* io)
         : fd_(fd),
           network_namespace_fd_(network_namespace_fd),
+          io_(io),
           runtime_(NULL),
           ctx_(NULL),
           poll_started_(false),
@@ -755,6 +847,7 @@ public:
           request_chunk_(JS_UNDEFINED),
           request_end_(JS_UNDEFINED),
           cancel_request_(JS_UNDEFINED),
+          microtask_error_reporter_(JS_UNDEFINED),
           next_token_generation_(0),
           current_token_(NULL),
           poisoned_(false),
@@ -776,6 +869,7 @@ public:
 
     ~WorkerRuntime() {
         if (ctx_) {
+            clear_connections();
             for (std::map<uint64_t, ResponseState>::iterator it = responses_.begin();
                  it != responses_.end();
                  ++it) {
@@ -841,6 +935,11 @@ public:
                  it != token_registry_.end();) {
                 RequestToken *token = it->second;
                 token_registry_.erase(it++);
+                delete token;
+            }
+            while (retired_connection_tokens_) {
+                RequestToken *token = retired_connection_tokens_;
+                retired_connection_tokens_ = token->retired_next;
                 delete token;
             }
         }
@@ -1017,6 +1116,15 @@ public:
         job_hooks.release = job_release_hook;
         JS_SetJobContextHooks(
             JS_GetRuntime(ctx_), &job_hooks, this);
+        JS_SetJobContextCanRunHook(JS_GetRuntime(ctx_), connection_job_can_run, this);
+        JSPromiseContextHooks promise_hooks;
+        promise_hooks.capture = promise_scope_capture;
+        promise_hooks.enter = promise_scope_enter;
+        promise_hooks.leave = job_leave_hook;
+        promise_hooks.release = promise_scope_release;
+        promise_hooks.can_run = promise_scope_can_run;
+        promise_hooks.same_context = promise_scope_matches;
+        JS_SetPromiseContextHooks(JS_GetRuntime(ctx_), &promise_hooks, this);
         // §7.2: the same four hooks drive the txiki-layer async context so
         // native resources (timers, httpclient, webcrypto ops) capture the
         // owning token across libuv callbacks and re-enter it when their
@@ -1027,6 +1135,12 @@ public:
         async_ctx_hooks.leave = job_leave_hook;
         async_ctx_hooks.release = async_job_release_hook;
         tjs_set_async_context_hooks(ctx_, &async_ctx_hooks, this);
+        TJSAsyncContextControlHooks context_control;
+        context_control.can_run = connection_job_can_run;
+        context_control.timer_allowed = connection_timer_allowed;
+        context_control.checkpoint = connection_checkpoint;
+        tjs_set_async_context_control_hooks(ctx_, &context_control, this);
+        tjs_set_timer_exception_hook(ctx_, scoped_timer_exception, this);
         std::string bridge_error;
         if (!load_bridge_functions(&bridge_error)) {
             send_error(0, bridge_error);
@@ -1104,12 +1218,23 @@ public:
             capsid::compute_binding_profile_digest(bindings_));
         if (config_.protocol_version ==
             capsid::protocol::kVersionV4) {
-            // Amended §1.2: v4 READY answers the worker's capability
-            // bitset. The vertical slice ships negotiation first, so the
-            // worker announces carriage only (zero feature bits); the
-            // channel and upgrade bits land with their implementations.
+            // Channel adapters require the confirmation barrier. Optional
+            // fetch metadata is usable only when the Host announces it too;
+            // older embedders keep their exact previous effective bitset.
+            const uint32_t caps = (config_.host_capabilities & capsid::protocol::kCapChannelConfirm)
+                ? capsid::protocol::kCapDuplexChannel | capsid::protocol::kCapUpgrade |
+                  capsid::protocol::kCapChannelLayoutA2 | capsid::protocol::kCapChannelConfirm |
+                  (config_.host_capabilities & (capsid::protocol::kCapChannelCloseFinal | capsid::protocol::kCapFetchUpgrade | capsid::protocol::kCapConnectionLifetime)) : 0;
+            capsid::protocol::append_u32(&ready_payload, caps);
             capsid::protocol::append_u32(&ready_payload, 0);
-            capsid::protocol::append_u32(&ready_payload, 0);
+        }
+        if (channels_) {
+            capsid::protocol::Frame ready;
+            ready.version = config_.protocol_version;
+            ready.type = capsid::protocol::kReady;
+            ready.flags = sandbox_features;
+            ready.payload = ready_payload;
+            if (!channels_->commit_local(ready).accepted) return 1;
         }
         send_payload(capsid::protocol::kReady, 0, sandbox_features,
                      ready_payload.data(), ready_payload.size());
@@ -1126,6 +1251,14 @@ public:
         // retained count on POISON EXIT.
         bool token_leak = false;
         if (!poisoned_ && responses_.empty()) {
+            // The last response can be followed immediately by Shutdown or
+            // host EOF, before the deadline tick performs its scheduled GC.
+            // Completed Promise cycles still own captured token references
+            // until collected. Collect unreachable values before inspecting
+            // those references; live timers/jobs remain reachable and must
+            // still fail the unchanged leak check below. Do not run jobs or
+            // advance the event loop after the shutdown boundary.
+            JS_RunGC(JS_GetRuntime(ctx_));
             for (std::map<uint64_t, RequestToken *>::const_iterator it =
                      token_registry_.begin();
                  it != token_registry_.end();
@@ -1139,6 +1272,13 @@ public:
                     token_leak = true;
                 }
             }
+            if (!token_leak) {
+                // Every survivor now has only its registry reference. Drop
+                // that final owner before reporting a successful exit.
+                while (!token_registry_.empty()) {
+                    release_token(token_registry_.begin()->second);
+                }
+            }
         }
         if (token_leak) {
             std::fprintf(stderr,
@@ -1146,7 +1286,9 @@ public:
                          static_cast<unsigned long long>(retained_refs_));
             return 1;
         }
-        return run_result;
+        // A poisoned realm is an abnormal Worker termination even when the
+        // event loop itself stopped without a JavaScript exception.
+        return poisoned_ ? 1 : run_result;
     }
 
 private:
@@ -1172,7 +1314,7 @@ private:
         if (!token) {
             return 0;
         }
-        if (token->terminal) {
+        if (token->terminal && token->connection_id == 0 && token->connection_dial_id == 0) {
             return 0;
         }
         if (token->deadline_ns == 0) {
@@ -1251,6 +1393,10 @@ private:
         if (self) {
             self->current_token_ =
                 static_cast<RequestToken *>(job_context);
+            RequestToken *token = self->current_token_;
+            if (token && (token->connection_id || token->connection_dial_id) &&
+                    !token->deadline_ns && !token->connection_jobs_revoked)
+                token->deadline_ns = self->connection_execution_deadline();
         }
         return previous;
     }
@@ -1280,6 +1426,354 @@ private:
         if (self && token != NULL) {
             token->async_refs -= 1;
             self->release_token(token);
+        }
+    }
+
+    static int promise_scope_capture(JSContext *ctx, void *opaque, void **out) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        *out = nullptr;
+        RequestToken *token = self ? self->current_token_ : nullptr;
+        if (!token) return 0;
+        if (!token->promise_creation_scope) {
+            token->promise_creation_scope = new (std::nothrow) PromiseCreationScope(token);
+            if (!token->promise_creation_scope) {
+                JS_ThrowOutOfMemory(ctx);
+                return -1;
+            }
+        }
+        if ((token->connection_id || token->connection_dial_id) &&
+                !token->promise_creation_scope->holds_connection_token) {
+            self->retain_token(token);
+            token->promise_creation_scope->holds_connection_token = true;
+        }
+        token->promise_creation_scope->refs++;
+        *out = token->promise_creation_scope;
+        return 0;
+    }
+
+    static void promise_scope_release(void *context, void *opaque) {
+        PromiseCreationScope *scope = static_cast<PromiseCreationScope *>(context);
+        if (!scope) return;
+        if (--scope->refs == 0) {delete scope; return;}
+        if (scope->refs == 1 && scope->holds_connection_token) {
+            scope->holds_connection_token = false;
+            // Releasing this last engine reference can destroy both token
+            // and scope. The registry lease is separately revoked on Close.
+            static_cast<WorkerRuntime *>(opaque)->release_token(scope->token);
+        }
+    }
+
+    static uint64_t io_context_identity(const RequestToken *token) {
+        return !token ? 0 : (token->connection_id || token->connection_dial_id)
+            ? token->origin_generation : token->generation;
+    }
+
+    static bool promise_scope_matches(JSContext *, void *context, void *job_context, void *opaque) {
+        const PromiseCreationScope *scope = static_cast<PromiseCreationScope *>(context);
+        const WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        const RequestToken *other = job_context ? static_cast<RequestToken *>(job_context)
+            : self ? self->current_token_ : nullptr;
+        return scope && scope->token && other &&
+            io_context_identity(scope->token) == io_context_identity(other);
+    }
+
+    static bool promise_scope_can_run(JSContext *ctx, void *context, void *opaque) {
+        const PromiseCreationScope *scope = static_cast<PromiseCreationScope *>(context);
+        const WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        const RequestToken *token = scope ? scope->token : nullptr;
+        if (!self || self->poisoned_ || !token) return false;
+        if (token->connection_id || token->connection_dial_id)
+            return connection_job_can_run(ctx, scope->token, opaque) &&
+                (promise_scope_matches(ctx, context, nullptr, opaque) ||
+                 !self->connection_resources_closed(token));
+        // Ordinary HTTP continuations keep their strict terminal checks. A
+        // foreign request cannot revive a Promise from an ended HTTP scope.
+        if (promise_scope_matches(ctx, context, nullptr, opaque)) return true;
+        // A committed Upgrade can still be waiting for its peer to accept.
+        // Its existing bounded, origin-matched coupling owns that wait after
+        // the HTTP response ends; another request may perform the acceptance.
+        if (self->has_provisional_coupling(token)) return true;
+        const auto response = self->responses_.find(token->request_id);
+        return !token->terminal && response != self->responses_.end() &&
+            response->second.token == token;
+    }
+
+    static void *promise_scope_enter(JSContext *ctx, void *context, void *opaque) {
+        const PromiseCreationScope *scope = static_cast<PromiseCreationScope *>(context);
+        return job_enter_hook(ctx, scope ? scope->token : nullptr, opaque);
+    }
+
+    uint64_t connection_execution_deadline() const {
+        const uint64_t now = uv_hrtime();
+        const uint64_t max = std::numeric_limits<uint64_t>::max();
+        const uint64_t duration = config_.timeout_ms > max / 1000000u
+            ? max : config_.timeout_ms * 1000000u;
+        return duration > max - now ? max : now + duration;
+    }
+
+    static bool connection_job_can_run(JSContext *, void *context, void *opaque) {
+        const RequestToken *token = static_cast<RequestToken *>(context);
+        if (!token) return true;
+        if (token->connection_jobs_revoked) return false;
+        const WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        // Deadline interruption ends application work before the next native
+        // tick queues the connection failure. Deferred rejection notifications
+        // must not re-enter that expired turn. Private cleanup has its own
+        // finite token; ordinary HTTP continuation policy stays independent.
+        return !((token->connection_id || token->connection_dial_id) &&
+            !token->connection_cleanup_task && (token->terminal ||
+            (self && self->interrupted_request_id_ == token->request_id)));
+    }
+
+    static bool callback_scope_live(const WorkerRuntime *self) {
+        const RequestToken *token = self ? self->current_token_ : nullptr;
+        return token && !self->poisoned_ && !token->terminal && !token->connection_jobs_revoked;
+    }
+
+    static bool scoped_timer_exception(JSContext *, JSValueConst, void *opaque) {
+        // Timer exceptions do not report a global error event in the pinned
+        // profile. An interrupt keeps its native deadline marker so the next
+        // tick cancels only the owning connection/request. Worker scope and
+        // terminal continuations retain the existing runtime-stop policy.
+        return callback_scope_live(static_cast<WorkerRuntime *>(opaque));
+    }
+
+    static bool scoped_microtask_exception(JSContext *ctx, JSValueConst error, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (!callback_scope_live(self) || !JS_IsFunction(ctx, self->microtask_error_reporter_)) return false;
+        JSValue filename = JS_UNDEFINED;
+        int line = 0, column = -1;
+        JS_GetErrorSourceLocation(ctx, error, &filename, &line, &column);
+        JSValue location = JS_NewArray(ctx);
+        if (JS_IsException(filename) || JS_IsException(location)) {
+            JS_FreeValue(ctx, filename);
+            JS_FreeValue(ctx, location);
+            JSValue failure = JS_GetException(ctx);
+            JS_FreeValue(ctx, failure);
+            return false;
+        }
+        if (JS_DefinePropertyValueUint32(ctx, location, 0, filename, JS_PROP_C_W_E) < 0 ||
+            JS_DefinePropertyValueUint32(ctx, location, 1, JS_NewInt32(ctx, line), JS_PROP_C_W_E) < 0 ||
+            JS_DefinePropertyValueUint32(ctx, location, 2, JS_NewInt32(ctx, column), JS_PROP_C_W_E) < 0) {
+            JS_FreeValue(ctx, location);
+            JSValue failure = JS_GetException(ctx);
+            JS_FreeValue(ctx, failure);
+            return false;
+        }
+        JSValueConst arguments[] = {error, location};
+        JSValue result = JS_Call(ctx, self->microtask_error_reporter_, JS_UNDEFINED, 2, arguments);
+        JS_FreeValue(ctx, location);
+        if (JS_IsException(result)) {
+            // A reporting listener may itself throw. Consume that secondary
+            // exception without turning a reported microtask into a realm exit.
+            JSValue secondary = JS_GetException(ctx);
+            JS_FreeValue(ctx, secondary);
+        }
+        JS_FreeValue(ctx, result);
+        return true;
+    }
+
+    bool connection_http_request_active(const ConnectionOwner &owner) const {
+        if (!owner.dial_id) return false;
+        const auto response = responses_.find(owner.request_id);
+        return response != responses_.end() && response->second.token &&
+            !response->second.token->terminal &&
+            response->second.token->generation == owner.origin_generation;
+    }
+
+    bool origin_has_live_connection(uint64_t origin) const {
+        for (const auto &item : connections_) {
+            const auto &owner = item.second;
+            if (owner.origin_generation == origin && owner.connection_promoted &&
+                    !owner.resources_closed && !owner.abandoned) return true;
+        }
+        return false;
+    }
+
+    bool connection_resources_closed(const RequestToken *token) const {
+        // Accepted sockets from one request share its I/O lifetime. A closed
+        // parent's continuations remain live while a promoted sibling owns
+        // that origin, even after the parent's transport owner was erased.
+        if (origin_has_live_connection(token->origin_generation)) return false;
+        if (token->connection_id) {
+            const auto found = connections_.find(token->connection_id);
+            return found == connections_.end() || (found->second.resources_closed &&
+                !connection_http_request_active(found->second));
+        }
+        if (token->connection_dial_id) {
+            const auto found = pending_connections_.find(token->connection_dial_id);
+            return found == pending_connections_.end() || (found->second.resources_closed &&
+                !connection_http_request_active(found->second));
+        }
+        return false;
+    }
+
+    static bool connection_timer_allowed(JSContext *, void *context, int operation, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        const RequestToken *token = static_cast<RequestToken *>(context);
+        if (!self || !token) return true;
+        if (operation == 1) {
+            const RequestToken *active = self->current_token_;
+            if (!active) return false;
+            const uint64_t origin = (token->connection_id || token->connection_dial_id)
+                ? token->origin_generation : token->generation;
+            const uint64_t active_origin = (active->connection_id || active->connection_dial_id)
+                ? active->origin_generation : active->generation;
+            return origin == active_origin;
+        }
+        return !token->connection_jobs_revoked && !self->connection_resources_closed(token);
+    }
+
+    static void connection_checkpoint(JSContext *, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        if (self) self->finish_connection_turns();
+    }
+
+    static bool resource_matches_io_origin(void *context, void *opaque) {
+        const RequestToken *token = static_cast<RequestToken *>(context);
+        const RequestToken *owner = static_cast<RequestToken *>(opaque);
+        return token && (token->connection_id || token->connection_dial_id) &&
+            token->origin_generation == owner->origin_generation;
+    }
+
+    static bool resource_matches_exact_token(void *context, void *opaque) {
+        return context == opaque;
+    }
+
+    bool abandon_origin_dials(uint64_t origin) {
+        namespace p = capsid::protocol;
+        if (!origin) return true;
+        const auto belongs = [origin](const ConnectionOwner &candidate) {
+            return candidate.dial_id && !candidate.proxy_peer && !candidate.connection_promoted && !candidate.abandoned &&
+                candidate.origin_generation == origin;
+        };
+        for (auto &item : pending_connections_) {
+            auto &child = item.second;
+            if (!belongs(child)) continue;
+            child.abandoned = true;
+            child.events.clear();
+            close_connection_resources(0, child);
+            if (child.cancel_requested || child.close_event_queued) continue;
+            p::ChannelCancelPayload cancel; cancel.dial_id = item.first;
+            p::Frame frame; frame.version = p::kVersionV4; frame.type = p::kChannelCancel;
+            p::encode_channel_cancel(cancel, &frame.payload);
+            if (!enqueue_channel_control(frame)) return false;
+            child.cancel_requested = true;
+        }
+        for (auto &item : connections_) {
+            auto &child = item.second;
+            if (!belongs(child)) continue;
+            child.abandoned = true;
+            child.events.clear();
+            if (!child.cancel_requested && !child.close_event_queued && channels_->registry().find(item.first, nullptr)) {
+                if (!cancel_channel_resource(item.first, p::kCancelLocal)) return false;
+                child.cancel_requested = true;
+                child.events.clear();
+            }
+            close_connection_resources(item.first, child);
+        }
+        return true;
+    }
+
+    void close_connection_resources(uint32_t id, ConnectionOwner &owner) {
+        // A coupled incoming endpoint still owns its outgoing direction after
+        // remote EOF. Its local close (or an explicit failure) ends that owner;
+        // constructor/fetched endpoints never acquire this incoming lifetime.
+        if (!shutting_down_ && owner.transport_disconnected &&
+                owner.local_outgoing_open && !owner.abandoned) return;
+        owner.resources_closed = true;
+        // An outbound socket may end while its original HTTP request still
+        // awaits the close callback's Promise. That request owns the live I/O
+        // context until its response settles; transport EOF alone cannot cancel
+        // its timers or reactions. Incoming upgraded connections have no dial.
+        if (!shutting_down_ && connection_http_request_active(owner)) return;
+        if (!shutting_down_ && origin_has_live_connection(owner.origin_generation)) return;
+        if (owner.resources_reclaimed) return;
+        owner.resources_reclaimed = true;
+        RequestToken identity(0, 0, 0);
+        identity.connection_id = id;
+        identity.connection_dial_id = id ? 0 : owner.dial_id;
+        identity.origin_generation = owner.origin_generation;
+        tjs_cancel_context_timers(ctx_, resource_matches_io_origin, &identity);
+        tjs_cancel_context_httpclients(ctx_, resource_matches_io_origin, &identity);
+        // The last promoted socket retires the shared origin's remaining
+        // handshakes, unaccepted endpoints and unfinished bodies. Earlier
+        // parent transport closures cannot revoke a still-live I/O origin.
+        // Preserve result ACKs ahead of each queued CANCEL.
+        if (!shutting_down_) {
+            try {
+                if (!abandon_origin_dials(owner.origin_generation))
+                    enter_poison("connection fetch cancellation control budget exceeded");
+            } catch (const std::bad_alloc &) {enter_poison("connection fetch cancellation allocation failed");}
+        }
+    }
+
+    void retire_connection_token(RequestToken *token) {
+        token->connection_jobs_revoked = true;
+        token->terminal = true;
+        token->deadline_ns = 0;
+        auto owner = connections_.find(token->connection_id);
+        if (owner != connections_.end() && owner->second.active_event == token->generation) {
+            owner->second.active_event = 0;
+            owner->second.active_message.reset();
+        }
+        auto pending = pending_connections_.find(token->connection_dial_id);
+        if (pending != pending_connections_.end() && pending->second.active_event == token->generation)
+            pending->second.active_event = 0;
+        // Captured JS reactions can remain reachable after close (for example
+        // a resolver retained by the application). They are inert, and own
+        // only this context reference, not a live connection/registry lease.
+        token_registry_.erase(token->generation);
+        token->connection_retired = true;
+        // Intrusive bookkeeping keeps cancellation allocation-free.
+        token->retired_next = retired_connection_tokens_;
+        if (retired_connection_tokens_) retired_connection_tokens_->retired_previous = token;
+        retired_connection_tokens_ = token;
+        release_token(token);
+    }
+
+    void finish_connection_turns() {
+        if (current_token_ || JS_IsJobPending(JS_GetRuntime(ctx_))) return;
+        bool released_lifetime=false;
+        for (auto &item : connections_) {
+            auto &owner = item.second;
+            if (owner.transport_disconnected && !owner.local_outgoing_open && !owner.resources_closed)
+                close_connection_resources(item.first, owner);
+            if (owner.lifetime_pinned && owner.resources_closed) {
+                if (!queue_connection_lifetime(item.first, false)) {
+                    enter_poison("connection lifetime control budget exceeded");return;
+                }
+                owner.lifetime_pinned=false;
+                released_lifetime=true;
+            }
+        }
+        if (released_lifetime) pump_channels();
+        for (auto it = token_registry_.begin(); it != token_registry_.end();) {
+            RequestToken *token = (it++)->second;
+            if (!token->connection_id && !token->connection_dial_id) continue;
+            if (connection_resources_closed(token) &&
+                    (!token->connection_cleanup_task || token->connection_event_settled)) {
+                if (token->upgrade_source_channel) {
+                    // Revoke reactions before cancelling native resources.
+                    // A held body or application resolver must not resume the
+                    // original handler after its final JS-owned source ends.
+                    try {
+                        token->connection_jobs_revoked = true;
+                        tjs_cancel_context_timers(ctx_, resource_matches_exact_token, token);
+                        tjs_cancel_context_httpclients(ctx_, resource_matches_exact_token, token);
+                        if (!abandon_origin_dials(token->origin_generation)) {
+                            enter_poison("proxy source cancellation control budget exceeded"); return;
+                        }
+                    } catch (const std::bad_alloc &) {
+                        enter_poison("proxy source cancellation allocation failed"); return;
+                    }
+                }
+                retire_connection_token(token);
+            } else {
+                // Arm a fresh finite CPU budget on the next native callback
+                // or Promise job; a parked resource consumes no running turn.
+                if (interrupted_request_id_ != token->request_id) token->deadline_ns = 0;
+            }
         }
     }
 
@@ -1429,6 +1923,11 @@ private:
         retained_refs_ -= 1;
         if (--token->refs == 0) {
             token_registry_.erase(token->generation);
+            if (token->connection_retired) {
+                if (token->retired_previous) token->retired_previous->retired_next = token->retired_next;
+                else retired_connection_tokens_ = token->retired_next;
+                if (token->retired_next) token->retired_next->retired_previous = token->retired_previous;
+            }
             delete token;
         }
     }
@@ -1460,6 +1959,10 @@ private:
                 return NULL;
             }
             JS_ThrowInternalError(ctx, "no active request");
+            return NULL;
+        }
+        if (has_explicit && (token->connection_id != 0 || token->connection_dial_id != 0)) {
+            JS_ThrowInternalError(ctx, "connection event cannot access the HTTP response bridge");
             return NULL;
         }
         if (has_explicit && explicit_id != token->request_id) {
@@ -1501,9 +2004,20 @@ private:
              it != token_registry_.end();
              ++it) {
             RequestToken *token = it->second;
-            if (token->request_id == id) {
+            if (token->connection_id == 0 && token->connection_dial_id == 0 && token->request_id == id) {
                 if (token->terminal) {
                     return false;  // double settle
+                }
+                try {
+                    const bool live_upgrade_origin = token->upgrade_source_channel &&
+                        origin_has_live_connection(token->generation);
+                    if (!live_upgrade_origin && !abandon_http_dials(token->generation)) {
+                        enter_poison("HTTP dial cancellation control budget exceeded");
+                        return false;
+                    }
+                } catch (const std::bad_alloc &) {
+                    enter_poison("HTTP dial cancellation allocation failed");
+                    return false;
                 }
                 // §6.4: settle ends the ResponseState owner ref. The
                 // post-drain reclaim then sees only the registry owner
@@ -1516,6 +2030,23 @@ private:
                 if (found != responses_.end()) {
                     release_token(found->second.token);
                     found->second.token = NULL;
+                }
+                if (token->upgrade_source_channel) {
+                    // Keep the initial Promise/timer scope with the accepted
+                    // WebSocket origin after the HTTP terminal. A native
+                    // proxy alone has no application owner and still expires
+                    // at the next checkpoint. Ordinary HTTP stays terminal.
+                    token->connection_id = token->upgrade_source_channel;
+                    token->origin_generation = token->generation;
+                    token->connection_event_settled = true;
+                    token->deadline_ns = 0;
+                    if (token->promise_creation_scope && token->promise_creation_scope->refs > 1 &&
+                            !token->promise_creation_scope->holds_connection_token) {
+                        retain_token(token);
+                        token->promise_creation_scope->holds_connection_token = true;
+                    }
+                    request_reclaim(token);
+                    return true;
                 }
                 token->terminal = true;
                 // §7.4: the normal completion path runs no drain; the
@@ -1622,6 +2153,27 @@ private:
     // parked on an unfired resource is detached work, not completion-chain
     // progress. Past the per-token window any surviving refs poison the
     // worker.
+    bool has_provisional_coupling(const RequestToken *token) const {
+        if (!token || token->terminal) return false;
+        for (const auto &item : connections_) {
+            const auto &owner = item.second;
+            if (owner.coupling_token == token && owner.origin_generation == token->generation &&
+                    owner.committed && owner.awaiting_activation && !owner.abandoned)
+                return true;
+        }
+        return false;
+    }
+
+    void release_coupling(ConnectionOwner &owner) {
+        RequestToken *token = owner.coupling_token;
+        owner.coupling_token = nullptr;
+        owner.coupling_deadline_ns = 0;
+        if (token) {
+            request_reclaim(token);
+            release_token(token);
+        }
+    }
+
     void reclaim_settled_tokens() {
         std::vector<uint64_t> reclaimable;
         for (std::map<uint64_t, RequestToken *>::iterator it =
@@ -1629,6 +2181,24 @@ private:
              it != token_registry_.end();
              ++it) {
             RequestToken *token = it->second;
+            if ((token->connection_id || token->connection_dial_id) &&
+                    !token->terminal && token->connection_event_settled && token->refs == 1) {
+                reclaimable.push_back(it->first);
+                continue;
+            }
+            if (has_provisional_coupling(token)) {
+                // Only the private, origin-matched connection lease grants
+                // this exception. expire_connection_events() bounds the wait.
+                reclaim_pending_ = true;
+                continue;
+            }
+            if ((token->connection_id || token->connection_dial_id) && token->terminal && !token->connection_event_settled &&
+                    token->deadline_ns && uv_hrtime()<token->deadline_ns) {
+                // Revoked capabilities and a finite Promise cleanup owner
+                // are separate. This event is not detached HTTP work.
+                reclaim_pending_=true;
+                continue;
+            }
             // §7.4: remember the refs of the previous round before
             // updating; a candidate whose refs are still falling is a
             // chain actively unwinding (the cancel continuation's promise
@@ -1640,7 +2210,7 @@ private:
             token->last_reclaim_refs_ = token->refs;
             const bool response_gone =
                 responses_.find(token->request_id) == responses_.end();
-            if (!token->terminal && !response_gone) {
+            if (!token->terminal && (token->connection_id != 0 || token->connection_dial_id != 0 || !response_gone)) {
                 continue;  // in flight and healthy
             }
             if (token->refs == 1) {
@@ -1778,6 +2348,31 @@ private:
         // fire-and-forget Binding call created by that request. Reclaim them
         // here even if the Binding Promise never cooperates or settles.
         cancel_binding_calls(it->first);
+        if (channels_) channels_->teardown_handshake(it->first);
+        if (it->second.upgrade_channel_id) {
+            auto owner=connections_.find(it->second.upgrade_channel_id);
+            if (owner!=connections_.end() && !owner->second.committed) {
+                RequestToken *previous=current_token_; current_token_=it->second.token;
+                JSValue error=JS_NewString(ctx_,"WebSocket handshake cancelled");
+                JSValue result=JS_Call(ctx_,owner->second.reject,JS_UNDEFINED,1,&error);
+                JS_FreeValue(ctx_,result); JS_FreeValue(ctx_,error); current_token_=previous;
+                JS_FreeValue(ctx_,owner->second.callback); JS_FreeValue(ctx_,owner->second.resolve); JS_FreeValue(ctx_,owner->second.reject);
+                release_coupling(owner->second);
+                connections_.erase(owner);
+            }
+        }
+        RequestToken *token = it->second.token;
+        if (token && !token->connection_id && !token->connection_dial_id &&
+                !it->second.upgrade_channel_id &&
+                !origin_has_live_connection(token->generation) &&
+                !has_provisional_coupling(token)) {
+            // A resolved fetch may leave an unread native response reachable
+            // from application globals. Its transport belongs to this finished
+            // HTTP request; retiring it releases its captured context without
+            // running application callbacks after the response terminal.
+            // Promoted/provisional connection owners retain their own lifetime.
+            tjs_cancel_context_httpclients(ctx_, resource_matches_exact_token, token);
+        }
         release_token(it->second.token);
         it->second.token = NULL;
         responses_.erase(it);
@@ -1789,6 +2384,19 @@ private:
         if (!self) {
             return;
         }
+        if (self->channels_) {
+            const uint64_t now_ms = uv_hrtime() / 1000000;
+            const uint64_t elapsed = now_ms - self->channel_clock_ms_;
+            self->channel_clock_ms_ = now_ms;
+            if (!self->channels_->advance_time(elapsed)) {
+                self->send_error(0, "channel confirmation timeout");
+                self->flush_output();
+                self->shutdown();
+                return;
+            }
+        }
+        self->expire_connection_events();
+        self->pump_channels();
         // Binding v1 §5.2: dispatch queued binding calls and settle their
         // user promises on the same single-threaded tick.
         self->pump_binding_calls();
@@ -1872,6 +2480,7 @@ private:
                 !self->define_native(ctx, core, "capsidResponseFinal", js_bridge_forbidden, 5) ||
                 !self->define_native(ctx, core, "capsidResponseFixed", js_bridge_forbidden, 5) ||
                 !self->define_native(ctx, core, "capsidRequestSettled", js_bridge_forbidden, 1) ||
+                !self->install_channel_natives(ctx, core, true) ||
                 !self->define_native(ctx, core, "capsidLog", js_log, 2) ||
                 !self->define_native(ctx, core, "capsidFetchRequestBodyLimit",
                     js_fetch_request_body_limit, 0) ||
@@ -1933,6 +2542,7 @@ private:
             !self->define_native(ctx, core, "capsidResponseFinal", js_response_final, 5) ||
             !self->define_native(ctx, core, "capsidResponseFixed", js_response_fixed, 5) ||
             !self->define_native(ctx, core, "capsidRequestSettled", js_request_settled, 1) ||
+            !self->install_channel_natives(ctx, core, false) ||
             !self->define_native(ctx, core,
                 "capsidFetchRequestBodyLimit",
                 js_fetch_request_body_limit,
@@ -2398,6 +3008,1331 @@ private:
             ctx, "cannot settle unknown request");
     }
 
+    bool install_channel_natives(JSContext *ctx, JSValue core, bool binding) {
+        return JS_DefinePropertyValueStr(ctx, core, "capsidUserRuntime",
+                JS_NewBool(ctx, !binding), 0) >= 0 &&
+            define_native(ctx, core, "capsidInstallMicrotaskReporter", js_install_microtask_reporter, 1) &&
+            define_native(ctx, core, "capsidChannelLimits", js_channel_limits, 0) &&
+            define_native(ctx, core, "capsidChannelContext", binding ? js_bridge_forbidden : js_channel_context, 0) &&
+            define_native(ctx, core, "capsidChannelCheckContext", binding ? js_bridge_forbidden : js_channel_check_context, 1) &&
+            define_native(ctx, core, "capsidChannelOpen", binding ? js_bridge_forbidden : js_channel_open, 3) &&
+            define_native(ctx, core, "capsidFetchUpgradeOpen", binding ? js_bridge_forbidden : js_fetch_upgrade_open, 4) &&
+            define_native(ctx, core, "capsidFetchUpgradeAccept", binding ? js_bridge_forbidden : js_fetch_upgrade_accept, 1) &&
+            define_native(ctx, core, "capsidFetchBodyConsume", binding ? js_bridge_forbidden : js_fetch_body_consume, 2) &&
+            define_native(ctx, core, "capsidFetchReadPending", js_fetch_read_pending, 1) &&
+            define_native(ctx, core, "capsidStreamBufferAlias", js_stream_buffer_alias, 1) &&
+            define_native(ctx, core, "capsidStreamObservePromise", js_stream_observe_promise, 1) &&
+            define_native(ctx, core, "capsidChannelCancelDial", binding ? js_bridge_forbidden : js_channel_cancel_dial, 1) &&
+            define_native(ctx, core, "capsidChannelAttach", binding ? js_bridge_forbidden : js_channel_attach, 4) &&
+            define_native(ctx, core, "capsidChannelActivate", binding ? js_bridge_forbidden : js_channel_activate, 1) &&
+            define_native(ctx, core, "capsidChannelCouple", binding ? js_bridge_forbidden : js_channel_couple, 2) &&
+            define_native(ctx, core, "capsidChannelLocalClose", binding ? js_bridge_forbidden : js_channel_local_close, 1) &&
+            define_native(ctx, core, "capsidChannelEncodeText", js_channel_encode_text, 1) &&
+            define_native(ctx, core, "capsidChannelValueKind", js_channel_value_kind, 1) &&
+            define_native(ctx, core, "capsidChannelSend", binding ? js_bridge_forbidden : js_channel_send, 3) &&
+            define_native(ctx, core, "capsidChannelClose", binding ? js_bridge_forbidden : js_channel_close, 3) &&
+            define_native(ctx, core, "capsidChannelEventStarted", binding ? js_bridge_forbidden : js_channel_event_started, 1) &&
+            define_native(ctx, core, "capsidChannelQueueTask", binding ? js_bridge_forbidden : js_channel_queue_task, 1) &&
+            define_native(ctx, core, "capsidChannelEventSettled", binding ? js_bridge_forbidden : js_channel_event_settled, 1);
+    }
+
+    static JSValue js_install_microtask_reporter(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (!g_worker || argc < 1 || !JS_IsFunction(ctx, argv[0]))
+            return JS_ThrowTypeError(ctx, "invalid microtask error reporter");
+        if (g_worker->bootstrapping_binding_runtime_) return JS_UNDEFINED;
+        JS_FreeValue(ctx, g_worker->microtask_error_reporter_);
+        g_worker->microtask_error_reporter_ = JS_DupValue(ctx, argv[0]);
+        JS_SetMicrotaskExceptionHook(JS_GetRuntime(ctx), scoped_microtask_exception, g_worker);
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_context(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        if (!g_worker || !g_worker->current_token_) return JS_NewBigUint64(ctx, 0);
+        const RequestToken* token = g_worker->current_token_;
+        // This numeric identity does not retain the HTTP token.
+        const uint64_t origin = (token->connection_id || token->connection_dial_id)
+            ? token->origin_generation : token->generation;
+        return JS_NewBigUint64(ctx, origin);
+    }
+
+    static JSValue throw_channel_origin_error(JSContext *ctx) {
+        // The pinned workerd throws Error, rather than TypeError, for Native
+        // I/O belonging to another request. The ownership gate stays intact.
+        static const char message[] =
+            "Cannot perform I/O on behalf of a different request. "
+            "I/O objects (such as streams, request/response bodies, and others) created in the context "
+            "of one request handler cannot be accessed from a different request's handler. "
+            "This is a limitation of Cloudflare Workers which allows us to improve overall performance. "
+            "(I/O type: Native)";
+        JSValue error = JS_NewError(ctx);
+        if (JS_IsException(error)) return JS_EXCEPTION;
+        JSValue text = JS_NewString(ctx, message);
+        if (JS_IsException(text)) {
+            JS_FreeValue(ctx, error);
+            return JS_EXCEPTION;
+        }
+        if (JS_DefinePropertyValueStr(ctx, error, "message", text,
+                JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE) < 0) {
+            JS_FreeValue(ctx, error);
+            return JS_EXCEPTION;
+        }
+        return JS_Throw(ctx, error);
+    }
+
+    static JSValue js_channel_check_context(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint64_t origin = 0;
+        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &origin, argv[0])) return JS_EXCEPTION;
+        const RequestToken *token = g_worker->require_active_request(ctx, 0, false, false, "channel context");
+        if (!token) return JS_EXCEPTION;
+        const uint64_t active_origin = (token->connection_id || token->connection_dial_id)
+            ? token->origin_generation : token->generation;
+        if (origin != active_origin) return throw_channel_origin_error(ctx);
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_limits(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        if (!g_worker) return JS_ThrowInternalError(ctx, "worker unavailable");
+        const auto &limits = g_worker->config_.channel_limits;
+        JSValue result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "message", JS_NewInt64(ctx, limits.max_message_bytes));
+        JS_SetPropertyStr(ctx, result, "queue", JS_NewInt64(ctx, limits.per_channel_queue_bytes));
+        JS_SetPropertyStr(ctx, result, "send", JS_NewInt64(ctx, limits.send_budget_bytes));
+        return result;
+    }
+
+    static JSValue js_channel_attach(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint64_t request_id = 0;
+        if (!g_worker || argc < 4 || JS_ToBigUint64(ctx, &request_id, argv[0]) ||
+                !JS_IsFunction(ctx, argv[3])) return JS_ThrowTypeError(ctx, "invalid WebSocket transfer");
+        RequestToken *token = g_worker->require_active_request(ctx, request_id, true, false, "channel attach");
+        if (!token) return JS_EXCEPTION;
+        auto response = g_worker->responses_.find(request_id);
+        if (!g_worker->channels_ || response == g_worker->responses_.end() ||
+                response->second.upgrade_channel_id == 0) return JS_ThrowTypeError(ctx, "request is not a negotiated WebSocket upgrade");
+        const uint32_t id = response->second.upgrade_channel_id;
+        size_t retained_local_scopes = 0;
+        for (const auto &item : g_worker->connections_)
+            if (item.second.transport_disconnected && item.second.local_outgoing_open)
+                ++retained_local_scopes;
+        if (retained_local_scopes >= g_worker->config_.channel_limits.max_channels)
+            return JS_ThrowRangeError(ctx, "WebSocket owner budget exceeded");
+        capsid::ChannelEntry entry;
+        if (!g_worker->channels_->registry().find(id, &entry) ||
+                g_worker->connections_.count(id)) return JS_ThrowTypeError(ctx, "WebSocket already transferred");
+        capsid::protocol::Frame head;
+        if (!build_fixed_response_head(ctx, request_id, 101, argv[1], argv[2], &head))
+            return JS_ThrowTypeError(ctx, "invalid WebSocket response headers");
+        head.version = capsid::protocol::kVersionV4;
+        head.flags = capsid::protocol::kFlagResponseUpgrade;
+        capsid::protocol::UpgradeTail tail;
+        tail.channel_id = id;
+        tail.max_message_bytes = entry.max_message_bytes;
+        capsid::protocol::encode_upgrade_tail(tail, &head.payload);
+        JSValue resolving[2];
+        JSValue promise = JS_NewPromiseCapability(ctx, resolving);
+        if (JS_IsException(promise)) return promise;
+        try {
+            auto inserted = g_worker->connections_.emplace(id, ConnectionOwner());
+            auto &owner = inserted.first->second;
+            owner.request_id = request_id;
+            owner.origin_generation = token->generation;
+            owner.awaiting_activation = true;
+            const uint64_t now = uv_hrtime();
+            const uint64_t wait_ns = 10000000000ULL;
+            const uint64_t deadline = now > std::numeric_limits<uint64_t>::max() - wait_ns
+                ? std::numeric_limits<uint64_t>::max() : now + wait_ns;
+            owner.coupling_deadline_ns = token->deadline_ns ? std::min(deadline, token->deadline_ns) : deadline;
+            g_worker->retain_token(token);
+            owner.coupling_token = token;
+            token->upgrade_source_channel = id;
+            owner.handshake = std::move(head);
+            owner.callback = JS_DupValue(ctx, argv[3]);
+            owner.resolve = resolving[0];
+            owner.reject = resolving[1];
+        } catch (const std::bad_alloc &) {
+            JS_FreeValue(ctx, resolving[0]); JS_FreeValue(ctx, resolving[1]);
+            JS_FreeValue(ctx, promise);
+            return JS_ThrowOutOfMemory(ctx);
+        }
+        // Resolving functions now belong to the connection owner. A pump
+        // failure may follow a committed 101; never free the old local
+        // handles a second time or pretend the transfer rolled back.
+        try { g_worker->pump_channels(); }
+        catch (const std::bad_alloc &) { g_worker->enter_poison("native channel pump allocation failed"); }
+        return promise;
+    }
+
+    static JSValue js_channel_activate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint32_t id = 0;
+        if (!g_worker || argc < 1 || JS_ToUint32(ctx, &id, argv[0])) return JS_EXCEPTION;
+        const RequestToken *token = g_worker->require_active_request(ctx, 0, false, false, "channel activation");
+        if (!token) return JS_EXCEPTION;
+        auto found = g_worker->connections_.find(id);
+        if (found == g_worker->connections_.end() || found->second.dial_id || !found->second.committed ||
+                !found->second.awaiting_activation || found->second.abandoned)
+            return JS_ThrowTypeError(ctx, "invalid WebSocket coupling");
+        auto &owner = found->second;
+        const uint64_t origin = (token->connection_id || token->connection_dial_id)
+            ? token->origin_generation : token->generation;
+        if (owner.origin_generation != origin)
+            return JS_ThrowTypeError(ctx, "Cannot perform I/O on behalf of a different request");
+        // A peer terminal may already be awaiting the JS coupling decision.
+        // Activating that owner delivers its terminal, without reviving I/O.
+        if (!g_worker->channels_->registry().find(id, nullptr) && !owner.close_event_queued)
+            return JS_ThrowTypeError(ctx, "WebSocket closed before coupling");
+        owner.awaiting_activation = false;
+        owner.connection_promoted = true;
+        owner.local_outgoing_open = !owner.resources_closed &&
+            !(argc > 1 && JS_ToBool(ctx, argv[1]));
+        g_worker->release_coupling(owner);
+        try { g_worker->pump_channels(); }
+        catch (const std::bad_alloc &) { return JS_ThrowOutOfMemory(ctx); }
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_local_close(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint32_t id = 0;
+        if (!g_worker || argc < 1 || JS_ToUint32(ctx, &id, argv[0])) return JS_EXCEPTION;
+        const auto *token = g_worker->require_active_request(ctx, 0, false, false, "local outgoing close");
+        if (!token) return JS_EXCEPTION;
+        auto found = g_worker->connections_.find(id);
+        if (found == g_worker->connections_.end()) return JS_UNDEFINED;
+        const uint64_t origin = (token->connection_id || token->connection_dial_id)
+            ? token->origin_generation : token->generation;
+        if (origin != found->second.origin_generation) return throw_channel_origin_error(ctx);
+        if (found->second.dial_id) return JS_ThrowTypeError(ctx, "invalid incoming WebSocket owner");
+        // Defer cancellation until the normal pump/checkpoint, so the current
+        // synchronous turn and its queued microtasks can finish normally.
+        found->second.local_outgoing_open = false;
+        return JS_UNDEFINED;
+    }
+
+    static bool channel_byte_string(JSContext *ctx, JSValueConst value, std::string *out) {
+        size_t size=0;const char *text=JS_ToCStringLen(ctx,&size,value);if (!text) return false;
+        try {
+            out->clear();out->reserve(size);
+            for (size_t index=0;index<size;++index) {
+                const auto byte=static_cast<unsigned char>(text[index]);
+                if (byte<128) out->push_back(static_cast<char>(byte));
+                else if ((byte==0xc2 || byte==0xc3) && index+1<size &&
+                        (static_cast<unsigned char>(text[index+1])&0xc0)==0x80) {
+                    out->push_back(static_cast<char>(((byte&3)<<6)|(static_cast<unsigned char>(text[++index])&63)));
+                } else {JS_FreeCString(ctx,text);JS_ThrowTypeError(ctx,"HTTP header is not a ByteString");return false;}
+            }
+        } catch (...) {JS_FreeCString(ctx,text);throw;}
+        JS_FreeCString(ctx,text);return true;
+    }
+    static JSValue js_channel_open_impl(JSContext *ctx,int argc,JSValueConst *argv,bool fetch) {
+        namespace p = capsid::protocol;
+        const int callback=fetch ? 3 : 2;
+        if (!g_worker || argc<=callback || !JS_IsFunction(ctx,argv[callback])) return JS_ThrowTypeError(ctx,"invalid WebSocket dial");
+        RequestToken *token=g_worker->require_active_request(ctx,0,false,false,"WebSocket dial");
+        if (!token) return JS_EXCEPTION;
+        if (!g_worker->channels_ || !(g_worker->channels_->registry().effective_capabilities() & p::kCapChannelConfirm))
+            return JS_ThrowTypeError(ctx,"WebSocket channels were not negotiated");
+        if (fetch && !(g_worker->channels_->registry().effective_capabilities()&p::kCapFetchUpgrade))
+            return JS_ThrowTypeError(ctx,"HTTP Upgrade fetch was not negotiated");
+        if (g_worker->pending_connections_.size()>=g_worker->config_.channel_limits.max_channels || !g_worker->next_dial_id_)
+            return JS_ThrowRangeError(ctx,"WebSocket pending dial budget exceeded");
+        p::ChannelOpenPayload open;
+        open.dial_id=g_worker->next_dial_id_;
+        open.owner_kind=p::kOwnerStandalone;
+        open.channel_kind=fetch ? static_cast<uint8_t>(p::kChannelKindFetchUpgrade) : static_cast<uint8_t>(p::kChannelKindWebSocket);
+        open.max_message_bytes=g_worker->config_.channel_limits.max_message_bytes;
+        size_t size=0; const char *url=JS_ToCStringLen(ctx,&size,argv[0]);
+        if (!url) return JS_EXCEPTION;
+        try { open.url.assign(url,size); } catch (...) { JS_FreeCString(ctx,url); return JS_ThrowOutOfMemory(ctx); }
+        JS_FreeCString(ctx,url);
+        JSValue length_value=JS_GetPropertyStr(ctx,argv[1],"length");
+        if (JS_IsException(length_value)) return JS_EXCEPTION;
+        uint32_t count=0; const int converted=JS_ToUint32(ctx,&count,length_value); JS_FreeValue(ctx,length_value);
+        if (converted || count>128) return JS_ThrowTypeError(ctx,"invalid WebSocket protocols");
+        try {
+            if (fetch) {
+                uint32_t redirect=0;if (JS_ToUint32(ctx,&redirect,argv[2]) || redirect>p::kFetchRedirectError)
+                    return JS_ThrowTypeError(ctx,"invalid fetch redirect mode");
+                open.http_request.redirect=static_cast<uint8_t>(redirect);
+            }
+            for (uint32_t i=0;i<count;++i) {
+                JSValue value=JS_GetPropertyUint32(ctx,argv[1],i);
+                if (fetch) {
+                    if (JS_IsException(value)) return JS_EXCEPTION;
+                    JSValue name=JS_GetPropertyUint32(ctx,value,0);
+                    if (JS_IsException(name)) {JS_FreeValue(ctx,value);return JS_EXCEPTION;}
+                    JSValue content=JS_GetPropertyUint32(ctx,value,1);JS_FreeValue(ctx,value);
+                    if (JS_IsException(content)) {JS_FreeValue(ctx,name);return JS_EXCEPTION;}
+                    std::string header_name,header_value;
+                    bool valid;
+                    try {valid=channel_byte_string(ctx,name,&header_name) && channel_byte_string(ctx,content,&header_value);}
+                    catch (...) {JS_FreeValue(ctx,name);JS_FreeValue(ctx,content);throw;}
+                    JS_FreeValue(ctx,name);JS_FreeValue(ctx,content);
+                    if (!valid) return JS_EXCEPTION;
+                    open.http_request.headers.emplace_back(std::move(header_name),std::move(header_value));continue;
+                }
+                const char *protocol=JS_ToCStringLen(ctx,&size,value); JS_FreeValue(ctx,value);
+                if (!protocol) return JS_EXCEPTION;
+                try { open.protocols.emplace_back(protocol,size); } catch (...) { JS_FreeCString(ctx,protocol); throw; }
+                JS_FreeCString(ctx,protocol);
+            }
+            p::Frame frame; frame.version=p::kVersionV4; frame.type=p::kChannelOpen;
+            if (!p::encode_channel_open(open,&frame.payload,g_worker->channels_->registry().effective_capabilities())) return JS_ThrowRangeError(ctx,"invalid WebSocket dial payload");
+            if(frame.payload.size()+p::kHeaderSize>g_worker->config_.max_queued_bytes)
+                return JS_ThrowRangeError(ctx,"WebSocket dial exceeds IPC writer budget");
+            auto inserted=g_worker->pending_connections_.emplace(open.dial_id,ConnectionOwner());
+            auto &owner=inserted.first->second;
+            owner.dial_id=open.dial_id; owner.request_id=token->request_id;
+            owner.fetch_upgrade=fetch;
+            owner.http_owned_dial=!token->connection_id && !token->connection_dial_id;
+            owner.origin_generation=(token->connection_id || token->connection_dial_id) ? token->origin_generation : token->generation;
+            owner.callback=JS_DupValue(ctx,argv[callback]); owner.handshake=std::move(frame);
+            ++g_worker->next_dial_id_;
+            g_worker->pump_channels();
+            auto pending=g_worker->pending_connections_.find(open.dial_id);
+            if(pending!=g_worker->pending_connections_.end() && !pending->second.handshake.payload.empty()) {
+                // No OPEN was committed, so nothing exists at the peer to
+                // cancel. Constructor admission is synchronous and bounded;
+                // it cannot leave an unannounced owner after HTTP completion.
+                JS_FreeValue(ctx,pending->second.callback);
+                g_worker->pending_connections_.erase(pending);
+                return JS_ThrowRangeError(ctx,"WebSocket IPC writer budget exceeded");
+            }
+            return JS_NewBigUint64(ctx,open.dial_id);
+        } catch (const std::bad_alloc &) { g_worker->enter_poison("native dial allocation failed"); return JS_ThrowOutOfMemory(ctx); }
+    }
+
+    static JSValue js_channel_open(JSContext *ctx,JSValueConst,int argc,JSValueConst *argv) {
+        return js_channel_open_impl(ctx,argc,argv,false);
+    }
+    static JSValue js_fetch_upgrade_open(JSContext *ctx,JSValueConst,int argc,JSValueConst *argv) {
+        return js_channel_open_impl(ctx,argc,argv,true);
+    }
+    static bool return_fetch_credit(uint32_t id,uint64_t bytes) {
+        namespace p=capsid::protocol;
+        if (!bytes) return true;
+        p::ChannelCreditPayload credit;credit.channel_id=id;credit.credit=bytes;
+        p::Frame frame;frame.version=p::kVersionV4;frame.type=p::kChannelCredit;
+        return p::encode_channel_credit(credit,&frame.payload) && g_worker->enqueue_channel_control(frame);
+    }
+    static JSValue js_channel_couple(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint32_t incoming = 0, outgoing = 0;
+        if (!g_worker || argc < 2 || JS_ToUint32(ctx, &incoming, argv[0]) ||
+                JS_ToUint32(ctx, &outgoing, argv[1])) return JS_EXCEPTION;
+        const auto *token = g_worker->require_active_request(ctx, 0, false, false, "native WebSocket coupling");
+        if (!token) return JS_EXCEPTION;
+        auto first = g_worker->connections_.find(incoming), second = g_worker->connections_.find(outgoing);
+        if (incoming == outgoing || first == g_worker->connections_.end() || second == g_worker->connections_.end())
+            return JS_ThrowTypeError(ctx, "invalid fetched WebSocket coupling");
+        auto &local = first->second; auto &remote = second->second;
+        const uint64_t origin = (token->connection_id || token->connection_dial_id)
+            ? token->origin_generation : token->generation;
+        if (local.origin_generation != origin || remote.origin_generation != origin) return throw_channel_origin_error(ctx);
+        if (!local.committed || local.dial_id || !local.awaiting_activation || local.abandoned || !local.coupling_token ||
+                local.coupling_token->connection_id || local.coupling_token->connection_dial_id ||
+                local.coupling_token->generation != origin ||
+                !remote.committed || !remote.fetch_upgrade || remote.fetch_body || remote.fetch_accepted ||
+                remote.abandoned || local.proxy_peer || remote.proxy_peer)
+            return JS_ThrowTypeError(ctx, "invalid fetched WebSocket coupling");
+        try {
+            // Pre-accept buffering used one bounded receive window. Release it
+            // so a message larger than that window can finish assembling.
+            capsid::ChannelEntry entry;
+            if (g_worker->channels_->registry().find(outgoing, &entry) && entry.phase == capsid::ChannelPhase::Open &&
+                    !return_fetch_credit(outgoing, remote.withheld_credit))
+                return JS_ThrowRangeError(ctx, "fetch credit control budget exceeded");
+            remote.withheld_credit = 0;
+            local.proxy_peer = outgoing; remote.proxy_peer = incoming;
+            local.awaiting_activation = false;
+            local.connection_promoted = remote.connection_promoted = false;
+            local.local_outgoing_open = remote.local_outgoing_open = false;
+            local.resources_closed = remote.resources_closed = true;
+            remote.fetch_accepted = true; remote.http_owned_dial = false;
+            local.coupling_token->upgrade_source_channel = incoming;
+            // No application callback or JS byte buffer participates in the
+            // native pumps after ownership is released to the proxy.
+            JS_FreeValue(ctx, local.callback); local.callback = JS_UNDEFINED;
+            JS_FreeValue(ctx, remote.callback); remote.callback = JS_UNDEFINED;
+            g_worker->release_coupling(local);
+            g_worker->pump_channels();
+            return JS_UNDEFINED;
+        } catch (const std::bad_alloc &) {
+            g_worker->enter_poison("native WebSocket coupling allocation failed");
+            return JS_ThrowOutOfMemory(ctx);
+        }
+    }
+
+    static JSValue js_fetch_upgrade_accept(JSContext *ctx,JSValueConst,int argc,JSValueConst *argv) {
+        uint32_t id=0;if (!g_worker || argc<1 || JS_ToUint32(ctx,&id,argv[0])) return JS_EXCEPTION;
+        const auto *token=g_worker->require_active_request(ctx,0,false,false,"fetch WebSocket accept");if (!token) return JS_EXCEPTION;
+        auto found=g_worker->connections_.find(id);
+        if (found==g_worker->connections_.end() || !found->second.fetch_upgrade || found->second.fetch_body || found->second.abandoned)
+            return JS_ThrowTypeError(ctx,"invalid fetched WebSocket");
+        auto &owner=found->second;
+        const uint64_t origin=(token->connection_id || token->connection_dial_id) ? token->origin_generation : token->generation;
+        if (owner.origin_generation!=origin) return throw_channel_origin_error(ctx);
+        try {
+            capsid::ChannelEntry entry;
+            if (g_worker->channels_->registry().find(id,&entry) && entry.phase==capsid::ChannelPhase::Open &&
+                !return_fetch_credit(id,owner.withheld_credit)) return JS_ThrowRangeError(ctx,"fetch credit control budget exceeded");
+            owner.withheld_credit=0;owner.fetch_accepted=true;owner.connection_promoted=true;owner.http_owned_dial=false;
+            g_worker->pump_channels();return JS_UNDEFINED;
+        } catch (const std::bad_alloc &) {return JS_ThrowOutOfMemory(ctx);}
+    }
+    static JSValue js_stream_observe_promise(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1) return JS_ThrowTypeError(ctx, "invalid stream observation promise");
+        if (JS_MarkPromiseReactionsPassive(ctx, argv[0]) < 0) return JS_EXCEPTION;
+        return JS_DupValue(ctx, argv[0]);
+    }
+    static JSValue js_stream_buffer_alias(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        return JS_NewArrayBufferAlias(ctx, argc ? argv[0] : JS_UNDEFINED);
+    }
+    static JSValue js_fetch_read_pending(JSContext *ctx,JSValueConst,int argc,JSValueConst *argv) {
+        // Observe the actual native read promise without running application
+        // accessors. Cancellation must not replace an already fulfilled read.
+        return JS_NewBool(ctx,argc==1 && JS_PromiseState(ctx,argv[0])==JS_PROMISE_PENDING);
+    }
+    static JSValue js_fetch_body_consume(JSContext *ctx,JSValueConst,int argc,JSValueConst *argv) {
+        uint32_t id=0;uint64_t bytes=0;
+        if (!g_worker || argc<2 || JS_ToUint32(ctx,&id,argv[0]) || JS_ToIndex(ctx,&bytes,argv[1])) return JS_EXCEPTION;
+        const auto *token=g_worker->require_active_request(ctx,0,false,false,"fetch body read");if (!token) return JS_EXCEPTION;
+        auto found=g_worker->connections_.find(id);
+        // A completed EOF may have reclaimed its native owner while the
+        // independently owned stream still has a bounded buffered tail.
+        if (found==g_worker->connections_.end()) return JS_UNDEFINED;
+        auto &owner=found->second;
+        const uint64_t origin=(token->connection_id || token->connection_dial_id) ? token->origin_generation : token->generation;
+        if (owner.origin_generation!=origin) return throw_channel_origin_error(ctx);
+        if (!owner.fetch_body || bytes>owner.withheld_credit) return JS_ThrowRangeError(ctx,"invalid consumed fetch bytes");
+        try {
+            capsid::ChannelEntry entry;
+            if (g_worker->channels_->registry().find(id,&entry) && entry.phase==capsid::ChannelPhase::Open && !owner.cancel_requested &&
+                !return_fetch_credit(id,bytes)) return JS_ThrowRangeError(ctx,"fetch credit control budget exceeded");
+            owner.withheld_credit-=bytes;g_worker->pump_channels();return JS_UNDEFINED;
+        } catch (const std::bad_alloc &) {return JS_ThrowOutOfMemory(ctx);}
+    }
+
+    static JSValue js_channel_cancel_dial(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint64_t dial=0;
+        if (!g_worker || argc<1 || JS_ToBigUint64(ctx,&dial,argv[0]) ||
+            !g_worker->require_active_request(ctx,0,false,false,"WebSocket cancel")) return JS_EXCEPTION;
+        auto found=g_worker->pending_connections_.find(dial);
+        auto *token=g_worker->current_token_;
+        const uint64_t origin=(token->connection_id || token->connection_dial_id) ? token->origin_generation : token->generation;
+        if (found==g_worker->pending_connections_.end()) {
+            // ACCEPT may already have been read while its result ACK/open
+            // callback is still waiting for writer or job capacity. The JS
+            // socket remains CONNECTING; cancel the assigned identity after
+            // the queued result ACK, and suppress its pending open event.
+            for(auto &item:g_worker->connections_) {
+                auto &owner=item.second;
+                if(owner.dial_id!=dial) continue;
+                if(owner.origin_generation!=origin) return JS_ThrowTypeError(ctx,"Cannot perform I/O on behalf of a different request");
+                if(owner.fetch_upgrade && owner.close_event_queued) return JS_UNDEFINED;
+                if(owner.cancel_requested) return JS_UNDEFINED;
+                try {
+                    const bool close_queued=owner.close_event_queued;
+                    owner.close_event_queued=false;
+                    if(!g_worker->cancel_channel_resource(item.first,capsid::protocol::kCancelLocal)) {
+                        owner.close_event_queued=close_queued;
+                        return JS_ThrowRangeError(ctx,"channel control budget exceeded");
+                    }
+                    owner.cancel_requested=true;
+                    owner.events.back().type="failure";
+                    g_worker->pump_channels();
+                } catch(const std::bad_alloc &) { g_worker->enter_poison("native dial cancel allocation failed"); return JS_ThrowOutOfMemory(ctx); }
+                return JS_UNDEFINED;
+            }
+            return JS_UNDEFINED;
+        }
+        if (found->second.origin_generation!=origin) return JS_ThrowTypeError(ctx,"Cannot perform I/O on behalf of a different request");
+        if (found->second.cancel_requested) return JS_UNDEFINED;
+        capsid::protocol::ChannelCancelPayload cancel; cancel.dial_id=dial;
+        capsid::protocol::Frame frame; frame.version=capsid::protocol::kVersionV4; frame.type=capsid::protocol::kChannelCancel;
+        capsid::protocol::encode_channel_cancel(cancel,&frame.payload);
+        try {
+            if (!g_worker->enqueue_channel_control(frame)) return JS_ThrowRangeError(ctx,"channel control budget exceeded");
+            found->second.cancel_requested=true;
+            g_worker->pump_channels();
+        } catch (const std::bad_alloc &) { g_worker->enter_poison("native dial cancel allocation failed"); return JS_ThrowOutOfMemory(ctx); }
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_value_kind(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        // Exception serialization must inspect engine brands without invoking
+        // application prototypes, Symbol.hasInstance, or Proxy traps. The
+        // private JS consumer uses 1=Error, 2=ordinary object, 3=Array, 4=Proxy.
+        if (argc < 1 || !JS_IsObject(argv[0])) return JS_NewInt32(ctx, 0);
+        if (JS_IsError(argv[0])) return JS_NewInt32(ctx, 1);
+        if (JS_IsProxy(argv[0])) return JS_NewInt32(ctx, 4);
+        if (JS_IsArray(argv[0])) return JS_NewInt32(ctx, 3);
+        JSValue marker = JS_NewObject(ctx);
+        if (JS_IsException(marker)) return JS_EXCEPTION;
+        const bool ordinary = JS_GetClassID(argv[0]) == JS_GetClassID(marker);
+        JS_FreeValue(ctx, marker);
+        return JS_NewInt32(ctx, ordinary ? 2 : 0);
+    }
+
+    static JSValue js_channel_encode_text(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1) return JS_ThrowTypeError(ctx, "WebSocket text argument required");
+        // The pinned workerd send() takes kj::String, unlike close()'s
+        // USVString reason. Preserve unmatched surrogate encodings (WTF-8)
+        // here; TextEncoder intentionally replaces them and cannot implement
+        // that observable wire contract. QuickJS converts the value once and
+        // encodes directly, without quadratic JS string concatenation.
+        size_t size = 0;
+        const char *text = JS_ToCStringLen(ctx, &size, argv[0]);
+        if (!text) return JS_EXCEPTION;
+        JSValue bytes = JS_NewUint8ArrayCopy(ctx, reinterpret_cast<const uint8_t *>(text), size);
+        JS_FreeCString(ctx, text);
+        return bytes;
+    }
+
+    static JSValue js_channel_send(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint32_t id = 0;
+        if (!g_worker || argc < 3 || JS_ToUint32(ctx, &id, argv[0])) return JS_EXCEPTION;
+        const auto owner = g_worker->connections_.find(id);
+        if (owner == g_worker->connections_.end())
+            return JS_ThrowTypeError(ctx, "WebSocket closed");
+        // Sends arrive either from a handler's synchronous stack (the
+        // token scopes the origin check) or from the endpoint's serial
+        // commit chain: any current token must still be active and match
+        // the connection origin. With no token the channel id scopes the
+        // internal commit; a terminal token must not bypass its checks.
+        if (g_worker->current_token_ != nullptr) {
+            if (!g_worker->require_active_request(ctx, 0, false, false, "channel send")) return JS_EXCEPTION;
+            const auto active_origin=(g_worker->current_token_->connection_id || g_worker->current_token_->connection_dial_id)
+                ? g_worker->current_token_->origin_generation : g_worker->current_token_->generation;
+            if (g_worker->connections_.at(id).origin_generation != active_origin)
+                return throw_channel_origin_error(ctx);
+        }
+        size_t size = 0;
+        const uint8_t *bytes = JS_GetUint8Array(ctx, &size, argv[1]);
+        if (!bytes) return JS_EXCEPTION;
+        const int text = JS_ToBool(ctx, argv[2]);
+        std::string error;
+        try {
+            if (!g_worker->channels_->queue_message(id, bytes, size, text != 0, &error))
+                return JS_ThrowRangeError(ctx, "%s", error.c_str());
+            g_worker->pump_channels();
+        } catch (const std::bad_alloc &) { return JS_ThrowOutOfMemory(ctx); }
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_close(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint32_t id = 0, code = 0;
+        if (!g_worker || argc < 3 || JS_ToUint32(ctx, &id, argv[0]) || JS_ToUint32(ctx, &code, argv[1]) ||
+                !g_worker->require_active_request(ctx, 0, false, false, "channel close")) return JS_EXCEPTION;
+        auto owner=g_worker->connections_.find(id);
+        if (owner==g_worker->connections_.end()) return JS_ThrowTypeError(ctx,"WebSocket closed");
+        if (g_worker->current_token_ != nullptr) {
+            const auto active_origin=(g_worker->current_token_->connection_id || g_worker->current_token_->connection_dial_id)
+                ? g_worker->current_token_->origin_generation : g_worker->current_token_->generation;
+            if (owner->second.origin_generation != active_origin)
+                return throw_channel_origin_error(ctx);
+        }
+        if (owner->second.transport_disconnected) {
+            owner->second.local_outgoing_open = false;
+            return JS_UNDEFINED;
+        }
+        if (code == 1006 && owner->second.awaiting_activation) {
+            // A committed header does not mean the application endpoint was
+            // coupled. Abort the network owner without dispatching into that
+            // invalid/unaccepted endpoint. An already-observed peer terminal
+            // must not enqueue another marker against a retired identity.
+            owner->second.abandoned = true;
+            owner->second.events.clear();
+            g_worker->release_coupling(owner->second);
+            if (owner->second.close_event_queued || !g_worker->channels_->registry().find(id, nullptr)) {
+                g_worker->pump_channels();
+                return JS_UNDEFINED;
+            }
+        }
+        // With no synchronous callback on the stack (async abort from a
+        // failed handler) the channel id itself is the scope.
+        capsid::protocol::ChannelClosePayload close;
+        close.channel_id = id;
+        close.code = static_cast<uint16_t>(code);
+        close.flags = code ? capsid::protocol::kCloseFlagCodePresent : 0;
+        // 1006 is the synthesized abort observation: never a network
+        // close frame — the host aborts the transport instead (C17).
+        close.close_kind = static_cast<uint8_t>(
+            code == 1006 ? capsid::protocol::kCloseTransport
+                         : capsid::protocol::kCloseInitiated);
+        const int final_close = argc > 3 ? JS_ToBool(ctx, argv[3]) : 0;
+        if (final_close < 0) return JS_EXCEPTION;
+        if (final_close) {
+            if (!(g_worker->channels_->registry().effective_capabilities() & capsid::protocol::kCapChannelCloseFinal))
+                return JS_ThrowTypeError(ctx, "atomic final Close was not negotiated");
+            close.close_kind = capsid::protocol::kCloseFinal;
+        }
+        if (code > 65535 || !to_bytes(ctx, argv[2], &close.reason)) return JS_ThrowTypeError(ctx, "invalid WebSocket close");
+        capsid::protocol::Frame frame;
+        frame.type = capsid::protocol::kChannelClose;
+        frame.version = capsid::protocol::kVersionV4;
+        if (!capsid::protocol::encode_channel_close(close, &frame.payload)) return JS_ThrowTypeError(ctx, "invalid WebSocket close");
+        try {
+            if (!g_worker->enqueue_channel_control(frame)) return JS_ThrowRangeError(ctx, "channel control budget exceeded");
+            if (final_close || code == 1006)
+                g_worker->close_connection_resources(id, owner->second);
+            g_worker->pump_channels();
+        } catch (const std::bad_alloc &) { return JS_ThrowOutOfMemory(ctx); }
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_event_started(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint64_t generation = 0;
+        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &generation, argv[0])) return JS_EXCEPTION;
+        auto found = g_worker->token_registry_.find(generation);
+        if (found == g_worker->token_registry_.end()) return JS_FALSE;
+        RequestToken *token = found->second;
+        ConnectionOwner *owner = nullptr;
+        if (token->connection_id) {
+            auto connection = g_worker->connections_.find(token->connection_id);
+            if (connection != g_worker->connections_.end()) owner = &connection->second;
+        } else if (token->connection_dial_id) {
+            auto pending = g_worker->pending_connections_.find(token->connection_dial_id);
+            if (pending != g_worker->pending_connections_.end()) owner = &pending->second;
+        }
+        if (!owner || owner->abandoned || token->terminal || token->connection_event_settled) return JS_FALSE;
+        if (g_worker->current_token_ != token) return JS_ThrowInternalError(ctx, "invalid connection event context");
+        // Promotion happens when JS begins the open job, not merely when an
+        // ACCEPT frame arrives or its ACK waits for writer capacity.
+        if (token->connection_open_event) {
+            if (owner->fetch_upgrade) owner->fetch_response_started=true;
+            else {owner->http_owned_dial = false;owner->connection_promoted = true;}
+        }
+        return JS_TRUE;
+    }
+
+    static JSValue js_channel_event_settled(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        uint64_t generation = 0;
+        if (!g_worker || argc < 1 || JS_ToBigUint64(ctx, &generation, argv[0])) return JS_EXCEPTION;
+        // Concurrent handlers mean settled() may run long after its
+        // callback returned; retire by generation, not by the
+        // synchronously-current token.
+        RequestToken *token = nullptr;
+        {
+            const auto found = g_worker->token_registry_.find(generation);
+            if (found == g_worker->token_registry_.end() || found->second->connection_event_settled)
+                return JS_ThrowInternalError(ctx, "invalid connection event owner");
+            token = found->second;
+        }
+        if (!token->connection_id && !token->connection_dial_id)
+            return JS_ThrowInternalError(ctx, "invalid connection event owner");
+        token->connection_event_settled = true;
+        if (g_worker->interrupted_request_id_==token->request_id) g_worker->interrupted_request_id_=0;
+        // The callback has completed; timers and reactions still belong to
+        // the accepted connection until its transport reaches a terminal.
+        token->last_reclaim_refs_ = token->refs;
+        token->reclaim_grace = true;
+        g_worker->request_reclaim(token);
+        auto owner = g_worker->connections_.find(token->connection_id);
+        if (owner != g_worker->connections_.end() && owner->second.active_event == generation) {
+            owner->second.active_event = 0;
+            owner->second.active_message.reset();
+        }
+        if (!token->connection_id && token->connection_dial_id) {
+            auto pending=g_worker->pending_connections_.find(token->connection_dial_id);
+            if (pending!=g_worker->pending_connections_.end() && pending->second.active_event==generation) pending->second.active_event=0;
+        }
+        g_worker->pump_channels();
+        return JS_UNDEFINED;
+    }
+
+    static JSValue js_channel_cleanup_task(JSContext *ctx, JSValueConst, int,
+                                          JSValueConst *, int, JSValue *data) {
+        uint64_t generation = 0;
+        if (!g_worker || JS_ToBigUint64(ctx, &generation, data[1])) return JS_EXCEPTION;
+        const auto found = g_worker->token_registry_.find(generation);
+        if (found == g_worker->token_registry_.end()) return JS_UNDEFINED;
+        RequestToken *token = found->second;
+        JSValue result = JS_Call(ctx, data[0], JS_UNDEFINED, 0, nullptr);
+        token->connection_event_settled = true;
+        g_worker->request_reclaim(token);
+        return result;
+    }
+
+    static JSValue js_channel_queue_task(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (!g_worker || argc < 1 || !JS_IsFunction(ctx, argv[0]))
+            return JS_ThrowTypeError(ctx, "invalid connection cleanup task");
+        RequestToken *parent = g_worker->require_active_request(ctx, 0, false, false, "connection cleanup");
+        if (!parent) return JS_EXCEPTION;
+        if (!parent->connection_id && !parent->connection_dial_id)
+            return JS_ThrowTypeError(ctx, "connection cleanup requires an event owner");
+        std::unique_ptr<RequestToken> allocation(new RequestToken(g_worker->next_token_generation_++,
+            parent->request_id, g_worker->connection_execution_deadline()));
+        RequestToken *token = allocation.get();
+        token->connection_id = parent->connection_id;
+        token->connection_dial_id = parent->connection_dial_id;
+        token->origin_generation = parent->origin_generation;
+        token->connection_cleanup_task = true;
+        JSValue data[] = {argv[0], JS_NewBigUint64(ctx, token->generation)};
+        JSValue callback = JS_NewCFunctionData(ctx, js_channel_cleanup_task, 0, 0, 2, data);
+        JS_FreeValue(ctx, data[1]);
+        if (JS_IsException(callback)) return callback;
+        g_worker->token_registry_.emplace(token->generation, token);
+        allocation.release();
+        g_worker->retained_refs_ += 1;
+        RequestToken *previous = g_worker->current_token_;
+        g_worker->current_token_ = token;
+        JSValue result = tjs_queue_async_cleanup(ctx, callback);
+        g_worker->current_token_ = previous;
+        JS_FreeValue(ctx, callback);
+        if (JS_IsException(result)) {
+            token->connection_event_settled = true;
+            g_worker->request_reclaim(token);
+        }
+        return result;
+    }
+
+    void observe_channel_output(CapsidWorkerIo::Event event,
+                                const capsid::protocol::Frame& frame) {
+        if (!io_ || !io_->observe) return;
+        const uint32_t id = frame.payload.size() >= 4
+            ? capsid::protocol::load_u32_at(frame.payload.data()) : 0;
+        const auto owner = connections_.find(id);
+        io_->observe(event, frame, outbound_.logical_size(), config_.max_queued_bytes,
+            owner != connections_.end(), owner != connections_.end() && owner->second.committed,
+            io_->opaque);
+    }
+
+    static bool channel_writer(const capsid::protocol::Frame &frame, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        // Leave a small reserved control window. Pending controls run
+        // before both channel DATA and the ordinary HTTP response pump.
+        if (frame.type == capsid::protocol::kChannelData) {
+            const size_t reserve = std::min<size_t>(4096, self->config_.max_queued_bytes / 4);
+            if (!self->has_output_capacity(frame.payload.size() + capsid::protocol::kHeaderSize + reserve)) return false;
+        }
+        const bool accepted = self->queue_output(frame);
+        self->observe_channel_output(accepted ? CapsidWorkerIo::Event::kWriteAccepted
+                                             : CapsidWorkerIo::Event::kWriteBlocked, frame);
+        return accepted;
+    }
+
+    bool enqueue_channel_control(const capsid::protocol::Frame &frame) {
+        namespace p = capsid::protocol;
+        const uint32_t id = p::load_u32_at(frame.payload.data());
+        if (frame.type == p::kChannelCredit) {
+            for (auto &queued : channel_controls_) {
+                if (p::load_u32_at(queued.payload.data()) != id) continue;
+                if (queued.type == p::kChannelCancel || queued.type == p::kChannelClose) return true;
+                if (queued.type == p::kChannelCredit) {
+                    const uint8_t *cursor = queued.payload.data() + 4;
+                    uint64_t existing = 0, added = 0;
+                    p::read_u64(&cursor, queued.payload.data() + queued.payload.size(), &existing);
+                    cursor = frame.payload.data() + 4;
+                    p::read_u64(&cursor, frame.payload.data() + frame.payload.size(), &added);
+                    if (added > std::numeric_limits<uint64_t>::max() - existing) return false;
+                    p::ChannelCreditPayload credit; credit.channel_id = id; credit.credit = existing + added;
+                    std::vector<uint8_t> bytes;
+                    p::encode_channel_credit(credit, &bytes);
+                    queued.payload.swap(bytes);
+                    return true;
+                }
+            }
+        }
+        if (frame.type == p::kChannelCancel && id != 0) {
+            for (auto it = channel_controls_.begin(); it != channel_controls_.end();) {
+                if (p::load_u32_at(it->payload.data()) == id && it->type != p::kChannelAck && it->type != p::kConnectionLifetime) it = channel_controls_.erase(it);
+                else ++it;
+            }
+        }
+        if (channel_controls_.size() >= size_t(config_.channel_limits.max_channels) * 4) return false;
+        channel_controls_.push_back(frame);
+        observe_channel_output(CapsidWorkerIo::Event::kControlQueued, frame);
+        return true;
+    }
+
+    bool queue_connection_lifetime(uint32_t id, bool retained) {
+        namespace p=capsid::protocol;
+        p::ConnectionLifetimePayload lifetime;lifetime.channel_id=id;lifetime.retained=retained?1:0;
+        p::Frame frame;frame.version=p::kVersionV4;frame.type=p::kConnectionLifetime;
+        return p::encode_connection_lifetime(lifetime,&frame.payload) && enqueue_channel_control(frame);
+    }
+
+    void queue_connection_close(uint32_t id, uint16_t code, const std::string &reason, bool clean,
+                                bool disconnected = false) {
+        auto found = connections_.find(id);
+        if (found == connections_.end()) return;
+        if (found->second.fetch_body) {
+            if (found->second.close_event_queued) return;
+            ConnectionEvent event;event.type=clean ? "bodyend" : "bodyerror";event.clean=clean;event.reason=reason;
+            // HTTP metadata and already accepted chunks precede either EOF
+            // or a body error, even if all frames arrive in one IPC read.
+            found->second.events.push_back(std::move(event));found->second.close_event_queued=true;
+            close_connection_resources(id,found->second);return;
+        }
+        if (disconnected) found->second.transport_disconnected = true;
+        else if (!clean) found->second.local_outgoing_open = false;
+        const bool pending_fetch=found->second.fetch_upgrade && !found->second.fetch_response_started;
+        capsid::ChannelEntry entry;
+        if (!clean || !channels_->registry().find(id, &entry) ||
+                (entry.direction[0].close_sent && entry.direction[1].close_sent))
+            close_connection_resources(id, found->second);
+        if (found->second.close_event_queued) return;
+        // A disconnected parent can still have awaiting handlers owned by a
+        // promoted sibling from the same I/O origin. Retiring those tokens
+        // here would revoke valid continuations and trigger the terminal
+        // continuation leak guard while their native fetch remains live.
+        if (!clean && !pending_fetch && !connection_http_request_active(found->second) &&
+                !origin_has_live_connection(found->second.origin_generation)) {
+            for (auto &item:token_registry_) {
+                RequestToken *token=item.second;
+                if (token->connection_id!=id || token->connection_event_settled) continue;
+                token->terminal=true;
+                token->deadline_ns=std::min(token->deadline_ns,uv_hrtime()+kReclaimSettleWindowNs);
+                token->last_reclaim_refs_=token->refs; token->reclaim_grace=true;
+                request_reclaim(token);
+            }
+            cancel_binding_calls(found->second.request_id);
+        }
+        ConnectionEvent event;
+        event.type = disconnected ? "disconnect" : nullptr;
+        event.code = code; event.reason = reason; event.clean = clean;
+        if (!clean && !pending_fetch) found->second.events.clear();
+        found->second.events.push_back(std::move(event));
+        found->second.close_event_queued = true;
+    }
+
+    bool cancel_channel_resource(uint32_t id, uint32_t reason) {
+        capsid::protocol::ChannelCancelPayload cancel;
+        cancel.channel_id = id; cancel.terminal_reason = reason;
+        capsid::protocol::Frame frame;
+        frame.version = capsid::protocol::kVersionV4;
+        frame.type = capsid::protocol::kChannelCancel;
+        capsid::protocol::encode_channel_cancel(cancel, &frame.payload);
+        if (!enqueue_channel_control(frame)) return false;
+        queue_connection_close(id, 1006, "WebSocket resource limit", false);
+        return true;
+    }
+
+    bool abandon_http_dials(uint64_t origin) {
+        namespace p = capsid::protocol;
+        bool changed = false;
+        for (auto &item : pending_connections_) {
+            auto &owner = item.second;
+            if (!owner.http_owned_dial || owner.origin_generation != origin || owner.abandoned) continue;
+            owner.abandoned = true;
+            changed = true;
+            owner.events.clear();
+            if (owner.cancel_requested || owner.close_event_queued) continue;
+            p::ChannelCancelPayload cancel; cancel.dial_id = item.first;
+            p::Frame frame; frame.version = p::kVersionV4; frame.type = p::kChannelCancel;
+            p::encode_channel_cancel(cancel, &frame.payload);
+            if (!enqueue_channel_control(frame)) return false;
+            owner.cancel_requested = true;
+        }
+        for (auto &item : connections_) {
+            auto &owner = item.second;
+            if (!owner.http_owned_dial || owner.origin_generation != origin || owner.abandoned) continue;
+            owner.abandoned = true;
+            changed = true;
+            owner.events.clear();
+            if (owner.cancel_requested || owner.close_event_queued || !channels_->registry().find(item.first, nullptr)) continue;
+            if (!cancel_channel_resource(item.first, p::kCancelLocal)) return false;
+            owner.cancel_requested = true;
+            owner.events.clear();
+        }
+        if (changed) pump_channels();
+        return true;
+    }
+
+    bool handle_channel_frame(const capsid::protocol::Frame &frame,
+                              const capsid::ChannelRegistry::ApplyResult &result) {
+        namespace p = capsid::protocol;
+        if (frame.type==p::kChannelAccept || frame.type==p::kChannelReject) {
+            p::ChannelAcceptPayload accepted; p::ChannelRejectPayload rejected; std::string error;
+            const bool success=frame.type==p::kChannelAccept;
+            if (success ? !p::decode_channel_accept(frame.payload.data(),frame.payload.size(),&accepted,&error,channels_->registry().effective_capabilities())
+                        : !p::decode_channel_reject(frame.payload.data(),frame.payload.size(),&rejected,&error)) return false;
+            const uint64_t dial=success ? accepted.dial_id : rejected.dial_id;
+            auto pending=pending_connections_.find(dial);
+            if (pending==pending_connections_.end()) return false;
+            if (result.discard) { pump_channels(); return true; }
+            p::ChannelAckPayload ack; ack.dial_id=dial; ack.channel_id=success ? accepted.channel_id : 0;
+            p::Frame confirmation; confirmation.version=p::kVersionV4; confirmation.type=p::kChannelAck;
+            p::encode_channel_ack(ack,&confirmation.payload);
+            if (success) {
+                auto inserted=connections_.emplace(accepted.channel_id,std::move(pending->second));
+                pending_connections_.erase(pending);
+                auto &owner=inserted.first->second;
+                owner.fetch_body=owner.fetch_upgrade && accepted.http_response.status!=101;
+                channels_->register_authority(accepted.channel_id,capsid::ChannelAuthority());
+                if (owner.cancel_requested) {
+                    // A cancel waiting for writer capacity may cross an
+                    // observed ACCEPT. Confirm the result, then cancel its
+                    // assigned identity. Never send the pending form late.
+                    for (auto it=channel_controls_.begin();it!=channel_controls_.end();) {
+                        p::ChannelCancelPayload cancel;
+                        if (it->type==p::kChannelCancel && p::decode_channel_cancel(it->payload.data(),it->payload.size(),&cancel,&error) && cancel.dial_id==dial)
+                            it=channel_controls_.erase(it);
+                        else ++it;
+                    }
+                    if (!enqueue_channel_control(confirmation)) return false;
+                    if (!cancel_channel_resource(accepted.channel_id,p::kCancelLocal)) return false;
+                    owner.events.back().type="failure";
+                } else {
+                    ConnectionEvent event; event.type=owner.fetch_upgrade ? "fetchresponse" : "open"; event.reason=accepted.selected_protocol;
+                    event.has_http_response=accepted.has_http_response;event.http_response=std::move(accepted.http_response);
+                    owner.events.push_back(std::move(event));
+                    if (!enqueue_channel_control(confirmation)) return false;
+                }
+            } else {
+                // The result was observed before a queued pending cancel.
+                for (auto it=channel_controls_.begin();it!=channel_controls_.end();) {
+                    p::ChannelCancelPayload cancel;
+                    if (it->type==p::kChannelCancel && p::decode_channel_cancel(it->payload.data(),it->payload.size(),&cancel,&error) && cancel.dial_id==dial)
+                        it=channel_controls_.erase(it);
+                    else ++it;
+                }
+                ConnectionEvent event; event.type="failure"; event.code=1006; event.clean=false; event.reason=rejected.diagnostic;
+                pending->second.events.push_back(std::move(event)); pending->second.close_event_queued=true;
+                if (!enqueue_channel_control(confirmation)) return false;
+            }
+            pump_channels(); return true;
+        }
+        const uint32_t id = p::load_u32_at(frame.payload.data());
+        if (frame.type==p::kChannelCancel) {
+            capsid::ChannelEntry entry;
+            if (channels_->registry().find(id,&entry) && entry.owner_kind==p::kOwnerHandshake &&
+                responses_.count(entry.owner_request_id) && !cancel_request(entry.owner_request_id)) return false;
+        }
+        if (result.resource_exhausted && !cancel_channel_resource(id, p::kCancelResourceLimits)) return false;
+        if (frame.type == p::kChannelData && !result.discard) {
+            // Return byte credit per copied fragment, otherwise a message
+            // larger than the 64 KiB initial window would deadlock.
+            const uint64_t bytes = frame.payload.size() - 4;
+            capsid::ChannelEntry entry;
+            const bool credit_open = channels_->registry().find(id, &entry) && !entry.direction[1].close_sent;
+            auto source=connections_.find(id);
+            const bool withhold=source!=connections_.end() &&
+                ((source->second.fetch_upgrade && (source->second.fetch_body || !source->second.fetch_accepted)) ||
+                 (source->second.proxy_peer && ((frame.flags & p::kFlagEnd) ||
+                    channels_->has_pending_send(source->second.proxy_peer) || !source->second.events.empty())));
+            if (withhold) {
+                if (bytes>std::numeric_limits<uint64_t>::max()-source->second.withheld_credit) return false;
+                source->second.withheld_credit+=bytes;
+            } else if (bytes && credit_open) {
+                p::ChannelCreditPayload credit; credit.channel_id = id; credit.credit = bytes;
+                p::Frame update; update.version = p::kVersionV4; update.type = p::kChannelCredit;
+                p::encode_channel_credit(credit, &update.payload);
+                if (!enqueue_channel_control(update)) return false;
+            }
+            while (auto message = channels_->take_message()) {
+                auto owner = connections_.find(message->channel_id());
+                if (owner == connections_.end() || owner->second.close_event_queued) continue;
+                ConnectionEvent event; event.message = std::move(message);
+                owner->second.events.push_back(std::move(event));
+            }
+        } else if (frame.type == p::kChannelClose || frame.type == p::kChannelCancel) {
+            bool terminal = frame.type == p::kChannelCancel;
+            if (frame.type == p::kChannelClose) {
+                p::ChannelClosePayload close; std::string error;
+                if (!p::decode_channel_close(frame.payload.data(), frame.payload.size(), &close, &error)) return false;
+                terminal = close.close_kind == p::kCloseTransport || close.close_kind == p::kCloseFinal;
+                const bool failed = close.close_kind == p::kCloseTransport;
+                queue_connection_close(id, failed ? 1006 : close.flags ? close.code : 1005, close.reason, !failed);
+            } else {
+                p::ChannelCancelPayload cancel; std::string error;
+                if (!p::decode_channel_cancel(frame.payload.data(), frame.payload.size(), &cancel, &error)) return false;
+                const bool disconnected = cancel.terminal_reason == p::kCancelDisconnect;
+                queue_connection_close(id, 1006, disconnected
+                    ? "WebSocket disconnected without sending Close frame."
+                    : "WebSocket disconnected", false, disconnected);
+            }
+            if (terminal) {
+                p::ChannelAckPayload ack; ack.channel_id = id;
+                ack.kind = frame.type == p::kChannelCancel ? p::kAckCancel : p::kAckTransportClose;
+                p::Frame response; response.version = p::kVersionV4; response.type = p::kChannelAck;
+                p::encode_channel_ack(ack, &response.payload);
+                // Stop the producer before acknowledging the peer marker.
+                for (auto it = channel_controls_.begin(); it != channel_controls_.end();) {
+                    if (p::load_u32_at(it->payload.data()) == id && it->type != p::kChannelAck && it->type != p::kChannelCancel && it->type != p::kConnectionLifetime) it = channel_controls_.erase(it);
+                    else ++it;
+                }
+                auto owner=connections_.find(id);
+                if (owner!=connections_.end() && !owner->second.dial_id && owner->second.transport_disconnected &&
+                        owner->second.local_outgoing_open && owner->second.connection_promoted &&
+                        !owner->second.abandoned && !owner->second.lifetime_pinned &&
+                        (channels_->registry().effective_capabilities() & p::kCapConnectionLifetime)) {
+                    // Publish the generation pin before ACK can free the last
+                    // transport reservation in the opposite IPC direction.
+                    if (!queue_connection_lifetime(id,true)) return false;
+                    owner->second.lifetime_pinned=true;
+                }
+                if (!enqueue_channel_control(response)) return false;
+            }
+        } else if (frame.type != p::kChannelData && frame.type != p::kChannelCredit &&
+                   frame.type != p::kChannelAck && frame.type != p::kChannelHalfClose) return false;
+        // The registry validates and drains DATA already in flight when a
+        // local cancel or receive quarantine stops delivery. Discarded DATA
+        // must still reach the pump so the terminal ACK can retire the owner.
+        pump_channels();
+        return true;
+    }
+
+    static void free_channel_js_bytes(JSRuntime *runtime, void *, void *pointer) { js_free_rt(runtime, pointer); }
+
+    static JSValue channel_byte_string_value(JSContext *ctx,const std::string &bytes) {
+        std::string utf8;utf8.reserve(bytes.size()*2);
+        for (unsigned char byte:bytes) {
+            if (byte<128) utf8.push_back(static_cast<char>(byte));
+            else {utf8.push_back(static_cast<char>(0xc0|(byte>>6)));utf8.push_back(static_cast<char>(0x80|(byte&63)));}
+        }
+        return JS_NewStringLen(ctx,utf8.data(),utf8.size());
+    }
+    static JSValue channel_http_metadata(JSContext *ctx,const capsid::protocol::FetchUpgradeResponse &response) {
+        JSValue result=JS_NewObject(ctx);if (JS_IsException(result)) return result;
+        if (JS_SetPropertyStr(ctx,result,"status",JS_NewUint32(ctx,response.status))<0 ||
+            JS_SetPropertyStr(ctx,result,"statusText",channel_byte_string_value(ctx,response.status_text))<0 ||
+            JS_SetPropertyStr(ctx,result,"url",JS_NewStringLen(ctx,response.url.data(),response.url.size()))<0 ||
+            JS_SetPropertyStr(ctx,result,"redirected",JS_NewBool(ctx,response.redirected))<0) {JS_FreeValue(ctx,result);return JS_EXCEPTION;}
+        JSValue headers=JS_NewArray(ctx);if (JS_IsException(headers)) {JS_FreeValue(ctx,result);return headers;}
+        for (size_t index=0;index<response.headers.size();++index) {
+            JSValue pair=JS_NewArray(ctx);
+            if (JS_IsException(pair) || JS_SetPropertyUint32(ctx,pair,0,channel_byte_string_value(ctx,response.headers[index].first))<0 ||
+                JS_SetPropertyUint32(ctx,pair,1,channel_byte_string_value(ctx,response.headers[index].second))<0) {
+                JS_FreeValue(ctx,pair);JS_FreeValue(ctx,headers);JS_FreeValue(ctx,result);return JS_EXCEPTION;
+            }
+            if (JS_SetPropertyUint32(ctx,headers,static_cast<uint32_t>(index),pair)<0) {JS_FreeValue(ctx,headers);JS_FreeValue(ctx,result);return JS_EXCEPTION;}
+        }
+        if (JS_SetPropertyStr(ctx,result,"headers",headers)<0) {JS_FreeValue(ctx,result);return JS_EXCEPTION;}
+        return result;
+    }
+
+    bool dispatch_connection_event(uint32_t id, ConnectionOwner &owner) {
+        // C15 (reference): handlers run CONCURRENTLY — a previous
+        // handler's pending promise does not gate the next event. Each
+        // dispatch mints its own token (budget per event) and settled()
+        // retires by registry lookup; the JS side preserves per-message
+        // send order through the dispatch-sequence commit flush.
+        if (owner.abandoned) { owner.events.clear(); return true; }
+        if (owner.proxy_peer) return true;
+        if (!owner.committed || owner.events.empty()) return true;
+        if (id && owner.fetch_upgrade && !owner.fetch_body && !owner.fetch_accepted && !owner.cancel_requested && !owner.events.front().has_http_response)
+            return true;
+        if (owner.awaiting_activation) {
+            const auto terminal = std::find_if(owner.events.begin(), owner.events.end(), [](const ConnectionEvent &event) {
+                return (!event.message && !event.clean) || (event.type &&
+                    (std::strcmp(event.type, "disconnect") == 0 || std::strcmp(event.type, "failure") == 0));
+            });
+            if (terminal == owner.events.end()) return true;
+            // Bound messages in their existing native reservations until peer
+            // acceptance. A terminal cancels that wait and drops prior data.
+            owner.events.erase(owner.events.begin(), terminal);
+        }
+        ConnectionEvent &event = owner.events.front();
+        const uint64_t now=uv_hrtime();
+        const uint64_t duration=config_.timeout_ms > std::numeric_limits<uint64_t>::max()/1000000u
+            ? std::numeric_limits<uint64_t>::max() : config_.timeout_ms*1000000u;
+        const uint64_t deadline=duration > std::numeric_limits<uint64_t>::max()-now
+            ? std::numeric_limits<uint64_t>::max() : now+duration;
+        std::unique_ptr<RequestToken> allocation(new RequestToken(next_token_generation_++, owner.request_id, deadline));
+        RequestToken *token = allocation.get();
+        token->connection_id = id;
+        token->connection_dial_id = id ? 0 : owner.dial_id;
+        token->connection_open_event = event.type &&
+            (std::strcmp(event.type, "open") == 0 || std::strcmp(event.type,"fetchresponse")==0);
+        token->origin_generation = owner.origin_generation;
+        token_registry_.emplace(token->generation, token);
+        allocation.release();
+        retained_refs_ += 1;
+        owner.active_event = token->generation;
+        owner.active_message = event.message;
+        JSValue bytes = JS_UNDEFINED;
+        if (event.message) {
+            const size_t size = static_cast<size_t>(event.message->size());
+            uint8_t *buffer = static_cast<uint8_t *>(js_malloc(ctx_, size ? size : 1));
+            if (!buffer) { JS_ThrowOutOfMemory(ctx_); return false; }
+            size_t offset = 0;
+            for (const auto &chunk : event.message->chunks()) {
+                if (chunk.size()) std::memcpy(buffer + offset, chunk.data(), chunk.size());
+                offset += chunk.size();
+            }
+            // ArrayBuffer creation has not taken ownership on failure in
+            // this pinned QuickJS. Free the JS-accounted native buffer on
+            // that path; once created the ArrayBuffer owns it, including
+            // typed-array constructor failure.
+            JSValue backing=JS_NewArrayBuffer(ctx_,buffer,size,free_channel_js_bytes,NULL,false);
+            if (JS_IsException(backing)) { js_free(ctx_,buffer); return false; }
+            // This C API calls the pinned constructor directly; unlike a
+            // JS call it does not pad optional arguments with undefined.
+            JSValue view_arguments[]={backing,JS_NewInt32(ctx_,0),JS_UNDEFINED};
+            bytes=JS_NewTypedArray(ctx_,3,view_arguments,JS_TYPED_ARRAY_UINT8);
+            JS_FreeValue(ctx_,backing);
+            if (JS_IsException(bytes)) return false;
+        }
+        JSValue metadata=event.has_http_response ? channel_http_metadata(ctx_,event.http_response) : JS_UNDEFINED;
+        if (JS_IsException(metadata)) {JS_FreeValue(ctx_,bytes);return false;}
+        JSValue arguments[] = { JS_NewBigUint64(ctx_, token->generation),
+            JS_NewString(ctx_, event.type ? event.type : event.message ? "message" : "close"), bytes,
+            JS_NewBool(ctx_, event.message && event.message->text()), JS_NewUint32(ctx_, event.code),
+            JS_NewStringLen(ctx_, event.reason.data(), event.reason.size()), JS_NewBool(ctx_, event.clean), JS_NewUint32(ctx_,id),metadata };
+        RequestToken *previous = current_token_;
+        current_token_ = token;
+        const bool called = call_bridge(owner.callback, 9, arguments);
+        current_token_ = previous;
+        for (auto argument : arguments) JS_FreeValue(ctx_, argument);
+        owner.events.pop_front();
+        return called;
+    }
+
+    bool stop_native_proxy(uint32_t id) {
+        namespace p = capsid::protocol;
+        auto found = connections_.find(id);
+        if (found == connections_.end()) return true;
+        const uint32_t ids[] = {id, found->second.proxy_peer};
+        for (uint32_t current : ids) {
+            auto item = connections_.find(current);
+            if (item == connections_.end() || item->second.proxy_stopped) continue;
+            auto &owner = item->second;
+            owner.proxy_stopped = true; owner.abandoned = true;
+            owner.local_outgoing_open = false; owner.events.clear(); owner.withheld_credit = 0;
+            capsid::ChannelEntry entry;
+            if (!owner.cancel_requested && channels_->registry().find(current, &entry) &&
+                    (entry.phase == capsid::ChannelPhase::Open || entry.phase == capsid::ChannelPhase::Closing)) {
+                if (!cancel_channel_resource(current, p::kCancelLocal)) return false;
+                owner.cancel_requested = true;
+            }
+            close_connection_resources(current, owner);
+        }
+        return true;
+    }
+
+    bool pump_native_proxies() {
+        namespace p = capsid::protocol;
+        for (auto &item : connections_) {
+            auto &owner = item.second;
+            if (!owner.proxy_peer || owner.proxy_stopped || owner.active_event) continue;
+            auto peer = connections_.find(owner.proxy_peer);
+            if (peer == connections_.end()) { if (!stop_native_proxy(item.first)) return false; continue; }
+            while (!owner.events.empty()) {
+                auto &event = owner.events.front();
+                if (event.message) {
+                    std::string error;
+                    if (!channels_->forward_message(owner.proxy_peer, event.message, &error)) {
+                        if (error == "channel send budget exceeded") break;
+                        if (!stop_native_proxy(item.first)) return false;
+                        break;
+                    }
+                } else if (!event.clean) {
+                    if (!stop_native_proxy(item.first)) return false;
+                    break;
+                } else {
+                    capsid::ChannelEntry entry;
+                    if (!peer->second.proxy_send_closed && channels_->registry().find(owner.proxy_peer, &entry) &&
+                            (entry.phase == capsid::ChannelPhase::Open || entry.phase == capsid::ChannelPhase::Closing) &&
+                            !entry.direction[1].close_sent) {
+                        p::ChannelClosePayload close; close.channel_id = owner.proxy_peer;
+                        close.close_kind = p::kCloseInitiated; close.code = event.code == 1005 ? 0 : event.code;
+                        close.flags = close.code ? p::kCloseFlagCodePresent : 0; close.reason = event.reason;
+                        p::Frame frame; frame.version = p::kVersionV4; frame.type = p::kChannelClose;
+                        if (!p::encode_channel_close(close, &frame.payload) || !enqueue_channel_control(frame)) return false;
+                        peer->second.proxy_send_closed = true;
+                        peer->second.local_outgoing_open = false;
+                    }
+                }
+                owner.events.pop_front();
+            }
+        }
+        return true;
+    }
+
+    bool native_proxy_peer_live(const ConnectionOwner &owner) const {
+        if (!owner.proxy_peer || owner.proxy_stopped) return false;
+        const auto peer = connections_.find(owner.proxy_peer);
+        return peer != connections_.end() && (!peer->second.events.empty() ||
+            channels_->has_pending_send(owner.proxy_peer) || channels_->registry().find(owner.proxy_peer, nullptr));
+    }
+
+    void pump_channels() {
+        if (!channels_ || channel_pump_active_ || shutting_down_) return;
+        channel_pump_active_ = true;
+        struct Reset { bool &value; ~Reset() { value = false; } } reset{channel_pump_active_};
+        std::string error;
+        for (auto &item:pending_connections_) {
+            auto &owner=item.second;
+            if (owner.handshake.payload.empty()) continue;
+            if (!channels_->transmit(owner.handshake,channel_writer,this,&error)) {
+                if (!error.empty()) { enter_poison("channel OPEN sequence"); return; }
+                break;
+            }
+            std::vector<uint8_t>().swap(owner.handshake.payload);
+        }
+        for (auto &item : connections_) {
+            auto &owner = item.second;
+            if (owner.committed || owner.dial_id) continue;
+            auto response = responses_.find(owner.request_id);
+            if (response == responses_.end() || response->second.phase != ResponsePhase::kOpen) continue;
+            if (!channels_->transmit(owner.handshake, channel_writer, this, &error)) {
+                if (!error.empty()) { enter_poison("channel upgrade sequence"); return; }
+                continue;
+            }
+            capsid::ChannelAuthority authority; // immutable User origin
+            channels_->register_authority(item.first, authority);
+            owner.committed = true;
+            RequestToken *previous = current_token_;
+            current_token_ = response->second.token;
+            JSValue value = JS_NewUint32(ctx_, item.first);
+            JSValue result = JS_Call(ctx_, owner.resolve, JS_UNDEFINED, 1, &value);
+            JS_FreeValue(ctx_, value); JS_FreeValue(ctx_, result);
+            current_token_ = previous;
+            JS_FreeValue(ctx_, owner.resolve); owner.resolve = JS_UNDEFINED;
+            JS_FreeValue(ctx_, owner.reject); owner.reject = JS_UNDEFINED;
+            std::vector<uint8_t>().swap(owner.handshake.payload);
+            erase_response(response);
+            remember_terminal(owner.request_id);
+        }
+        if (!pump_native_proxies()) { enter_poison("native proxy control budget exceeded"); return; }
+        for (auto it = channel_controls_.begin(); it != channel_controls_.end();) {
+            const uint32_t id = capsid::protocol::load_u32_at(it->payload.data());
+            if (it->type == capsid::protocol::kChannelClose && channels_->has_pending_send(id)) { ++it; continue; }
+            if (it->type==capsid::protocol::kChannelCancel && !id) {
+                capsid::protocol::ChannelCancelPayload cancel;
+                capsid::protocol::decode_channel_cancel(it->payload.data(),it->payload.size(),&cancel,&error);
+                auto pending=pending_connections_.find(cancel.dial_id);
+                if (pending!=pending_connections_.end() && !pending->second.handshake.payload.empty()) break;
+            }
+            error.clear();
+            if (!channels_->transmit(*it, channel_writer, this, &error)) {
+                if (!error.empty()) { enter_poison("channel control sequence"); return; }
+                break;
+            }
+            if (it->type==capsid::protocol::kChannelAck) {
+                capsid::protocol::ChannelAckPayload ack;
+                capsid::protocol::decode_channel_ack(it->payload.data(),it->payload.size(),&ack,&error);
+                if (ack.kind==capsid::protocol::kAckDialResult) {
+                    if (ack.channel_id) connections_.at(ack.channel_id).committed=true;
+                    else if (pending_connections_.count(ack.dial_id)) pending_connections_.at(ack.dial_id).committed=true;
+                }
+            } else if (it->type==capsid::protocol::kChannelCancel && !id) {
+                capsid::protocol::ChannelCancelPayload cancel;
+                capsid::protocol::decode_channel_cancel(it->payload.data(),it->payload.size(),&cancel,&error);
+                auto pending=pending_connections_.find(cancel.dial_id);
+                if (pending!=pending_connections_.end() && !pending->second.close_event_queued) {
+                    ConnectionEvent event; event.type="failure"; event.code=1006; event.clean=false; event.reason="WebSocket connection cancelled";
+                    pending->second.events.push_back(std::move(event)); pending->second.committed=true; pending->second.close_event_queued=true;
+                }
+            }
+            it = channel_controls_.erase(it);
+        }
+        for (size_t quantum = 0; quantum < 32; ++quantum) {
+            error.clear();
+            const size_t reserve = std::min<size_t>(4096, config_.max_queued_bytes / 4);
+            const size_t capacity = wire_payload_capacity();
+            if (capacity < reserve + 4) break;
+            if (!channels_->transmit_fragment(channel_writer, this, &error, capacity - reserve - 4)) {
+                if (!error.empty()) enter_poison("channel DATA sequence");
+                break;
+            }
+        }
+        for (auto &item : connections_) {
+            auto &owner = item.second;
+            if (!owner.proxy_peer || owner.proxy_stopped || !owner.withheld_credit ||
+                    !owner.events.empty() || channels_->has_pending_send(owner.proxy_peer)) continue;
+            capsid::ChannelEntry entry;
+            if (channels_->registry().find(item.first, &entry) && !entry.direction[1].close_sent &&
+                    !return_fetch_credit(item.first, owner.withheld_credit)) {
+                enter_poison("native proxy credit control budget exceeded"); return;
+            }
+            owner.withheld_credit = 0;
+        }
+        for (auto it = connections_.begin(); it != connections_.end();) {
+            auto &owner = it->second;
+            capsid::ChannelEntry entry;
+            if (!channels_->registry().find(it->first, &entry) ||
+                    (entry.direction[0].close_sent && entry.direction[1].close_sent))
+                close_connection_resources(it->first, owner);
+            if (!dispatch_connection_event(it->first, owner)) { enter_poison("connection event allocation failed"); return; }
+            if (owner.committed && !owner.active_event && owner.events.empty() &&
+                    !(owner.transport_disconnected && owner.local_outgoing_open) &&
+                    !owner.lifetime_pinned &&
+                    !native_proxy_peer_live(owner) &&
+                    !connection_http_request_active(owner) && !channels_->registry().find(it->first, NULL)) {
+                JS_FreeValue(ctx_, owner.callback);
+                cancel_binding_calls(owner.request_id);
+                release_coupling(owner);
+                it = connections_.erase(it);
+            } else ++it;
+        }
+        for (auto it=pending_connections_.begin();it!=pending_connections_.end();) {
+            auto &owner=it->second;
+            if (!channels_->registry().pending_dial(it->first)) close_connection_resources(0, owner);
+            if (!dispatch_connection_event(0,owner)) { enter_poison("dial event allocation failed"); return; }
+            if (owner.committed && !owner.active_event && owner.events.empty() &&
+                    !connection_http_request_active(owner) && !channels_->registry().pending_dial(it->first)) {
+                JS_FreeValue(ctx_,owner.callback); it=pending_connections_.erase(it);
+            } else ++it;
+        }
+    }
+
+    void expire_connection_events() {
+        const uint64_t now = uv_hrtime();
+        for (auto &item : connections_) {
+            auto &owner = item.second;
+            if (!owner.committed || !owner.awaiting_activation || owner.abandoned || !owner.coupling_token ||
+                    !owner.coupling_deadline_ns || now < owner.coupling_deadline_ns) continue;
+            owner.coupling_deadline_ns = 0;
+            // Allow the pending JS cleanup jobs to run after the deadline.
+            // The transport is cancelled below; its capabilities are not
+            // promoted into an accepted application connection.
+            owner.coupling_token->deadline_ns = 0;
+            if (interrupted_request_id_ == owner.request_id) interrupted_request_id_ = 0;
+            if (channels_->registry().find(item.first, nullptr) && !owner.cancel_requested) {
+                if (!cancel_channel_resource(item.first, capsid::protocol::kCancelTimeout)) {
+                    enter_poison("coupling timeout control budget exceeded");
+                    return;
+                }
+                owner.cancel_requested = true;
+            }
+            // A buffered clean Close must not hide expiry. Replace it with
+            // an internal failure that wakes the coupling wait; application
+            // callbacks remain suppressed until a successful activation.
+            owner.events.clear();
+            ConnectionEvent event;
+            event.type = "failure";
+            event.code = 1006;
+            event.clean = false;
+            event.reason = "WebSocket peer acceptance deadline exceeded";
+            owner.events.push_back(std::move(event));
+            owner.close_event_queued = true;
+        }
+        for (auto &item : token_registry_) {
+            RequestToken *token = item.second;
+            if ((!token->connection_id && !token->connection_dial_id) || token->terminal ||
+                    !token->deadline_ns || now < token->deadline_ns) continue;
+            token->terminal = true;
+            token->deadline_ns = 0;
+            token->last_reclaim_refs_ = token->refs;
+            token->reclaim_grace = true;
+            request_reclaim(token);
+            cancel_binding_calls(token->request_id);
+            if (token->connection_id && !cancel_channel_resource(token->connection_id, capsid::protocol::kCancelTimeout)) enter_poison("channel event timeout");
+            if (interrupted_request_id_ == token->request_id) interrupted_request_id_ = 0;
+        }
+    }
+
+    void clear_connections() {
+        channel_controls_.clear();
+        for (auto &item : connections_) {
+            close_connection_resources(item.first, item.second);
+            JS_FreeValue(ctx_, item.second.callback);
+            JS_FreeValue(ctx_, item.second.resolve);
+            JS_FreeValue(ctx_, item.second.reject);
+            release_coupling(item.second);
+        }
+        connections_.clear();
+        for (auto &item:pending_connections_) {
+            close_connection_resources(0, item.second);
+            JS_FreeValue(ctx_,item.second.callback);
+        }
+        pending_connections_.clear();
+        for (auto it = token_registry_.begin(); it != token_registry_.end();) {
+            RequestToken *token = (it++)->second;
+            if (token->connection_id || token->connection_dial_id) retire_connection_token(token);
+        }
+    }
+
     static JSValue js_install_bridge(JSContext *ctx,
                                      JSValueConst,
                                      int argc,
@@ -2629,7 +4564,7 @@ private:
         if (frame.payload.size() > g_worker->config_.max_header_bytes) {
             return false;
         }
-        return g_worker->queue_output(frame);
+        return g_worker->queue_response_head(frame);
     }
 
     static JSValue js_response_head(JSContext *ctx,
@@ -2886,7 +4821,7 @@ private:
             head.payload[4] = static_cast<uint8_t>(size >> 16);
             head.payload[5] = static_cast<uint8_t>(size >> 24);
         }
-        if (!g_worker->queue_output(head)) {
+        if (!g_worker->queue_response_head(head)) {
             if (body_text) {
                 JS_FreeCString(ctx, body_text);
             }
@@ -3275,6 +5210,21 @@ private:
             return false;
         }
         config_ = startup_state_.config();
+        if (frame.type == capsid::protocol::kHello &&
+                config_.protocol_version == capsid::protocol::kVersionV4) {
+            capsid::ChannelRegistry::Options options;
+            options.local_side = capsid::ChannelSide::Worker;
+            options.max_channels = config_.channel_limits.max_channels;
+            options.max_message_bytes = config_.channel_limits.max_message_bytes;
+            options.reassembly_budget_bytes = config_.channel_limits.reassembly_budget_bytes;
+            options.send_budget_bytes = config_.channel_limits.send_budget_bytes;
+            options.per_channel_queue_bytes = config_.channel_limits.per_channel_queue_bytes;
+            options.dial_timeout_ms = config_.channel_limits.dial_timeout_ms;
+            options.close_timeout_ms = config_.channel_limits.close_timeout_ms;
+            channels_.reset(new capsid::ChannelIO(options));
+            channel_clock_ms_ = uv_hrtime() / 1000000;
+            if (!channels_->receive(frame).accepted) return false;
+        }
         if (startup_state_.bundle_complete()) {
             bundle_.swap(startup_state_.bundle());
             bundle_name_ = startup_state_.bundle_name();
@@ -3313,12 +5263,14 @@ private:
         JS_FreeValue(ctx_, request_chunk_);
         JS_FreeValue(ctx_, request_end_);
         JS_FreeValue(ctx_, cancel_request_);
+        JS_FreeValue(ctx_, microtask_error_reporter_);
         application_handler_ = JS_UNDEFINED;
         application_handler_this_ = JS_UNDEFINED;
         begin_request_ = JS_UNDEFINED;
         request_chunk_ = JS_UNDEFINED;
         request_end_ = JS_UNDEFINED;
         cancel_request_ = JS_UNDEFINED;
+        microtask_error_reporter_ = JS_UNDEFINED;
     }
 
     static bool permission_from_name(
@@ -6753,6 +8705,15 @@ private:
         JS_FreeValue(ctx_, default_export);
         JS_FreeValue(ctx_, module_namespace);
         JS_FreeValue(ctx_, module);
+        if (installed) {
+            // Module evaluation is a completed JavaScript task. Report its
+            // deferred rejections before TJS_Run can dispatch already-due
+            // timers, including handlers registered while the module ran.
+            // Draining promise jobs alone lets such a timer erase the pending
+            // rejection before either lifecycle event can be observed.
+            PhaseGuard guard(this, WorkerPhase::kJS);
+            tjs__execute_jobs(ctx_);
+        }
         return installed;
     }
 
@@ -6782,6 +8743,7 @@ private:
         // would reclaim while uv-loop timers that captured ctx_data at
         // creation (e.g. the abort path's setTimeout(reject, 0)) have
         // not fired yet, false-poisoning a clean cancellation.
+        finish_connection_turns();
     }
 
     std::string exception_string() {
@@ -6873,6 +8835,16 @@ private:
     }
 
     bool handle_frame(const capsid::protocol::Frame &frame) {
+        // The worker now shares the endpoint state and native queue core.
+        // READY remains carriage-only until the JS connection owner and
+        // network adapters are complete; an unnegotiated channel/Upgrade
+        // frame is rejected here before it can create an HTTP request.
+        capsid::ChannelRegistry::ApplyResult channel_result;
+        if (channels_) {
+            channel_result = channels_->receive(frame, true);
+            if (!channel_result.accepted) return false;
+            if (frame.type >= capsid::protocol::kChannelOpen) return handle_channel_frame(frame, channel_result);
+        }
         switch (frame.type) {
             case capsid::protocol::kRequestHead:
                 return begin_request(frame);
@@ -6987,6 +8959,7 @@ private:
         }
 
         ResponseState response;
+        response.upgrade_channel_id = decoded.upgrade_channel_id;
         response.t_begin_ns = uv_hrtime();
         response.credit = config_.initial_window;
         // Bodyless requests (kFlagRequestEnd): no request-direction credit
@@ -7318,7 +9291,12 @@ private:
             // of whether the transport can queue the timeout terminal yet.
             cancel_binding_calls(id);
             interrupted_request_id_ = id;
+            // Abort listeners must clear their own resources in the same
+            // request context used by explicit cancellation.
+            RequestToken *saved_token = current_token_;
+            current_token_ = expired_token;
             call_id_bridge(cancel_request_, id);
+            current_token_ = saved_token;
             send_error(
                 id,
                 "request deadline exceeded",
@@ -7353,14 +9331,18 @@ private:
     void resolve_pending(ResponseState &state) {
         state.t_write_done_ns = uv_hrtime();
         PendingWrite &pending = state.pending.front();
-        RequestToken *saved_token = current_token_;
-        current_token_ = state.token;
-        JSValue result = JS_Call(ctx_, pending.resolve, JS_UNDEFINED, 0, NULL);
-        current_token_ = saved_token;
-        if (JS_IsException(result)) {
-            JS_FreeValue(ctx_, JS_GetException(ctx_));
+        // Snapshot writes have no JS promise callbacks. Only streaming
+        // writes resume a continuation in the owning request context.
+        if (!JS_IsUndefined(pending.resolve)) {
+            RequestToken *saved_token = current_token_;
+            current_token_ = state.token;
+            JSValue result = JS_Call(ctx_, pending.resolve, JS_UNDEFINED, 0, NULL);
+            current_token_ = saved_token;
+            if (JS_IsException(result)) {
+                JS_FreeValue(ctx_, JS_GetException(ctx_));
+            }
+            JS_FreeValue(ctx_, result);
         }
-        JS_FreeValue(ctx_, result);
         JS_FreeValue(ctx_, pending.resolve);
         JS_FreeValue(ctx_, pending.reject);
         state.pending.pop_front();
@@ -7369,17 +9351,18 @@ private:
     void reject_pending(ResponseState &state, const char *message) {
         while (!state.pending.empty()) {
             PendingWrite &pending = state.pending.front();
-            JSValue argument = JS_NewString(ctx_, message);
-            // WP-02 §6.2: same scope wrapping as resolve_pending — the
-            // rejection is delivered from a native callback and its
-            // continuation must capture the request token.
-            RequestToken *saved_token = current_token_;
-            current_token_ = state.token;
-            JSValue result =
-                JS_Call(ctx_, pending.reject, JS_UNDEFINED, 1, &argument);
-            current_token_ = saved_token;
-            JS_FreeValue(ctx_, result);
-            JS_FreeValue(ctx_, argument);
+            if (!JS_IsUndefined(pending.reject)) {
+                JSValue argument = JS_NewString(ctx_, message);
+                // Native callbacks preserve the request context for the
+                // promise rejection just as resolve_pending does.
+                RequestToken *saved_token = current_token_;
+                current_token_ = state.token;
+                JSValue result =
+                    JS_Call(ctx_, pending.reject, JS_UNDEFINED, 1, &argument);
+                current_token_ = saved_token;
+                JS_FreeValue(ctx_, result);
+                JS_FreeValue(ctx_, argument);
+            }
             JS_FreeValue(ctx_, pending.resolve);
             JS_FreeValue(ctx_, pending.reject);
             state.pending.pop_front();
@@ -7394,6 +9377,16 @@ private:
                          uint64_t id,
                          size_t quantum) {
         bool progressed = false;
+        if (state.head_pending) {
+            if (!has_output_capacity(capsid::protocol::kHeaderSize + state.pending_head.payload.size()))
+                return false;
+            // The frame was validated before deferral. A failed write here
+            // is fatal rather than an indefinitely retried invalid frame.
+            if (!queue_output(state.pending_head)) { shutdown(); return false; }
+            state.head_pending = false;
+            state.pending_head = capsid::protocol::Frame();
+            progressed = true;
+        }
         while (!state.pending.empty() && state.credit > 0 && quantum > 0) {
             PendingWrite &pending = state.pending.front();
             if (pending.offset == pending.size) {
@@ -7447,7 +9440,7 @@ private:
                            const TerminalPending &terminal) {
         if (terminal.kind == TerminalPending::Kind::kResponseEnd) {
             // The end waits until every body byte is on the wire.
-            if (!state.pending.empty()) {
+            if (state.head_pending || !state.pending.empty()) {
                 state.terminal = terminal;
                 state.terminal_pending = true;
                 state.phase = ResponsePhase::kEndPending;
@@ -7467,13 +9460,20 @@ private:
         }
         capsid::protocol::Frame frame;
         frame.type = capsid::protocol::kError;
+        state.head_pending = false;
+        state.pending_head = capsid::protocol::Frame();
         frame.flags = terminal.error_flags;
         frame.request_id = id;
         const size_t size = std::min<size_t>(
             terminal.message.size(), error_payload_capacity());
         frame.payload.assign(
             terminal.message.begin(), terminal.message.begin() + size);
-        if (!queue_output(frame)) {
+        const bool accepted = queue_output(frame);
+        if (io_ && io_->observe_http_terminal) {
+            io_->observe_http_terminal(frame, outbound_.logical_size(),
+                                       config_.max_queued_bytes, accepted, io_->opaque);
+        }
+        if (!accepted) {
             state.terminal = terminal;
             state.terminal_pending = true;
             state.phase = ResponsePhase::kFailurePending;
@@ -7602,7 +9602,7 @@ private:
                 continue;
             }
             ResponseState &state = it->second;
-            if (state.credit == 0 && !state.terminal_pending) {
+            if (state.credit == 0 && !state.terminal_pending && !state.head_pending) {
                 // No credit and no deferred terminal: this request can
                 // make no progress on wire space alone; its credit
                 // arrival drives pump_one directly. Drop it from the
@@ -7702,7 +9702,38 @@ private:
         queue_output(frame);
     }
 
+    bool queue_response_head(const capsid::protocol::Frame &frame) {
+        const auto found = responses_.find(frame.request_id);
+        if (found == responses_.end() || found->second.head_pending ||
+            frame.payload.size() > config_.max_queued_bytes ||
+            capsid::protocol::kHeaderSize > config_.max_queued_bytes - frame.payload.size())
+            return false;
+        if (has_output_capacity(capsid::protocol::kHeaderSize + frame.payload.size()))
+            return queue_output(frame);
+        if (channels_) {
+            std::string error;
+            capsid::protocol::Frame explicit_frame = frame;
+            if (!explicit_frame.version) explicit_frame.version = config_.protocol_version;
+            // ChannelIO commits only after its writer succeeds. Validate a
+            // deferred head without changing channel ownership or emitting it.
+            channels_->transmit(explicit_frame,
+                [](const capsid::protocol::Frame&, void*) { return false; }, nullptr, &error);
+            if (!error.empty()) return false;
+        }
+        found->second.pending_head = frame;
+        found->second.head_pending = true;
+        enqueue_pump(frame.request_id);
+        return true;
+    }
+
     bool queue_output(const capsid::protocol::Frame &frame) {
+        if (channels_ && frame.type == capsid::protocol::kResponseHead &&
+                !(frame.flags & capsid::protocol::kFlagResponseUpgrade)) {
+            std::string error;
+            capsid::protocol::Frame explicit_frame = frame;
+            if (!explicit_frame.version) explicit_frame.version = config_.protocol_version;
+            return channels_->transmit(explicit_frame, raw_output_writer, this, &error);
+        }
         return queue_output_bytes(
             frame.type,
             frame.flags,
@@ -7711,6 +9742,13 @@ private:
             frame.payload.size(),
             frame.version != 0 ? frame.version
                                : config_.protocol_version);
+    }
+
+    static bool raw_output_writer(const capsid::protocol::Frame &frame, void *opaque) {
+        WorkerRuntime *self = static_cast<WorkerRuntime *>(opaque);
+        return self->queue_output_bytes(frame.type, frame.flags, frame.request_id,
+            frame.payload.empty() ? NULL : frame.payload.data(), frame.payload.size(),
+            frame.version ? frame.version : self->config_.protocol_version);
     }
 
     // Fast path: writes as many bytes as credit and wire capacity allow,
@@ -7724,6 +9762,10 @@ private:
                                             size_t *sent_out = NULL) {
         if (!payload || payload_size == 0 || !state) {
             return EnqueueResult::kFatal;
+        }
+        if (state->head_pending) {
+            if (sent_out) *sent_out = 0;
+            return EnqueueResult::kWouldBlock;
         }
         size_t sent = 0;
         while (sent < payload_size && state->credit > 0) {
@@ -7852,6 +9894,7 @@ private:
         // frame type from the frame header at the write cursor; a
         // resume after EAGAIN points mid-frame and is skipped.
         bool diag;
+        const CapsidWorkerIo* io;
         std::array<uint64_t, 32> frame_types{};
     };
 
@@ -7881,13 +9924,21 @@ private:
         }
     }
 
+    static ssize_t runtime_writer(const uint8_t* data, size_t size, void* opaque) {
+        auto* state = static_cast<WriterOpaque*>(opaque);
+        if (state->io && state->io->write)
+            return state->io->write(data, size, socket_writer, opaque, state->io->opaque);
+        return socket_writer(data, size, opaque);
+    }
+
     void flush_output() {
         PhaseGuard guard(this, WorkerPhase::kFlush);
         writer_opaque_.fd = fd_;
         writer_opaque_.calls = 0;
         writer_opaque_.diag = diag_enabled_;
+        writer_opaque_.io = io_;
         writer_opaque_.frame_types.fill(0);
-        if (!outbound_.flush(socket_writer, &writer_opaque_)) {
+        if (!outbound_.flush(runtime_writer, &writer_opaque_)) {
             shutdown();
             return;
         }
@@ -7917,6 +9968,7 @@ private:
                              static_cast<unsigned long long>(flush_syscall_total_ - named));
             }
         }
+        pump_channels();
         if (outbound_.drained()) {
             pump_response_output();
         }
@@ -7933,11 +9985,13 @@ private:
         opaque.fd = fd_;
         opaque.calls = 0;
         opaque.diag = false;
-        outbound_.flush(socket_writer, &opaque);
+        opaque.io = io_;
+        outbound_.flush(runtime_writer, &opaque);
     }
 
     void update_poll() {
-        if (!poll_started_) {
+        if (shutting_down_ || !poll_started_ ||
+            uv_is_closing(reinterpret_cast<uv_handle_t *>(&poll_))) {
             return;
         }
         int events = UV_READABLE;
@@ -7955,11 +10009,14 @@ private:
             return;
         }
         shutting_down_ = true;
+        clear_connections();
+        if (channels_) channels_->teardown_all(capsid::protocol::kCancelShutdown);
         if (poll_started_) {
             uv_poll_stop(&poll_);
             if (!uv_is_closing(reinterpret_cast<uv_handle_t *>(&poll_))) {
                 uv_close(reinterpret_cast<uv_handle_t *>(&poll_), NULL);
             }
+            poll_started_ = false;
         }
         if (deadline_timer_started_) {
             uv_timer_stop(&deadline_timer_);
@@ -7978,6 +10035,7 @@ private:
 
     int fd_;
     int network_namespace_fd_;
+    const CapsidWorkerIo* io_;
     TJSRuntime *runtime_;
     JSContext *ctx_;
     uv_poll_t poll_;
@@ -8001,6 +10059,13 @@ private:
     bool shutting_down_;
     capsid::protocol::Parser parser_;
     capsid::WorkerStartupState startup_state_;
+    std::unique_ptr<capsid::ChannelIO> channels_;
+    uint64_t channel_clock_ms_ = 0;
+    std::map<uint32_t, ConnectionOwner> connections_;
+    std::map<uint64_t, ConnectionOwner> pending_connections_;
+    uint64_t next_dial_id_ = 1;
+    std::deque<capsid::protocol::Frame> channel_controls_;
+    bool channel_pump_active_ = false;
     WorkerConfig config_;
     std::vector<uint8_t> bundle_;
     bool bundle_is_trusted_bytecode_;
@@ -8044,8 +10109,10 @@ private:
     JSValue request_chunk_;
     JSValue request_end_;
     JSValue cancel_request_;
+    JSValue microtask_error_reporter_;
     uint64_t next_token_generation_;
     std::map<uint64_t, RequestToken *> token_registry_;
+    RequestToken *retired_connection_tokens_ = nullptr;
     RequestToken *current_token_;
     // §7.4 poison state machine. Idempotent: the first reason wins
     // (poison_reason_), later triggers only increment poison_triggers_;
@@ -8079,6 +10146,10 @@ WorkerRuntime *WorkerRuntime::g_worker = NULL;
 }  // namespace
 
 int capsid_run_worker(int ipc_fd, int network_namespace_fd) {
-    WorkerRuntime runtime(ipc_fd, network_namespace_fd);
+    return capsid_run_worker(ipc_fd, network_namespace_fd, nullptr);
+}
+
+int capsid_run_worker(int ipc_fd, int network_namespace_fd, const CapsidWorkerIo* io) {
+    WorkerRuntime runtime(ipc_fd, network_namespace_fd, io);
     return runtime.run();
 }

@@ -1,0 +1,357 @@
+{
+  "status": "complete",
+  "complete": true,
+  "beforeFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-windows-worker-pe-difference-r1\\before-worker.exe",
+  "afterFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-windows-worker-pe-difference-r1\\after-worker.exe",
+  "beforeSHA256": "34951af6a35b24440a5d3550b01912a33c31c347859a9056f09ba2079aeb3f66",
+  "afterSHA256": "365efc6d2658e093b4522d127f847cd7d6274fe9100cd1468839377b210bf540",
+  "bytes": 29368832,
+  "changedBytes": 9,
+  "changedOffsets": [
+    304,
+    305,
+    22798516,
+    22798517,
+    22798544,
+    22798545,
+    22798572,
+    22798573,
+    22824932
+  ],
+  "unexpectedChangedOffsets": [],
+  "unexpectedChangedBytes": 0,
+  "onlyRecognizedPeTimestampChecksumAndCodeviewGuidAgeChanged": true,
+  "sections": [
+    {
+      "name": ".text",
+      "rva": 4096,
+      "virtualSize": 18962582,
+      "rawBytes": 18962944,
+      "offset": 1024,
+      "characteristics": 1610612768,
+      "differentBytes": 0,
+      "beforeSHA256": "f0b602bcc3091bfcc13726052d15a0ba9ff3f1b913e6104ad7f8603482122f37",
+      "afterSHA256": "f0b602bcc3091bfcc13726052d15a0ba9ff3f1b913e6104ad7f8603482122f37"
+    },
+    {
+      "name": ".rdata",
+      "rva": 18968576,
+      "virtualSize": 4191946,
+      "rawBytes": 4192256,
+      "offset": 18963968,
+      "characteristics": 1073741888,
+      "differentBytes": 7,
+      "beforeSHA256": "cd33fd11aa2edafab495ba21cb0dc6097bd7c9195487f4d7b87a39a01ff3df78",
+      "afterSHA256": "80cd2d8ef7e2c4346cf225a51dd32c09e6415c2810fbe5bd6df75d19d4896648"
+    },
+    {
+      "name": ".data",
+      "rva": 23162880,
+      "virtualSize": 5786100,
+      "rawBytes": 5517824,
+      "offset": 23156224,
+      "characteristics": 3221225536,
+      "differentBytes": 0,
+      "beforeSHA256": "df23d052002c4e33966bbbb918cd923c7ca371bbe705da4552a45340ea94ca0b",
+      "afterSHA256": "df23d052002c4e33966bbbb918cd923c7ca371bbe705da4552a45340ea94ca0b"
+    },
+    {
+      "name": ".pdata",
+      "rva": 28950528,
+      "virtualSize": 322248,
+      "rawBytes": 322560,
+      "offset": 28674048,
+      "characteristics": 1073741888,
+      "differentBytes": 0,
+      "beforeSHA256": "c54a4107f866c0a04cb0dab1918d9fcb18a097a69793606632959e1203c82768",
+      "afterSHA256": "c54a4107f866c0a04cb0dab1918d9fcb18a097a69793606632959e1203c82768"
+    },
+    {
+      "name": ".WEAK",
+      "rva": 29274112,
+      "virtualSize": 392,
+      "rawBytes": 512,
+      "offset": 28996608,
+      "characteristics": 1073741888,
+      "differentBytes": 0,
+      "beforeSHA256": "e956f83c59d559b99f4a5cc289e615a42470a30905bb0ad1e5e49877dbe511e0",
+      "afterSHA256": "e956f83c59d559b99f4a5cc289e615a42470a30905bb0ad1e5e49877dbe511e0"
+    },
+    {
+      "name": ".INTR",
+      "rva": 29278208,
+      "virtualSize": 272,
+      "rawBytes": 512,
+      "offset": 28997120,
+      "characteristics": 1073741888,
+      "differentBytes": 0,
+      "beforeSHA256": "e0f01b08f6838db70046bddb37c2d4801235e647d6b07e38a61677342a6d7557",
+      "afterSHA256": "e0f01b08f6838db70046bddb37c2d4801235e647d6b07e38a61677342a6d7557"
+    },
+    {
+      "name": ".fptable",
+      "rva": 29282304,
+      "virtualSize": 256,
+      "rawBytes": 512,
+      "offset": 28997632,
+      "characteristics": 3221225536,
+      "differentBytes": 0,
+      "beforeSHA256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+      "afterSHA256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+    },
+    {
+      "name": ".rsrc",
+      "rva": 29286400,
+      "virtualSize": 504,
+      "rawBytes": 512,
+      "offset": 28998144,
+      "characteristics": 1073741888,
+      "differentBytes": 0,
+      "beforeSHA256": "5c1c80f57fe7f99fd6ac1eebb9e2cbf1d4fdbf82ae79375eea10f33904f31e7a",
+      "afterSHA256": "5c1c80f57fe7f99fd6ac1eebb9e2cbf1d4fdbf82ae79375eea10f33904f31e7a"
+    },
+    {
+      "name": ".reloc",
+      "rva": 29290496,
+      "virtualSize": 369692,
+      "rawBytes": 370176,
+      "offset": 28998656,
+      "characteristics": 1107296320,
+      "differentBytes": 0,
+      "beforeSHA256": "d028bc0e23b2696d22c2223d40b01b274d142ed69ace5a6d5da3038e362c1667",
+      "afterSHA256": "d028bc0e23b2696d22c2223d40b01b274d142ed69ace5a6d5da3038e362c1667"
+    }
+  ],
+  "peBefore": {
+    "machine": 34404,
+    "sectionCount": 9,
+    "coffTimestamp": 1794310259,
+    "sections": [
+      {
+        "name": ".text",
+        "rva": 4096,
+        "virtualSize": 18962582,
+        "rawBytes": 18962944,
+        "offset": 1024,
+        "characteristics": 1610612768,
+        "sha256": "f0b602bcc3091bfcc13726052d15a0ba9ff3f1b913e6104ad7f8603482122f37"
+      },
+      {
+        "name": ".rdata",
+        "rva": 18968576,
+        "virtualSize": 4191946,
+        "rawBytes": 4192256,
+        "offset": 18963968,
+        "characteristics": 1073741888,
+        "sha256": "cd33fd11aa2edafab495ba21cb0dc6097bd7c9195487f4d7b87a39a01ff3df78"
+      },
+      {
+        "name": ".data",
+        "rva": 23162880,
+        "virtualSize": 5786100,
+        "rawBytes": 5517824,
+        "offset": 23156224,
+        "characteristics": 3221225536,
+        "sha256": "df23d052002c4e33966bbbb918cd923c7ca371bbe705da4552a45340ea94ca0b"
+      },
+      {
+        "name": ".pdata",
+        "rva": 28950528,
+        "virtualSize": 322248,
+        "rawBytes": 322560,
+        "offset": 28674048,
+        "characteristics": 1073741888,
+        "sha256": "c54a4107f866c0a04cb0dab1918d9fcb18a097a69793606632959e1203c82768"
+      },
+      {
+        "name": ".WEAK",
+        "rva": 29274112,
+        "virtualSize": 392,
+        "rawBytes": 512,
+        "offset": 28996608,
+        "characteristics": 1073741888,
+        "sha256": "e956f83c59d559b99f4a5cc289e615a42470a30905bb0ad1e5e49877dbe511e0"
+      },
+      {
+        "name": ".INTR",
+        "rva": 29278208,
+        "virtualSize": 272,
+        "rawBytes": 512,
+        "offset": 28997120,
+        "characteristics": 1073741888,
+        "sha256": "e0f01b08f6838db70046bddb37c2d4801235e647d6b07e38a61677342a6d7557"
+      },
+      {
+        "name": ".fptable",
+        "rva": 29282304,
+        "virtualSize": 256,
+        "rawBytes": 512,
+        "offset": 28997632,
+        "characteristics": 3221225536,
+        "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+      },
+      {
+        "name": ".rsrc",
+        "rva": 29286400,
+        "virtualSize": 504,
+        "rawBytes": 512,
+        "offset": 28998144,
+        "characteristics": 1073741888,
+        "sha256": "5c1c80f57fe7f99fd6ac1eebb9e2cbf1d4fdbf82ae79375eea10f33904f31e7a"
+      },
+      {
+        "name": ".reloc",
+        "rva": 29290496,
+        "virtualSize": 369692,
+        "rawBytes": 370176,
+        "offset": 28998656,
+        "characteristics": 1107296320,
+        "sha256": "d028bc0e23b2696d22c2223d40b01b274d142ed69ace5a6d5da3038e362c1667"
+      }
+    ],
+    "debug": [
+      {
+        "offset": 22798512,
+        "timestamp": 1794310259,
+        "type": 2,
+        "bytes": 79,
+        "pointer": 22824912,
+        "guid": "86afcc55b617bb41941ccd7b8e0c5447",
+        "age": 6,
+        "pdbPath": "D:\\capsid-verification-20261108\\c78a\\capsid-worker.pdb"
+      },
+      {
+        "offset": 22798540,
+        "timestamp": 1794310259,
+        "type": 12,
+        "bytes": 20,
+        "pointer": 22824992
+      },
+      {
+        "offset": 22798568,
+        "timestamp": 1794310259,
+        "type": 13,
+        "bytes": 1616,
+        "pointer": 22825012
+      }
+    ]
+  },
+  "peAfter": {
+    "machine": 34404,
+    "sectionCount": 9,
+    "coffTimestamp": 1794319704,
+    "sections": [
+      {
+        "name": ".text",
+        "rva": 4096,
+        "virtualSize": 18962582,
+        "rawBytes": 18962944,
+        "offset": 1024,
+        "characteristics": 1610612768,
+        "sha256": "f0b602bcc3091bfcc13726052d15a0ba9ff3f1b913e6104ad7f8603482122f37"
+      },
+      {
+        "name": ".rdata",
+        "rva": 18968576,
+        "virtualSize": 4191946,
+        "rawBytes": 4192256,
+        "offset": 18963968,
+        "characteristics": 1073741888,
+        "sha256": "80cd2d8ef7e2c4346cf225a51dd32c09e6415c2810fbe5bd6df75d19d4896648"
+      },
+      {
+        "name": ".data",
+        "rva": 23162880,
+        "virtualSize": 5786100,
+        "rawBytes": 5517824,
+        "offset": 23156224,
+        "characteristics": 3221225536,
+        "sha256": "df23d052002c4e33966bbbb918cd923c7ca371bbe705da4552a45340ea94ca0b"
+      },
+      {
+        "name": ".pdata",
+        "rva": 28950528,
+        "virtualSize": 322248,
+        "rawBytes": 322560,
+        "offset": 28674048,
+        "characteristics": 1073741888,
+        "sha256": "c54a4107f866c0a04cb0dab1918d9fcb18a097a69793606632959e1203c82768"
+      },
+      {
+        "name": ".WEAK",
+        "rva": 29274112,
+        "virtualSize": 392,
+        "rawBytes": 512,
+        "offset": 28996608,
+        "characteristics": 1073741888,
+        "sha256": "e956f83c59d559b99f4a5cc289e615a42470a30905bb0ad1e5e49877dbe511e0"
+      },
+      {
+        "name": ".INTR",
+        "rva": 29278208,
+        "virtualSize": 272,
+        "rawBytes": 512,
+        "offset": 28997120,
+        "characteristics": 1073741888,
+        "sha256": "e0f01b08f6838db70046bddb37c2d4801235e647d6b07e38a61677342a6d7557"
+      },
+      {
+        "name": ".fptable",
+        "rva": 29282304,
+        "virtualSize": 256,
+        "rawBytes": 512,
+        "offset": 28997632,
+        "characteristics": 3221225536,
+        "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+      },
+      {
+        "name": ".rsrc",
+        "rva": 29286400,
+        "virtualSize": 504,
+        "rawBytes": 512,
+        "offset": 28998144,
+        "characteristics": 1073741888,
+        "sha256": "5c1c80f57fe7f99fd6ac1eebb9e2cbf1d4fdbf82ae79375eea10f33904f31e7a"
+      },
+      {
+        "name": ".reloc",
+        "rva": 29290496,
+        "virtualSize": 369692,
+        "rawBytes": 370176,
+        "offset": 28998656,
+        "characteristics": 1107296320,
+        "sha256": "d028bc0e23b2696d22c2223d40b01b274d142ed69ace5a6d5da3038e362c1667"
+      }
+    ],
+    "debug": [
+      {
+        "offset": 22798512,
+        "timestamp": 1794319704,
+        "type": 2,
+        "bytes": 79,
+        "pointer": 22824912,
+        "guid": "86afcc55b617bb41941ccd7b8e0c5447",
+        "age": 8,
+        "pdbPath": "D:\\capsid-verification-20261108\\c78a\\capsid-worker.pdb"
+      },
+      {
+        "offset": 22798540,
+        "timestamp": 1794319704,
+        "type": 12,
+        "bytes": 20,
+        "pointer": 22824992
+      },
+      {
+        "offset": 22798568,
+        "timestamp": 1794319704,
+        "type": 13,
+        "bytes": 1616,
+        "pointer": 22825012
+      }
+    ]
+  },
+  "originalFullGuardFailureRetained": true,
+  "fullFrozenBinaryQualificationNotClaimed": true,
+  "originalBinariesUnmodifiedByAudit": true,
+  "fullV030GoalComplete": false
+}

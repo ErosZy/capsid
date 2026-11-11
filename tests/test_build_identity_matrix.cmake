@@ -204,7 +204,7 @@ function(capsid_matrix_record variant build_dir
         "compilerId=[^\n]+\ncompilerVersion=[^\n]+\n"
         "targetTriple=[^\n]+\ncmakeBuildType=Release\n"
         "featureFlags=lto=(ON|OFF) asan=(ON|OFF) ubsan=(ON|OFF) "
-        "tsan=(ON|OFF) mimalloc=(ON|OFF) host=(ON|OFF) worker=(ON|OFF)\n"
+        "tsan=(ON|OFF) mimalloc=(ON|OFF) host=(ON|OFF) worker=(ON|OFF) sandbox_profile=production\n"
         "dependencyOverlayKey=[0-9a-f]+\n"
         "buildId=sha256:[0-9a-f]+\n$")
     if(NOT prov_record MATCHES "${prov_regex}")

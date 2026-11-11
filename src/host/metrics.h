@@ -5,9 +5,11 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <memory>
 #include <string>
 
 namespace capsid::host {
+class ServiceChannelBudget;
 
 // M2 item 7 (design §12.1): the fixed, low-cardinality metric registry
 // behind the Admin /metrics endpoint. Families:
@@ -50,6 +52,11 @@ public:
         std::function<ProcessMetricsSnapshot()>;
 
     void set_process_snapshot_provider(ProcessSnapshotProvider provider);
+    // One service provider plus configured listener providers. Weak
+    // ownership keeps metrics from extending a retired service's lifetime.
+    // Re-registering the same shared budget is allowed for pool shards.
+    void observe_channel_budget(std::shared_ptr<ServiceChannelBudget> budget,
+                                const std::string &listener = {});
 
     void count_worker_event(const std::string& event,
                             const std::string& app,
@@ -85,6 +92,7 @@ private:
     mutable std::mutex mutex_;
     std::map<std::string, std::uint64_t> counters_;
     std::map<std::string, std::uint64_t> gauges_;
+    std::map<std::string, std::weak_ptr<ServiceChannelBudget>> channel_budgets_;
 };
 
 }  // namespace capsid::host

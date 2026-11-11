@@ -1,0 +1,2167 @@
+{
+  "schema": "capsid-async-callbacks-v1",
+  "complete": true,
+  "runId": "f8f65075-6008-4ffd-b242-fe20c248d201",
+  "mode": "reference",
+  "family": "shared",
+  "requestTimeoutMs": 10000,
+  "sourceName": "main",
+  "referenceLock": {
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "binary": "workerd-windows-64",
+    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary_version_string": "workerd 2026-10-10",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": [],
+    "client": {
+      "runtime": "node",
+      "websocket": "native (undici) - no external dependency",
+      "node_version": "v24.14.0",
+      "undici_version": "7.21.0"
+    },
+    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
+    "release_asset": "workerd-windows-64.gz",
+    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
+    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+  },
+  "client": {
+    "node": "v24.14.0",
+    "undici": "7.21.0"
+  },
+  "inputs": {
+    "runner": "1c80f1e352c981df6890b45ac93939050db999a81583cc6d6bff2c20c20d2194",
+    "fixture": "bb6f38a74691f90a98fef497d5a66f01a00870d598977e2814a3845d0cbe2d31",
+    "contract": "bbbefa0be6527ccfcc0b35490bb157cf69a5b4f7a996d2146b1f155f16091ca1",
+    "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+  },
+  "binaries": {
+    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "worker": null
+  },
+  "cases": [
+    {
+      "id": "timeout-throw",
+      "challenge": "a653a8ed-d7ca-4ee5-b4e0-2d08c44e2e98",
+      "initialState": {
+        "realm": "66ebf644-3e6d-4d25-931a-9890bcb54499",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oo7MWYY/mv3a20lmFiVHzH8Q/PQ=",
+        "requestKey": "BQT4N6pSH5QCArhzazTnGQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oo7MWYY/mv3a20lmFiVHzH8Q/PQ=",
+        "requestKey": "BQT4N6pSH5QCArhzazTnGQ==",
+        "rawTail": "gStxdWV1ZWQ6YTY1M2E4ZWQtZDdjYS00ZWU1LWI0ZTAtMmQwOGM0NGUyZTk4gSphZnRlcjphNjUzYThlZC1kN2NhLTRlZTUtYjRlMC0yZDA4YzQ0ZTJlOTiIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmE2NTNhOGVkLWQ3Y2EtNGVlNS1iNGUwLTJkMDhjNDRlMmU5OA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6YTY1M2E4ZWQtZDdjYS00ZWU1LWI0ZTAtMmQwOGM0NGUyZTk4"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 73.29539999999997,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"66ebf644-3e6d-4d25-931a-9890bcb54499\",\"state\":{\"kind\":\"timeout-throw\",\"challenge\":\"a653a8ed-d7ca-4ee5-b4e0-2d08c44e2e98\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "66ebf644-3e6d-4d25-931a-9890bcb54499",
+        "state": {
+          "kind": "timeout-throw",
+          "challenge": "a653a8ed-d7ca-4ee5-b4e0-2d08c44e2e98",
+          "trace": [
+            "message",
+            "callback",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "interval-throw",
+      "challenge": "113ff0cb-d80f-4b82-9161-251d50c4486f",
+      "initialState": {
+        "realm": "a2b0058f-c110-4885-85e4-cd32e9807d4b",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uoNCCSpva9xg/AHSGSUS3NGYYps=",
+        "requestKey": "ZPLQYTYoW0b9labn2ZcYhQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uoNCCSpva9xg/AHSGSUS3NGYYps=",
+        "requestKey": "ZPLQYTYoW0b9labn2ZcYhQ==",
+        "rawTail": "gStxdWV1ZWQ6MTEzZmYwY2ItZDgwZi00YjgyLTkxNjEtMjUxZDUwYzQ0ODZmgSphZnRlcjoxMTNmZjBjYi1kODBmLTRiODItOTE2MS0yNTFkNTBjNDQ4NmaIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjExM2ZmMGNiLWQ4MGYtNGI4Mi05MTYxLTI1MWQ1MGM0NDg2Zg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6MTEzZmYwY2ItZDgwZi00YjgyLTkxNjEtMjUxZDUwYzQ0ODZm"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 85.90179999999998,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"a2b0058f-c110-4885-85e4-cd32e9807d4b\",\"state\":{\"kind\":\"interval-throw\",\"challenge\":\"113ff0cb-d80f-4b82-9161-251d50c4486f\",\"trace\":[\"message\",\"interval/1\",\"interval/2\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":2,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "a2b0058f-c110-4885-85e4-cd32e9807d4b",
+        "state": {
+          "kind": "interval-throw",
+          "challenge": "113ff0cb-d80f-4b82-9161-251d50c4486f",
+          "trace": [
+            "message",
+            "interval/1",
+            "interval/2",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 2,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "timeout-reject",
+      "challenge": "f4d71413-3b8d-4c12-ae99-8b55af00c141",
+      "initialState": {
+        "realm": "1be4d30f-a01e-4106-97c4-634950e5b14a",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FL7W02232e3WUB8O/lHybNjDhFs=",
+        "requestKey": "bM/GfvW1yHr7eys7wyLjLQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FL7W02232e3WUB8O/lHybNjDhFs=",
+        "requestKey": "bM/GfvW1yHr7eys7wyLjLQ==",
+        "rawTail": "gStxdWV1ZWQ6ZjRkNzE0MTMtM2I4ZC00YzEyLWFlOTktOGI1NWFmMDBjMTQxgSphZnRlcjpmNGQ3MTQxMy0zYjhkLTRjMTItYWU5OS04YjU1YWYwMGMxNDGIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmY0ZDcxNDEzLTNiOGQtNGMxMi1hZTk5LThiNTVhZjAwYzE0MQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6ZjRkNzE0MTMtM2I4ZC00YzEyLWFlOTktOGI1NWFmMDBjMTQx"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 66.42840000000001,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"1be4d30f-a01e-4106-97c4-634950e5b14a\",\"state\":{\"kind\":\"timeout-reject\",\"challenge\":\"f4d71413-3b8d-4c12-ae99-8b55af00c141\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "1be4d30f-a01e-4106-97c4-634950e5b14a",
+        "state": {
+          "kind": "timeout-reject",
+          "challenge": "f4d71413-3b8d-4c12-ae99-8b55af00c141",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/timeout-reject",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "timeout-async-reject",
+      "challenge": "b146a5c9-ce9c-4f97-ace7-e67a9bb043e7",
+      "initialState": {
+        "realm": "d3af3f2c-0e45-424f-9e3c-5eb21faf4d5a",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WVPYjlhni7FwbEFMsms4NsN8VNQ=",
+        "requestKey": "xAr4J1Dsf/2jKebZeoj2Lw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WVPYjlhni7FwbEFMsms4NsN8VNQ=",
+        "requestKey": "xAr4J1Dsf/2jKebZeoj2Lw==",
+        "rawTail": "gStxdWV1ZWQ6YjE0NmE1YzktY2U5Yy00Zjk3LWFjZTctZTY3YTliYjA0M2U3gSphZnRlcjpiMTQ2YTVjOS1jZTljLTRmOTctYWNlNy1lNjdhOWJiMDQzZTeIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmIxNDZhNWM5LWNlOWMtNGY5Ny1hY2U3LWU2N2E5YmIwNDNlNw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6YjE0NmE1YzktY2U5Yy00Zjk3LWFjZTctZTY3YTliYjA0M2U3"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 64.01779999999985,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"d3af3f2c-0e45-424f-9e3c-5eb21faf4d5a\",\"state\":{\"kind\":\"timeout-async-reject\",\"challenge\":\"b146a5c9-ce9c-4f97-ace7-e67a9bb043e7\",\"trace\":[\"message\",\"callback\",\"async\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/timeout-async-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "d3af3f2c-0e45-424f-9e3c-5eb21faf4d5a",
+        "state": {
+          "kind": "timeout-async-reject",
+          "challenge": "b146a5c9-ce9c-4f97-ace7-e67a9bb043e7",
+          "trace": [
+            "message",
+            "callback",
+            "async",
+            "global/unhandledrejection",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/timeout-async-reject",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "microtask-throw",
+      "challenge": "4211f269-2518-4b02-b9e5-2663436c9980",
+      "initialState": {
+        "realm": "61e2df65-18ab-40c7-8040-607b6db0feb3",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: HJYEhtEEjwERhNum4Lhne3hM8oc=",
+        "requestKey": "TIfSw/s5SLCCeIHCJmIR/Q==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: HJYEhtEEjwERhNum4Lhne3hM8oc=",
+        "requestKey": "TIfSw/s5SLCCeIHCJmIR/Q==",
+        "rawTail": "gStxdWV1ZWQ6NDIxMWYyNjktMjUxOC00YjAyLWI5ZTUtMjY2MzQzNmM5OTgwgSphZnRlcjo0MjExZjI2OS0yNTE4LTRiMDItYjllNS0yNjYzNDM2Yzk5ODCIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjQyMTFmMjY5LTI1MTgtNGIwMi1iOWU1LTI2NjM0MzZjOTk4MA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NDIxMWYyNjktMjUxOC00YjAyLWI5ZTUtMjY2MzQzNmM5OTgw"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 66.24710000000005,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"61e2df65-18ab-40c7-8040-607b6db0feb3\",\"state\":{\"kind\":\"microtask-throw\",\"challenge\":\"4211f269-2518-4b02-b9e5-2663436c9980\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "61e2df65-18ab-40c7-8040-607b6db0feb3",
+        "state": {
+          "kind": "microtask-throw",
+          "challenge": "4211f269-2518-4b02-b9e5-2663436c9980",
+          "trace": [
+            "message",
+            "callback",
+            "global/error",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "error",
+              "trusted": true,
+              "message": "Uncaught TypeError: async-callback/microtask-throw",
+              "name": "TypeError",
+              "errorMessage": "async-callback/microtask-throw",
+              "promise": null,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": "main",
+              "lineno": 4,
+              "colno": 90
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "promise-throw",
+      "challenge": "909ef693-1a42-4904-8012-5e48fd9b6b39",
+      "initialState": {
+        "realm": "9db9e4f2-01d4-4126-81c8-20a1873f4153",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gw172F+G9kEYHIFLJqOB5VDt4i4=",
+        "requestKey": "QhkvYgODm9yekzEYSk5DDg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gw172F+G9kEYHIFLJqOB5VDt4i4=",
+        "requestKey": "QhkvYgODm9yekzEYSk5DDg==",
+        "rawTail": "gStxdWV1ZWQ6OTA5ZWY2OTMtMWE0Mi00OTA0LTgwMTItNWU0OGZkOWI2YjM5gSphZnRlcjo5MDllZjY5My0xYTQyLTQ5MDQtODAxMi01ZTQ4ZmQ5YjZiMzmIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjkwOWVmNjkzLTFhNDItNDkwNC04MDEyLTVlNDhmZDliNmIzOQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6OTA5ZWY2OTMtMWE0Mi00OTA0LTgwMTItNWU0OGZkOWI2YjM5"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 71.33159999999998,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"9db9e4f2-01d4-4126-81c8-20a1873f4153\",\"state\":{\"kind\":\"promise-throw\",\"challenge\":\"909ef693-1a42-4904-8012-5e48fd9b6b39\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "9db9e4f2-01d4-4126-81c8-20a1873f4153",
+        "state": {
+          "kind": "promise-throw",
+          "challenge": "909ef693-1a42-4904-8012-5e48fd9b6b39",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/promise-throw",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "timeout-caught",
+      "challenge": "408c52b0-edcb-459c-bb4b-cefdfa12f90e",
+      "initialState": {
+        "realm": "a4fb7220-2b2e-477a-b8b4-c33148cd1a2c",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EXksl3UbMiUjBaKH3DjvwI6baGA=",
+        "requestKey": "cvvcDfeYVF15YWPxAwk4ow==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EXksl3UbMiUjBaKH3DjvwI6baGA=",
+        "requestKey": "cvvcDfeYVF15YWPxAwk4ow==",
+        "rawTail": "gStxdWV1ZWQ6NDA4YzUyYjAtZWRjYi00NTljLWJiNGItY2VmZGZhMTJmOTBlgSphZnRlcjo0MDhjNTJiMC1lZGNiLTQ1OWMtYmI0Yi1jZWZkZmExMmY5MGWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjQwOGM1MmIwLWVkY2ItNDU5Yy1iYjRiLWNlZmRmYTEyZjkwZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NDA4YzUyYjAtZWRjYi00NTljLWJiNGItY2VmZGZhMTJmOTBl"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 65.54539999999997,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"a4fb7220-2b2e-477a-b8b4-c33148cd1a2c\",\"state\":{\"kind\":\"timeout-caught\",\"challenge\":\"408c52b0-edcb-459c-bb4b-cefdfa12f90e\",\"trace\":[\"message\",\"callback\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "a4fb7220-2b2e-477a-b8b4-c33148cd1a2c",
+        "state": {
+          "kind": "timeout-caught",
+          "challenge": "408c52b0-edcb-459c-bb4b-cefdfa12f90e",
+          "trace": [
+            "message",
+            "callback",
+            "caught/TypeError",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-handled",
+      "challenge": "9a4ec95b-e51b-489d-8035-daa8b08fa80b",
+      "initialState": {
+        "realm": "64f6c016-50ac-4879-a2ed-f07d495c1e38",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Ea7i8P43CfNdKSHBK3V1rUomjYo=",
+        "requestKey": "s/D6qt/MTR9nqej+2Ztq/w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Ea7i8P43CfNdKSHBK3V1rUomjYo=",
+        "requestKey": "s/D6qt/MTR9nqej+2Ztq/w==",
+        "rawTail": "gStxdWV1ZWQ6OWE0ZWM5NWItZTUxYi00ODlkLTgwMzUtZGFhOGIwOGZhODBigSphZnRlcjo5YTRlYzk1Yi1lNTFiLTQ4OWQtODAzNS1kYWE4YjA4ZmE4MGKIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjlhNGVjOTViLWU1MWItNDg5ZC04MDM1LWRhYThiMDhmYTgwYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6OWE0ZWM5NWItZTUxYi00ODlkLTgwMzUtZGFhOGIwOGZhODBi"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 71.95290000000023,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"64f6c016-50ac-4879-a2ed-f07d495c1e38\",\"state\":{\"kind\":\"rejection-handled\",\"challenge\":\"9a4ec95b-e51b-489d-8035-daa8b08fa80b\",\"trace\":[\"message\",\"callback\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "64f6c016-50ac-4879-a2ed-f07d495c1e38",
+        "state": {
+          "kind": "rejection-handled",
+          "challenge": "9a4ec95b-e51b-489d-8035-daa8b08fa80b",
+          "trace": [
+            "message",
+            "callback",
+            "caught/TypeError",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "http-timeout-throw",
+      "challenge": "60330a6b-03f4-456c-9d4b-b20b2c92eae8",
+      "initialState": {
+        "realm": "d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0",
+        "state": null
+      },
+      "response": {
+        "status": 200,
+        "text": "{\"realm\":\"d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0\",\"state\":{\"kind\":\"http-timeout-throw\",\"challenge\":\"60330a6b-03f4-456c-9d4b-b20b2c92eae8\",\"trace\":[\"http\",\"callback\",\"followup\",\"response\"],\"globalEvents\":[],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0\",\"state\":{\"kind\":\"http-timeout-throw\",\"challenge\":\"60330a6b-03f4-456c-9d4b-b20b2c92eae8\",\"trace\":[\"http\",\"callback\",\"followup\",\"response\"],\"globalEvents\":[],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0",
+        "state": {
+          "kind": "http-timeout-throw",
+          "challenge": "60330a6b-03f4-456c-9d4b-b20b2c92eae8",
+          "trace": [
+            "http",
+            "callback",
+            "followup",
+            "response"
+          ],
+          "globalEvents": [],
+          "socketEvents": [],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "http-timeout-reject",
+      "challenge": "64fe73df-e564-4bf5-ad7d-0c5ae90c9836",
+      "initialState": {
+        "realm": "cf66041e-e2bb-4005-a06e-f8e08b2acbe8",
+        "state": null
+      },
+      "response": {
+        "status": 200,
+        "text": "{\"realm\":\"cf66041e-e2bb-4005-a06e-f8e08b2acbe8\",\"state\":{\"kind\":\"http-timeout-reject\",\"challenge\":\"64fe73df-e564-4bf5-ad7d-0c5ae90c9836\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"cf66041e-e2bb-4005-a06e-f8e08b2acbe8\",\"state\":{\"kind\":\"http-timeout-reject\",\"challenge\":\"64fe73df-e564-4bf5-ad7d-0c5ae90c9836\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "cf66041e-e2bb-4005-a06e-f8e08b2acbe8",
+        "state": {
+          "kind": "http-timeout-reject",
+          "challenge": "64fe73df-e564-4bf5-ad7d-0c5ae90c9836",
+          "trace": [
+            "http",
+            "callback",
+            "global/unhandledrejection",
+            "followup",
+            "response"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/http-timeout-reject",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "http-microtask-throw",
+      "challenge": "2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029",
+      "initialState": {
+        "realm": "8e31b507-31a8-4a05-8999-1fca0d0105cf",
+        "state": null
+      },
+      "response": {
+        "status": 200,
+        "text": "{\"realm\":\"8e31b507-31a8-4a05-8999-1fca0d0105cf\",\"state\":{\"kind\":\"http-microtask-throw\",\"challenge\":\"2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029\",\"trace\":[\"http\",\"callback\",\"global/error\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/http-microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"8e31b507-31a8-4a05-8999-1fca0d0105cf\",\"state\":{\"kind\":\"http-microtask-throw\",\"challenge\":\"2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029\",\"trace\":[\"http\",\"callback\",\"global/error\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/http-microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "8e31b507-31a8-4a05-8999-1fca0d0105cf",
+        "state": {
+          "kind": "http-microtask-throw",
+          "challenge": "2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029",
+          "trace": [
+            "http",
+            "callback",
+            "global/error",
+            "followup",
+            "response"
+          ],
+          "globalEvents": [
+            {
+              "type": "error",
+              "trusted": true,
+              "message": "Uncaught TypeError: async-callback/http-microtask-throw",
+              "name": "TypeError",
+              "errorMessage": "async-callback/http-microtask-throw",
+              "promise": null,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": "main",
+              "lineno": 4,
+              "colno": 90
+            }
+          ],
+          "socketEvents": [],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "http-promise-throw",
+      "challenge": "72903007-4432-4d0d-b56b-b6b8183a121c",
+      "initialState": {
+        "realm": "7805f13e-92af-49c7-b8a5-87a0dbdd1587",
+        "state": null
+      },
+      "response": {
+        "status": 200,
+        "text": "{\"realm\":\"7805f13e-92af-49c7-b8a5-87a0dbdd1587\",\"state\":{\"kind\":\"http-promise-throw\",\"challenge\":\"72903007-4432-4d0d-b56b-b6b8183a121c\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"7805f13e-92af-49c7-b8a5-87a0dbdd1587\",\"state\":{\"kind\":\"http-promise-throw\",\"challenge\":\"72903007-4432-4d0d-b56b-b6b8183a121c\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "7805f13e-92af-49c7-b8a5-87a0dbdd1587",
+        "state": {
+          "kind": "http-promise-throw",
+          "challenge": "72903007-4432-4d0d-b56b-b6b8183a121c",
+          "trace": [
+            "http",
+            "callback",
+            "global/unhandledrejection",
+            "followup",
+            "response"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/http-promise-throw",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "timeout-throw-microtask",
+      "challenge": "8684aa6f-cd6d-4659-aba8-68430d61e48a",
+      "initialState": {
+        "realm": "bc608242-31db-4495-bdc7-da4e859ca987",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tIHFCq9sPMdwAZkeW7THrIoP9yE=",
+        "requestKey": "Ct5kg28in+WDxCmqVEDgbg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tIHFCq9sPMdwAZkeW7THrIoP9yE=",
+        "requestKey": "Ct5kg28in+WDxCmqVEDgbg==",
+        "rawTail": "gStxdWV1ZWQ6ODY4NGFhNmYtY2Q2ZC00NjU5LWFiYTgtNjg0MzBkNjFlNDhhgSphZnRlcjo4Njg0YWE2Zi1jZDZkLTQ2NTktYWJhOC02ODQzMGQ2MWU0OGGIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjg2ODRhYTZmLWNkNmQtNDY1OS1hYmE4LTY4NDMwZDYxZTQ4YQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6ODY4NGFhNmYtY2Q2ZC00NjU5LWFiYTgtNjg0MzBkNjFlNDhh"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 64.38630000000012,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"bc608242-31db-4495-bdc7-da4e859ca987\",\"state\":{\"kind\":\"timeout-throw-microtask\",\"challenge\":\"8684aa6f-cd6d-4659-aba8-68430d61e48a\",\"trace\":[\"message\",\"callback\",\"nested\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "bc608242-31db-4495-bdc7-da4e859ca987",
+        "state": {
+          "kind": "timeout-throw-microtask",
+          "challenge": "8684aa6f-cd6d-4659-aba8-68430d61e48a",
+          "trace": [
+            "message",
+            "callback",
+            "nested",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "interval-clear-throw",
+      "challenge": "da814ada-e792-476e-853e-219eea3e3bc5",
+      "initialState": {
+        "realm": "56005929-243f-4abe-8485-b644757aeb8d",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KTRBKXl4HA1Dy3sqKgE2VNkIqd4=",
+        "requestKey": "njJTCKM/CK9KsNjsGn+i5A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KTRBKXl4HA1Dy3sqKgE2VNkIqd4=",
+        "requestKey": "njJTCKM/CK9KsNjsGn+i5A==",
+        "rawTail": "gStxdWV1ZWQ6ZGE4MTRhZGEtZTc5Mi00NzZlLTg1M2UtMjE5ZWVhM2UzYmM1gSphZnRlcjpkYTgxNGFkYS1lNzkyLTQ3NmUtODUzZS0yMTllZWEzZTNiYzWIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmRhODE0YWRhLWU3OTItNDc2ZS04NTNlLTIxOWVlYTNlM2JjNQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6ZGE4MTRhZGEtZTc5Mi00NzZlLTg1M2UtMjE5ZWVhM2UzYmM1"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 66.5043999999998,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"56005929-243f-4abe-8485-b644757aeb8d\",\"state\":{\"kind\":\"interval-clear-throw\",\"challenge\":\"da814ada-e792-476e-853e-219eea3e3bc5\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "56005929-243f-4abe-8485-b644757aeb8d",
+        "state": {
+          "kind": "interval-clear-throw",
+          "challenge": "da814ada-e792-476e-853e-219eea3e3bc5",
+          "trace": [
+            "message",
+            "callback",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "microtask-primitive",
+      "challenge": "f08fdcb3-d22d-4fdd-b3b7-6fdcd9d320b0",
+      "initialState": {
+        "realm": "72b5c46f-32b8-41e1-99e6-e5709c5ddf34",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: a0y9ixXl48Dn4CHxE89qbpyLJzw=",
+        "requestKey": "OPEAmeQHZCRyvITpZkYIig==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: a0y9ixXl48Dn4CHxE89qbpyLJzw=",
+        "requestKey": "OPEAmeQHZCRyvITpZkYIig==",
+        "rawTail": "gStxdWV1ZWQ6ZjA4ZmRjYjMtZDIyZC00ZmRkLWIzYjctNmZkY2Q5ZDMyMGIwgSphZnRlcjpmMDhmZGNiMy1kMjJkLTRmZGQtYjNiNy02ZmRjZDlkMzIwYjCIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmYwOGZkY2IzLWQyMmQtNGZkZC1iM2I3LTZmZGNkOWQzMjBiMA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6ZjA4ZmRjYjMtZDIyZC00ZmRkLWIzYjctNmZkY2Q5ZDMyMGIw"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 64.44890000000032,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"72b5c46f-32b8-41e1-99e6-e5709c5ddf34\",\"state\":{\"kind\":\"microtask-primitive\",\"challenge\":\"f08fdcb3-d22d-4fdd-b3b7-6fdcd9d320b0\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught primitive/microtask-primitive\",\"name\":null,\"errorMessage\":null,\"promise\":null,\"valueType\":\"string\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"undefined\",\"lineno\":0,\"colno\":-1}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "72b5c46f-32b8-41e1-99e6-e5709c5ddf34",
+        "state": {
+          "kind": "microtask-primitive",
+          "challenge": "f08fdcb3-d22d-4fdd-b3b7-6fdcd9d320b0",
+          "trace": [
+            "message",
+            "callback",
+            "global/error",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "error",
+              "trusted": true,
+              "message": "Uncaught primitive/microtask-primitive",
+              "name": null,
+              "errorMessage": null,
+              "promise": null,
+              "valueType": "string",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": "undefined",
+              "lineno": 0,
+              "colno": -1
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "microtask-report-override",
+      "challenge": "b40d4bfa-f674-41d2-a5cc-11605b86249a",
+      "initialState": {
+        "realm": "23ecc625-f2a9-4344-93d0-d41977f63eeb",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8dakUMI0vy47YfMbDhkh8le0x/E=",
+        "requestKey": "2BiRb6Z/nNninbwbJPMxNg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8dakUMI0vy47YfMbDhkh8le0x/E=",
+        "requestKey": "2BiRb6Z/nNninbwbJPMxNg==",
+        "rawTail": "gStxdWV1ZWQ6YjQwZDRiZmEtZjY3NC00MWQyLWE1Y2MtMTE2MDViODYyNDlhgSphZnRlcjpiNDBkNGJmYS1mNjc0LTQxZDItYTVjYy0xMTYwNWI4NjI0OWGIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmI0MGQ0YmZhLWY2NzQtNDFkMi1hNWNjLTExNjA1Yjg2MjQ5YQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6YjQwZDRiZmEtZjY3NC00MWQyLWE1Y2MtMTE2MDViODYyNDlh"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 80.3172999999997,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"23ecc625-f2a9-4344-93d0-d41977f63eeb\",\"state\":{\"kind\":\"microtask-report-override\",\"challenge\":\"b40d4bfa-f674-41d2-a5cc-11605b86249a\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-report-override\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-report-override\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "23ecc625-f2a9-4344-93d0-d41977f63eeb",
+        "state": {
+          "kind": "microtask-report-override",
+          "challenge": "b40d4bfa-f674-41d2-a5cc-11605b86249a",
+          "trace": [
+            "message",
+            "callback",
+            "global/error",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "error",
+              "trusted": true,
+              "message": "Uncaught TypeError: async-callback/microtask-report-override",
+              "name": "TypeError",
+              "errorMessage": "async-callback/microtask-report-override",
+              "promise": null,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": "main",
+              "lineno": 4,
+              "colno": 90
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "microtask-error-listener-throw",
+      "challenge": "74e906a5-7d03-48c5-b257-021b609cafbc",
+      "initialState": {
+        "realm": "5cae9e84-5ac4-49cf-ad32-4f1a1df82512",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jEaPmwIGty+wnQR7lwB4md4xlMs=",
+        "requestKey": "G8/9dJevFazJ2copRYmwvg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jEaPmwIGty+wnQR7lwB4md4xlMs=",
+        "requestKey": "G8/9dJevFazJ2copRYmwvg==",
+        "rawTail": "gStxdWV1ZWQ6NzRlOTA2YTUtN2QwMy00OGM1LWIyNTctMDIxYjYwOWNhZmJjgSphZnRlcjo3NGU5MDZhNS03ZDAzLTQ4YzUtYjI1Ny0wMjFiNjA5Y2FmYmOIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjc0ZTkwNmE1LTdkMDMtNDhjNS1iMjU3LTAyMWI2MDljYWZiYw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NzRlOTA2YTUtN2QwMy00OGM1LWIyNTctMDIxYjYwOWNhZmJj"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 63.87010000000009,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"5cae9e84-5ac4-49cf-ad32-4f1a1df82512\",\"state\":{\"kind\":\"microtask-error-listener-throw\",\"challenge\":\"74e906a5-7d03-48c5-b257-021b609cafbc\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-error-listener-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-error-listener-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":true}}",
+      "state": {
+        "realm": "5cae9e84-5ac4-49cf-ad32-4f1a1df82512",
+        "state": {
+          "kind": "microtask-error-listener-throw",
+          "challenge": "74e906a5-7d03-48c5-b257-021b609cafbc",
+          "trace": [
+            "message",
+            "callback",
+            "global/error",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "error",
+              "trusted": true,
+              "message": "Uncaught TypeError: async-callback/microtask-error-listener-throw",
+              "name": "TypeError",
+              "errorMessage": "async-callback/microtask-error-listener-throw",
+              "promise": null,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": "main",
+              "lineno": 4,
+              "colno": 90
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": true
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "microtask-error-listener-close",
+      "challenge": "119b3fa9-3be3-4541-bccd-2fbd79557aba",
+      "initialState": {
+        "realm": "67686529-8e9f-4c16-b8c7-01e751609e59",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kQeiUVJhz6ApFMPizZiWHjITbXg=",
+        "requestKey": "5gwAmisz2kKMnrHX4L/n6Q==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kQeiUVJhz6ApFMPizZiWHjITbXg=",
+        "requestKey": "5gwAmisz2kKMnrHX4L/n6Q==",
+        "rawTail": "gStxdWV1ZWQ6MTE5YjNmYTktM2JlMy00NTQxLWJjY2QtMmZiZDc5NTU3YWJhiAoD6G9ic2VydmVy",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjExOWIzZmE5LTNiZTMtNDU0MS1iY2NkLTJmYmQ3OTU1N2FiYQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hvYnNlcnZlcg=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 17.784599999999955,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"67686529-8e9f-4c16-b8c7-01e751609e59\",\"state\":{\"kind\":\"microtask-error-listener-close\",\"challenge\":\"119b3fa9-3be3-4541-bccd-2fbd79557aba\",\"trace\":[\"message\",\"callback\",\"global/error\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-error-listener-close\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-error-listener-close\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "67686529-8e9f-4c16-b8c7-01e751609e59",
+        "state": {
+          "kind": "microtask-error-listener-close",
+          "challenge": "119b3fa9-3be3-4541-bccd-2fbd79557aba",
+          "trace": [
+            "message",
+            "callback",
+            "global/error",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "error",
+              "trusted": true,
+              "message": "Uncaught TypeError: async-callback/microtask-error-listener-close",
+              "name": "TypeError",
+              "errorMessage": "async-callback/microtask-error-listener-close",
+              "promise": null,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": "main",
+              "lineno": 4,
+              "colno": 90
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "observer",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-listener-close",
+      "challenge": "81f560b7-3a9d-4274-8e9c-f00637830ff6",
+      "initialState": {
+        "realm": "c80851ad-5cdc-40f0-b59c-628ced6f902b",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: G06MFR2NtrYcwETJIj0wKa+oxmY=",
+        "requestKey": "DwwlLzwTsDBfSWsR/o458w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: G06MFR2NtrYcwETJIj0wKa+oxmY=",
+        "requestKey": "DwwlLzwTsDBfSWsR/o458w==",
+        "rawTail": "gStxdWV1ZWQ6ODFmNTYwYjctM2E5ZC00Mjc0LThlOWMtZjAwNjM3ODMwZmY2iAoD6G9ic2VydmVy",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjgxZjU2MGI3LTNhOWQtNDI3NC04ZTljLWYwMDYzNzgzMGZmNg=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hvYnNlcnZlcg=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 31.93000000000029,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"c80851ad-5cdc-40f0-b59c-628ced6f902b\",\"state\":{\"kind\":\"rejection-listener-close\",\"challenge\":\"81f560b7-3a9d-4274-8e9c-f00637830ff6\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-close\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "c80851ad-5cdc-40f0-b59c-628ced6f902b",
+        "state": {
+          "kind": "rejection-listener-close",
+          "challenge": "81f560b7-3a9d-4274-8e9c-f00637830ff6",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/rejection-listener-close",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "observer",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-listener-send",
+      "challenge": "59e93176-c995-44bc-8eff-e1fd642b085c",
+      "initialState": {
+        "realm": "e80831bc-7412-4f69-ba21-af0cd1c8cabe",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: RBNPmkFdZH26s5KMxryDoKHEzQw=",
+        "requestKey": "z0noVoy2Diq/176gZAcR3w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: RBNPmkFdZH26s5KMxryDoKHEzQw=",
+        "requestKey": "z0noVoy2Diq/176gZAcR3w==",
+        "rawTail": "gStxdWV1ZWQ6NTllOTMxNzYtYzk5NS00NGJjLThlZmYtZTFmZDY0MmIwODVjgS1vYnNlcnZlZDo1OWU5MzE3Ni1jOTk1LTQ0YmMtOGVmZi1lMWZkNjQyYjA4NWOBKmFmdGVyOjU5ZTkzMTc2LWM5OTUtNDRiYy04ZWZmLWUxZmQ2NDJiMDg1Y4gGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjU5ZTkzMTc2LWM5OTUtNDRiYy04ZWZmLWUxZmQ2NDJiMDg1Yw=="
+          },
+          {
+            "opcode": 1,
+            "payload": "b2JzZXJ2ZWQ6NTllOTMxNzYtYzk5NS00NGJjLThlZmYtZTFmZDY0MmIwODVj"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NTllOTMxNzYtYzk5NS00NGJjLThlZmYtZTFmZDY0MmIwODVj"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 76.94050000000061,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"e80831bc-7412-4f69-ba21-af0cd1c8cabe\",\"state\":{\"kind\":\"rejection-listener-send\",\"challenge\":\"59e93176-c995-44bc-8eff-e1fd642b085c\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-send\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "e80831bc-7412-4f69-ba21-af0cd1c8cabe",
+        "state": {
+          "kind": "rejection-listener-send",
+          "challenge": "59e93176-c995-44bc-8eff-e1fd642b085c",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/rejection-listener-send",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-late-handled-send",
+      "challenge": "570ae820-bf82-44c0-a3bb-bb673f426b08",
+      "initialState": {
+        "realm": "3cbfae4d-41c0-4acf-8d88-232ed407e653",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: GcUmv1Gz7HOCbLJ6Zy24QLjQYSc=",
+        "requestKey": "JVoQleSPk9V14B1e4u/soQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: GcUmv1Gz7HOCbLJ6Zy24QLjQYSc=",
+        "requestKey": "JVoQleSPk9V14B1e4u/soQ==",
+        "rawTail": "gStxdWV1ZWQ6NTcwYWU4MjAtYmY4Mi00NGMwLWEzYmItYmI2NzNmNDI2YjA4gSxoYW5kbGVkOjU3MGFlODIwLWJmODItNDRjMC1hM2JiLWJiNjczZjQyNmIwOIEqYWZ0ZXI6NTcwYWU4MjAtYmY4Mi00NGMwLWEzYmItYmI2NzNmNDI2YjA4iAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjU3MGFlODIwLWJmODItNDRjMC1hM2JiLWJiNjczZjQyNmIwOA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "aGFuZGxlZDo1NzBhZTgyMC1iZjgyLTQ0YzAtYTNiYi1iYjY3M2Y0MjZiMDg="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NTcwYWU4MjAtYmY4Mi00NGMwLWEzYmItYmI2NzNmNDI2YjA4"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 246.16289999999935,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"3cbfae4d-41c0-4acf-8d88-232ed407e653\",\"state\":{\"kind\":\"rejection-late-handled-send\",\"challenge\":\"570ae820-bf82-44c0-a3bb-bb673f426b08\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"attach/before\",\"global/rejectionhandled\",\"attach/after\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-late-handled-send\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null},{\"type\":\"rejectionhandled\",\"trusted\":true,\"message\":null,\"name\":null,\"errorMessage\":null,\"promise\":true,\"valueType\":\"undefined\",\"sameValue\":false,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "3cbfae4d-41c0-4acf-8d88-232ed407e653",
+        "state": {
+          "kind": "rejection-late-handled-send",
+          "challenge": "570ae820-bf82-44c0-a3bb-bb673f426b08",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "attach/before",
+            "global/rejectionhandled",
+            "attach/after",
+            "caught/TypeError",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/rejection-late-handled-send",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            },
+            {
+              "type": "rejectionhandled",
+              "trusted": true,
+              "message": null,
+              "name": null,
+              "errorMessage": null,
+              "promise": true,
+              "valueType": "undefined",
+              "sameValue": false,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-late-handled-close",
+      "challenge": "ae0e3f14-0cd9-41a2-be11-d7a6c32a65e9",
+      "initialState": {
+        "realm": "7ca2c133-f45d-4a88-b821-8e759ee8afd4",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gurXabw+pZg0Cdtui5Kr81na35Q=",
+        "requestKey": "M0eBtdsTj+7WL/CmJb1+kw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gurXabw+pZg0Cdtui5Kr81na35Q=",
+        "requestKey": "M0eBtdsTj+7WL/CmJb1+kw==",
+        "rawTail": "gStxdWV1ZWQ6YWUwZTNmMTQtMGNkOS00MWEyLWJlMTEtZDdhNmMzMmE2NWU5iAoD6G9ic2VydmVy",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmFlMGUzZjE0LTBjZDktNDFhMi1iZTExLWQ3YTZjMzJhNjVlOQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hvYnNlcnZlcg=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 63.30459999999948,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"7ca2c133-f45d-4a88-b821-8e759ee8afd4\",\"state\":{\"kind\":\"rejection-late-handled-close\",\"challenge\":\"ae0e3f14-0cd9-41a2-be11-d7a6c32a65e9\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"attach/before\",\"global/rejectionhandled\",\"attach/after\",\"caught/TypeError\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-late-handled-close\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null},{\"type\":\"rejectionhandled\",\"trusted\":true,\"message\":null,\"name\":null,\"errorMessage\":null,\"promise\":true,\"valueType\":\"undefined\",\"sameValue\":false,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "7ca2c133-f45d-4a88-b821-8e759ee8afd4",
+        "state": {
+          "kind": "rejection-late-handled-close",
+          "challenge": "ae0e3f14-0cd9-41a2-be11-d7a6c32a65e9",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "attach/before",
+            "global/rejectionhandled",
+            "attach/after",
+            "caught/TypeError",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/rejection-late-handled-close",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            },
+            {
+              "type": "rejectionhandled",
+              "trusted": true,
+              "message": null,
+              "name": null,
+              "errorMessage": null,
+              "promise": true,
+              "valueType": "undefined",
+              "sameValue": false,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "observer",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-listener-throw",
+      "challenge": "a1e4770b-82ab-4f38-ba26-3aa9092dfdb6",
+      "initialState": {
+        "realm": "5f82cd47-ce3c-40e5-b3d7-7cd7ea1bbad6",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: p9DkOWT0QFNClp0XRiVLBSgCraU=",
+        "requestKey": "ALPRGsAJV2X55MZRfFN5LA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: p9DkOWT0QFNClp0XRiVLBSgCraU=",
+        "requestKey": "ALPRGsAJV2X55MZRfFN5LA==",
+        "rawTail": "gStxdWV1ZWQ6YTFlNDc3MGItODJhYi00ZjM4LWJhMjYtM2FhOTA5MmRmZGI2gSphZnRlcjphMWU0NzcwYi04MmFiLTRmMzgtYmEyNi0zYWE5MDkyZGZkYjaIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOmExZTQ3NzBiLTgyYWItNGYzOC1iYTI2LTNhYTkwOTJkZmRiNg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6YTFlNDc3MGItODJhYi00ZjM4LWJhMjYtM2FhOTA5MmRmZGI2"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 62.509900000000926,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"5f82cd47-ce3c-40e5-b3d7-7cd7ea1bbad6\",\"state\":{\"kind\":\"rejection-listener-throw\",\"challenge\":\"a1e4770b-82ab-4f38-ba26-3aa9092dfdb6\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":true}}",
+      "state": {
+        "realm": "5f82cd47-ce3c-40e5-b3d7-7cd7ea1bbad6",
+        "state": {
+          "kind": "rejection-listener-throw",
+          "challenge": "a1e4770b-82ab-4f38-ba26-3aa9092dfdb6",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/rejection-listener-throw",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": true
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "id": "rejection-listener-handle-next",
+      "challenge": "61c81797-d298-4d91-b410-f71a0f01e178",
+      "initialState": {
+        "realm": "9c2b555e-4a0a-41b1-9c4d-698372993013",
+        "state": null
+      },
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fnZrul8FKYdXGWcbhFy8Gyr4540=",
+        "requestKey": "2vm5mhtjMMmuhA/Ia8rZ5A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fnZrul8FKYdXGWcbhFy8Gyr4540=",
+        "requestKey": "2vm5mhtjMMmuhA/Ia8rZ5A==",
+        "rawTail": "gStxdWV1ZWQ6NjFjODE3OTctZDI5OC00ZDkxLWI0MTAtZjcxYTBmMDFlMTc4gSphZnRlcjo2MWM4MTc5Ny1kMjk4LTRkOTEtYjQxMC1mNzFhMGYwMWUxNziIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVkOjYxYzgxNzk3LWQyOTgtNGQ5MS1iNDEwLWY3MWEwZjAxZTE3OA=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXI6NjFjODE3OTctZDI5OC00ZDkxLWI0MTAtZjcxYTBmMDFlMTc4"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "elapsedMs": 63.579499999999825,
+      "stateStatus": 200,
+      "stateText": "{\"realm\":\"9c2b555e-4a0a-41b1-9c4d-698372993013\",\"state\":{\"kind\":\"rejection-listener-handle-next\",\"challenge\":\"61c81797-d298-4d91-b410-f71a0f01e178\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"other-caught/RangeError\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-handle-next\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "state": {
+        "realm": "9c2b555e-4a0a-41b1-9c4d-698372993013",
+        "state": {
+          "kind": "rejection-listener-handle-next",
+          "challenge": "61c81797-d298-4d91-b410-f71a0f01e178",
+          "trace": [
+            "message",
+            "callback",
+            "global/unhandledrejection",
+            "other-caught/RangeError",
+            "followup",
+            "socket/close"
+          ],
+          "globalEvents": [
+            {
+              "type": "unhandledrejection",
+              "trusted": true,
+              "message": null,
+              "name": "TypeError",
+              "errorMessage": "async-callback/rejection-listener-handle-next",
+              "promise": true,
+              "valueType": "object",
+              "sameValue": true,
+              "bubbles": false,
+              "cancelable": false,
+              "defaultPrevented": false,
+              "filename": null,
+              "lineno": null,
+              "colno": null
+            }
+          ],
+          "socketEvents": [
+            {
+              "type": "close",
+              "readyState": 3,
+              "code": 1000,
+              "reason": "done",
+              "name": null,
+              "message": null,
+              "trusted": true
+            }
+          ],
+          "callbacks": 1,
+          "sum": 0,
+          "observerThrew": false
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "",
+      "stdout": ""
+    }
+  ]
+}

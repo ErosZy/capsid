@@ -8,44 +8,130 @@ Linux's strict sandbox semantics (seccomp/Landlock/namespace/cgroup) have no Win
 
 ## Build
 
+### Runtime stack budgets
+
+MSVC executables embedding TJS reserve 8 MiB of native stack, matching the
+upstream txiki CLI. This provides room to construct and catch a JavaScript
+stack-limit exception before the operating-system stack is exhausted. The
+public `capsid_worker_config_init()` JavaScript stack default remains 1 MiB.
+`worker_js_stack_limits_default` and `worker_js_stack_limits_262144` exercise
+actual recursive calls, catch `RangeError`, and then serve another request,
+twice, under the default and an explicit 256 KiB JavaScript limit.
+
+The Windows ASan Hono functional profile explicitly launches with a 2 MiB
+JavaScript stack because instrumented interpreter frames consume more native
+stack. Its CTest commands and driver logs record this budget. Ordinary builds
+use 1 MiB; both profiles run the same response and lifecycle assertions.
+Passing the ASan functional profile does not establish that Hono fits within
+the 1 MiB ASan budget. Default-limit recovery remains a separate required test.
+
+### Consuming an extracted package
+
+The archive contains `CapsidConfig.cmake` and a version file, so an independent
+CMake project can consume the exported runtime target:
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+project(my_capsid_app LANGUAGES C CXX)
+find_package(Capsid CONFIG REQUIRED)
+add_executable(my_app main.cc)
+target_compile_features(my_app PRIVATE cxx_std_17)
+target_link_libraries(my_app PRIVATE Capsid::capsid_runtime)
+if(Capsid_RUNTIME_DLLS)
+    add_custom_command(TARGET my_app POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            ${Capsid_RUNTIME_DLLS} "$<TARGET_FILE_DIR:my_app>"
+        VERBATIM)
+endif()
+```
+
+Configure with `-DCMAKE_PREFIX_PATH=<extracted-package>` and use a build
+configuration matching the package. The C header also needs the C++ linker
+because the runtime library is implemented in C++; enable both languages for
+a C executable. Sanitizer compilation requirements come from the exported
+target.
+
+Ordinary Windows packages use the static CRT. An MSVC ASan package additionally
+carries its selected toolchain's ASan DLL and the two VC runtime DLLs it
+imports. `Capsid_RUNTIME_DLLS` exposes these files for an embedding application;
+the packaged worker/compiler/Host load them from `bin`. Their names, compiler
+identity and SHA-256 values are recorded in `share/capsid/asan-runtime.json`,
+the file manifest and the SBOM. `find_package` checks the DLL checksums after
+relocation. Package smoke tests run with the developer toolchain removed from
+PATH and verify that the consumer actually loaded the three local DLLs.
+
+This follows the current [MSVC ASan runtime model](https://learn.microsoft.com/en-us/cpp/sanitizers/asan-runtime?view=msvc-170):
+even `/MT` instrumented programs require the ASan runtime DLL. A nonstandard
+toolchain layout can supply `CAPSID_MSVC_ASAN_RUNTIME`; the selected DLL and its
+VC runtime companions must come from the matching toolchain directory.
+
 ### Prerequisites
 
 - Windows 10 1803+ (IPC between worker and Host uses Winsock loopback sockets; an Admin socket using AF_UNIX also requires 1803+ when enabled. All official tests run on the `windows-latest` runner (Windows Server 2022+));
 - Visual Studio 2022+, including the "Desktop development with C++" workload (MSVC + Windows SDK);
 - CMake ≥ 3.18 and Ninja (bundled with the VS installer, or installed separately);
-- Node.js 24 (used by `npm ci` to provide esbuild);
-- Python 3 (either `python` or `python3`; used by test fixtures);
-- vcpkg (provides static OpenSSL and Boost headers).
+- Node.js **24.14.0** (the locked runtime for the WebSocket comparison tests;
+  also used by `npm ci` to provide esbuild);
+- CPython **3.12.3** with `venv` and `pip` for the locked independent
+  WebSocket tests; an embedded distribution without `venv` is insufficient for
+  the setup command below;
+- An OpenSSL CLI on PATH for test certificates (for example Git for Windows'
+  `mingw64/bin/openssl.exe`); this is separate from the linked vcpkg library;
+- vcpkg (provides static OpenSSL, c-ares and Boost headers).
 
 ### Steps
 
 ```powershell
 # 1. Dependencies: static OpenSSL and Boost.System/Asio (Boost ≥1.87 is header-only;
 #    boost-asio is a separate port; the Host data plane needs <boost/asio.hpp>)
-vcpkg install openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+vcpkg install openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
 
 # 2. Lock JS dependencies (esbuild)
 npm ci --ignore-scripts --prefix vendor/txiki.js
 npm ci --ignore-scripts --prefix examples/hono-reference
 npm ci --ignore-scripts --prefix examples/itty-router-reference
 npm ci --ignore-scripts --prefix examples/h3-v2-reference
+npm ci --ignore-scripts --prefix examples/elysia-reference
 
-# 3. Configure (the static CRT and x64-windows-static triplet must match)
+# 3. Install the locked independent clients, using the full Python 3.12.3
+#    installation and Node 24.14.0 on PATH. The setup verifies package digests.
+$interop_root = Join-Path $env:TEMP 'capsid-ws-interop'
+python tools/setup-ws-interop-python.py $interop_root
+if ($LASTEXITCODE -ne 0) { throw 'WebSocket client setup failed' }
+$env:CAPSID_WS_INTEROP_PYTHON = Join-Path $interop_root 'Scripts/python.exe'
+$env:CAPSID_WS_INTEROP_NODE_PACKAGE = Join-Path $interop_root 'node-ws'
+openssl version
+if ($LASTEXITCODE -ne 0) { throw 'OpenSSL CLI for fixtures is unavailable' }
+
+# 4. Configure (the static CRT and x64-windows-static triplet must match)
 cmake -S . -B build -G Ninja `
   -DCMAKE_C_COMPILER=cl `
   -DCMAKE_CXX_COMPILER=cl `
   -DCMAKE_BUILD_TYPE=Release `
   -DCAPSID_BUILD_HOST=ON `
+  -DCAPSID_BUILD_WORKER=ON `
+  -DCAPSID_STRICT_WARNINGS=ON `
+  -DCAPSID_USE_MIMALLOC=OFF `
+  "-DCAPSID_WS_INTEROP_PYTHON=$env:CAPSID_WS_INTEROP_PYTHON" `
+  "-DCAPSID_WS_INTEROP_NODE_PACKAGE=$env:CAPSID_WS_INTEROP_NODE_PACKAGE" `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static
 
-# 4. Build and test
+# 5. Build and execute the current native CI profile
 cmake --build build --parallel 2
-ctest --test-dir build --output-on-failure -E '^(wpt_conformance_not_configured|worker_package_.*)$'
+ctest --test-dir build --no-tests=error --output-on-failure -E '^wpt_conformance_not_configured$'
 
-# 5. Package
+# 6. Package (the build command does not establish package smoke acceptance)
 cmake --build build --target package   # Produces build/capsid-<version>-windows-x86_64.zip + .sha256
 ```
+
+The current native test failures and package fixture limits are recorded in the
+[takeover audit, section 33](v0.3.0-glm-takeover-review.md#33-2026-10-16-测试入口原生-windows-与仍然失败的验收).
+A successful build or registration check does not establish complete Windows
+WebSocket interoperability. The current profile executes the package gates;
+keep all failed and skipped results visible. Earlier audit profiles that
+excluded four package tests retain their original scope and results.
 
 Configuration notes:
 
@@ -53,7 +139,7 @@ Configuration notes:
 - **MSVC compiler**: in a shell without vcvars (CI, ordinary terminal), Ninja picks up MinGW gcc from PATH and cannot build the CRT/winsock portability layer; you must explicitly pass `-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl`. When a non-MSVC compiler is configured, the top-level CMakeLists emits a FATAL_ERROR directly.
 - **iconv**: Windows has no system iconv; the build uses the repository-bundled [win-iconv](../vendor/win-iconv/VENDOR.txt) (public domain, a Win32 MultiByteToWideChar implementation). Linux/macOS continue to use the system iconv.
 - **txiki overlay**: the build copies the vendored txiki.js into the build tree and applies patches. Machines without Developer Mode enabled cannot create symbolic links, so `PrepareTxiki.cmake` automatically falls back to copying the whole directory (content is identical; the overlay key hashes only file contents).
-- **OpenSSL/Boot**: provided through the vcpkg `x64-windows-static` triplet; this project does not perform configure-time downloads (continuing the "no FetchContent" constraint from build_host.cmake).
+- **OpenSSL/Boost/c-ares**: provided through the vcpkg `x64-windows-static` triplet; this project does not perform configure-time downloads (continuing the "no FetchContent" constraint from build_host.cmake).
 - **LTO is forcibly disabled on Windows**: MSVC's `/GL` binds `operator new/delete` at compile time, so overrides of globally replaceable symbols (which ABI guard allocation-failure injection relies on) no longer intercept IPO'd translation units. GCC/Clang LTO preserves replaceable symbols, so POSIX builds are unaffected; build identity feature flags faithfully record `lto=OFF`.
 
 ### Known working configurations
@@ -98,6 +184,7 @@ Configuration notes:
 
 - **single-worker / static-pool fully available**: single and multi-shard modes share the same external contract as Linux/macOS. Windows has no `SO_REUSEPORT`; multi-shard uses a pool-level shared acceptor bound to the public port and distributes connections round-robin to each shard, so clients see the same port and the same READY and drain contract. Process stop signal: Windows has no `sigwait`; `static-pool` uses a console control handler (CTRL_C/CTRL_BREAK/close) to trigger the same stop path; `single-worker` uses Boost.Asio `signal_set` (also available on Windows).
 - **Multi-shard scenario tests** (`host_static_pool_server_shared_port_lifecycle`, `host_admission_pool_forwards_options`, `host_concurrent_pool_wait`) are registered and run on Windows; single-shard drain scenarios are also registered. Only two m2-group scenarios are not registered because of POSIX dependencies; see "Test coverage differences on Windows" below.
+- **Parent-controlled normal exit**: local modes accept an optional `--stop-fd` pointing to an inherited readable pipe, distinct from `--ready-fd`. Writing any byte or closing the parent's end requests the same normal stop as console events. The Host owns a non-inheritable duplicate and cancels its watcher on startup failure. Active inbound WebSockets receive a 1001 Close and have at most one second to reply before their transport closes; Workers are then stopped and joined. Node `child.kill('SIGTERM')` on Windows terminates the process and does not exercise this normal shutdown path. The test backend uses the explicit parent pipe and still requires exit code 0, no signal, and no forced cleanup.
 - **managed mode**: the Windows build keeps the `--mode managed` CLI entry, but the runtime directly prints "managed coordinator requires Linux strict sandbox" and exits, matching macOS behavior; the coordinator implementation remains Linux-only and is not included in the Windows package. Process snapshots (RSS/CPU) on Windows are provided through `GetProcessMemoryInfo`/`GetProcessTimes` (PSS has no equivalent; RSS is the fallback).
 - **File owner/permission checks** (trusted key store, deployment reads, state directory): Windows has no uid/mode bits, so owner checks are skipped; the boundary is provided by NTFS ACLs, and deployment reads retain the reparse-point (symlink/junction) rejection semantics.
 
@@ -123,12 +210,24 @@ Configuration notes:
 - The `windows-host-library` job in `.github/workflows/testing-validity.yml` builds Runtime/worker/Host and runs all platform-neutral tests (Linux-only tests are absent per the "not registered means skipped" or `SKIP_RETURN_CODE 77` principle, following the same strategy as macOS), produces JUnit evidence, and participates in the `hosted-evidence-index` hard gate.
 - The Windows matrix entry in `.github/workflows/release.yml` produces `capsid-<version>-windows-x86_64.zip` and `.sha256` and uploads them to the Release.
 
+The Worker process receives only `SystemRoot`, resolved through the operating
+system API. It does not copy the parent's value or other process variables.
+Winsock needs this value to load its provider; application environment values
+continue to arrive in the HELLO snapshot. `worker_windows_environment` checks
+actual v3/v4 startup and requests with a deliberately incorrect parent value,
+and uses a separate native peer to check the physical environment entries.
+
+The ABI guard executes its attached-worker `runtime_error`, request OOM and
+destroy-after-OOM scenarios on Windows too. After correcting the private
+request helper's C++ linkage, the local MSVC 14.50 static-CRT build passes
+171 checks with these branches enabled. Windows LTO remains OFF so the global
+allocation override is effective. Hosted execution remains a separate gate.
+
 ## Test coverage differences on Windows
 
 The following contracts are not fully covered on Windows (Linux CI retains all scenarios):
 
-- **ABI guard allocation-failure injection**: `test-abi-guard` injects bad_alloc/runtime_error through a global `operator new` override. With the MSVC static CRT, the "throw-from-operator-new while the worker process is attached" path triggers a fast-fail or hang, so `internal-error-injection` (worker branch), `request-path-oom`, and `destroy-reaps` scenarios are skipped on Windows; the spawn-path injection sweep (covering the same guard mechanism) still runs.
-- **WPT conformance suite**: the WPT toolchain is Linux-only; the `wpt_conformance_not_configured` "loud failure" gate is not registered on Windows.
+- **WPT conformance suite**: the native Node/MSVC toolchain supports the same manifest-pinned 84 files and audits every upstream input against its Git blob. Set `CAPSID_WPT_ROOT` to the pinned checkout when configuring; an unconfigured Windows build still omits `wpt_conformance_not_configured` and provides no WPT evidence. The local qualification now builds the fixtures on Windows rather than importing Linux bundles. The Windows hosted job still needs this configuration and an evidence audit before its WPT coverage can be claimed.
 - **m2-group POSIX-dependent scenarios**: `host_static_pool_activation_barrier` wraps the worker with a POSIX shell script (mkdir/sleep/exec semantics), and `host_static_pool_worker_exit_isolation` needs `/proc` exit evidence; both are not registered on Windows. Multi-shard and single-shard static-pool scenarios are already registered and run on Windows.
 - **generation pool kill-injection scenario**: without `/proc/<pid>/status`, the "killed worker is replaced" path cannot be verified; after the create/drain and startup-failure scenarios run normally, the test reports the skip honestly with SKIP_RETURN_CODE 77 overall (same on Windows and macOS).
 - **A/B benchmark evidence contract** (`host_single_worker_ab_emits_complete_evidence`): the runner is a POSIX shell wrapper (`bench/run-ab.sh`), and Windows has no usable perf path, so it is skipped with 77.

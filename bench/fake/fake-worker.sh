@@ -6,4 +6,15 @@
 # `exec sleep` would replace the script name with "sleep 600".
 set -euo pipefail
 
-sleep 600
+sleep_pid=""
+cleanup() {
+    trap - EXIT INT TERM
+    if [[ -n "$sleep_pid" ]]; then
+        kill "$sleep_pid" 2>/dev/null || true
+        wait "$sleep_pid" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
+sleep 600 &
+sleep_pid=$!
+wait "$sleep_pid" 2>/dev/null || true

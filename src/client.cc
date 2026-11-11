@@ -1,11 +1,13 @@
 #include "capsid/runtime.h"
 
 #include "capability_policy.h"
+#include "channel_registry.h"
 #include "client_ipc_metrics.h"
 #include "cpu_topology.h"
 #include "egress_policy.h"
 #include "protocol.h"
 #include "response_headers.h"
+#include "worker_exit_status.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -36,6 +38,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstring>
+#include <type_traits>
 #include <deque>
 #include <limits>
 #include <map>
@@ -51,9 +54,15 @@
 
 struct capsid_worker {
     struct RequestState {
+        uint32_t upgrade_channel_id = 0;
         uint64_t credit;
         bool ended;
         std::chrono::steady_clock::time_point deadline;
+        // Arm once when the cooperative host first observes an overdue
+        // read. Continuous polling retains the submission-time watchdog;
+        // a host that resumes after withholding reads gets one bounded
+        // opportunity to drain already queued worker timeout terminals.
+        std::chrono::steady_clock::time_point observed_watchdog_deadline{};
 
         RequestState() : credit(0), ended(false) {}
     };
@@ -75,26 +84,57 @@ struct capsid_worker {
     uint32_t max_header_bytes;
     uint32_t max_queued_bytes;
     size_t write_offset;
-    std::vector<uint8_t> write_buffer;
+    // Count plus allocator selects the throwing empty constructor, retaining
+    // value initialization of this aggregate and all Debug iterator checks.
+    std::vector<uint8_t> write_buffer{0, std::allocator<uint8_t>{}};
     // Pinned from the spawn config; v4 pins the parser and the Hello
     // capability tail. worker_capabilities lands from the READY tail.
     uint16_t protocol_version = capsid::protocol::kVersion;
     uint32_t protocol_capabilities = 0;
     uint32_t worker_capabilities = 0;
+    bool protocol_ready = false;
+    // FetchRPC v4 A2 (T07): one registry validates both sides of the
+    // channel frame stream; only live for spawn_ex at wire version 4.
+    bool channel_registry_live = false;
+    capsid::ChannelRegistry channel_registry;
+    std::chrono::steady_clock::time_point channel_clock = std::chrono::steady_clock::now();
+    // Limits snapshot used to compose the Hello A2 extension.
+    capsid::protocol::ChannelLimits protocol_limits;
+    capsid::EgressPolicy user_egress_snapshot;
     capsid::protocol::Parser parser;
-    std::vector<uint8_t> event_payload;
+    std::vector<uint8_t> event_payload{0, std::allocator<uint8_t>{}};
     std::map<uint64_t, RequestState> requests;
+    std::map<uint64_t, capsid::protocol::UpgradeTail> staged_upgrades;
+    uint32_t announced_channel_id = 0;
     std::set<uint64_t> canceled_requests;
     std::deque<uint64_t> canceled_request_order;
     // §13.2: ids of requests still inflight when the hard timeout killed
     // the worker. They drain one REQUEST_TIMEOUT event per next_event call
     // (stable map order) before the channel reports CAPSID_CLOSED.
-    std::vector<uint64_t> pending_timeouts;
+    std::vector<uint64_t> pending_timeouts{0, std::allocator<uint64_t>{}};
     bool ipc_metrics_enabled;
     capsid::ClientIpcMetrics ipc_metrics;
 };
 
 namespace {
+
+capsid_result advance_channel_clock(capsid_worker *worker) {
+    if (!worker->channel_registry_live || worker->closed) return CAPSID_OK;
+    const auto now = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - worker->channel_clock);
+    if (elapsed.count() <= 0) return CAPSID_OK;
+    worker->channel_clock += elapsed;
+    if (worker->channel_registry.advance_time(static_cast<uint64_t>(elapsed.count()))) return CAPSID_OK;
+    // A missing barrier invalidates this IPC stream; dropping only the
+    // channel record would make a queued acknowledgement unsafe to read.
+    close(worker->fd);
+    worker->fd = -1;
+    worker->closed = true;
+    worker->requests.clear();
+    worker->write_buffer.clear();
+    worker->write_offset = 0;
+    return CAPSID_PROTOCOL_ERROR;
+}
 
 const uint64_t kWorkerTimeoutGraceMs = 250;
 const uint32_t kCgroupResourceLimitFields =
@@ -196,8 +236,11 @@ capsid_result queue_wire(capsid_worker *worker, const std::vector<uint8_t> &wire
         }
         return CAPSID_WOULD_BLOCK;
     }
-    if (worker->write_offset && worker->write_offset == worker->write_buffer.size()) {
-        worker->write_buffer.clear();
+    if (worker->write_offset &&
+            (worker->write_offset >= worker->write_buffer.size() / 2 ||
+             worker->write_buffer.size() > worker->max_queued_bytes - wire.size())) {
+        worker->write_buffer.erase(worker->write_buffer.begin(),
+                                  worker->write_buffer.begin() + worker->write_offset);
         worker->write_offset = 0;
     }
     worker->write_buffer.insert(worker->write_buffer.end(), wire.begin(), wire.end());
@@ -218,7 +261,7 @@ capsid_result queue_wire(capsid_worker *worker, const std::vector<uint8_t> &wire
 }
 
 capsid_result queue_frame(capsid_worker *worker, const capsid::protocol::Frame &frame) {
-    std::vector<uint8_t> wire;
+    std::vector<uint8_t> wire(0);
     if (!capsid::protocol::encode_versioned(
             worker->protocol_version, frame, &wire)) {
         return CAPSID_INVALID_ARGUMENT;
@@ -268,7 +311,7 @@ capsid_result queue_chunked(capsid_worker *worker,
         return CAPSID_WOULD_BLOCK;
     }
 
-    std::vector<uint8_t> batch;
+    std::vector<uint8_t> batch(0);
     batch.reserve(wire_size);
     size_t offset = 0;
     bool first = true;
@@ -288,7 +331,7 @@ capsid_result queue_chunked(capsid_worker *worker,
         if (chunk_size) {
             frame.payload.assign(data + offset, data + offset + chunk_size);
         }
-        std::vector<uint8_t> wire;
+        std::vector<uint8_t> wire(0);
         if (!capsid::protocol::encode_versioned(
                 worker->protocol_version, frame, &wire)) {
             return CAPSID_INVALID_ARGUMENT;
@@ -334,27 +377,139 @@ bool append_string32(std::vector<uint8_t> *output,
     return true;
 }
 
-// struct_size-guarded readers for the additive negotiation tail: an
-// embedder built against an older header passes a smaller struct and
-// keeps v3 defaults.
-uint16_t config_protocol_version(const capsid_worker_config &config) {
-    if (config.struct_size >=
-        offsetof(capsid_worker_config, protocol_reserved) +
-            sizeof(config.protocol_reserved)) {
-        return config.protocol_version == 0 ? capsid::protocol::kVersion
-                                            : config.protocol_version;
-    }
-    return capsid::protocol::kVersion;
+namespace {
+
+// Resolved protocol selection for one spawn: the frozen v7 config never
+// carries protocol fields; spawn_ex resolves them from the options
+// descriptor BEFORE any OS side effect (T01/T02).
+struct ResolvedProtocol {
+    uint16_t wire_version = capsid::protocol::kVersion;
+    uint32_t capabilities = 0;
+    capsid::protocol::ChannelLimits limits;
+};
+
+// Field reader honoring the caller's descriptor size: only fields fully
+// covered by caller_size are read.
+bool options_covers(const capsid_protocol_options *options,
+                    size_t field_offset,
+                    size_t field_size,
+                    uint32_t caller_size) {
+    return options != nullptr &&
+           field_offset + field_size <= caller_size &&
+           field_offset + field_size <= options->struct_size;
 }
 
-uint32_t config_protocol_capabilities(const capsid_worker_config &config) {
-    if (config.struct_size >=
-        offsetof(capsid_worker_config, protocol_capabilities) +
-            sizeof(config.protocol_capabilities)) {
-        return config.protocol_capabilities;
+capsid_result resolve_protocol_options(const capsid_protocol_options *options,
+                                       ResolvedProtocol *out) {
+    if (!options) {
+        *out = ResolvedProtocol();
+        return CAPSID_OK;
     }
-    return 0;
+    const uint32_t caller_size = options->struct_size;
+    // Fixed prefix every caller must provide.
+    if (caller_size < offsetof(capsid_protocol_options, capabilities) +
+                          sizeof(uint32_t)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    uint32_t descriptor_version = 0;
+    std::memcpy(&descriptor_version,
+                &options->descriptor_version,
+                sizeof(descriptor_version));
+    if (descriptor_version != CAPSID_PROTOCOL_DESCRIPTOR_VERSION) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    ResolvedProtocol resolved;
+    std::memcpy(&resolved.wire_version,
+                &options->wire_version,
+                sizeof(resolved.wire_version));
+    uint16_t reserved16 = 0;
+    std::memcpy(&reserved16, &options->reserved16, sizeof(reserved16));
+    std::memcpy(&resolved.capabilities,
+                &options->capabilities,
+                sizeof(resolved.capabilities));
+    if (reserved16 != 0) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (resolved.wire_version != capsid::protocol::kVersion &&
+        resolved.wire_version != capsid::protocol::kVersionV4) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if ((resolved.capabilities &
+         ~capsid::protocol::kCapabilitiesKnownMask) != 0 ||
+        !capsid::protocol::capabilities_satisfy_closure(
+            resolved.capabilities)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    // Channel features ride on the A2 layout (frozen v4.1): every
+    // channel capability requires CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2
+    // and DUPLEX; the closure check above enforces exactly that.
+    if (options_covers(options,
+                       offsetof(capsid_protocol_options, reserved32),
+                       sizeof(uint32_t),
+                       caller_size)) {
+        uint32_t reserved32 = 0;
+        std::memcpy(&reserved32, &options->reserved32, sizeof(reserved32));
+        if (reserved32 != 0) {
+            return CAPSID_INVALID_ARGUMENT;
+        }
+    }
+    // Channel limits (A2): zero selects the deployment default;
+    // nonzero values must satisfy the frozen Hello extension bounds
+    // (validate_channel_limits mirrors the wire-side contract).
+    capsid::protocol::ChannelLimits limits;
+    limits.max_channels = 128;
+    limits.max_message_bytes = 1024u * 1024u;
+    limits.reassembly_budget_bytes = 16u * 1024u * 1024u;
+    limits.send_budget_bytes = 16u * 1024u * 1024u;
+    limits.close_timeout_ms = 5000;
+    limits.dial_timeout_ms = 10000;
+    limits.idle_timeout_ms = 0;
+    limits.per_channel_queue_bytes = 4u * 1024u * 1024u;
+#define CAPSID_READ_OPTION_U32(field)                                    \
+    do {                                                                 \
+        if (options_covers(options,                                      \
+                           offsetof(capsid_protocol_options, field),     \
+                           sizeof(uint32_t),                             \
+                           caller_size)) {                               \
+            uint32_t value = 0;                                          \
+            std::memcpy(&value, &options->field, sizeof(value));         \
+            if (value != 0) {                                            \
+                limits.field = value;                                    \
+            }                                                            \
+        }                                                                \
+    } while (0)
+#define CAPSID_READ_OPTION_U64(field)                                    \
+    do {                                                                 \
+        if (options_covers(options,                                      \
+                           offsetof(capsid_protocol_options, field),     \
+                           sizeof(uint64_t),                             \
+                           caller_size)) {                               \
+            uint64_t value = 0;                                          \
+            std::memcpy(&value, &options->field, sizeof(value));         \
+            if (value != 0) {                                            \
+                limits.field = value;                                    \
+            }                                                            \
+        }                                                                \
+    } while (0)
+    CAPSID_READ_OPTION_U32(max_channels);
+    CAPSID_READ_OPTION_U64(max_message_bytes);
+    CAPSID_READ_OPTION_U64(reassembly_budget_bytes);
+    CAPSID_READ_OPTION_U64(send_budget_bytes);
+    CAPSID_READ_OPTION_U32(close_timeout_ms);
+    CAPSID_READ_OPTION_U32(dial_timeout_ms);
+    CAPSID_READ_OPTION_U32(idle_timeout_ms);
+    CAPSID_READ_OPTION_U32(per_channel_queue_bytes);
+#undef CAPSID_READ_OPTION_U32
+#undef CAPSID_READ_OPTION_U64
+    if (!capsid::protocol::validate_channel_limits(limits)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    resolved.limits = limits;
+    *out = resolved;
+    return CAPSID_OK;
 }
+
+}  // namespace
 
 capsid_result send_hello(capsid_worker *worker,
                        const capsid_worker_config &config,
@@ -366,6 +521,9 @@ capsid_result send_hello(capsid_worker *worker,
     frame.type = capsid::protocol::kHello;
     frame.flags = 0;
     frame.request_id = 0;
+    // The registry validates the host's own HELLO (bootstrap rule);
+    // it needs the wire version on the in-memory frame.
+    frame.version = worker->protocol_version;
     capsid::protocol::append_u32(&frame.payload, CAPSID_ABI_VERSION);
     capsid::protocol::append_u64(&frame.payload, config.js_heap_limit);
     capsid::protocol::append_u64(&frame.payload, config.process_memory_limit);
@@ -543,11 +701,27 @@ capsid_result send_hello(capsid_worker *worker,
         }
     }
     if (worker->protocol_version == capsid::protocol::kVersionV4) {
-        // Amended §1.2: the v4 Hello is the full v3 startup-config
-        // payload plus an 8-byte capability tail.
+        // Amended §1.2 (v4.1): [v3 startup payload][A2 limits
+        // extension when A2 announced][8-byte capability tail].
+        if ((worker->protocol_capabilities &
+             capsid::protocol::kCapChannelLayoutA2) != 0 &&
+                !capsid::protocol::append_hello_a2_extension(
+                    &frame.payload, worker->protocol_limits)) {
+            return CAPSID_INTERNAL_ERROR;
+        }
         capsid::protocol::append_u32(
             &frame.payload, worker->protocol_capabilities);
         capsid::protocol::append_u32(&frame.payload, 0);
+    }
+    // The registry validates the host's own HELLO first (bootstrap
+    // rule: HELLO is frame one, from the host).
+    if (worker->channel_registry_live) {
+        const capsid::ChannelRegistry::ApplyResult applied =
+            worker->channel_registry.apply(
+                capsid::ChannelSide::Host, frame);
+        if (!applied.accepted) {
+            return CAPSID_INTERNAL_ERROR;
+        }
     }
     return queue_frame(worker, frame);
 }
@@ -808,33 +982,127 @@ capsid_result map_frame_to_event(capsid_worker *worker,
     event->payload.data = worker->event_payload.empty() ? NULL : &worker->event_payload[0];
     event->payload.size = worker->event_payload.size();
 
+    // FetchRPC v4 A2 channel frames (T07): validate through the
+    // shared registry (worker side), then surface as typed channel
+    // events whose payload is the raw A2 frame payload for
+    // capsid_channel_event_decode. v3 workers can never reach here:
+    // their parser rejects channel frame types outright.
+    if (frame.type >= capsid::protocol::kChannelOpen &&
+            frame.type <= capsid::protocol::kConnectionLifetime) {
+        if (!worker->channel_registry_live || !event->payload.data) {
+            return CAPSID_PROTOCOL_ERROR;
+        }
+        capsid::protocol::Frame registry_frame = frame;
+        registry_frame.payload.assign(
+            event->payload.data,
+            event->payload.data + event->payload.size);
+        const capsid::ChannelRegistry::ApplyResult applied =
+            worker->channel_registry.apply(
+                capsid::ChannelSide::Worker, registry_frame);
+        if (!applied.accepted) {
+            return CAPSID_PROTOCOL_ERROR;
+        }
+        if (applied.discard) return CAPSID_OK; // caller loops past EVENT_NONE
+        switch (frame.type) {
+        case capsid::protocol::kChannelOpen:
+            event->type = CAPSID_EVENT_CHANNEL_DIAL;
+            break;
+        case capsid::protocol::kChannelData:
+            event->type = CAPSID_EVENT_CHANNEL_DATA;
+            break;
+        case capsid::protocol::kChannelCredit:
+            event->type = CAPSID_EVENT_CHANNEL_CREDIT;
+            break;
+        case capsid::protocol::kChannelHalfClose:
+            event->type = CAPSID_EVENT_CHANNEL_HALF_CLOSE;
+            break;
+        case capsid::protocol::kChannelClose:
+            event->type = CAPSID_EVENT_CHANNEL_CLOSE;
+            break;
+        case capsid::protocol::kChannelCancel:
+            event->type = CAPSID_EVENT_CHANNEL_CANCEL;
+            break;
+        case capsid::protocol::kChannelAck:
+            event->type = CAPSID_EVENT_CHANNEL_ACK;
+            break;
+        case capsid::protocol::kConnectionLifetime: {
+            event->type = CAPSID_EVENT_CONNECTION_LIFETIME;
+            const size_t retained=worker->channel_registry.retained_owner_count();
+            if (retained>std::numeric_limits<uint32_t>::max()) return CAPSID_PROTOCOL_ERROR;
+            event->credit = static_cast<uint32_t>(retained);
+            break;
+        }
+        default:
+            return CAPSID_PROTOCOL_ERROR;
+        }
+        event->request_id = 0;   // channel frames never carry one
+        return CAPSID_OK;
+    }
+
     switch (frame.type) {
         case capsid::protocol::kReady:
             event->type = CAPSID_EVENT_READY;
+            // v3 connections have nothing to negotiate: capabilities
+            // stay zero and the info getter answers after READY too.
+            if (worker->protocol_version != capsid::protocol::kVersionV4) {
+                worker->protocol_ready = true;
+            }
             if (worker->protocol_version ==
                 capsid::protocol::kVersionV4) {
-                // Amended §1.2: v4 READY appends the worker's
-                // capability bitset; unknown bits are a protocol error.
+                // Amended §1.2 (v4.1): READY appends the worker's
+                // capability bitset; unknown bits, nonzero reserved,
+                // or a closure violation are protocol errors. The tail
+                // is split FIRST and stripped, so the sandbox proof
+                // verifier downstream reads exactly the v3-shaped
+                // compatibility/proof payload and never has to guess
+                // the trailing format (GLM plan T07).
                 if (event->payload.size <
                     capsid::protocol::kHelloV4TailSize) {
                     return CAPSID_PROTOCOL_ERROR;
                 }
-                const uint8_t *cursor =
+                const uint8_t *tail =
                     event->payload.data +
                     event->payload.size -
                     capsid::protocol::kHelloV4TailSize;
-                const uint8_t *end =
-                    event->payload.data + event->payload.size;
-                uint32_t caps = 0;
-                uint32_t reserved = 0;
-                if (!capsid::protocol::read_u32(&cursor, end, &caps) ||
-                    !capsid::protocol::read_u32(&cursor, end, &reserved) ||
-                    reserved != 0 ||
-                    (caps & ~capsid::protocol::kCapabilitiesKnownMask) !=
-                        0) {
+                uint32_t caps =
+                    capsid::protocol::load_u32_at(tail);
+                uint32_t reserved =
+                    capsid::protocol::load_u32_at(tail + 4);
+                if (reserved != 0 ||
+                    (caps &
+                     ~capsid::protocol::kCapabilitiesKnownMask) != 0 ||
+                    !capsid::protocol::capabilities_satisfy_closure(
+                        caps)) {
                     return CAPSID_PROTOCOL_ERROR;
                 }
+                if (worker->channel_registry_live) {
+                    // the zero-copy parse keeps payloads in
+                    // event_payload; the registry validates the full
+                    // frame, so attach the bytes first
+                    capsid::protocol::Frame registry_frame = frame;
+                    registry_frame.payload.assign(
+                        event->payload.data,
+                        event->payload.data + event->payload.size);
+                    const capsid::ChannelRegistry::ApplyResult applied =
+                        worker->channel_registry.apply(
+                            capsid::ChannelSide::Worker,
+                            registry_frame);
+                    if (!applied.accepted) {
+                        return CAPSID_PROTOCOL_ERROR;
+                    }
+                }
                 worker->worker_capabilities = caps;
+                worker->protocol_ready = true;
+                // Strip the tail: the event payload is the original
+                // v3 READY bytes (compatibility id + proof).
+                worker->event_payload.resize(
+                    worker->event_payload.size() -
+                    capsid::protocol::kHelloV4TailSize);
+                event->payload.size = worker->event_payload.size();
+                event->payload.data =
+                    worker->event_payload.empty()
+                        ? NULL
+                        : &worker->event_payload[0];
             }
             break;
         case capsid::protocol::kWindowUpdate: {
@@ -858,11 +1126,33 @@ capsid_result map_frame_to_event(capsid_worker *worker,
             break;
         }
         case capsid::protocol::kResponseHead: {
+            const bool upgraded = (frame.flags & capsid::protocol::kFlagResponseUpgrade) != 0;
+            if (worker->channel_registry_live) {
+                capsid::protocol::Frame registry_frame = frame;
+                registry_frame.payload = worker->event_payload;
+                if (!worker->channel_registry.apply(capsid::ChannelSide::Worker,
+                                                     registry_frame).accepted) {
+                    return CAPSID_PROTOCOL_ERROR;
+                }
+            } else if (upgraded) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            if (upgraded && worker->canceled_requests.count(frame.request_id)) {
+                event->type = CAPSID_EVENT_NONE;
+                return CAPSID_OK;
+            }
             if (event->payload.size < sizeof(uint16_t)) {
                 return CAPSID_PROTOCOL_ERROR;
             }
             const uint8_t *cursor = event->payload.data;
             const uint8_t *end = cursor + event->payload.size;
+            if (upgraded) {
+                capsid::protocol::UpgradeTail tail;
+                std::string error("");
+                if (!capsid::protocol::decode_upgrade_tail(end - 12, 12, &tail, &error)) return CAPSID_PROTOCOL_ERROR;
+                event->credit = tail.channel_id;
+                end -= 12; // expose only the legacy header block
+            }
             uint16_t status = 0;
             if (!capsid::protocol::read_u16(&cursor, end, &status)) {
                 return CAPSID_PROTOCOL_ERROR;
@@ -882,6 +1172,7 @@ capsid_result map_frame_to_event(capsid_worker *worker,
             if (!decode_header_at(event, 0, NULL, NULL)) {
                 return CAPSID_PROTOCOL_ERROR;
             }
+            if (upgraded) worker->requests.erase(frame.request_id);
             break;
         }
         case capsid::protocol::kResponseBody:
@@ -910,6 +1201,7 @@ capsid_result map_frame_to_event(capsid_worker *worker,
                     : CAPSID_EVENT_ERROR;
             if (frame.request_id != 0) {
                 worker->requests.erase(frame.request_id);
+                if (worker->channel_registry_live) worker->channel_registry.teardown_handshake(frame.request_id);
             }
             break;
         default:
@@ -919,16 +1211,26 @@ capsid_result map_frame_to_event(capsid_worker *worker,
 }
 
 #if defined(_WIN32)
-bool wait_for_child(HANDLE process, uint32_t timeout_ms) {
+bool wait_for_child(HANDLE process, uint32_t timeout_ms,
+                    capsid::WorkerExitStatus* status) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() +
         std::chrono::milliseconds(timeout_ms);
     for (;;) {
         const DWORD result = WaitForSingleObject(process, 0);
         if (result == WAIT_OBJECT_0) {
+            DWORD code = 0;
+            if (GetExitCodeProcess(process, &code)) {
+                status->observed = true;
+                status->exit_code = code;
+                status->wait_error = 0;
+            } else {
+                status->wait_error = GetLastError();
+            }
             return true;
         }
         if (result == WAIT_FAILED) {
+            status->wait_error = GetLastError();
             return false;
         }
         if (std::chrono::steady_clock::now() >= deadline) {
@@ -954,17 +1256,30 @@ void kill_and_reap(HANDLE process) {
     CloseHandle(process);
 }
 #else
-bool wait_for_child(pid_t pid, uint32_t timeout_ms) {
+bool wait_for_child(pid_t pid, uint32_t timeout_ms,
+                    capsid::WorkerExitStatus* observed) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() +
         std::chrono::milliseconds(timeout_ms);
     for (;;) {
         int status = 0;
         const pid_t result = waitpid(pid, &status, WNOHANG);
-        if (result == pid || (result < 0 && errno == ECHILD)) {
+        if (result == pid) {
+            observed->observed = WIFEXITED(status) || WIFSIGNALED(status);
+            observed->exit_code = WIFEXITED(status)
+                ? static_cast<std::uint32_t>(WEXITSTATUS(status)) : 0;
+            observed->signal = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+            observed->wait_error = 0;
+            return true;
+        }
+        if (result < 0 && errno == ECHILD) {
+            // Another owner already reaped it. Never signal a recycled PID
+            // or fabricate exit zero from the absence of a child.
+            observed->wait_error = static_cast<std::uint32_t>(ECHILD);
             return true;
         }
         if (result < 0 && errno != EINTR) {
+            observed->wait_error = static_cast<std::uint32_t>(errno);
             return false;
         }
         if (std::chrono::steady_clock::now() >= deadline) {
@@ -1062,13 +1377,21 @@ bool client_ipc_metrics_snapshot(capsid_worker *worker,
     if (!worker || !metrics || !worker->ipc_metrics_enabled) {
         return false;
     }
+    return client_ipc_metrics_drain(&worker->ipc_metrics, metrics);
+}
+
+bool client_ipc_metrics_drain(ClientIpcMetrics *source,
+                              ClientIpcMetrics *metrics) {
+    if (!source || !metrics || source == metrics) {
+        return false;
+    }
     // Delta snapshot: exchange() reads and zeroes each counter in one
     // atomic step, so the snapshot is the delta accumulated since the
     // previous snapshot (same per-line semantics as the host metrics) and a
     // concurrent increment is never torn or lost.
 #define CAPSID_METRIC_EXCHANGE(field) \
     metrics->field = \
-        worker->ipc_metrics.field.exchange(0, std::memory_order_relaxed)
+        source->field.exchange(0, std::memory_order_relaxed)
     CAPSID_METRIC_EXCHANGE(queued_frames);
     CAPSID_METRIC_EXCHANGE(queued_wire_bytes);
     CAPSID_METRIC_EXCHANGE(queue_would_block);
@@ -1231,15 +1554,14 @@ void capsid_worker_config_init(capsid_worker_config *config) {
     config->capability_policy = NULL;
     config->sandbox_network_namespace_fd = -1;
     config->egress_reserved = 0;
-    // Additive v4 negotiation tail (struct_size-guarded): embedders
-    // that never touch these fields get the shipped v3 wire unchanged.
-    config->protocol_version = capsid::protocol::kVersion;
-    config->protocol_reserved = 0;
-    config->protocol_capabilities = 0;
 }
 
 const char *capsid_result_string(capsid_result result) {
-    switch (result) {
+    // The C ABI accepts unknown numeric codes. Read their representation as
+    // the underlying integer without loading an out-of-range C++ enum value.
+    std::underlying_type<capsid_result>::type code;
+    std::memcpy(&code, &result, sizeof(code));
+    switch (code) {
         case CAPSID_OK:
             return "ok";
         case CAPSID_WOULD_BLOCK:
@@ -1268,7 +1590,11 @@ const char *capsid_last_error(void) {
                : NULL;
 }
 
-capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_worker **out_worker) {
+namespace {
+
+capsid_result spawn_worker_internal(const capsid_worker_config *input,
+                                    const ResolvedProtocol &resolved,
+                                    capsid_worker **out_worker) {
     return capsid::abi::guard_result(
         [&]() -> capsid_result {
     if (!input || !out_worker || input->struct_size < sizeof(capsid_worker_config) ||
@@ -1283,13 +1609,13 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
 
     capsid_worker_config config = *input;
     capsid::EgressPolicy validated_egress_policy;
-    std::string egress_policy_error;
+    std::string egress_policy_error("");
     if (!validated_egress_policy.configure(
             config.egress_policy, &egress_policy_error)) {
         return CAPSID_INVALID_ARGUMENT;
     }
     capsid::CapabilityPolicy validated_capability_policy;
-    std::string capability_policy_error;
+    std::string capability_policy_error("");
     if (!validated_capability_policy.configure(
             config.capability_policy,
             &capability_policy_error)) {
@@ -1697,6 +2023,15 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     // CreateProcessA takes the command line as one string. Every argument
     // here is a bareword (--ipc-fd, the numeric fd, --close-stdio), and the
     // worker path is quoted with embedded quotes doubled.
+    // Command-line construction can allocate before a child exists.
+    // Keep both IPC descriptors owned until that construction completes.
+    struct CommandLineDescriptors {
+        int* descriptors;
+        bool active;
+        ~CommandLineDescriptors() {
+            if (active) { close(descriptors[0]); close(descriptors[1]); }
+        }
+    } command_line_descriptors = {sockets, true};
     std::string command_line = "\"";
     for (const char *cursor = worker_path; *cursor != '\0'; ++cursor) {
         command_line.push_back(*cursor);
@@ -1709,6 +2044,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     if (config.strict_sandbox) {
         command_line += " --close-stdio";
     }
+    command_line_descriptors.active = false;
 #else
     char network_namespace_fd_argument[32];
     std::snprintf(
@@ -1735,41 +2071,21 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
 #endif
 
 #if defined(_WIN32)
-    // Forward CAPSID_* environment to the worker (diagnostic controls
-    // like CAPSID_PERF_DIAG); nothing else leaks across the boundary.
-    // CreateProcess requires the block to be sorted case-insensitively.
-    std::vector<std::string> capsid_environment;
-    // "environ" is a macro on MSVC (__p__environ()); use a clean local
-    // name for the block source.
-    char **environment_source = _environ;
-    for (char **env = environment_source;
-         env != NULL && *env != NULL;
-         ++env) {
-        if (std::strncmp(*env, "CAPSID_", 7) == 0) {
-            capsid_environment.push_back(*env);
-        }
+    // Winsock expands its provider path through SystemRoot. Supply that
+    // one OS-derived value, independently of the parent's environment.
+    // Application environment values still come from the HELLO snapshot.
+    static const size_t system_root_prefix = sizeof("SystemRoot=") - 1;
+    char worker_environment[MAX_PATH + sizeof("SystemRoot=") + 1] =
+        "SystemRoot=";
+    const UINT system_root_size = GetWindowsDirectoryA(
+        worker_environment + system_root_prefix, MAX_PATH + 1);
+    if (system_root_size == 0 || system_root_size > MAX_PATH) {
+        close(sockets[0]);
+        close(sockets[1]);
+        capsid::abi::set_error("cannot resolve Windows system directory");
+        return CAPSID_SYSTEM_ERROR;
     }
-    std::sort(
-        capsid_environment.begin(),
-        capsid_environment.end(),
-        [](const std::string &left, const std::string &right) {
-            const size_t limit = std::min(left.size(), right.size());
-            for (size_t i = 0; i < limit; ++i) {
-                const char left_character = static_cast<char>(std::tolower(
-                    static_cast<unsigned char>(left[i])));
-                const char right_character = static_cast<char>(std::tolower(
-                    static_cast<unsigned char>(right[i])));
-                if (left_character != right_character) {
-                    return left_character < right_character;
-                }
-            }
-            return left.size() < right.size();
-        });
-    std::string environment_block;
-    for (size_t index = 0; index < capsid_environment.size(); ++index) {
-        environment_block += capsid_environment[index];
-        environment_block.push_back('\0');
-    }
+    worker_environment[system_root_prefix + system_root_size + 1] = '\0';
 
     // EXTENDED_STARTUPINFO_PRESENT + PROC_THREAD_ATTRIBUTE_HANDLE_LIST:
     // only the listed inheritable handles cross the process boundary.
@@ -1828,7 +2144,7 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         NULL,
         TRUE,
         EXTENDED_STARTUPINFO_PRESENT,
-        NULL,  // DEBUG: env temporarily inherited
+        worker_environment,
         NULL,
         &startup.StartupInfo,
         &process_info);
@@ -1845,27 +2161,9 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     // against one identifier: a HANDLE here, pid_t elsewhere.
     HANDLE pid = process_info.hProcess;
 #else
-    extern char **environ;
-    // Forward CAPSID_* environment to the worker (diagnostic controls
-    // like CAPSID_PERF_DIAG); nothing else leaks across the boundary.
-    char **worker_environment = NULL;
-    size_t capsid_env_count = 0;
-    for (char **env = environ; env != NULL && *env != NULL; ++env) {
-        if (std::strncmp(*env, "CAPSID_", 7) == 0) {
-            capsid_env_count += 1;
-        }
-    }
-    if (capsid_env_count != 0) {
-        worker_environment = static_cast<char **>(
-            std::calloc(capsid_env_count + 1, sizeof(char *)));
-        size_t index = 0;
-        for (char **env = environ; env != NULL && *env != NULL; ++env) {
-            if (std::strncmp(*env, "CAPSID_", 7) == 0) {
-                worker_environment[index++] = *env;
-            }
-        }
-        worker_environment[index] = NULL;
-    }
+    // Never forward host variables, including CAPSID_* diagnostic controls.
+    // A non-null empty vector also avoids platform-dependent NULL semantics.
+    char *worker_environment[] = { NULL };
 
     pid_t pid = -1;
     const int spawn_result = posix_spawn(
@@ -1875,9 +2173,6 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         NULL,
         arguments,
         worker_environment);
-    if (worker_environment != NULL) {
-        std::free(worker_environment);
-    }
     posix_spawn_file_actions_destroy(&actions);
     if (network_namespace_source_fd >= 0) {
         close(network_namespace_source_fd);
@@ -1942,6 +2237,10 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         // have produced.
         capsid::abi::set_error("capsid_worker_spawn: out of memory");
         return CAPSID_OUT_OF_MEMORY;
+    } catch (...) {
+        close(sockets[0]);
+        kill_and_reap(pid);
+        throw;
     }
     if (!worker) {
         close(sockets[0]);
@@ -1953,24 +2252,43 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         return CAPSID_OUT_OF_MEMORY;
     }
     worker->fd = sockets[0];
-    // FetchRPC negotiation tail (struct_size-guarded, additive): pin the
-    // wire version, validate capability bits locally (fail fast at
-    // spawn rather than on the wire), and pin the parser.
-    worker->protocol_version = config_protocol_version(config);
-    worker->protocol_capabilities = config_protocol_capabilities(config);
-    if (worker->protocol_version != capsid::protocol::kVersion &&
-        worker->protocol_version != capsid::protocol::kVersionV4) {
-        capsid_worker_destroy(worker);
-        return CAPSID_INVALID_ARGUMENT;
-    }
-    if ((worker->protocol_capabilities &
-         ~capsid::protocol::kCapabilitiesKnownMask) != 0) {
-        capsid_worker_destroy(worker);
-        return CAPSID_INVALID_ARGUMENT;
-    }
-    if (worker->protocol_version == capsid::protocol::kVersionV4) {
-        worker->parser = capsid::protocol::Parser(
-            capsid::protocol::kVersionV4);
+    // Protocol selection was resolved and validated from the options
+    // descriptor BEFORE any OS side effect (spawn_ex); pin the stream
+    // here once the worker object exists.
+    worker->protocol_version = resolved.wire_version;
+    worker->protocol_capabilities = resolved.capabilities;
+    try {
+        if (worker->protocol_version == capsid::protocol::kVersionV4) {
+            worker->parser = capsid::protocol::Parser(
+                capsid::protocol::kVersionV4);
+            worker->protocol_limits = resolved.limits;
+            if ((worker->protocol_capabilities &
+                 capsid::protocol::kCapDuplexChannel) != 0) {
+                // One registry instance validates both directions of the
+                // channel stream (options already passed the closure and
+                // limits validation).
+                capsid::ChannelRegistry::Options options;
+                options.max_channels = resolved.limits.max_channels;
+                options.max_message_bytes =
+                    resolved.limits.max_message_bytes;
+                options.reassembly_budget_bytes =
+                    resolved.limits.reassembly_budget_bytes;
+                options.send_budget_bytes =
+                    resolved.limits.send_budget_bytes;
+                options.per_channel_queue_bytes =
+                    resolved.limits.per_channel_queue_bytes;
+                options.dial_timeout_ms = resolved.limits.dial_timeout_ms;
+                options.close_timeout_ms = resolved.limits.close_timeout_ms;
+                worker->channel_registry =
+                    capsid::ChannelRegistry(options);
+                worker->channel_registry_live = true;
+            }
+        }
+    } catch (...) {
+        close(sockets[0]);
+        kill_and_reap(pid);
+        delete worker;
+        throw;
     }
 #if defined(_WIN32)
     worker->process = pid;
@@ -1992,6 +2310,10 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
     // leaks as a zombie.
     capsid_result hello_result = CAPSID_INTERNAL_ERROR;
     try {
+        // Copy the validated spawn-time authority, including capability
+        // policy precedence. No caller-owned descriptor survives spawn.
+        worker->user_egress_snapshot = validated_capability_policy.enabled()
+            ? validated_capability_policy.net_policy() : validated_egress_policy;
         hello_result = send_hello(
             worker,
             config,
@@ -2015,9 +2337,639 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *input, capsid_work
         "capsid_worker_spawn: internal error");
 }
 
+}  // namespace
+
+capsid_result capsid_protocol_options_init(capsid_protocol_options *options,
+                                           uint32_t caller_size) {
+    if (!options) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    // Fixed prefix every caller must provide (through capabilities).
+    if (caller_size < offsetof(capsid_protocol_options, capabilities) +
+                           sizeof(uint32_t)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    // Two-way size negotiation: write only what the caller's buffer
+    // covers; struct_size records the caller's allocation so spawn_ex
+    // reads exactly the fields init could have set.
+    const size_t write_size = caller_size < sizeof(*options)
+                                  ? caller_size
+                                  : sizeof(*options);
+    std::memset(options, 0, write_size);
+    options->struct_size = caller_size;
+    options->descriptor_version = CAPSID_PROTOCOL_DESCRIPTOR_VERSION;
+    options->wire_version = capsid::protocol::kVersion;
+    return CAPSID_OK;
+}
+
+capsid_result capsid_worker_spawn(const capsid_worker_config *config,
+                                  capsid_worker **out_worker) {
+    // The published entry stays exactly v3; protocol selection is
+    // spawn_ex's job.
+    if (out_worker) {
+        *out_worker = nullptr;
+    }
+    const ResolvedProtocol v3;
+    return spawn_worker_internal(config, v3, out_worker);
+}
+
+capsid_result capsid_worker_spawn_ex(const capsid_worker_config *config,
+                                     const capsid_protocol_options *options,
+                                     capsid_worker **out_worker) {
+    if (out_worker) {
+        *out_worker = nullptr;
+    }
+    // Every option field is validated BEFORE any process, socketpair,
+    // cgroup, or handle is created: a rejected spawn leaves nothing
+    // behind (design §2.2, plan T01/T02).
+    ResolvedProtocol resolved;
+    const capsid_result validation =
+        resolve_protocol_options(options, &resolved);
+    if (validation != CAPSID_OK) {
+        return validation;
+    }
+    return spawn_worker_internal(config, resolved, out_worker);
+}
+
+// ---------------------------------------------------------------------
+// FetchRPC v4 A2 channel ABI (T07); see runtime.h for the frozen
+// contract of each entry point.
+// ---------------------------------------------------------------------
+
+namespace {
+
+// Shared precondition: a live v4 channel registry (spawn_ex with the
+// negotiated DUPLEX|A2 bits). Inputs are validated and COPIED before
+// any frame is queued; nothing borrows caller memory past the return.
+capsid_result channel_abi_readiness(capsid_worker *worker) {
+    if (!worker) return CAPSID_INVALID_ARGUMENT;
+    if (worker->closed) return CAPSID_CLOSED;
+    if (!worker->channel_registry_live) return CAPSID_PROTOCOL_ERROR;
+    const auto clock_result = advance_channel_clock(worker);
+    if (clock_result != CAPSID_OK) return clock_result;
+    return worker->protocol_ready ? CAPSID_OK : CAPSID_WOULD_BLOCK;
+}
+
+capsid_result apply_and_queue_host(capsid_worker *worker,
+                                   capsid::protocol::Frame *frame) {
+    // the registry pins the connection's wire version
+    frame->version = capsid::protocol::kVersionV4;
+    capsid::ChannelRegistry next = worker->channel_registry;
+    const capsid::ChannelRegistry::ApplyResult applied =
+        next.apply(capsid::ChannelSide::Host, *frame);
+    if (!applied.accepted) {
+        return CAPSID_PROTOCOL_ERROR;
+    }
+    const capsid_result queued = queue_frame(worker, *frame);
+    if (queued == CAPSID_OK) {
+        worker->channel_registry = std::move(next);
+        if (frame->type == capsid::protocol::kChannelAccept) {
+            worker->announced_channel_id = capsid::protocol::load_u32_at(frame->payload.data() + 8);
+        }
+    }
+    return queued;
+}
+
+}  // namespace
+
+capsid_result capsid_channel_event_init_sized(capsid_channel_event *event,
+                                              uint32_t caller_size) {
+    if (!event || caller_size < offsetof(capsid_channel_event, kind) + sizeof(uint32_t)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    capsid_channel_event initialized = {};
+    initialized.struct_size = caller_size;
+    initialized.version = CAPSID_CHANNEL_EVENT_VERSION;
+    std::memcpy(event, &initialized, std::min<size_t>(caller_size, sizeof(initialized)));
+    return CAPSID_OK;
+}
+
+capsid_result capsid_channel_event_decode(const capsid_event *event,
+                                          capsid_channel_event *out,
+                                          uint32_t caller_size) {
+    if (!event || !out || event->struct_size != sizeof(*event) ||
+            (event->payload.size != 0 && event->payload.data == nullptr)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (event->type < CAPSID_EVENT_CHANNEL_DIAL ||
+        event->type > CAPSID_EVENT_CHANNEL_ACK) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (caller_size < offsetof(capsid_channel_event, kind) +
+                           sizeof(uint32_t)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    const size_t write_size = caller_size < sizeof(*out)
+                                  ? caller_size
+                                  : sizeof(*out);
+    return capsid::abi::guard_result([&]() -> capsid_result {
+        capsid_channel_event decoded = {};
+        capsid_channel_event *view = &decoded;
+        view->struct_size = caller_size;
+        view->version = CAPSID_CHANNEL_EVENT_VERSION;
+        view->kind = static_cast<uint32_t>(event->type);
+
+        namespace p = capsid::protocol;
+        const uint8_t *data = event->payload.data;
+        const size_t size = event->payload.size;
+        std::string error("");
+        switch (event->type) {
+        case CAPSID_EVENT_CHANNEL_DIAL: {
+            p::ChannelOpenPayload open;
+            if (!p::decode_channel_open(data, size, &open, &error)) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->dial_id = open.dial_id;
+            view->owner_kind = open.owner_kind;
+            // borrow INTO the event payload: the fixed A2 open prefix is
+            // 32 bytes, then u32 url_size, then the url bytes (the local
+            // decode struct dies with this frame)
+            if (size < 36 + open.url.size()) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->url.data = data + 36;
+            view->url.size = open.url.size();
+            break;
+        }
+        case CAPSID_EVENT_CHANNEL_DATA: {
+            uint32_t id = 0;
+            if (!p::decode_channel_data_id(data, size, &id, &error)) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->channel_id = id;
+            view->message.data = data + sizeof(uint32_t);
+            view->message.size = size - sizeof(uint32_t);
+            break;
+        }
+        case CAPSID_EVENT_CHANNEL_CREDIT: {
+            p::ChannelCreditPayload grant;
+            if (!p::decode_channel_credit(data, size, &grant, &error)) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->channel_id = grant.channel_id;
+            view->credit = grant.credit;
+            break;
+        }
+        case CAPSID_EVENT_CHANNEL_HALF_CLOSE: {
+            uint32_t id = 0;
+            if (!p::decode_channel_data_id(data, size, &id, &error) ||
+                size != sizeof(uint32_t)) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->channel_id = id;
+            break;
+        }
+        case CAPSID_EVENT_CHANNEL_CLOSE: {
+            p::ChannelClosePayload close;
+            if (!p::decode_channel_close(data, size, &close, &error)) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->channel_id = close.channel_id;
+            view->close_kind = close.close_kind;
+            view->code =
+                (close.flags & p::kCloseFlagCodePresent) != 0
+                    ? close.code
+                    : 0;
+            view->diagnostic.data =
+                data + 10;
+            view->diagnostic.size = close.reason.size();
+            break;
+        }
+        case CAPSID_EVENT_CHANNEL_CANCEL: {
+            p::ChannelCancelPayload cancel;
+            if (!p::decode_channel_cancel(data, size, &cancel, &error)) {
+                return CAPSID_PROTOCOL_ERROR;
+            }
+            view->channel_id = cancel.channel_id;
+            view->dial_id = cancel.dial_id;
+            break;
+        }
+        case CAPSID_EVENT_CHANNEL_ACK: {
+            p::ChannelAckPayload ack;
+            if (!p::decode_channel_ack(data, size, &ack, &error)) return CAPSID_PROTOCOL_ERROR;
+            view->channel_id = ack.channel_id;
+            view->dial_id = ack.dial_id;
+            break;
+        }
+        default:
+            return CAPSID_INVALID_ARGUMENT;
+        }
+        std::memcpy(out, &decoded, write_size);
+        return CAPSID_OK;
+    }, "capsid_channel_event_decode: out of memory",
+       "capsid_channel_event_decode: internal error");
+}
+
+capsid_result capsid_channel_cancel_reason(const capsid_event *event,
+                                            uint32_t *out_reason) {
+    if (!event || !out_reason || event->struct_size != sizeof(*event) ||
+            event->type != CAPSID_EVENT_CHANNEL_CANCEL ||
+            (!event->payload.data && event->payload.size)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result([&]() -> capsid_result {
+        capsid::protocol::ChannelCancelPayload cancel;
+        std::string error("");
+        if (!capsid::protocol::decode_channel_cancel(event->payload.data,
+                event->payload.size, &cancel, &error)) return CAPSID_PROTOCOL_ERROR;
+        *out_reason = cancel.terminal_reason;
+        return CAPSID_OK;
+    }, "capsid_channel_cancel_reason: out of memory",
+       "capsid_channel_cancel_reason: internal error");
+}
+
+capsid_result capsid_channel_ack_kind(const capsid_event *event, uint32_t *out_kind) {
+    if (!event || !out_kind || event->struct_size != sizeof(*event) ||
+            event->type != CAPSID_EVENT_CHANNEL_ACK ||
+            (!event->payload.data && event->payload.size)) return CAPSID_INVALID_ARGUMENT;
+    return capsid::abi::guard_result([&]() -> capsid_result {
+        capsid::protocol::ChannelAckPayload ack;
+        std::string error("");
+        if (!capsid::protocol::decode_channel_ack(event->payload.data, event->payload.size,
+                &ack, &error)) return CAPSID_PROTOCOL_ERROR;
+        *out_kind = ack.kind;
+        return CAPSID_OK;
+    }, "capsid_channel_ack_kind: out of memory", "capsid_channel_ack_kind: internal error");
+}
+
+capsid_result capsid_worker_channel_confirm(capsid_worker *worker, uint32_t channel_id,
+                                             uint64_t dial_id, uint32_t kind) {
+    return capsid::abi::guard_result([&]() -> capsid_result {
+        const auto readiness = channel_abi_readiness(worker);
+        if (readiness != CAPSID_OK) return readiness;
+        capsid::protocol::ChannelAckPayload ack;
+        ack.channel_id = channel_id;
+        ack.dial_id = dial_id;
+        ack.kind = kind;
+        capsid::protocol::Frame frame;
+        frame.type = capsid::protocol::kChannelAck;
+        if (!capsid::protocol::encode_channel_ack(ack, &frame.payload)) return CAPSID_INVALID_ARGUMENT;
+        return apply_and_queue_host(worker, &frame);
+    }, "capsid_worker_channel_confirm: out of memory", "capsid_worker_channel_confirm: internal error");
+}
+
+capsid_result capsid_worker_channel_send(capsid_worker *worker,
+                                         uint32_t channel_id,
+                                         const uint8_t *data,
+                                         size_t size,
+                                         uint32_t flags) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (channel_id == 0 || (size && !data) ||
+        size > capsid::protocol::kMaxPayloadSize -
+                   sizeof(uint32_t) ||
+        (flags & ~(CAPSID_CHANNEL_FLAG_START |
+                   CAPSID_CHANNEL_FLAG_END |
+                   CAPSID_CHANNEL_FLAG_TEXT)) != 0) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelData;
+            frame.flags = flags;
+            capsid::protocol::append_u32(&frame.payload, channel_id);
+            if (size) frame.payload.insert(frame.payload.end(), data, data + size);
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_channel_send: out of memory",
+        "capsid_worker_channel_send: internal error");
+}
+
+capsid_result capsid_worker_channel_grant(capsid_worker *worker,
+                                          uint32_t channel_id,
+                                          uint64_t credit) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (channel_id == 0 || credit == 0) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelCredit;
+            capsid::protocol::ChannelCreditPayload grant;
+            grant.channel_id = channel_id;
+            grant.credit = credit;
+            if (!capsid::protocol::encode_channel_credit(
+                    grant, &frame.payload)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_channel_grant: out of memory",
+        "capsid_worker_channel_grant: internal error");
+}
+
+capsid_result capsid_worker_channel_half_close(
+    capsid_worker *worker, uint32_t channel_id) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (channel_id == 0) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if ((worker->protocol_capabilities &
+         worker->worker_capabilities &
+         capsid::protocol::kCapHalfClose) == 0) {
+        return CAPSID_PROTOCOL_ERROR;
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelHalfClose;
+            capsid::protocol::append_u32(&frame.payload, channel_id);
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_channel_half_close: out of memory",
+        "capsid_worker_channel_half_close: internal error");
+}
+
+capsid_result capsid_worker_channel_close(capsid_worker *worker,
+                                          uint32_t channel_id,
+                                          uint16_t code,
+                                          const char *reason) {
+    return capsid_worker_channel_close_ex(worker, channel_id, 0, code, reason);
+}
+
+capsid_result capsid_worker_channel_close_ex(capsid_worker *worker,
+                                           uint32_t channel_id,
+                                           uint32_t kind,
+                                           uint16_t code,
+                                           const char *reason) {
+    return capsid_worker_channel_close_bytes(worker,channel_id,kind,code,
+        reinterpret_cast<const uint8_t *>(reason),reason?std::strlen(reason):0);
+}
+
+capsid_result capsid_worker_channel_close_bytes(capsid_worker *worker,
+                                           uint32_t channel_id,
+                                           uint32_t kind,
+                                           uint16_t code,
+                                           const uint8_t *reason,
+                                           size_t reason_size) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (channel_id == 0 ||
+        (reason_size && !reason) ||
+        (kind != 2 && code == 0 && reason_size != 0) ||
+        reason_size > capsid::protocol::kMaxCloseReasonBytes) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::ChannelClosePayload close;
+            if (kind > capsid::protocol::kCloseFinal) return CAPSID_INVALID_ARGUMENT;
+            close.close_kind = static_cast<uint8_t>(kind);
+            close.channel_id = channel_id;
+            close.flags = code == 0 ? 0 : capsid::protocol::kCloseFlagCodePresent;
+            close.code = code;
+            if (reason_size) close.reason.assign(reinterpret_cast<const char *>(reason),reason_size);
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelClose;
+            if (!capsid::protocol::encode_channel_close(
+                    close, &frame.payload)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_channel_close: out of memory",
+        "capsid_worker_channel_close: internal error");
+}
+
+capsid_result capsid_worker_channel_cancel(capsid_worker *worker,
+                                           uint32_t channel_id,
+                                           uint32_t reason) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (channel_id == 0 || reason > CAPSID_CANCEL_REASON_PROTOCOL_VIOLATION) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    for (auto it = worker->staged_upgrades.begin(); it != worker->staged_upgrades.end(); ++it) {
+        if (it->second.channel_id == channel_id) {
+            worker->channel_registry.teardown_channel(channel_id, reason);
+            worker->staged_upgrades.erase(it);
+            return CAPSID_OK; // the reservation was never announced to the peer
+        }
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::ChannelCancelPayload cancel;
+            cancel.channel_id = channel_id;
+            cancel.terminal_reason = reason;
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelCancel;
+            if (!capsid::protocol::encode_channel_cancel(
+                    cancel, &frame.payload)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_channel_cancel: out of memory",
+        "capsid_worker_channel_cancel: internal error");
+}
+
+capsid_result capsid_worker_upgrade_begin(capsid_worker *worker,
+                                          uint64_t request_id,
+                                          uint32_t channel_id,
+                                          uint64_t max_message_bytes) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (request_id == 0 || channel_id == 0 ||
+        max_message_bytes <
+            capsid::protocol::kMinMessageBytes ||
+        max_message_bytes >
+            capsid::protocol::kMaxMessageBytes) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (!worker->protocol_ready) return CAPSID_WOULD_BLOCK;
+    if (worker->requests.count(request_id) || worker->staged_upgrades.count(request_id)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result([&]() -> capsid_result {
+        capsid::protocol::Frame probe;
+        probe.version = capsid::protocol::kVersionV4;
+        probe.type = capsid::protocol::kRequestHead;
+        probe.flags = capsid::protocol::kFlagRequestUpgrade;
+        probe.request_id = request_id;
+        // Reserve off-wire using a complete head; the caller supplies the
+        // actual method, URL and headers through begin_request afterwards.
+        const char method[] = "GET";
+        const char url[] = "https://reservation.invalid/";
+        append_string16(&probe.payload, reinterpret_cast<const uint8_t *>(method), 3);
+        append_string32(&probe.payload, reinterpret_cast<const uint8_t *>(url), sizeof(url) - 1);
+        capsid::protocol::append_u16(&probe.payload, 0);
+        capsid::protocol::UpgradeTail tail;
+        tail.channel_id = channel_id;
+        tail.max_message_bytes = max_message_bytes;
+        capsid::protocol::encode_upgrade_tail(tail, &probe.payload);
+        capsid::ChannelRegistry next = worker->channel_registry;
+        if (!next.apply(capsid::ChannelSide::Host, probe).accepted) {
+            return CAPSID_PROTOCOL_ERROR;
+        }
+        worker->staged_upgrades.emplace(request_id, tail);
+        worker->channel_registry = std::move(next);
+        return CAPSID_OK;
+    }, "capsid_worker_upgrade_begin: out of memory",
+       "capsid_worker_upgrade_begin: internal error");
+}
+
+capsid_result capsid_worker_dial_accept(capsid_worker *worker,
+                                        uint64_t dial_id,
+                                        uint32_t channel_id,
+                                        uint64_t max_message_bytes,
+                                        const char *selected_protocol) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (dial_id == 0 || channel_id == 0 ||
+        max_message_bytes < capsid::protocol::kMinMessageBytes ||
+        max_message_bytes > capsid::protocol::kMaxMessageBytes) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    const size_t protocol_size =
+        selected_protocol != nullptr
+            ? std::strlen(selected_protocol)
+            : 0;
+    if (protocol_size > capsid::protocol::kMaxProtocolBytes) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::ChannelAcceptPayload accept;
+            accept.dial_id = dial_id;
+            accept.channel_id = channel_id;
+            accept.accepted_max_message_bytes = max_message_bytes;
+            accept.selected_protocol.assign(
+                selected_protocol != nullptr ? selected_protocol : "",
+                protocol_size);
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelAccept;
+            if (!capsid::protocol::encode_channel_accept(
+                    accept, &frame.payload)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_dial_accept: out of memory",
+        "capsid_worker_dial_accept: internal error");
+}
+
+capsid_result capsid_worker_dial_accept_http(capsid_worker *worker,
+                                             uint64_t dial_id,
+                                             uint32_t channel_id,
+                                             uint64_t max_message_bytes,
+                                             const capsid_fetch_upgrade_response *response) {
+    namespace p = capsid::protocol;
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    const uint32_t capabilities = worker->channel_registry.effective_capabilities();
+    if (!(capabilities & p::kCapFetchUpgrade)) return CAPSID_PROTOCOL_ERROR;
+    if (!response || response->struct_size < sizeof(*response) ||
+            response->version != CAPSID_FETCH_UPGRADE_RESPONSE_VERSION ||
+            dial_id == 0 || channel_id == 0 ||
+            max_message_bytes < p::kMinMessageBytes || max_message_bytes > p::kMaxMessageBytes ||
+            (response->status != 101 && (response->status < 200 || response->status > 599)) ||
+            response->redirected > 1 || response->status_text.size > p::kMaxChannelHttpStatusTextBytes ||
+            response->url.size == 0 || response->url.size > p::kMaxUrlBytes ||
+            (!response->status_text.data && response->status_text.size) || !response->url.data ||
+            response->header_count > p::kMaxChannelHttpHeaders || (!response->headers && response->header_count)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    size_t header_bytes = 2;
+    for (size_t index = 0; index < response->header_count; ++index) {
+        const capsid_header &header = response->headers[index];
+        if (header.name.size == 0 || header.name.size > UINT16_MAX || header.value.size > UINT16_MAX ||
+                !header.name.data || (!header.value.data && header.value.size)) return CAPSID_INVALID_ARGUMENT;
+        const size_t encoded = 4 + header.name.size + header.value.size;
+        if (encoded > p::kMaxChannelHttpHeaderBytes - header_bytes) return CAPSID_INVALID_ARGUMENT;
+        header_bytes += encoded;
+    }
+    return capsid::abi::guard_result([&]() -> capsid_result {
+        p::ChannelAcceptPayload accept;
+        accept.dial_id = dial_id; accept.channel_id = channel_id;
+        accept.accepted_max_message_bytes = max_message_bytes; accept.has_http_response = true;
+        auto &http = accept.http_response;
+        http.status = static_cast<uint16_t>(response->status); http.redirected = response->redirected != 0;
+        http.status_text.assign(response->status_text.data ? reinterpret_cast<const char *>(response->status_text.data) : "", response->status_text.size);
+        http.url.assign(reinterpret_cast<const char *>(response->url.data), response->url.size);
+        http.headers.reserve(response->header_count);
+        for (size_t index = 0; index < response->header_count; ++index) {
+            const capsid_header &header = response->headers[index];
+            http.headers.emplace_back(std::string(reinterpret_cast<const char *>(header.name.data), header.name.size),
+                std::string(header.value.data ? reinterpret_cast<const char *>(header.value.data) : "", header.value.size));
+        }
+        p::Frame frame; frame.type = p::kChannelAccept;
+        if (!p::encode_channel_accept(accept, &frame.payload, capabilities)) return CAPSID_INVALID_ARGUMENT;
+        return apply_and_queue_host(worker, &frame);
+    }, "capsid_worker_dial_accept_http: out of memory", "capsid_worker_dial_accept_http: internal error");
+}
+
+capsid_result capsid_worker_dial_reject(capsid_worker *worker,
+                                        uint64_t dial_id,
+                                        uint32_t reason_code,
+                                        const char *diagnostic) {
+    const capsid_result readiness = channel_abi_readiness(worker);
+    if (readiness != CAPSID_OK) return readiness;
+    if (dial_id == 0 || reason_code > 9) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    const size_t diagnostic_size =
+        diagnostic != nullptr ? std::strlen(diagnostic) : 0;
+    if (diagnostic_size > capsid::protocol::kMaxDiagnosticBytes) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    return capsid::abi::guard_result(
+        [&]() -> capsid_result {
+            capsid::protocol::ChannelRejectPayload reject;
+            reject.dial_id = dial_id;
+            reject.channel_id = 0;
+            reject.reason_code = reason_code;
+            reject.diagnostic.assign(
+                diagnostic != nullptr ? diagnostic : "", diagnostic_size);
+            capsid::protocol::Frame frame;
+            frame.type = capsid::protocol::kChannelReject;
+            if (!capsid::protocol::encode_channel_reject(
+                    reject, &frame.payload)) {
+                return CAPSID_INVALID_ARGUMENT;
+            }
+            return apply_and_queue_host(worker, &frame);
+        },
+        "capsid_worker_dial_reject: out of memory",
+        "capsid_worker_dial_reject: internal error");
+}
+
+capsid_result capsid_worker_get_protocol_info(const capsid_worker *worker,
+                                              capsid_protocol_info *out_info,
+                                              uint32_t caller_size) {
+    if (!worker || !out_info) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (caller_size < offsetof(capsid_protocol_info, host_capabilities) +
+                          sizeof(uint32_t)) {
+        return CAPSID_INVALID_ARGUMENT;
+    }
+    if (!worker->protocol_ready) {
+        return CAPSID_WOULD_BLOCK;
+    }
+    capsid_protocol_info info = {};
+    info.struct_size = caller_size;
+    info.descriptor_version = CAPSID_PROTOCOL_DESCRIPTOR_VERSION;
+    info.wire_version = worker->protocol_version;
+    info.host_capabilities = worker->protocol_capabilities;
+    info.worker_capabilities = worker->worker_capabilities;
+    info.effective_capabilities = worker->protocol_capabilities & worker->worker_capabilities;
+    std::memcpy(out_info, &info, std::min<size_t>(caller_size, sizeof(info)));
+    return CAPSID_OK;
+}
+
 void capsid_worker_destroy(capsid_worker *worker) {
+    (void)capsid::destroy_worker_with_status(worker);
+}
+
+extern "C++" {
+capsid::WorkerExitStatus capsid::destroy_worker_with_status(
+    capsid_worker* worker) noexcept {
+    WorkerExitStatus status;
     if (!worker) {
-        return;
+        return status;
     }
     // §13.3: abortive cleanup. destroy never attempts graceful shutdown —
     // a caller who wants a graceful stop must run the documented sequence
@@ -2036,9 +2988,10 @@ void capsid_worker_destroy(capsid_worker *worker) {
     if (worker->process != NULL) {
         // A short natural-exit window keeps the reap cheap for workers that
         // are already gone; anything still alive is terminated and reaped.
-        if (!wait_for_child(worker->process, 50)) {
+        if (!wait_for_child(worker->process, 50, &status)) {
+            status.destroy_forced = true;
             terminate_process(worker->process);
-            wait_for_child(worker->process, 250);
+            wait_for_child(worker->process, 250, &status);
         }
         CloseHandle(worker->process);
         worker->process = NULL;
@@ -2047,14 +3000,17 @@ void capsid_worker_destroy(capsid_worker *worker) {
     if (worker->pid > 0) {
         // A short natural-exit window keeps the reap cheap for workers that
         // are already gone; anything still alive is SIGKILLed and reaped.
-        if (!wait_for_child(worker->pid, 50)) {
+        if (!wait_for_child(worker->pid, 50, &status)) {
+            status.destroy_forced = true;
             kill(worker->pid, SIGKILL);
-            wait_for_child(worker->pid, 250);
+            wait_for_child(worker->pid, 250, &status);
         }
     }
 #endif
     delete worker;
+    return status;
 }
+}  // extern "C++"
 
 int capsid_worker_fd(const capsid_worker *worker) {
     return worker && !worker->closed ? worker->fd : -1;
@@ -2348,7 +3304,7 @@ capsid_result capsid_worker_load_binding(capsid_worker *worker,
 
     // Blob: u32 descriptor length, the descriptor sections, then the raw
     // source bytes (mirrors the worker's LOAD_BINDING decoder).
-    std::vector<uint8_t> descriptor;
+    std::vector<uint8_t> descriptor(0);
     append_api_string16(&descriptor, name);
     capsid::protocol::append_u32(
         &descriptor,
@@ -2393,7 +3349,7 @@ capsid_result capsid_worker_load_binding(capsid_worker *worker,
         }
     }
 
-    std::vector<uint8_t> blob;
+    std::vector<uint8_t> blob(0);
     capsid::protocol::append_u32(
         &blob, static_cast<uint32_t>(descriptor.size()));
     blob.insert(blob.end(), descriptor.begin(), descriptor.end());
@@ -2516,6 +3472,10 @@ capsid_result capsid_worker_load_trusted_bytecode_named(
         "capsid_worker_load_trusted_bytecode_named: internal error");
 }
 
+// This private implementation can throw while assembling or queuing a frame.
+// MSVC /EHsc assumes C-linkage functions do not throw, so keep C++ linkage
+// until the public entry points translate exceptions with guard_result.
+extern "C++" {
 static capsid_result begin_request_impl(capsid_worker *worker,
                                       uint64_t request_id,
                                       const char *method,
@@ -2538,6 +3498,12 @@ static capsid_result begin_request_impl(capsid_worker *worker,
     size_t payload_size =
         sizeof(uint16_t) + method_size + sizeof(uint32_t) + url_size +
         sizeof(uint16_t);
+    const auto upgrade = worker->staged_upgrades.find(request_id);
+    if (upgrade != worker->staged_upgrades.end() &&
+            upgrade->second.channel_id <= worker->announced_channel_id) {
+        return CAPSID_PROTOCOL_ERROR;
+    }
+    if (upgrade != worker->staged_upgrades.end()) payload_size += 12;
     if (payload_size > worker->max_header_bytes) {
         return CAPSID_INVALID_ARGUMENT;
     }
@@ -2566,6 +3532,9 @@ static capsid_result begin_request_impl(capsid_worker *worker,
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kRequestHead;
     frame.flags = flags;
+    if (upgrade != worker->staged_upgrades.end()) {
+        frame.flags |= capsid::protocol::kFlagRequestUpgrade | capsid::protocol::kFlagRequestEnd;
+    }
     frame.request_id = request_id;
     if (!append_string16(&frame.payload, reinterpret_cast<const uint8_t *>(method), method_size)) {
         return CAPSID_INVALID_ARGUMENT;
@@ -2582,17 +3551,19 @@ static capsid_result begin_request_impl(capsid_worker *worker,
             return CAPSID_INVALID_ARGUMENT;
         }
     }
+    if (upgrade != worker->staged_upgrades.end()) {
+        capsid::protocol::encode_upgrade_tail(upgrade->second, &frame.payload);
+    }
     if (worker->requests.find(request_id) != worker->requests.end()) {
         return CAPSID_INVALID_ARGUMENT;
     }
     if (worker->requests.size() >= worker->max_inflight_requests) {
         return CAPSID_WOULD_BLOCK;
     }
-    const capsid_result result = queue_frame(worker, frame);
-    if (result == CAPSID_OK) {
-        forget_canceled_request(worker, request_id);
+    {
         capsid_worker::RequestState state;
-        state.ended = (flags & capsid::protocol::kFlagRequestEnd) != 0;
+        if (upgrade != worker->staged_upgrades.end()) state.upgrade_channel_id = upgrade->second.channel_id;
+        state.ended = (frame.flags & capsid::protocol::kFlagRequestEnd) != 0;
         const uint64_t hard_timeout_ms =
             worker->request_timeout_ms >
                     std::numeric_limits<uint64_t>::max() -
@@ -2602,10 +3573,28 @@ static capsid_result begin_request_impl(capsid_worker *worker,
         state.deadline =
             std::chrono::steady_clock::now() +
             std::chrono::milliseconds(hard_timeout_ms);
-        worker->requests[request_id] = state;
+        worker->requests.emplace(request_id, state); // allocate before queuing any bytes
+    }
+    capsid_result result;
+    try {
+        result = queue_frame(worker, frame);
+    } catch (...) {
+        worker->requests.erase(request_id);
+        throw;
+    }
+    if (result != CAPSID_OK) {
+        worker->requests.erase(request_id);
+    } else {
+        forget_canceled_request(worker, request_id);
+        if (upgrade != worker->staged_upgrades.end()) {
+            worker->announced_channel_id = upgrade->second.channel_id;
+            worker->staged_upgrades.erase(upgrade);
+        }
     }
     return result;
 }
+
+}  // extern "C++"
 
 // begin_request with kFlagRequestEnd: worker marks request_ended
 // immediately and skips initial request-direction credit.
@@ -2738,7 +3727,9 @@ capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id) {
     frame.type = capsid::protocol::kCancel;
     frame.flags = 0;
     frame.request_id = request_id;
-    const capsid_result result = queue_frame(worker, frame);
+    const capsid_result result = state->second.upgrade_channel_id
+        ? capsid_worker_channel_cancel(worker, state->second.upgrade_channel_id, CAPSID_CANCEL_REASON_LOCAL)
+        : queue_frame(worker, frame);
     if (result == CAPSID_OK) {
         remember_canceled_request(worker, request_id);
         worker->requests.erase(state);
@@ -2771,6 +3762,8 @@ capsid_result capsid_worker_flush(capsid_worker *worker) {
     if (!worker || worker->closed) {
         return CAPSID_CLOSED;
     }
+    const auto clock_result = advance_channel_clock(worker);
+    if (clock_result != CAPSID_OK) return clock_result;
     if (worker->ipc_metrics_enabled) {
         worker->ipc_metrics.flush_calls.fetch_add(
                     1, std::memory_order_relaxed);
@@ -2878,6 +3871,8 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
     if (!worker || !event || event->struct_size < sizeof(capsid_event)) {
         return CAPSID_INVALID_ARGUMENT;
     }
+    const auto clock_result = advance_channel_clock(worker);
+    if (clock_result != CAPSID_OK) return clock_result;
     if (worker->ipc_metrics_enabled) {
         worker->ipc_metrics.next_event_calls.fetch_add(
                     1, std::memory_order_relaxed);
@@ -2940,6 +3935,7 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                 }
                 if (read_size == 0) {
                     worker->closed = true;
+                    worker->channel_registry.teardown_all(capsid::protocol::kCancelDisconnect);
                     worker->requests.clear();
                     worker->canceled_requests.clear();
                     worker->canceled_request_order.clear();
@@ -2977,7 +3973,19 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
                                 worker->requests.begin();
                         it != worker->requests.end();
                         ++it) {
-                        if (now >= it->second.deadline) {
+                        const auto soft_deadline = it->second.deadline -
+                            std::chrono::milliseconds(kWorkerTimeoutGraceMs);
+                        if (now >= soft_deadline &&
+                            it->second.observed_watchdog_deadline ==
+                                std::chrono::steady_clock::time_point{}) {
+                            it->second.observed_watchdog_deadline =
+                                now < it->second.deadline
+                                    ? it->second.deadline
+                                    : now + std::chrono::milliseconds(kWorkerTimeoutGraceMs);
+                        }
+                        if (it->second.observed_watchdog_deadline !=
+                                std::chrono::steady_clock::time_point{} &&
+                            now >= it->second.observed_watchdog_deadline) {
                             const uint64_t timed_out_id = it->first;
                             terminate_process(
 #if defined(_WIN32)
@@ -3046,7 +4054,9 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
             }
             continue;
         }
-        return map_frame_to_event(worker, frame, event);
+        const auto mapped = map_frame_to_event(worker, frame, event);
+        if (mapped == CAPSID_OK && event->type == CAPSID_EVENT_NONE) continue;
+        return mapped;
     }
         },
         "capsid_worker_next_event: out of memory",
@@ -3132,3 +4142,26 @@ capsid_result capsid_response_status_text(const capsid_event *event,
 }
 
 }  // extern "C"
+
+namespace capsid {
+bool client_channel_snapshot(const capsid_worker *worker, uint32_t id, ChannelEntry *out) {
+    return worker && worker->channel_registry_live && worker->channel_registry.find(id, out);
+}
+bool client_channel_limits(const capsid_worker *worker, protocol::ChannelLimits *out) {
+    if (!worker || !out) return false;
+    *out=worker->protocol_limits; return true;
+}
+bool client_pending_dial(const capsid_worker *worker, uint64_t id, ChannelEntry *entry,
+                         bool *cancelled, bool *unresolved) {
+    return worker && worker->channel_registry_live &&
+        worker->channel_registry.pending_dial(id, entry, cancelled, unresolved);
+}
+bool client_egress_snapshot(const capsid_worker *worker, EgressPolicy *out) {
+    if (!worker || !out) return false;
+    *out = worker->user_egress_snapshot;
+    return true;
+}
+bool client_dial_must_reject(const capsid_worker *worker, uint64_t id, uint32_t *reason) {
+    return worker && worker->channel_registry_live && worker->channel_registry.dial_must_reject(id,reason);
+}
+}

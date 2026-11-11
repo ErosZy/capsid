@@ -1,0 +1,4 @@
+#ifndef CAPSID_HOST_DNS_PROVIDER_H
+#define CAPSID_HOST_DNS_PROVIDER_H
+#include "@CAPSID_CARES_PROVIDER_DIR@/ares.h"
+#endif

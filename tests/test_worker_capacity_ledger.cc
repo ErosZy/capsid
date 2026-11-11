@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <limits>
 
 namespace {
 
@@ -40,6 +41,25 @@ int main(int argc, char** argv) {
         fail("expected one ledger test mode");
     }
     const std::string mode = argv[1];
+    if (mode == "ledger_retired_headroom") {
+        WorkerCapacityLedger ledger(4, 0);
+        require(ledger.reserve_fresh("orders", 4), "reserve old actual capacity");
+        ledger.commit_fresh("orders"); ledger.begin_retire("orders", 4);
+        require(!ledger.reserve_fresh("invoices", 1), "retired workers still occupy the absolute ceiling until reap");
+        ledger.release_drained("orders", 4);
+        require(ledger.reserve_fresh("invoices", 1), "actual reaped capacity becomes reusable");
+        std::cout << "PASS" << std::endl; return 0;
+    }
+    if (mode == "ledger_overflow_limits") {
+        WorkerCapacityLedger ledger(4, 2);
+        require(ledger.reserve_fresh("orders", 1), "reserve one existing worker");
+        require(!ledger.reserve_fresh("invoices", std::numeric_limits<std::uint64_t>::max()),
+                "large pool size must not wrap the steady-capacity check");
+        require(!ledger.reserve_replace("orders", std::numeric_limits<std::uint64_t>::max()),
+                "large replacement must not wrap the steady/surge checks");
+        require(ledger.steady_used() == 1 && ledger.surge_used() == 0, "rejected inputs cannot change held counts");
+        std::cout << "PASS" << std::endl; return 0;
+    }
 
     if (mode == "ledger_fresh_budget") {
         // workers_total=4, surge=0 (the v1 default): fresh deploys fit

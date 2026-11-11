@@ -1,0 +1,116 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 305418,
+  "steps": [
+    {
+      "label": "provider-missing-default-config",
+      "exitCode": 1,
+      "seconds": 0.02124378699954832,
+      "timeoutSeconds": 30,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "141ac4afeeafc3e4a79d547155ca2ae714dbf7c2fdcd2ba2eb31bc36549cac44"
+    },
+    {
+      "label": "provider-explicit-system-config",
+      "exitCode": 0,
+      "seconds": 1.4268845480000891,
+      "timeoutSeconds": 30,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "85ed7a66840080a9365065dc8e03320e8b0d06ce69316f6e901e5b929e906d8f"
+    },
+    {
+      "label": "system-default-config",
+      "exitCode": 0,
+      "seconds": 0.3705374800010759,
+      "timeoutSeconds": 30,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "03b5bb1956aa8d3150f233d60b8d74be89ffc1c133b4c8965b60af4d0723d360"
+    },
+    {
+      "label": "system-missing-config-negative",
+      "exitCode": 1,
+      "seconds": 0.005443735999506316,
+      "timeoutSeconds": 30,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "5dee783d50c01bd1134b8146c47893bbfad5e344c82a0ccd4da21261fa69c1fb"
+    },
+    {
+      "label": "websocket_fetch_boundaries_single-worker",
+      "exitCode": 0,
+      "seconds": 6.034884074999354,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "38ddf256ae61f25b8c3c90bb263093a0633befec2dc6da17775b8aeb0e70ab90",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "realOriginalProductScenarioPassed": true,
+      "reportSHA256": "4dd84cdc05573dc8181dabccc5225d5cfa7a3e24c1c66b36fbe3fea86b97352e"
+    },
+    {
+      "label": "websocket_fetch_boundaries_static-pool",
+      "exitCode": 0,
+      "seconds": 5.935427829999753,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "a53cc4370334fc550f4117a2442d532a4b8b0029ca26e5c956fab83a585f20fa",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "realOriginalProductScenarioPassed": true,
+      "reportSHA256": "1c9e1cc1a433d62bc557f8178d78e6465fc3469bf11d643d98a4963aae7839a9"
+    },
+    {
+      "label": "websocket_fetch_boundaries_managed",
+      "exitCode": 0,
+      "seconds": 7.238893308000115,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "598b21a116f9fd9eec55127b997aaf09a08e4b154d20656460ab59d8547bae5b",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "realOriginalProductScenarioPassed": true,
+      "reportSHA256": "12a8d97dd52d008eae5bdf3f1fa014c37da905c5b556b4c0d8efa8efcd124818"
+    }
+  ],
+  "providerCertificateTool": "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/bin/openssl",
+  "systemCertificateTool": "/usr/bin/openssl",
+  "systemConfiguration": "/etc/ssl/openssl.cnf",
+  "guardedInputs": {
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host": "27826ad397914bb1aa8d67378daa4550b53bd2b7f2704528e8bfc861f056e4fc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker": "ed828b4021a75ab662f2083709dc40ac6b9e947c586f66b1c9cd82f8fed5f912",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CMakeCache.txt": "ed4aecbb2676ac8f517e1acf91a90fdef18730bfaf9014a91e38a981a72198d0",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CTestTestfile.cmake": "dd94317475d12100f7f2b3944612526346e825c319748f56c9f49781cb6c0907",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-tsan-linux-build-r4/inventory.json": "923a44c0c5487e427e93b0dc553a714df568c159bd2a62e9ed365a53e55abd1c",
+    "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libssl.a": "2d4ec0decaf6a9c9630800e72550b7ecf151fdb984ebbcde386debb3ea468349",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libcrypto.a": "659fb5674ccd19863a007eb54dc7ec7eff51c611ca63893d3824debce46aae07",
+    "/root/capsid-verification-20261109/r8-cares-upstream-tsan-build-r3/providers/lib/libcares.a": "47e39c33bcf291d25fe874e8499a989588ad07fcabf73aadbc0433d993e34b75",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-tsan-allocation-link-proposal-r2/apply-exact-proposed-allocation-link-block.cmake": "d83b86ad6466ae959fc8d4d4bab020e49b2490ff396b19971b462b545d37a24a",
+    "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.tsan-x86_64.so": "dfb5ab5d511f84a08fbb380b04b2d3d30db69ee8817c427e73c131ff7e7c596b",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/bin/openssl": "a90fc1946f3a506ba4a3c4a4ab2f2071ecd3ec13a976aeae4dd347d4bfbce6a6",
+    "/usr/bin/openssl": "b4f547c0f16272d1cc7f870330a6f2c243710c335e7a99c734ff7a0c6fdb2503",
+    "/etc/ssl/openssl.cnf": "529815b0dd4bd6608bafeeb3d410b0683374e61aef792b3e3f38b3767d26f747"
+  },
+  "productInstrumentedProviderLibrariesUnchanged": true,
+  "originalRawFullFailuresRetained": true,
+  "fixtureToolOnlyBindingCorrection": true,
+  "liveBuildSourceCacheAndRegistrationUnmodified": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/test_websocket_fetch_boundaries.mjs",
+    "--host",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host",
+    "--worker",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker",
+    "--mode",
+    "managed",
+    "--openssl",
+    "/usr/bin/openssl",
+    "--report",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-certificate-tool-binding-r1/websocket_fetch_boundaries_managed.json"
+  ],
+  "activeCommandPid": 323854,
+  "certificatePreflightControlsPassed": 4,
+  "missingProviderDefaultConfigurationConfirmed": true,
+  "systemCliProducesAndParsesRealSanCertificate": true,
+  "explicitSystemConfigAlsoRepairsProviderCli": true,
+  "originalFullTerminalRecordSHA256": "004047007633f21e36df52258b19ec0562bfd373dad116ad01ffc198345b5372",
+  "actualOriginalNativeBoundaryModesPassed": 3,
+  "allGuardedInputsUnchanged": true,
+  "interpretation": "Missing default OpenSSL CLI configuration prevented certificate fixtures from reaching the product. Binding the installed system certificate CLI leaves the actual instrumented product libraries and original workloads/budgets unchanged. Original full raw findings remain archived; final candidate full qualification is separate."
+}

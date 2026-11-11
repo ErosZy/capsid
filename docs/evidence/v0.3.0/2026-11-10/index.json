@@ -1,0 +1,189 @@
+{
+  "schema": "capsid-qualification-snapshot-index-v3",
+  "capturedUTC": "2026-11-10T15:34:00.106251+00:00",
+  "goalStatus": "active",
+  "releaseQualified": false,
+  "projectVersion": "0.2.2",
+  "codeAndTestConfigurationPrivateSnapshot": "ef42e7bc5ae7c595ef6fb3ff39b64fc3f77f8f57",
+  "documentationAndEvidenceAddedAfterThatSnapshot": true,
+  "records": {
+    "progress-at-capture.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r78\\run.json",
+      "sha256": "f8192b3b7e649d57789cc67798b19ce26ca928cb950c5538871c1c45f5940010",
+      "bytes": 27323,
+      "immutableSnapshotOnly": true
+    },
+    "goal-requirements-at-capture.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\current-goal-requirements.json",
+      "sha256": "8dd96dcf12a5820275515a1d15b26da5800b72714af2b83755d2cc20be5120e2",
+      "bytes": 224827,
+      "immutableSnapshotOnly": true
+    },
+    "integrated-ci-and-coverage.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-tsan-native-ci-coverage-main-integration-r2\\run.json",
+      "sha256": "aab4e4bdf78c970a738aa97619fd8e6a81959c54253c6af9a7b6712ab1048f2b",
+      "bytes": 4012,
+      "immutableSnapshotOnly": true
+    },
+    "integrated-compatibility-and-sanitizer-branches.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-compatible-gate-and-sanitizer-branches-main-integration-r1\\run.json",
+      "sha256": "5f8c18e0e5dbbb22ba3c23ac4d2f57b79c9734a3f1a201a80baedd7e99e3c8df",
+      "bytes": 5865,
+      "immutableSnapshotOnly": true
+    },
+    "sanitizer-native-branch-controls.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-sanitizer-branch-correction-native-r1\\run.json",
+      "sha256": "63602b6b87c457976dac912d39e08a5421dfee672353efecbff1c83e1af7e66a",
+      "bytes": 33425,
+      "immutableSnapshotOnly": true
+    },
+    "linux-corrected-production-full.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-clients-rebound-production-linux-unfiltered-r1\\run.json",
+      "sha256": "8f4b0a697e2cfcccfaca60e3affb7df8cfa9fdd742039a85cd8d34fbca79ab16",
+      "bytes": 4923,
+      "immutableSnapshotOnly": true
+    },
+    "linux-sanitizer-full.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-wpt-soak-sanitizer-linux-unfiltered-r1\\run.json",
+      "sha256": "27e77dd3a8a93424a911c2c4a773da419f3bf3884df2625e4dc7396a867d6ad6",
+      "bytes": 5040,
+      "immutableSnapshotOnly": true
+    },
+    "current-reference-and-wpt-profile.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-post-full-reference-r3\\run.json",
+      "sha256": "d0a5850c5a9728e5b194b184d77368b9c72771959b537b49c54bf1b4ddf12aa7",
+      "bytes": 8259,
+      "immutableSnapshotOnly": true
+    },
+    "actual-complete-compatibility-acceptance.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-compatible-release-real-positive-r2\\run.json",
+      "sha256": "078e971f2e9e7dfa1be8166e7b8604f71e533ec4347981ed9817166c6c408b58",
+      "bytes": 3227,
+      "immutableSnapshotOnly": true
+    },
+    "native-oracle-main-integration.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-native-connection-oracle-main-integration-r1\\run.json",
+      "sha256": "5d96b1780233ca01ccb1b2861a786c640b3d7f5a85a3c0c3501ea8c36315a19f",
+      "bytes": 3482,
+      "immutableSnapshotOnly": true
+    },
+    "native-oracle-fresh-sanitizer.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-native-connection-fresh-r1\\run.json",
+      "sha256": "d0a1affcddaea3c421402c9dd3f410dad8f7cfd0ac5faacdb6bf3fbb5c9b9286",
+      "bytes": 3393,
+      "immutableSnapshotOnly": true
+    },
+    "windows-raw-full.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\run.json",
+      "sha256": "04295eb41150f54593cd96116b6d6f7215dec1a2d0b47cada4356dc12abceb03",
+      "bytes": 5855,
+      "immutableSnapshotOnly": true
+    },
+    "windows-worker-pe-difference.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-windows-worker-pe-difference-r1\\run.json",
+      "sha256": "3e44ed34e6a288aef95d0a32e091c49b3558a216cfdd7477cf820abd3d65660d",
+      "bytes": 11182,
+      "immutableSnapshotOnly": true
+    },
+    "windows-package-prime.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-windows-package-prime-r1\\run.json",
+      "sha256": "4c932162a572faa176bda9adc54ee03472fb12ad049deb4043d14817245a0c40",
+      "bytes": 4432,
+      "immutableSnapshotOnly": true
+    },
+    "current-full-fuzz-reuse.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-full-fuzz-reuse-r1\\run.json",
+      "sha256": "9f024489d3da54fa2bae9c86de5a41ac3862a35d7d2f999967f270127f79d3ce",
+      "bytes": 7012,
+      "immutableSnapshotOnly": true
+    },
+    "bounded-state-model-controls.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-frozen-state-model-controls-r3\\run.json",
+      "sha256": "87951c30f3231497da62e47356fbcf008526580c3698ba1a35a499db02eb9f7e",
+      "bytes": 5893,
+      "immutableSnapshotOnly": true
+    },
+    "tsan-whole-product-build.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-tsan-linux-build-r4\\build.json",
+      "sha256": "1181d050b099bd3aceb9ad0f06cf0d4188dfeb744715f003ca038a71c7dd5d5e",
+      "bytes": 14926,
+      "immutableSnapshotOnly": true
+    },
+    "tsan-whole-product-full-at-capture.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-tsan-linux-unfiltered-r4\\run.json",
+      "sha256": "05e53fd52dd4fad7b5cd161244bf5f863925994961850976c9c056d7b480d30f",
+      "bytes": 4243,
+      "immutableSnapshotOnly": true
+    },
+    "tsan-openssl-r23-full.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-openssl-upstream-tsan-r2\\run.json",
+      "sha256": "20c243b9c4afe14d32ef402b2cc2a3547e58dde6605c45d83555ab1a6b555ce0",
+      "bytes": 20021,
+      "immutableSnapshotOnly": true
+    },
+    "tsan-cares-current-full.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-cares-upstream-tsan-isolated-dns-r3\\run.json",
+      "sha256": "18d4072847b193c08a2d682bd28cc48a615067252b17c1fb88447e8d201ce443",
+      "bytes": 5545,
+      "immutableSnapshotOnly": true
+    },
+    "rss-terminal-diagnostics.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-asan-rss-terminal-diagnostics-r4\\run.json",
+      "sha256": "5aedc968a032b18910c16efd1c9c57146995048a565160fa3518033efca71ef4",
+      "bytes": 5489,
+      "immutableSnapshotOnly": true
+    },
+    "allocator-rss-control.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-asan-rss-allocator-control-r1\\run.json",
+      "sha256": "84ce9a51c1fbac3ab77edc68b79d03e099fe0f1bd0727b2e4cb3a8aa5650dbc9",
+      "bytes": 4933,
+      "immutableSnapshotOnly": true
+    },
+    "certificate-tool-binding-at-capture.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-certificate-tool-binding-r1\\run.json",
+      "sha256": "77714bbc451fd482d35521735fa8c49ac549ff97673b0dd41deb7553dbd9e784",
+      "bytes": 4636,
+      "immutableSnapshotOnly": true
+    },
+    "headers-and-sandbox-decision.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-acceptance-boundary-decision-r2\\run.json",
+      "sha256": "3dc4f24ecac0b2369b0f76ba0b860b7811a0ef052c42270af7ac22f4233f3e47",
+      "bytes": 1489,
+      "immutableSnapshotOnly": true
+    },
+    "message-channel-decision.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-message-channel-acceptance-boundary-decision-r1\\run.json",
+      "sha256": "201f5c2c4553e6c7ae9b8b9d91025764a7bacaf7d74925509d6cc562cd6739e9",
+      "bytes": 987,
+      "immutableSnapshotOnly": true
+    },
+    "formal-performance-preparation.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-formal-performance-inputs-r1\\run.json",
+      "sha256": "bd4656c1cc6eed944496169421e996327f45acae09051366d8b36be8418a009a",
+      "bytes": 5723,
+      "immutableSnapshotOnly": true
+    },
+    "formal-command-templates.json": {
+      "original": "D:\\capsid-verification-20261108\\evidence\\sdk78-formal-performance-inputs-r1\\formal-command-templates.json",
+      "sha256": "042fbeec83cc4d57b7b260a8894b73be440b7e48446bf664e6b28b3877ee9b6b",
+      "bytes": 3092,
+      "immutableSnapshotOnly": true
+    },
+    "managed-websocket-1800s-soak.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-managed-websocket-soak-linux-r1\\run.json",
+      "sha256": "c70be33a10b80d8c226f159d53e3d3e749805ef44ea282abfdfea16a30de87d4",
+      "bytes": 4143,
+      "immutableSnapshotOnly": true
+    },
+    "historical-evidence-availability.json": {
+      "original": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-evidence-pointer-availability-r1\\run.json",
+      "sha256": "76489e58a282c7c6f210206312e3449b155bc26528cd391f3a80c42354cf586a",
+      "bytes": 190410,
+      "immutableSnapshotOnly": true
+    }
+  },
+  "liveRecordsArePointInTimeCopies": true,
+  "historicalBeforeRunFuzzerHashesNotClaimed": true,
+  "finalCombinedCandidateNotYetQualified": true,
+  "fullV030GoalComplete": false
+}

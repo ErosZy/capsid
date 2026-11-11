@@ -1,0 +1,248 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 304,
+  "proposalRecordSHA256": "bc0b27bb8c3f19ae7bcbfdc3cea2f5c71795c4fdfa956fb244b3a11504af28c4",
+  "guardedInputs": {
+    "/root/capsid-verification-20261109/build-production/capsid-host": "0a88b166c6604e7d751a6c4424e1e300bb2e9601a8f271574f84deef4d451429",
+    "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "/root/capsid-verification-20261109/build-production/test-sandbox": "6fc5499240cddeec795a0ddce52bbcd3e2b96f5f2a9472ac54d4358edb75374f",
+    "/root/capsid-verification-20261109/build-production/CMakeCache.txt": "09ee864836c05abe0cd56eaafd2fd997182fabb3bc16f9300ab204c124e64c44",
+    "/root/capsid-verification-20261109/build-production/build.ninja": "bea4e3d2c17410d04367b24e15bf1609ff5b0768d286e4e8bf83aacaf13b0a04",
+    "/root/capsid-verification-20261109/build-production/CTestTestfile.cmake": "85b3383e4d7c6837228a79be46cce702196c58ef54abc77069b83988d499473a",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/test_sandbox.cc": "4fee0a814ca64db289ca0d749d23bfb518feb081100b5bf2e1cd3ecd3c339d81",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-host": "33afa1ad5fc3c6004715e5d5dcd2043b7b0769ecf61151eea56af52fc14a5079",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-worker": "f815d91959b20a5c0dfa0dbf6e6cc58a73d8ca1abfe4b45546d70be90e1e88c9",
+    "/root/capsid-verification-20261109/build-sanitizer/test-sandbox": "0cb8282e5d2ca515968a855014349505fd18d9f7786b4ab19c59ff4c58f08595",
+    "/root/capsid-verification-20261109/build-sanitizer/CMakeCache.txt": "04b79591a2e2851cb0cd78ba28890314ae28a3d33208f37b7ce59f90cd754932",
+    "/root/capsid-verification-20261109/build-sanitizer/build.ninja": "401ad692f14bbd2ffc11b9ae4f889f4c22189d916eb67e2f1504ac6bcf907adf",
+    "/root/capsid-verification-20261109/build-sanitizer/CTestTestfile.cmake": "c141cb6c930c6050bb8447c092e5ee289a41d5cd5fdba2b8f0cb929539d8293e",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host": "27826ad397914bb1aa8d67378daa4550b53bd2b7f2704528e8bfc861f056e4fc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker": "ed828b4021a75ab662f2083709dc40ac6b9e947c586f66b1c9cd82f8fed5f912",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/test-sandbox": "4a7fa492e201dd81f7ae392d898e51dfd81b6dccc6d544cfd9fbda4f8ea9a469",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CMakeCache.txt": "ed4aecbb2676ac8f517e1acf91a90fdef18730bfaf9014a91e38a981a72198d0",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/build.ninja": "9265f78602c4858840a3b8db053fbb9e93c8d8905fbb44ceebd50872ea5f20b2",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CTestTestfile.cmake": "dd94317475d12100f7f2b3944612526346e825c319748f56c9f49781cb6c0907"
+  },
+  "steps": [
+    {
+      "label": "compile-production",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/include",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++11",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/production.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/production-test_sandbox.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 0.7440477220000048,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-production",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-O3",
+        "-DNDEBUG",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/production.o",
+        "CMakeFiles/test-sandbox.dir/src/sandbox.cc.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/production-test-sandbox"
+      ],
+      "exitCode": 0,
+      "seconds": 0.12058929899998816,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "production-worker_sandbox_namespaces",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/production-test-sandbox",
+        "--namespaces"
+      ],
+      "exitCode": 0,
+      "seconds": 0.006386607999999683,
+      "timeoutSeconds": 10.0,
+      "stdoutSHA256": "691e373e60ef0526db38109fb7a6e09d508c1677490e651124db048f9ef3c67b",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-asan-ubsan",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-DCAPSID_SANITIZER_SANDBOX=1",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/include",
+        "-g",
+        "-O1",
+        "-std=c++11",
+        "-fsanitize=address",
+        "-fno-omit-frame-pointer",
+        "-fno-sanitize-recover=all",
+        "-fsanitize=undefined",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/asan-ubsan.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/asan-ubsan-test_sandbox.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 0.787461854,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-asan-ubsan",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-g",
+        "-O1",
+        "-fsanitize=address",
+        "-fsanitize=undefined",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/asan-ubsan.o",
+        "CMakeFiles/test-sandbox.dir/src/sandbox.cc.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/asan-ubsan-test-sandbox"
+      ],
+      "exitCode": 0,
+      "seconds": 0.17387669599999356,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "asan-ubsan-worker_sandbox_namespaces",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/asan-ubsan-test-sandbox",
+        "--namespaces"
+      ],
+      "exitCode": 0,
+      "seconds": 0.013706120000009037,
+      "timeoutSeconds": 10.0,
+      "stdoutSHA256": "1fb2cd8fbdcefcde5487877a0d4be4294daf1aabcca0a6eb7dabddf47dbd47de",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-tsan",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-DCAPSID_SANITIZER_SANDBOX=1",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/include",
+        "-g",
+        "-std=c++11",
+        "-fsanitize=thread",
+        "-fno-omit-frame-pointer",
+        "-fno-sanitize-recover=all",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/tsan.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/tsan-test_sandbox.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 0.27504196400001035,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-tsan",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-g",
+        "-fsanitize=thread",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/tsan.o",
+        "CMakeFiles/test-sandbox.dir/src/sandbox.cc.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/tsan-test-sandbox"
+      ],
+      "exitCode": 0,
+      "seconds": 0.2728994729999954,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "tsan-worker_sandbox_namespaces",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/tsan-test-sandbox",
+        "--namespaces"
+      ],
+      "exitCode": 0,
+      "seconds": 0.022752801999999406,
+      "timeoutSeconds": 10.0,
+      "stdoutSHA256": "1fb2cd8fbdcefcde5487877a0d4be4294daf1aabcca0a6eb7dabddf47dbd47de",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "privateDriverObjectsAndExecutablesOnly": true,
+  "originalRawTsanNamespaceSkipRetained": true,
+  "originalFixtureWorkloadsAssertionsAndOuterTimeoutsUnchanged": true,
+  "noTsanSuppressions": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/root/capsid-verification-20261109/sdk78-tsan-namespace-test-native-r1/tsan-test-sandbox",
+    "--namespaces"
+  ],
+  "activeCommandPid": 428,
+  "actualOriginalFocusedCasesPassed": 3,
+  "results": [
+    {
+      "profile": "production",
+      "name": "worker_sandbox_namespaces",
+      "passed": true,
+      "originalTimeoutSeconds": 10.0,
+      "diagnosticInvocationCapSeconds": 10.0
+    },
+    {
+      "profile": "asan-ubsan",
+      "name": "worker_sandbox_namespaces",
+      "passed": true,
+      "originalTimeoutSeconds": 10.0,
+      "diagnosticInvocationCapSeconds": 10.0
+    },
+    {
+      "profile": "tsan",
+      "name": "worker_sandbox_namespaces",
+      "passed": true,
+      "originalTimeoutSeconds": 10.0,
+      "diagnosticInvocationCapSeconds": 10.0
+    }
+  ],
+  "allGuardedInputsUnchanged": true,
+  "actualTsanNamespaceFeaturesPassedWithoutSuppression": true,
+  "mainSourceStillUnmodified": true,
+  "windowsFinalQualificationStillRequired": true
+}

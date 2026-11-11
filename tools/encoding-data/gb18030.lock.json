@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "source_url": "https://encoding.spec.whatwg.org/index-gb18030.txt",
+  "source_identifier": "ff1c9a923b5d24f9761b3a2de2c0f07b395f9f6f36519508944de4f0415be81c",
+  "source_date": "2024-09-18",
+  "source_sha256": "746b3c55f1a8ec4b90b451f384437a17fd37cd51cd668456a28071a758d10784",
+  "pointer_count": 23940,
+  "packed_format": "unsigned 16-bit code points, little-endian, pointer order, no header",
+  "packed_sha256": "fc4f5cf85ecb30229e4b47bbaee2950b227ec7791ecd4bc75de32e26f0222268"
+}

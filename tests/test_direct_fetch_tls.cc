@@ -341,6 +341,11 @@ public:
                 port_text.c_str(),
                 MBEDTLS_NET_PROTO_TCP);
         }
+        if (result == 0) {
+            // Poll accept so teardown can join the sole owner before it
+            // mutates/frees listener_. Accepted clients remain blocking.
+            result = mbedtls_net_set_nonblock(&listener_);
+        }
         if (result != 0) {
             fail(std::string("cannot initialize mbedTLS test server: ") +
                  std::to_string(result));
@@ -350,19 +355,12 @@ public:
 
     ~MbedTlsServer() {
         stopping_ = true;
-        if (listener_.fd >= 0) {
-#if defined(_WIN32)
-            // mbedtls_net_context.fd is a raw SOCKET on Windows, not a
-            // CRT descriptor — the fd wrappers must not touch it.
-            shutdown(static_cast<SOCKET>(listener_.fd), SD_BOTH);
-#else
-            capsid::win32::shutdown_fd(listener_.fd);
-#endif
-        }
-        mbedtls_net_free(&listener_);
         if (thread_.joinable()) {
             thread_.join();
         }
+        // mbedtls_net_free writes the context's fd. No accept call may
+        // read that same context until this ownership handoff completes.
+        mbedtls_net_free(&listener_);
         mbedtls_ssl_config_free(&config_);
         mbedtls_x509_crt_free(&certificate_);
         mbedtls_pk_free(&private_key_);
@@ -469,8 +467,11 @@ private:
         while (!stopping_) {
             mbedtls_net_context client;
             mbedtls_net_init(&client);
-            const int result =
+            int result =
                 mbedtls_net_accept(&listener_, &client, NULL, 0, NULL);
+            if (result == 0) {
+                result = mbedtls_net_set_block(&client);
+            }
             if (result == 0) {
                 ++accepts_;
                 serve_client(&client);

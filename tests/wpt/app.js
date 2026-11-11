@@ -3,7 +3,7 @@ export default {
         const tests = await globalThis.__wptCompletion;
         const expected = new Map(
             (globalThis.__wptExpectedFailures ?? []).map(item =>
-                [ item.name, item.deviation ]),
+                [ item.name, item ]),
         );
         const observedExpectedFailures = [];
         const failures = [];
@@ -12,10 +12,16 @@ export default {
             if (test.status === 'PASS') {
                 continue;
             }
-            if (expected.has(test.name)) {
+            const contract = expected.get(test.name);
+            if (contract &&
+                test.status === 'FAIL' && test.phase === 'test' &&
+                test.errorName === 'AssertionError' &&
+                test.errorName === contract.errorName &&
+                typeof contract.message === 'string' &&
+                test.message?.split('\n')[0] === contract.message) {
                 observedExpectedFailures.push({
-                    name: test.name,
-                    deviation: expected.get(test.name),
+                    ...test,
+                    deviation: contract.deviation,
                 });
                 expected.delete(test.name);
             } else {
@@ -24,7 +30,7 @@ export default {
         }
         const missingExpectedFailures = Array.from(
             expected,
-            ([ name, deviation ]) => ({ name, deviation }),
+            ([ name, contract ]) => ({ name, ...contract }),
         );
         /*
          * A realm that ran zero subtests must never report success. The upstream

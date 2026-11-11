@@ -1,0 +1,203 @@
+--- a/src/js/polyfills/event-target.js
++++ b/src/js/polyfills/event-target.js
+@@ -37,7 +37,7 @@
+     const retv = privateData.get(event);
+ 
+     if (!retv) {
+-        throw new Error('\'this\' is expected an Event object, but got ' + event);
++        throw new TypeError('Illegal invocation');
+     }
+ 
+     return retv;
+@@ -64,33 +64,59 @@
+ }
+ 
+ 
++// JSG's legacy string round-trip replaces each invalid UTF-8 byte of a
++// lone UTF-16 surrogate. CloseEvent.reason explicitly uses USVString instead.
++function toEventString(value, replacement = '\uFFFD\uFFFD\uFFFD') {
++    if (typeof value === 'symbol') throw new TypeError('Cannot convert a Symbol to a string');
++    const text = String(value);
++    let result = '';
++    for (let index = 0; index < text.length; ++index) {
++        const code = text.charCodeAt(index);
++        if (code >= 0xD800 && code <= 0xDBFF) {
++            const next = text.charCodeAt(index + 1);
++            if (next >= 0xDC00 && next <= 0xDFFF) {
++                result += text[index] + text[++index];
++            } else result += replacement;
++        } else if (code >= 0xDC00 && code <= 0xDFFF) result += replacement;
++        else result += text[index];
++    }
++    return result;
++}
++
+ class Event {
+     constructor(eventType, eventInit = {}) {
+-        if (eventInit && typeof eventInit !== 'object') {
+-            throw TypeError('Value must be an object.');
+-        }
+-
++        if (arguments.length === 0) throw new TypeError('Event requires a type');
++        const type = toEventString(eventType);
++        if (eventInit !== null && typeof eventInit !== 'object' && typeof eventInit !== 'function') {
++            throw new TypeError('Event init must be an object');
++        }
++        const options = eventInit ?? {};
++        const snapshot = { bubbles: !!options.bubbles, cancelable: !!options.cancelable,
++            composed: !!options.composed };
+         privateData.set(this, {
+-            eventInit,
+-            eventPhase: 2,
+-            eventType: String(eventType),
++            eventInit: snapshot,
++            eventPhase: 0,
++            eventType: type,
++            isTrusted: false,
+             target: null,
+             currentTarget: null,
+             canceled: false,
+             stopped: false,
+             immediateStopped: false,
+             passiveListener: null,
+-            timeStamp: Date.now(),
++            timeStamp: 0,
+         });
+ 
+-        // https://heycam.github.io/webidl/#Unforgeable
+-        Object.defineProperty(this, 'isTrusted', { value: false, enumerable: true });
+     }
+ 
+     /**
+      * The type of this event.
+      * @type {string}
+      */
++    get [Symbol.toStringTag]() { return 'Event'; }
++
++    get isTrusted() { return pd(this).isTrusted; }
++
+     get type() {
+         return pd(this).eventType;
+     }
+@@ -117,7 +143,7 @@
+     composedPath() {
+         const currentTarget = pd(this).currentTarget;
+ 
+-        if (!currentTarget) {
++        if (!currentTarget || pd(this).eventPhase === 0) {
+             return [];
+         }
+ 
+@@ -237,12 +263,18 @@
+  * CustomEvent.
+  */
+ class CustomEvent extends Event {
++    constructor(eventType, eventInit) {
++        super(...arguments);
++        pd(this).detail = (eventInit ?? {}).detail;
++    }
++    get [Symbol.toStringTag]() { return 'CustomEvent'; }
++
+     /**
+      * Any data passed when initializing the event.
+      * @type {any}
+      */
+     get detail() {
+-        return pd(this).eventInit.detail ?? null;
++        return pd(this).detail;
+     }
+ }
+ 
+@@ -567,17 +599,22 @@
+ 
+         const self = this ?? globalThis;
+ 
+-        // Set the current target.
++        const data = pd(event);
++        if (data.eventPhase !== 0) {
++            throw new DOMException('The event is already being dispatched', 'InvalidStateError');
++        }
++        const listeners = getListeners(self);
++        data.canceled = data.stopped = data.immediateStopped = false;
++        setEventPhase(event, 2);
++        // The pinned workerd default retains target/currentTarget after dispatch.
+         setTarget(event, self);
+         setCurrentTarget(event, self);
+ 
+         // If listeners aren't registered, terminate.
+-        const listeners = getListeners(self);
+-        const eventName = event.type;
++        const eventName = data.eventType;
+         let node = listeners.get(eventName);
+ 
+         if (!node) {
+-            setCurrentTarget(event, null);
+             setEventPhase(event, 0);
+             return true;
+         }
+@@ -631,11 +668,18 @@
+ 
+         setPassiveListener(event, null);
+         setEventPhase(event, 0);
+-        setCurrentTarget(event, null);
+-
+-        return !event.defaultPrevented;
+-    }
+-}
+-
+-
+-export { defineEventAttribute, EventTarget, Event, CustomEvent };
++
++        return !data.canceled;
++    }
++}
++
++
++// Runtime delivery uses the captured implementation, not a user override.
++const nativeDispatch = EventTarget.prototype.dispatchEvent;
++function dispatchTrustedEvent(target, event) {
++    pd(event).isTrusted = true;
++    return nativeDispatch.call(target, event);
++}
++Object.defineProperty(Event.prototype, 'isTrusted', { enumerable: true });
++
++export { defineEventAttribute, EventTarget, Event, CustomEvent, toEventString, dispatchTrustedEvent };
+--- a/src/js/polyfills/event-target-polyfill.js
++++ b/src/js/polyfills/event-target-polyfill.js
+@@ -1,6 +1,6 @@
+ import core from 'tjs:internal/core';
+ 
+-import { defineEventAttribute, EventTarget, Event, CustomEvent } from './event-target.js';
++import { defineEventAttribute, EventTarget, Event, CustomEvent, dispatchTrustedEvent } from './event-target.js';
+ 
+ class CloseEvent extends Event {
+     #code;
+@@ -73,6 +73,7 @@
+ }
+ 
+ class PromiseRejectionEvent extends Event {
++    get [Symbol.toStringTag]() { return 'PromiseRejectionEvent'; }
+     #promise;
+     #reason;
+ 
+@@ -189,3 +190,6 @@
+ // other way to reach this module) can pick it up without exposing it to
+ // user code via the global EventTarget.
+ core.defineEventAttribute = defineEventAttribute;
++
++// Cached by the native rejection tracker after bootstrap; unavailable to apps.
++core.dispatchTrustedEvent = function(event) { return dispatchTrustedEvent(this, event); };
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -559,7 +559,10 @@
+ #endif
+ 
+     /* Load some builtin references for easy access */
+-    qrt->builtins.dispatch_event_func = JS_GetPropertyStr(ctx, global_obj, "dispatchEvent");
++    qrt->builtins.dispatch_event_func = JS_GetPropertyStr(ctx, core, "dispatchTrustedEvent");
++    if (JS_IsUndefined(qrt->builtins.dispatch_event_func)) {
++        qrt->builtins.dispatch_event_func = JS_GetPropertyStr(ctx, global_obj, "dispatchEvent");
++    }
+     CHECK_EQ(JS_IsUndefined(qrt->builtins.dispatch_event_func), 0);
+     qrt->builtins.promise_event_ctor = JS_GetPropertyStr(qrt->ctx, global_obj, "PromiseRejectionEvent");
+     CHECK_EQ(JS_IsUndefined(qrt->builtins.promise_event_ctor), 0);

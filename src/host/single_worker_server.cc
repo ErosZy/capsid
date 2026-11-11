@@ -1,3 +1,4 @@
+#include "host/request_header_budget.h"
 // M1A single-worker Host data plane.
 //
 // Thread model (matches the frozen ownership rules):
@@ -20,9 +21,14 @@
 // the worker request, worker timeouts map to 504 and route misses to 404.
 
 #include "host/single_worker_server.h"
+#include "host/client_disconnect.h"
+#include "host/metrics.h"
+#include "host/ipc_metrics.h"
+#include <stdexcept>
 
 #include "host/listener_cors.h"
 #include "host/local_capsid_policy.h"
+#include "host/websocket_session.h"
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -272,6 +278,8 @@ bool probe_local_health(const std::string& address,
                              timeout_ms, error);
 }
 
+constexpr std::size_t kMaxRequestHeaderBytes = 8192;
+
 constexpr std::size_t kMaxRequestBodyBytes = 16u * 1024u * 1024u;
 
 // Early-credit window (host): frames are reimbursed on receive while
@@ -401,6 +409,8 @@ struct QueuedResponseBody {
 
 // Request state owned by the io thread only.
 struct PendingRequest {
+    std::shared_ptr<ChannelLease> lease;
+    std::string upgrade_key, upgrade_protocols;
     // Shared ownership: an in-flight async write on the session stream must
     // keep the Session alive until the operation completes, otherwise the
     // completion handler reads a freed stream when the client disconnects
@@ -534,8 +544,12 @@ private:
     beast::flat_buffer buffer_;
     bool closed_ = false;
     bool probe_active_ = false;
+    std::weak_ptr<WebSocketSession> websocket_;
     bool nodelay_disabled_ = false;
     std::optional<std::uint64_t> current_id_;
+    // Owner-io-thread state: a socket waiting for an HTTP request is not
+    // present in requests_ yet, including a reused keep-alive connection.
+    bool reading_request_ = false;
     // The shared listener-CORS decision engine, engaged only while the
     // listener owns CORS. One request is parsed per session at a time
     // (queued requests park further reads), so one instance is exact.
@@ -556,6 +570,13 @@ public:
           signals_(ioc_),
           executor_(std::make_unique<WorkerExecutor>()) {
         executor_->set_log_identity(options_.application, std::string());
+        if(channel_budget_->parent()!=service_channel_budget_.get())
+            throw std::invalid_argument("listener channel budget must use the service parent");
+        executor_->set_channel_budget(service_channel_budget_);
+        if(options_.metrics) {
+            options_.metrics->observe_channel_budget(service_channel_budget_);
+            options_.metrics->observe_channel_budget(channel_budget_,options_.channel_listener_name);
+        }
         // Events queued by the executor's worker thread wake this io thread
         // through a weak post: the pending handler must never keep the Impl
         // alive on its own — once the facade stopped and released it, a
@@ -585,10 +606,16 @@ public:
         return metrics;
     }
     std::uint16_t bound_port() const { return bound_port_; }
+    capsid::WorkerExitStatus worker_exit_status() const {
+        return executor_->exit_status();
+    }
     // M2 item 7: the process-wide structured log (null in unit fixtures).
     StructuredLog* log() const { return options_.log; }
     bool activate_accept(std::string* error);
-    bool adopt_socket(tcp::socket socket);
+    bool try_adopt_socket(tcp::socket& socket);
+    asio::any_io_executor accept_executor() {
+        return ioc_.get_executor();
+    }
     bool worker_available() const {
         return worker_available_.load(std::memory_order_relaxed);
     }
@@ -645,6 +672,7 @@ private:
     void on_drain_deadline(const beast::error_code ec);
     void maybe_complete_drain();
     void complete_drain();
+    void close_external_admission();
     static std::uint64_t steady_ms();
     void pump_events();
     void handle_worker_event(WorkerEvent event);
@@ -704,6 +732,7 @@ private:
     Metrics metrics_;
     bool metrics_enabled_ = false;
     void write_metrics_line();
+    void write_channel_metrics_line();
 
     // Credit aggregation (CAPSID_CREDIT_GRANT_THRESHOLD env var; 0 = off).
     // When non-zero, response credit is accumulated per-request and only
@@ -758,7 +787,13 @@ private:
     std::optional<tcp::acceptor> acceptor_;
     asio::signal_set signals_;
     std::map<std::uint64_t, std::shared_ptr<Session>> sessions_;
+    std::shared_ptr<ServiceChannelBudget> service_channel_budget_ = options_.channel_service_budget ?
+        options_.channel_service_budget : std::make_shared<ServiceChannelBudget>(options_.channel_service_limits);
+    std::shared_ptr<ServiceChannelBudget> channel_budget_ = options_.channel_listener_budget ?
+        options_.channel_listener_budget : std::make_shared<ServiceChannelBudget>(options_.channel_listener_limits,service_channel_budget_);
+    ChannelLedger channel_ledger_{ChannelLedger::Limits{}, channel_budget_.get()};
     std::map<std::uint64_t, PendingRequest> requests_;
+    std::map<std::uint32_t, std::shared_ptr<WebSocketSession>> websockets_;
     std::uint64_t next_request_id_ = 1;
     std::uint64_t next_session_id_ = 1;
     bool shutting_down_ = false;
@@ -793,6 +828,11 @@ private:
     // thread, like accept_guard_.
     std::optional<asio::executor_work_guard<asio::io_context::executor_type>>
         external_guard_;
+    // Admission and the actual post share a critical section with guard
+    // release. Atomic preflight alone cannot keep run() alive while the
+    // accept thread allocates a transport or prepares a handler.
+    std::mutex adoption_mutex_;
+    bool adoption_open_ = false;  // Protected by adoption_mutex_.
     std::atomic<bool> accept_activated_ = false;
     // Activation acknowledgement: the io thread sets accept_armed_ after
     // do_accept ran (or was rejected); activate_accept() waits for it so
@@ -851,13 +891,18 @@ void Session::start() {
 //     an RST and fails the request;
 //   - data: a pipelined second request, which v1 forbids (§8.3) — close.
 void Session::start_disconnect_probe() {
+    if (current_id_) {
+        const auto found = impl_->requests_.find(*current_id_);
+        if (found != impl_->requests_.end() && !found->second.upgrade_key.empty()) return;
+    }
     if (probe_active_ || closed_) {
         return;
     }
     probe_active_ = true;
+    const auto request_id = current_id_;
     stream_.socket().async_wait(
         tcp::socket::wait_read,
-        [self = shared_from_this()](beast::error_code ec) {
+        [self = shared_from_this(), request_id](beast::error_code ec) {
             self->probe_active_ = false;
             if (self->closed_) {
                 return;
@@ -866,21 +911,20 @@ void Session::start_disconnect_probe() {
             // request already finished and its bytes belong to the next
             // request being parsed): leave the data in place and re-arm from
             // the next handle_request.
-            if (!self->current_id_.has_value()) {
+            if (self->current_id_ != request_id || !self->current_id_) {
+                self->start_disconnect_probe();
                 return;
             }
             if (ec) {
                 self->close();
                 return;
             }
-            char scratch = 0;
-            const ssize_t peeked = ::recv(
-                self->stream_.socket().native_handle(), &scratch, 1,
-                MSG_PEEK);
-            (void)scratch;
-            if (peeked < 0) {
+            const auto probe = probe_client_read(self->stream_.socket());
+            if (probe == ClientReadProbe::kRetry) {
+                self->start_disconnect_probe();
+            } else if (probe == ClientReadProbe::kError) {
                 self->close();
-            } else if (peeked > 0) {
+            } else if (probe == ClientReadProbe::kData) {
                 // Data arrived while a request is still registered. If the
                 // response has not reached a point where the client could
                 // legitimately send the next request, this is HTTP
@@ -901,14 +945,27 @@ void Session::start_disconnect_probe() {
 
 void Session::read_request() {
     clear_current_request();
+    if (impl_->worker_dead_ || impl_->shutting_down_ || closed_) {
+        close();
+        return;
+    }
     auto parser = std::make_shared<http::request_parser<http::string_body>>();
     parser->body_limit(kMaxRequestBodyBytes);
+    auto reader = std::make_shared<HeaderLimitedReadStream<beast::tcp_stream>>(
+        stream_, kMaxRequestHeaderBytes);
+    if (!reader->observe_initial_buffer(buffer_.data())) {
+        close();
+        return;
+    }
+    reading_request_ = true;
     http::async_read(
-        stream_,
+        *reader,
         buffer_,
         *parser,
-        [self = shared_from_this(), parser](beast::error_code ec, std::size_t) {
-            if (ec) {
+        [self = shared_from_this(), parser, reader](beast::error_code ec, std::size_t) {
+            (void)reader;
+            self->reading_request_ = false;
+            if (ec || self->closed_) {
                 self->close();
                 return;
             }
@@ -938,17 +995,6 @@ void Session::handle_request(http::request<http::string_body> request) {
             return;
         }
     }
-    // E-1 admission gate chain (§10.3), v1 fixed-pool form:
-    //   ① listener/header gate — the request head has been parsed; the v1
-    //     listener accepts into the shard and admits here.
-    //   ④ shard pool capacity — a dead worker means no READY worker on
-    //     this shard: 503, before any admission bookkeeping.
-    if (impl_->worker_dead()) {
-        send_simple(http::status::service_unavailable, "worker unavailable",
-                    false, request.version());
-        return;
-    }
-
     RequestRoutingPolicy policy;
     policy.mode = impl_->options_.routing_mode;
     policy.public_scheme = impl_->options_.public_scheme;
@@ -960,6 +1006,16 @@ void Session::handle_request(http::request<http::string_body> request) {
     views.reserve(16);
     for (const auto& field : request.base()) {
         views.push_back({field.name_string(), field.value()});
+    }
+    const auto rejection = websocket_upgrade_rejection(check_websocket_upgrade(
+        views, request.method_string(), request.version()));
+    if (rejection.status != 0) {
+        send_simple(static_cast<http::status>(rejection.status), rejection.body,
+                    false, request.version());
+        return;
+    }
+    if (check_websocket_upgrade(views,request.method_string(),request.version())==WebSocketUpgradeCheck::kValid && !request.body().empty()) {
+        send_simple(http::status::bad_request,"WebSocket upgrade must be bodyless",false,request.version()); return;
     }
     const RequestNormalizationResult normalized = normalize_public_request(
         policy, request.target(), views);
@@ -978,48 +1034,10 @@ void Session::handle_request(http::request<http::string_body> request) {
         return;
     }
 
-    // FetchRPC v4 WS-C3 (RFC 6455 §4.2.1, docs/fetchrpc-v4.md §2): the
-    // host owns the WebSocket handshake gates. A request that presents
-    // itself as a websocket upgrade is validated before admission; a
-    // malformed key is 400 and an unsupported version is 426 naming the
-    // supported one. A valid handshake still flows to the worker as a
-    // normal request until the v4 surface lands — the worker's non-101
-    // answer is the reject path.
-    switch (check_websocket_upgrade(views)) {
-    case WebSocketUpgradeCheck::kBadKey:
-        send_simple(http::status::bad_request, "invalid Sec-WebSocket-Key",
+    if (impl_->worker_dead()) {
+        send_simple(http::status::service_unavailable, "worker unavailable",
                     false, request.version());
         return;
-    case WebSocketUpgradeCheck::kUnsupportedVersion: {
-        auto response =
-            std::make_shared<http::response<http::string_body>>();
-        response->result(http::status::upgrade_required);
-        response->version(request.version());
-        response->keep_alive(false);
-        response->set(http::field::sec_websocket_version, "13");
-        response->set(http::field::content_type, "text/plain");
-        if (cors_) {
-            cors_->stamp(*response);
-        }
-        response->body() = "unsupported Sec-WebSocket-Version";
-        response->prepare_payload();
-        http::async_write(
-            stream_,
-            *response,
-            [self = shared_from_this(), response](
-                beast::error_code ec, std::size_t) {
-                (void)response;
-                if (!ec && !self->closed_) {
-                    self->close();
-                } else {
-                    self->close();
-                }
-            });
-        return;
-    }
-    case WebSocketUpgradeCheck::kValid:
-    case WebSocketUpgradeCheck::kNone:
-        break;
     }
 
     // ② Host-global inflight/queue gate is merged with ③ (the App
@@ -1063,6 +1081,7 @@ void Session::close() {
         return;
     }
     closed_ = true;
+    if (auto websocket = websocket_.lock()) websocket->abort();
     // A request parked in the admission queue has no request_id yet; it is
     // owned by the queue and must be dropped here (its connection is
     // closing, so the parked request can never be served).
@@ -1085,6 +1104,9 @@ void Session::send_simple(http::status status,
     response->result(status);
     response->version(version);
     response->keep_alive(keep_alive);
+    if (status == http::status::upgrade_required) {
+        response->set(http::field::sec_websocket_version, "13");
+    }
     response->set(http::field::content_type, "text/plain");
     if (cors_) {
         cors_->stamp(*response);
@@ -1342,8 +1364,8 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
             capsid_worker** out,
             std::string* factory_error) -> bool {
         capsid_worker* worker = nullptr;
-        const capsid_result spawn_result =
-            capsid_worker_spawn(&config, &worker);
+        const capsid_result spawn_result = capsid::host::
+            spawn_with_protocol(&config, options_.protocol, &worker);
         if (spawn_result != CAPSID_OK) {
             if (factory_error != nullptr) {
                 *factory_error = "worker spawn failed: " +
@@ -1388,7 +1410,7 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         return true;
     };
     factory.expected_ready = expected_worker_ready_proof(
-        local_policy->bindings, options_.strict_sandbox);
+        local_policy->bindings, config);
 
     // The executor's worker thread takes exclusive ownership of every
     // further Runtime API call (READY arrives through next_event). On
@@ -1435,6 +1457,8 @@ bool Impl::start(const std::vector<std::uint8_t>& bundle,
         // adopt_socket() sessions and timers have somewhere to run; the
         // guard is released by shutdown/drain.
         external_guard_.emplace(asio::make_work_guard(ioc_));
+        std::lock_guard<std::mutex> lock(adoption_mutex_);
+        adoption_open_ = true;
     } else if (options_.defer_accept) {
         // Pool barrier: the shard is fully prepared (worker READY,
         // listener bound) but must not accept a single connection until
@@ -1588,26 +1612,67 @@ bool Impl::activate_accept(std::string* error) {
     return true;
 }
 
-bool Impl::adopt_socket(tcp::socket socket) {
-    if (shutting_down_ || !worker_available_.load(std::memory_order_relaxed) ||
+bool Impl::try_adopt_socket(tcp::socket &socket) {
+    // This preflight runs on the pool accept thread. shutting_down_ belongs
+    // to the shard reactor; only atomic lifecycle gates may be read here.
+    // The posted handler below rechecks reactor-local state before adoption.
+    if (stop_requested_.load(std::memory_order_acquire) ||
+        !worker_available_.load(std::memory_order_relaxed) ||
         !io_running_.load(std::memory_order_relaxed) || !options_.external_accept) {
         return false;
     }
-    auto transport = std::make_shared<tcp::socket>(std::move(socket));
-    io_post([weak = weak_from_this(), transport] {
+    // Executor ownership: a moved socket keeps the reactor it was accepted
+    // on. One whose callbacks would run on another io thread must never
+    // enter this shard — its reads/writes and this shard's Worker events
+    // would mutate the same HTTP/WebSocket session state concurrently
+    // (the Windows static-pool heap-corruption regression).
+    if (socket.get_executor() != ioc_.get_executor()) {
+        return false;
+    }
+    // Allocate an unopened transport first. A rejected admission must leave
+    // the caller's live peer available for selection on another reactor.
+    auto transport = std::make_shared<tcp::socket>(socket.get_executor());
+    // Prepare allocating captures before taking the admission lock. The
+    // owner may finish while this work runs; the gate below must recheck.
+    std::function<void()> adoption = [weak = weak_from_this(), transport] {
         const std::shared_ptr<Impl> alive = weak.lock();
         if (!alive || alive->shutting_down_ ||
+            alive->draining_.load(std::memory_order_acquire) ||
             !alive->worker_available_.load(std::memory_order_relaxed)) {
             boost::system::error_code ignored;
             transport->close(ignored);
             return;
         }
-        auto session = std::make_shared<Session>(
-            alive, std::move(*transport));
+        auto session = std::make_shared<Session>(alive, std::move(*transport));
         alive->sessions_[alive->next_session_id_++] = session;
         session->start();
-    });
+    };
+    std::lock_guard<std::mutex> lock(adoption_mutex_);
+    if (!adoption_open_ || stop_requested_.load(std::memory_order_acquire) ||
+        draining_.load(std::memory_order_acquire) ||
+        !worker_available_.load(std::memory_order_relaxed) ||
+        !io_running_.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    // post never invokes the handler inline. Once it has enqueued work,
+    // guard release cannot strand that handler on an already-drained io.
+    *transport = std::move(socket);
+    try {
+        io_post(std::move(adoption));
+    } catch (...) {
+        // Asio allocates its operation before enqueueing it. Restore the
+        // peer if that allocation fails, then propagate the original error.
+        socket = std::move(*transport);
+        throw;
+    }
     return true;
+}
+
+void Impl::close_external_admission() {
+    std::lock_guard<std::mutex> lock(adoption_mutex_);
+    adoption_open_ = false;
+    if (external_guard_)
+        external_guard_->reset();
 }
 
 void Impl::arm_accept_on_io_thread() {
@@ -1635,10 +1700,6 @@ void Impl::request_stop() {
     if (stop_requested_.exchange(true)) {
         return;  // idempotent: nothing is touched again
     }
-    // The Runtime shutdown frame is queued at most once regardless of how
-    // many stop sources fire (request_stop, SIGTERM, destructor): the
-    // executor's request_shutdown owns the exactly-once gate.
-    executor_->request_shutdown();
     // When the event-loop thread exists, the acceptor/session teardown
     // runs on it (the only thread allowed to touch Beast objects). The
     // weak capture is safe even from the destructor: if the loop already
@@ -1649,6 +1710,10 @@ void Impl::request_stop() {
                 alive->on_signal(0);
             }
         });
+    } else {
+        // Startup has no live transport yet. Its stop gate handles the
+        // race with event-loop creation before start() returns.
+        executor_->request_shutdown();
     }
 }
 
@@ -1676,6 +1741,10 @@ bool Impl::wait(std::string* error) {
             io_thread_.join();
         }
         executor_->stop_and_join();
+        // No reactor or worker thread can emit another interval now.
+        // Flush the retained final client deltas even if the io loop had
+        // already ended before the reaper's last notification.
+        write_metrics_line();
     });
     if (error != nullptr) {
         *error = "server stopped";
@@ -1730,7 +1799,8 @@ void Impl::on_signal(int) {
     // operation_aborted on the io thread and releases itself.
     beast::error_code ignored;
     signals_.cancel(ignored);
-    // Close every client session; each close cancels its in-flight request.
+    // Close HTTP requests immediately. Upgraded sessions first send Going
+    // Away and complete a bounded handshake on this same owner executor.
     const std::vector<std::uint64_t> session_ids = [this] {
         std::vector<std::uint64_t> ids;
         ids.reserve(sessions_.size());
@@ -1742,13 +1812,14 @@ void Impl::on_signal(int) {
     for (const std::uint64_t id : session_ids) {
         auto it = sessions_.find(id);
         if (it != sessions_.end()) {
-            it->second->close();
+            if (auto websocket = it->second->websocket_.lock()) websocket->shutdown();
+            else it->second->close();
         }
     }
     // The shutdown frame is queued at most once even when several stop
     // sources fire (SIGTERM, request_stop, destructor): a duplicate would
     // trigger a Runtime double shutdown; the executor owns the gate.
-    executor_->request_shutdown();
+    if (websockets_.empty()) executor_->request_shutdown();
     // No ioc_.stop() here: every cancelled handler (signal wait, accept,
     // sessions) completes on the io thread and releases its captures, so
     // the loop drains naturally and run() returns with an empty queue. A
@@ -1758,9 +1829,7 @@ void Impl::on_signal(int) {
     if (accept_guard_) {
         accept_guard_->reset();
     }
-    if (external_guard_) {
-        external_guard_->reset();
-    }
+    close_external_admission();
 }
 
 void Impl::begin_drain(std::uint64_t deadline_ms) {
@@ -1789,9 +1858,7 @@ void Impl::start_drain_on_io(std::uint64_t deadline_ms) {
     if (accept_guard_) {
         accept_guard_->reset();
     }
-    if (external_guard_) {
-        external_guard_->reset();
-    }
+    close_external_admission();
     if (deadline_ms != 0) {
         drain_deadline_ = SteadyClock::now() +
                           std::chrono::milliseconds(deadline_ms);
@@ -1846,7 +1913,7 @@ void Impl::maybe_complete_drain() {
     if (!draining_.load() || shutting_down_) {
         return;
     }
-    if (!requests_.empty() || !queue_.empty()) {
+    if (!requests_.empty() || !queue_.empty() || !websockets_.empty()) {
         return;  // §7.5 row 2: keep serving the in-flight requests
     }
     complete_drain();
@@ -1858,6 +1925,11 @@ void Impl::complete_drain() {
     }
     shutting_down_ = true;
     worker_available_ = false;
+    // A completed drain has no later signal to wait for. Leave cancelled
+    // handlers on the owner loop so they release their captures normally;
+    // an armed signal wait would otherwise keep wait() blocked after reap.
+    beast::error_code ignored;
+    signals_.cancel(ignored);
     drain_finished_.store(true, std::memory_order_relaxed);
     const std::uint64_t started =
         drain_started_ms_.load(std::memory_order_relaxed);
@@ -1868,9 +1940,7 @@ void Impl::complete_drain() {
     if (accept_guard_) {
         accept_guard_->reset();
     }
-    if (external_guard_) {
-        external_guard_->reset();
-    }
+    close_external_admission();
     // The deadline timer must not pin the io loop after the drain finished:
     // destroy it here (safe from within its own handler) or run() would
     // keep waiting for a deadline that no longer matters.
@@ -1917,7 +1987,21 @@ void Impl::pump_events() {
 }
 
 void Impl::handle_worker_event(WorkerEvent event) {
+    if (event.type == WorkerEvent::Type::kChannelData || event.type == WorkerEvent::Type::kChannelCredit ||
+        event.type == WorkerEvent::Type::kChannelClose || event.type == WorkerEvent::Type::kChannelCancel ||
+        event.type == WorkerEvent::Type::kChannelAck) {
+        auto found = websockets_.find(event.channel_id);
+        if (found != websockets_.end()) { auto connection = found->second; connection->on_event(std::move(event)); }
+        return;
+    }
     switch (event.type) {
+    case WorkerEvent::Type::kChannelDial:
+    case WorkerEvent::Type::kChannelReady: return; // owned by the executor's dialer
+    case WorkerEvent::Type::kChannelData:
+    case WorkerEvent::Type::kChannelCredit:
+    case WorkerEvent::Type::kChannelClose:
+    case WorkerEvent::Type::kChannelCancel:
+    case WorkerEvent::Type::kChannelAck: return;
     case WorkerEvent::Type::kRequestCredit: {
         auto it = requests_.find(event.request_id);
         if (it == requests_.end()) {
@@ -1936,6 +2020,40 @@ void Impl::handle_worker_event(WorkerEvent event) {
             return;
         }
         PendingRequest& pending = it->second;
+        if (event.upgrade) {
+            std::string handshake;
+            if (pending.upgrade_key.empty() || !pending.session || pending.session->closed() ||
+                !sanitize_response_headers(&event.headers) ||
+                !websocket_handshake(pending.upgrade_key, pending.upgrade_protocols, event.headers, &handshake)) {
+                Command cancel; cancel.type=CommandType::kChannelCancel; cancel.channel_id=event.channel_id;
+                cancel.channel_flags=CAPSID_CANCEL_REASON_PROTOCOL_VIOLATION; executor_->submit(std::move(cancel));
+                reject_response_head(event.request_id, "invalid WebSocket response"); return;
+            }
+            auto session=pending.session;
+            auto lease=pending.lease; lease->commit_upgrade();
+            auto connection=std::make_shared<WebSocketSession>(session->stream_, session, lease, event.channel_id,
+                executor_->channel_limits(), write_timeout_ms_,
+                [this](Command command) { return executor_->try_submit_channel(std::move(command)); },
+                [weak=weak_from_this(), id=event.channel_id, session] {
+                    if (auto alive=weak.lock()) {
+                        alive->websockets_.erase(id);
+                        session->close();
+                        if (alive->shutting_down_ && alive->websockets_.empty())
+                            alive->executor_->request_shutdown();
+                        alive->maybe_complete_drain();
+                        alive->write_channel_metrics_line();
+                    }
+                },channel_budget_);
+            session->websocket_=connection;
+            session->clear_current_request();
+            std::vector<uint8_t> leftovers(session->buffer_.size());
+            asio::buffer_copy(asio::buffer(leftovers), session->buffer_.data()); session->buffer_.consume(leftovers.size());
+            websockets_.emplace(event.channel_id, connection);
+            requests_.erase(it); executor_->retire_terminal_request(event.request_id); pump_queue();
+            connection->start(std::move(handshake),std::move(leftovers));
+            return;
+        }
+        if (pending.lease) pending.lease->reject_upgrade();
         // Response semantics gate (design §8.3): the Runtime decoder only
         // validates the FetchRPC binary structure, so the Host filters
         // hop-by-hop fields, validates names/values, and rejects duplicate
@@ -2319,6 +2437,9 @@ void Impl::handle_worker_event(WorkerEvent event) {
         return;
     }
     case WorkerEvent::Type::kExit: {
+        std::vector<std::shared_ptr<WebSocketSession>> abandoned_connections;
+        for (auto &item:websockets_) abandoned_connections.push_back(item.second);
+        for (auto &connection:abandoned_connections) connection->abort(false);
         worker_dead_ = true;
         worker_available_ = false;
         // E-1 admission: every parked request dies with the worker — no
@@ -2331,7 +2452,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
             if (abandoned.session && !abandoned.session->closed()) {
                 abandoned.session->send_simple(
                     http::status::service_unavailable, "worker exited",
-                    abandoned.request.keep_alive(),
+                    false,
                     abandoned.request.version());
             }
         }
@@ -2349,9 +2470,7 @@ void Impl::handle_worker_event(WorkerEvent event) {
         if (accept_guard_) {
             accept_guard_->reset();
         }
-        if (external_guard_) {
-            external_guard_->reset();
-        }
+        close_external_admission();
         const std::vector<std::uint64_t> request_ids = [this] {
             std::vector<std::uint64_t> ids;
             ids.reserve(requests_.size());
@@ -2369,7 +2488,6 @@ void Impl::handle_worker_event(WorkerEvent event) {
             const std::shared_ptr<Session> session = pending.session;
             const bool head_sent = pending.head_sent;
             const bool writing = pending.writing;
-            const bool keep_alive = pending.keep_alive;
             const unsigned version = pending.version;
             cancel_request(request_id);
             // Same reasoning as the timeout path: once any response byte
@@ -2380,9 +2498,19 @@ void Impl::handle_worker_event(WorkerEvent event) {
                 }
             } else if (session && !session->closed()) {
                 session->send_simple(http::status::service_unavailable,
-                                     "worker exited", keep_alive, version);
+                                     "worker exited", false, version);
             }
         }
+        // Connections still parsing their first/next HTTP request have no
+        // PendingRequest entry. They cannot be served after this Worker
+        // exits and would otherwise pin both the socket and the reactor.
+        // Keep in-flight local/error response writes intact; read_request()
+        // closes them when the write finishes instead of rearming a read.
+        std::vector<std::shared_ptr<Session>> idle_sessions;
+        for (const auto& entry : sessions_) {
+            if (entry.second->reading_request_) idle_sessions.push_back(entry.second);
+        }
+        for (const auto& session : idle_sessions) session->close();
         return;
     }
     }
@@ -2611,6 +2739,7 @@ void Impl::write_end_block(std::uint64_t request_id) {
             // return the streaming permit exactly once.
             self->release_streaming_permit(pending);
             self->requests_.erase(it);
+            self->write_channel_metrics_line();
             // An inflight slot just freed: admit the next parked request
             // (E-1). The chunked end-block is a request-completion path
             // like finalize_request; without this, a parked request behind
@@ -2794,6 +2923,21 @@ void Impl::begin_request(
     const http::request<http::string_body>& request,
     const NormalizedPublicRequest& normalized) {
     PendingRequest pending;
+    std::vector<PublicRequestHeaderView> upgrade_views;
+    for (const auto &field:request.base()) upgrade_views.push_back({field.name_string(),field.value()});
+    const bool upgrade=check_websocket_upgrade(upgrade_views,request.method_string(),request.version())==WebSocketUpgradeCheck::kValid;
+    if (upgrade && !(executor_->effective_channel_caps() & CAPSID_PROTOCOL_CAP_UPGRADE)) {
+        session->send_simple(http::status::service_unavailable,"worker does not support WebSocket",false,request.version()); return;
+    }
+    pending.lease=std::make_shared<ChannelLease>(channel_ledger_,upgrade);
+    if (!pending.lease->valid()) { session->send_simple(http::status::too_many_requests,"channel capacity exhausted",false,request.version()); return; }
+    if (upgrade) {
+        pending.upgrade_key=std::string(request[http::field::sec_websocket_key]);
+        for (const auto &field:request.base()) if (field.name()==http::field::sec_websocket_protocol) {
+            if (!pending.upgrade_protocols.empty()) pending.upgrade_protocols+=",";
+            pending.upgrade_protocols+=std::string(field.value());
+        }
+    }
     pending.session = session;
     pending.method = std::string(request.method_string());
     pending.keep_alive = request.keep_alive();
@@ -2809,7 +2953,11 @@ void Impl::begin_request(
     begin.method = pending.method;
     begin.url = normalized.url;
     begin.headers = normalized.headers;
+    begin.upgrade_request=upgrade;
+    begin.channel_max_message=options_.protocol.options.max_message_bytes ? options_.protocol.options.max_message_bytes : 1024*1024;
+    if (upgrade) begin.headers.push_back({"upgrade","websocket"});
     begin.end_request = bodyless_enabled_ && !has_body;
+    if (upgrade) begin.end_request=true;
     requests_[request_id] = std::move(pending);
     executor_->submit(std::move(begin));
 
@@ -2870,6 +3018,7 @@ void Impl::cancel_request(std::uint64_t request_id) {
     // worker exit) returns the streaming permit exactly once.
     release_streaming_permit(it->second);
     requests_.erase(it);
+    write_channel_metrics_line();
     // The tombstone drops late commands for this request; it is removed
     // again when the matching cancel reaches the worker thread, so the
     // set stays bounded by the cancels still in flight.
@@ -2902,6 +3051,7 @@ void Impl::finalize_request(std::uint64_t request_id,
     release_streaming_permit(it->second);
     const bool keep_alive = it->second.keep_alive;
     requests_.erase(it);
+    write_channel_metrics_line();
     // An inflight slot just freed: admit the next parked request (E-1)
     // before resuming the session read.
     pump_queue();
@@ -3333,10 +3483,17 @@ bool Impl::sanitize_response_headers(
     return true;
 }
 
+void Impl::write_channel_metrics_line() {
+    if (!metrics_enabled_) return;
+    const std::string channel_line="capsid-host: channel-metrics {\"service\":"+
+        channel_budget_metrics_json(service_channel_budget_->snapshot())+",\"listener\":"+
+        channel_budget_metrics_json(channel_budget_->snapshot())+"}\n";
+    std::fwrite(channel_line.data(),1,channel_line.size(),stderr);
+}
+
 void Impl::write_metrics_line() {
-    if (!metrics_enabled_) {
-        return;
-    }
+    if (!metrics_enabled_) return;
+    write_channel_metrics_line();
     // Delta snapshot: exchange() reads and zeroes each counter in one
     // atomic step, so a line is the delta since the previous line and a
     // concurrent increment (worker thread) is never torn or lost. The
@@ -3375,62 +3532,14 @@ void Impl::write_metrics_line() {
 #undef CAPSID_METRIC_EXCHANGE
 
     capsid::ClientIpcMetrics client_metrics;
-    // The worker may already be destroyed (exited) when the final metrics
-    // line is written; snapshot nothing then — the client block prints
-    // zeroed fields. Ownership of the handle always stays with the executor.
-    if (capsid_worker* live = executor_->worker()) {
-        client_ipc_metrics_snapshot(live, &client_metrics);
-    }
-    // Write one compact JSON line to stderr; the runner captures it.
-    std::fprintf(stderr,
-        "{"
-        "\"host\":{"
-        "\"commands_submitted\":%lu,\"command_batches\":%lu,"
-        "\"commands_executed\":%lu,\"flush_calls\":%lu,\"flush_eagain\":%lu,"
-        "\"events_queued\":%lu,\"asio_posts\":%lu,"
-        "\"response_heads\":%lu,\"response_body_frames\":%lu,"
-        "\"response_ends\":%lu,\"grant_commands\":%lu,"
-        "\"credit_bytes_granted\":%lu,\"credit_stall_count\":%lu,"
-        "\"command_queue_hw\":%zu,\"event_queue_hw\":%zu},"
-        "\"client\":{"
-        "\"queued_frames\":%lu,\"queued_wire_bytes\":%lu,\"queue_would_block\":%lu,"
-        "\"flush_calls\":%lu,\"socket_write_calls\":%lu,\"socket_write_bytes\":%lu,"
-        "\"socket_write_eagain\":%lu,\"next_event_calls\":%lu,\"parsed_frames\":%lu,"
-        "\"parser_payload_copied_bytes\":%lu,"
-        "\"socket_read_calls\":%lu,\"socket_read_bytes\":%lu,"
-        "\"socket_read_eagain\":%lu,\"queued_bytes_hw\":%zu"
-        "}}\n",
-        // host
-        (unsigned long)commands_submitted,
-        (unsigned long)command_batches,
-        (unsigned long)commands_executed,
-        (unsigned long)flush_calls,
-        (unsigned long)flush_eagain,
-        (unsigned long)events_queued,
-        (unsigned long)asio_posts,
-        (unsigned long)response_heads,
-        (unsigned long)response_body_frames,
-        (unsigned long)response_ends,
-        (unsigned long)grant_commands,
-        (unsigned long)credit_bytes_granted,
-        (unsigned long)credit_stall_count,
-        (size_t)command_queue_high_water,
-        (size_t)event_queue_high_water,
-        // client
-        (unsigned long)client_metrics.queued_frames,
-        (unsigned long)client_metrics.queued_wire_bytes,
-        (unsigned long)client_metrics.queue_would_block,
-        (unsigned long)client_metrics.flush_calls,
-        (unsigned long)client_metrics.socket_write_calls,
-        (unsigned long)client_metrics.socket_write_bytes,
-        (unsigned long)client_metrics.socket_write_eagain,
-        (unsigned long)client_metrics.next_event_calls,
-        (unsigned long)client_metrics.parsed_frames,
-        (unsigned long)client_metrics.parser_payload_copied_bytes,
-        (unsigned long)client_metrics.socket_read_calls,
-        (unsigned long)client_metrics.socket_read_bytes,
-        (unsigned long)client_metrics.socket_read_eagain,
-        (size_t)client_metrics.queued_bytes_high_water);
+    (void)executor_->snapshot_client_metrics(&client_metrics);
+    write_ipc_metrics_line(stderr,
+        HostIpcMetrics{commands_submitted, command_batches, commands_executed,
+            flush_calls, flush_eagain, events_queued,
+            asio_posts, response_heads, response_body_frames,
+            response_ends, grant_commands, credit_bytes_granted,
+            credit_stall_count, command_queue_high_water, event_queue_high_water},
+        client_metrics);
 }
 
 SingleWorkerServer::SingleWorkerServer(SingleWorkerServerOptions options)
@@ -3464,6 +3573,10 @@ SingleWorkerServer::DrainMetrics SingleWorkerServer::drain_metrics() const {
     return impl_->drain_metrics();
 }
 
+capsid::WorkerExitStatus SingleWorkerServer::worker_exit_status() const {
+    return impl_->worker_exit_status();
+}
+
 bool SingleWorkerServer::wait(std::string* error) {
     return impl_->wait(error);
 }
@@ -3477,7 +3590,15 @@ bool SingleWorkerServer::activate_accept(std::string* error) {
 }
 
 bool SingleWorkerServer::adopt_socket(boost::asio::ip::tcp::socket socket) {
-    return impl_->adopt_socket(std::move(socket));
+    return impl_->try_adopt_socket(socket);
+}
+
+bool SingleWorkerServer::try_adopt_socket(boost::asio::ip::tcp::socket& socket) {
+    return impl_->try_adopt_socket(socket);
+}
+
+boost::asio::any_io_executor SingleWorkerServer::accept_executor() {
+    return impl_->accept_executor();
 }
 
 bool SingleWorkerServer::worker_available() const {

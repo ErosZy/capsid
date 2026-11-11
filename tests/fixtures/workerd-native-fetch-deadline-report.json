@@ -1,0 +1,13 @@
+{
+  "schema": "capsid-native-fetch-deadline-primary-metadata-v1",
+  "compressedSHA256": "cbc2ea162f4c07ae375d67e0a9f3efbd604093323f256cb7edc8e5b2d0db5025",
+  "rawSHA256": "5e493bc16e5b7120eb9dfc916bd740143ad20756c3b1fd7cc617bd5714da18be",
+  "rawBytes": 211116,
+  "identities": {
+    "fixtureSHA256": "09eaff4e201805cf9c090c9b24858e4ce05c3e47bf042ecf2db64afb04cf53c5",
+    "peerSHA256": "4db8dbc2e666a4cbbfb9875726a4cc198b00c936f302f9dd7489440263fbd384",
+    "sourceModelSHA256": "0d41e9c66bb9186aa1989122fed79f16b96e8267b1e542fcd14cab2a2297686b",
+    "captureSHA256": "19131474270b78bb342bc0d2b5ee8952389f2bd1784839e117d957c27b44a31b",
+    "contractSHA256": "9dc1a82cd2b889af84406138983400e83c4d9a02212d2a8818555c2aa8a578b1"
+  }
+}

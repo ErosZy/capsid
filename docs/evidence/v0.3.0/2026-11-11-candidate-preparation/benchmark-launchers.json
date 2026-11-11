@@ -1,0 +1,121 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 337,
+  "sourceSHA256": {
+    "/mnt/e/capsid/bench/qps_probe.py": "aa07ee77e3ce41b0459bc255e1273d519a8a5ffbf4c7fe5350dadcf3b9c1a82a",
+    "/mnt/e/capsid/tests/test_benchmark_qps_probe.py": "a8ebd1aba097b462aa397d95468a3738ae5af7634864bb7a46dc57abb828ada0"
+  },
+  "steps": [
+    {
+      "label": "fpm-master-actual-config",
+      "command": [
+        "/usr/sbin/php-fpm8.3",
+        "-tt",
+        "-F",
+        "-y",
+        "/root/capsid-verification-20261109/qps-launcher-config-r1/php-fpm.conf",
+        "--allow-to-run-as-root"
+      ],
+      "exitCode": 0,
+      "seconds": 0.11798906100000295,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "bcdf8182c5f3918793333f50668757c14634deef138483e4e392699b77cb7bc1"
+    },
+    {
+      "label": "nginx-actual-config",
+      "command": [
+        "/usr/sbin/nginx",
+        "-t",
+        "-p",
+        "/root/capsid-verification-20261109/qps-launcher-config-r1/",
+        "-c",
+        "/root/capsid-verification-20261109/qps-launcher-config-r1/nginx.conf"
+      ],
+      "exitCode": 0,
+      "seconds": 0.010586661000004938,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "4b8e2ece0e75a0e4789cdc8fec8d3fe26d085c5f9c31c06e4753fe6223c9788b"
+    },
+    {
+      "label": "actual-owned-process-tests",
+      "command": [
+        "python3",
+        "-B",
+        "/mnt/e/capsid/tests/test_benchmark_qps_probe.py",
+        "--loadgen",
+        "/root/capsid-verification-20261109/build-v030-production-preparation-r1/benchmark-tools/loadgen"
+      ],
+      "exitCode": 0,
+      "seconds": 32.000623463000004,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "cd4b48d30bd0ceea544084512282fb0d6b66c4d730e0ba343f8c0f7a57fe70ca"
+    },
+    {
+      "label": "actual-five-stack-short-observation",
+      "command": [
+        "python3",
+        "-B",
+        "/mnt/e/capsid/bench/qps-lane.py",
+        "--observation",
+        "--repo",
+        "/mnt/e/capsid",
+        "--out",
+        "/root/capsid-verification-20261109/qps-five-stack-launch-observation-r1",
+        "--host",
+        "/root/capsid-verification-20261109/build-v030-production-preparation-r1/capsid-host",
+        "--worker",
+        "/root/capsid-verification-20261109/build-v030-production-preparation-r1/capsid-worker",
+        "--loadgen",
+        "/root/capsid-verification-20261109/build-v030-production-preparation-r1/benchmark-tools/loadgen",
+        "--workerd",
+        "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd",
+        "--python",
+        "/root/capsid-verification-20261109/toolchains/qps-reference-r1/bin/python",
+        "--php-fpm",
+        "/usr/sbin/php-fpm8.3",
+        "--nginx",
+        "/usr/sbin/nginx",
+        "--cpuset",
+        "0-3",
+        "--stacks",
+        "capsid",
+        "workerd",
+        "fastapi",
+        "flask",
+        "php",
+        "--workloads",
+        "matrix-json-1k",
+        "--rounds",
+        "1",
+        "--warmup",
+        "1",
+        "--duration",
+        "1",
+        "--connections",
+        "2",
+        "--inflight",
+        "2",
+        "--trickle-seconds",
+        "1",
+        "--trickle-rate",
+        "5",
+        "--request-timeout-ms",
+        "30000"
+      ],
+      "exitCode": 0,
+      "seconds": 41.636380692,
+      "stdoutSHA256": "60bb130766a2dd27c996174dfdd6896169eb3a286a6114b47da6cbcb03efd2b2",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "formalPerformancePointNotCreated": true,
+  "originalPssStabilityProtocolUnchanged": true,
+  "existingSourcesAndBinariesUnmodified": true,
+  "preparatoryBinaryIdentity": "dbb25be7888b71bbe832f214f4eff8481b3dcc73",
+  "actualRootFpmAndNginxConfigurationPassed": true,
+  "actualFiveStacksServedExactBodyAndReapedAllOwnedProcesses": true,
+  "shortObservationDirectory": "/root/capsid-verification-20261109/qps-five-stack-launch-observation-r1",
+  "formalPerformanceQualified": false,
+  "fullV030GoalComplete": false
+}

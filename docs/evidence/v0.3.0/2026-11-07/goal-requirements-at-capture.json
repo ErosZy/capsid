@@ -1,0 +1,230 @@
+{
+  "objective": "继续完成 v0.3.0 的目标直到你觉得目标可以结束为止",
+  "status": "active",
+  "updatedUTC": "2026-11-07T14:41:01.631187+00:00",
+  "supersededHistoricalBoundary": "The old stop-before-final-combination boundary is historical and superseded by the current full-goal instruction.",
+  "historicalLedger": {
+    "file": "build-v030-dev/evidence/fetch-encoded-layer-20261107/documents-before/historical-goal-requirements.json",
+    "sha256": "216b3d0c32b13887fe9e18955a38d00dfa2a6104e83ecb16bff5b00c2d97943d"
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "status": "complete_for_targeted_requirement",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R1"
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "status": "complete_for_targeted_requirement",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R2"
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R3",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-context-20261107/v9-progress-audit.json"
+      ]
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "status": "complete_for_targeted_requirement",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R4"
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R5",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-context-20261107/v9-progress-audit.json"
+      ]
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R6",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-context-20261107/v9-progress-audit.json"
+      ]
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R7",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-context-20261107/v9-progress-audit.json"
+      ]
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "status": "in_progress",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R8",
+      "latestProgress": [
+        "progress-audit.json",
+        "../fetch-branch-context-20261107/v9-progress-audit.json"
+      ]
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "status": "incomplete",
+      "historicalEvidence": "documents-before/historical-goal-requirements.json#R9"
+    }
+  ],
+  "currentMainQualification": {
+    "status": "three_unfiltered_runs_completed_with_failures_asan_running",
+    "integration": "sdk70-main-integration-r3/integration.json",
+    "sourceManifestSHA256": "536805ae811fa3b4297a6762a24dab8ed9db84ae662d1eac092c8b0d5bc0ade1",
+    "windowsDebugBuild": {
+      "file": "sdk70-main-native-build-r2/build.json",
+      "sha256": "6273cf614073d6b480d96019003a57edcf163cb720e02011e9395c189660eaaf"
+    },
+    "windowsAsanBuild": {
+      "file": "sdk70-main-native-asan-build-r2/build.json",
+      "sha256": "c90087800bd8fa230805a6230e78fe9d15b11078e5a7978d258411deb07672c0"
+    },
+    "windowsAsanRuntimeDeployment": "sdk70-main-asan-runtime-deployment-r2.json",
+    "windowsDebugTests": "sdk70-main-native-no-hono-r1/run.json",
+    "windowsAsanTests": "sdk70-main-native-asan-no-hono-r2/run.json",
+    "windowsAsanFirstRuntimeFailure": "sdk70-main-native-asan-no-hono-r1/run.json",
+    "sourceContractChecks": "sdk70-main-generated-source-check-r1/run.json",
+    "cleanSnapshots": {
+      "windows": "sdk70-clean-source-windows-r1/run.json",
+      "linux": "sdk70-clean-source-linux-r1/run.json"
+    },
+    "linuxReleaseLtoBuild": "sdk70-main-linux-build-r9/build.json",
+    "windowsReleaseBuild": "sdk70-main-windows-release-build-r1/build.json",
+    "qualifiedDistinctMainCombinationsNotYetAssembled": true,
+    "windowsAsanFailureRecovery": "sdk70-main-native-asan-recovery-r1/run.json",
+    "initialSdk70SourceProofRetained": true,
+    "fourConfigurationsHonoPassed": 16,
+    "sourceManifest": "sdk70-main-documentation-r2/source-manifest.json",
+    "documentation": "sdk70-main-documentation-r2/run.json",
+    "cleanFollowupBuilds": {
+      "windows-debug": "sdk70-clean-windows-debug-build-r1/build.json",
+      "windows-asan": "sdk70-clean-windows-asan-build-r1/build.json",
+      "windows-release": "sdk70-clean-windows-release-build-r2/build.json",
+      "linux-release-lto": "sdk70-clean-linux-release-lto-build-r1/build.json"
+    },
+    "cleanFollowupSnapshots": {
+      "windows": "sdk70-clean-source-windows-r2/run.json",
+      "linux": "sdk70-clean-source-linux-r2/run.json"
+    },
+    "cleanFollowupBuildsComplete": 4,
+    "unfilteredCleanRuns": {
+      "windows-debug": {
+        "file": "build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-clean-windows-debug-full-r1\\run.json",
+        "status": "complete_with_failures",
+        "registered": 755,
+        "passed": 720,
+        "failed": 25,
+        "skipped": 10,
+        "runSHA256": "8143caa02f9d43fe5a0fbfd66b9b2dbb1b9f2bc5def2e191dff1972b2e318114"
+      },
+      "windows-release": {
+        "file": "build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-clean-windows-release-full-r1\\run.json",
+        "status": "complete_with_failures",
+        "registered": 755,
+        "passed": 721,
+        "failed": 24,
+        "skipped": 10,
+        "runSHA256": "ef602a2ae79b05df615a6982887433ffdb1dbf69911b22326cb20f03cb9450a8"
+      },
+      "linux-release-lto": {
+        "file": "build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-clean-linux-release-lto-full-r1\\run.json",
+        "status": "complete_with_failures",
+        "registered": 1010,
+        "passed": 990,
+        "failed": 17,
+        "skipped": 3,
+        "runSHA256": "bdf1c540b3a26147c181895e79f9eaeaf4139652eada802294eb45849affbe0a"
+      },
+      "windows-asan": {
+        "file": "sdk70-clean-windows-asan-full-r2/run.json",
+        "status": "running",
+        "controller": "sdk70-clean-asan-full-controller-r2/run.json"
+      }
+    },
+    "unfilteredTriage": "build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-full-r1-triage\\triage.json",
+    "unfilteredTriageSHA256": "4147edc13bad354dce08519c251a56ab84dda7aa2e2302d16106e9bca473682d"
+  },
+  "currentVersion": "0.2.2",
+  "sdkOverlay": 70,
+  "mainJs": "v11-identity-r6-integrated-pending-main-qualification",
+  "nextAction": "Keep source frozen through the live ASan matrix; diagnose preserved full-run failures and historical discarded-DATA rejection, then integrate verified corrections and rerun affected gates before final qualification.",
+  "commitPushReleasePerformed": false,
+  "fullV030GoalComplete": false,
+  "latestPrivateProgress": {
+    "file": "build-v030-dev/evidence/fetch-encoded-layer-20261107/v11-framed-r8-progress-audit.json",
+    "sha256": "1de18d2ee31a28a2fc619de3bcf3113f9904459fbcf9116492e928cf2df0bfeb"
+  },
+  "latestPrivatePrototype": "v11-framed-r8-progress-audit.json",
+  "latestPrivatePrototypeSHA256": "1de18d2ee31a28a2fc619de3bcf3113f9904459fbcf9116492e928cf2df0bfeb",
+  "currentPrivateCandidate": {
+    "variant": "v11-identity-framed-r8",
+    "nativeSources": "native-api-framed-r4-source-manifest.json",
+    "javascriptSources": "v11-r6-source-manifest.json",
+    "heldSourceQualifiedCases": 36,
+    "ownerHeldQualifiedCases": 18,
+    "ownerHeldActualPreFixFailuresRejected": 12,
+    "validatedCandidateCases": 1212,
+    "fullSuitesRunning": false,
+    "integrationPreview": "integration-preview-r2/preview.json",
+    "privateIntegrated": true,
+    "fullV030GoalComplete": false,
+    "mainQualificationComplete": false
+  },
+  "previousMainQualification": {
+    "file": "build-v030-dev/evidence/response-retirement-20261107/progress-audit.json",
+    "sha256": "6b6f62eb60bea3510e6fc844b0f0a016c9c6b7f0a25173baccfaa73ced528ab1"
+  },
+  "additionalPrivateNativeArgumentProof": {
+    "file": "private-r3-native-arguments-linux-r2-review.json",
+    "sha256": "3b754b14f25d3e72772974f54158a9bf2d8928279d2f5430c53a83cfe4e54186",
+    "fullPublicStateMatches": 390,
+    "productNestedObservations": 16380,
+    "coherentStateMutationRejections": 4160
+  },
+  "additionalPrivateRichJsonProof": {
+    "file": "r6-rich-json-state-review-r1/review.json",
+    "sha256": "712554436cc8508a135d238a80819f61ef87413f900fbe3d6ff687fc754599de",
+    "fullPublicStateMatches": 14,
+    "actualArchivedFailuresRejected": 2,
+    "historicalInvalidIPCRootCauseClosed": false,
+    "sdk69AlsoMatches": {
+      "file": "r6-sdk69-rich-json-state-review-r1.json",
+      "sha256": "90474a368866a2b51e4340c3e01f170b84ca86fc642dc27ae90956c0b8bb683d",
+      "fullPublicStateMatches": 14
+    }
+  },
+  "historicalRichJsonDiagnosis": {
+    "build": "sdk59-rich-json-diagnostic-build-r1/build.json",
+    "probe": "sdk59-rich-json-linux-probe-r1/run.json",
+    "capturedCases": 14,
+    "original1000ReadLoopLimitReproduced": true,
+    "readLoopStoppedAtBytes": 512000,
+    "invalidIPCReproduced": false,
+    "archivedLaterSourceSnapshotUsed": true,
+    "originalFailedBinaryNotRecreatedBitForBit": true,
+    "historicalRootCauseClosed": false
+  },
+  "integrationReviewPatch": {
+    "file": "sdk70-main-integrated-change-r2.patch",
+    "sha256": "c70a4a59e6eb751de65602593df42f8a95d9cf4727bb74737f46a94aa13c5d48",
+    "review": "sdk70-integration-review-r2/review.json",
+    "changedFiles": 33,
+    "exactReplayVerified": true
+  }
+}

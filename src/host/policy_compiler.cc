@@ -14,6 +14,26 @@
 namespace capsid::host {
 namespace {
 
+std::vector<FetchTarget> canonical_fetch_targets(const std::vector<FetchTarget>& targets) {
+    std::map<std::string, FetchTarget> merged;
+    for (const FetchTarget& target : targets) {
+        const auto inserted = merged.emplace(target.host, target);
+        FetchTarget& entry = inserted.first->second;
+        if (!inserted.second) {
+            if (entry.ports.empty() || target.ports.empty()) entry.ports.clear();
+            else entry.ports.insert(entry.ports.end(), target.ports.begin(), target.ports.end());
+        }
+    }
+    std::vector<FetchTarget> result;
+    for (auto& item : merged) {
+        auto& ports = item.second.ports;
+        std::sort(ports.begin(), ports.end());
+        ports.erase(std::unique(ports.begin(), ports.end()), ports.end());
+        result.push_back(std::move(item.second));
+    }
+    return result;
+}
+
 std::string sha256_hex(const std::string& data) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
@@ -340,9 +360,14 @@ PolicyCompileResult compile_policy(
     }
 
     // Fetch: app host:port must be covered by a host target.
-    for (const FetchTarget& target : app.fetch) {
+    // Rules are identified by host. Merge the complete port set first, both
+    // for coverage and stable ids, so separate host:port entries are equivalent
+    // to one entry listing the same ports. An empty port list means any port.
+    const std::vector<FetchTarget> requested_fetch = canonical_fetch_targets(app.fetch);
+    const std::vector<FetchTarget> allowed_fetch = canonical_fetch_targets(host.fetch_targets);
+    for (const FetchTarget& target : requested_fetch) {
         bool covered = false;
-        for (const FetchTarget& allowed : host.fetch_targets) {
+        for (const FetchTarget& allowed : allowed_fetch) {
             if (allowed.host != target.host) {
                 continue;
             }
@@ -442,6 +467,30 @@ PolicyCompileResult compile_policy(
         return result;
     }
     result.effective.requests_per_worker = app.requests_per_worker;
+    if (host.max_request_timeout_ms != 0 &&
+        host.default_request_timeout_ms > host.max_request_timeout_ms) {
+        result.error = "default request timeout exceeds the Host maximum";
+        return result;
+    }
+    std::uint64_t request_timeout = app.request_timeout_ms != 0
+        ? app.request_timeout_ms : host.default_request_timeout_ms;
+    if (request_timeout == 0 && host.max_request_timeout_ms != 0) {
+        // capsid_worker_config_init's documented 30s default must also
+        // respect a Host ceiling when neither document states a default.
+        request_timeout = std::min<std::uint64_t>(30000,
+                                                host.max_request_timeout_ms);
+    }
+    if (request_timeout > static_cast<std::uint64_t>(
+            std::numeric_limits<std::int64_t>::max())) {
+        result.error = "request timeout exceeds the worker limit";
+        return result;
+    }
+    if (host.max_request_timeout_ms != 0 &&
+        request_timeout > host.max_request_timeout_ms) {
+        result.error = "request timeout exceeds the Host maximum";
+        return result;
+    }
+    result.effective.request_timeout_ms = request_timeout;
     // E-1 admission-queue maximums (§10.3): the same intersection shape as
     // requests_per_worker — the App queue must not exceed the Host caps,
     // and a Host maximum of 0 means no cap (queueing stays App-decided).
@@ -754,8 +803,11 @@ PolicyCompileResult compile_policy(
         json << '"' << json_escape(result.effective.stdio_streams[index])
              << '"';
     }
-    json << "],\"requestsPerWorker\":" << result.effective.requests_per_worker
-         << ",\"queueRequests\":" << result.effective.queue_requests
+    json << "],\"requestsPerWorker\":" << result.effective.requests_per_worker;
+    if (result.effective.request_timeout_ms != 0) {
+        json << ",\"requestTimeoutMs\":" << result.effective.request_timeout_ms;
+    }
+    json << ",\"queueRequests\":" << result.effective.queue_requests
          << ",\"queueHeaderBytes\":" << result.effective.queue_header_bytes
          << ",\"queueTimeoutMs\":" << result.effective.queue_timeout_ms
          << ",\"maxStreamingInflightPerWorker\":"
@@ -791,7 +843,7 @@ PolicyCompileResult compile_policy(
     for (const std::string& path : app.fs_read_deny) {
         app_stream << "fd:" << path << ';';
     }
-    for (const FetchTarget& target : app.fetch) {
+    for (const FetchTarget& target : requested_fetch) {
         app_stream << "t:" << target.host << ':';
         for (const std::uint16_t port : target.ports) {
             app_stream << port << ',';
@@ -806,8 +858,11 @@ PolicyCompileResult compile_policy(
     for (const std::string& stream : app.stdio_streams) {
         app_stream << stream << ',';
     }
-    app_stream << ";rps:" << app.requests_per_worker
-               << ";qreq:" << app.queue_requests
+    app_stream << ";rps:" << app.requests_per_worker;
+    if (app.request_timeout_ms != 0) {
+        app_stream << ";timeout:" << app.request_timeout_ms;
+    }
+    app_stream << ";qreq:" << app.queue_requests
                << ";qbytes:" << app.queue_header_bytes
                << ";qtimeout:" << app.queue_timeout_ms
                << ";streaming:" << app.max_streaming_inflight_per_worker

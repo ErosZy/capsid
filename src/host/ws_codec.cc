@@ -204,12 +204,11 @@ bool encode(const Frame &frame,
             return false;  // control payload limit
         }
     }
-    if (role == kClient && mask == 0) {
-        return false;  // client frames must be masked
-    }
     if (role == kServer && mask != 0) {
         return false;  // server frames must not be masked
     }
+    // kClient is always masked; an all-zero mask key is legal. kServer
+    // encodes unmasked. (mask is ignored for kServer.)
     output->clear();
     output->reserve(2 + 8 + frame.payload.size());
     uint8_t head0 = static_cast<uint8_t>(frame.fin ? 0x80 : 0x00) |
@@ -264,12 +263,34 @@ bool Parser::append(const uint8_t *data, size_t size) {
         error_ = "invalid parser input";
         return false;
     }
-    buffer_.insert(buffer_.end(), data, data + size);
-    if (buffer_.size() - offset_ > 64u * 1024u * 1024u) {
+    // Fail BEFORE any allocation: an input that would push the buffered
+    // (unconsumed) bytes over the 64 MiB frame cap is rejected without
+    // growing storage.
+    const size_t buffered = buffer_.size() - offset_;
+    if (size > kMaxBufferedBytes - buffered) {
         error_ = "frame buffer limit exceeded";
         return false;
     }
+    buffer_.insert(buffer_.end(), data, data + size);
+    compact_if_needed();
     return true;
+}
+
+void Parser::compact_if_needed() {
+    // The consumed prefix is reclaimed eagerly: once it covers half the
+    // storage (or the whole buffer is consumed), erase it so interleaved
+    // complete frames and a held partial frame cannot accumulate.
+    if (offset_ == buffer_.size()) {
+        buffer_.clear();
+        offset_ = 0;
+        return;
+    }
+    if (offset_ >= buffer_.size() / 2) {
+        buffer_.erase(
+            buffer_.begin(),
+            buffer_.begin() + static_cast<ptrdiff_t>(offset_));
+        offset_ = 0;
+    }
 }
 
 ParseResult Parser::next(Frame *frame) {
@@ -312,15 +333,29 @@ ParseResult Parser::next(Frame *frame) {
         }
         length = (static_cast<uint64_t>(header[2]) << 8) | header[3];
         header_size = 4;
+        if (length < 126) {
+            error_ = "non-minimal length encoding";
+            return kParseError;
+        }
     } else if (length == 127) {
         if (buffered < 10) {
             return kParseNeedMore;
+        }
+        // The MSB of a 64-bit length is reserved and can never appear
+        // in a real frame.
+        if ((header[2] & 0x80) != 0) {
+            error_ = "invalid 64-bit length";
+            return kParseError;
         }
         length = 0;
         for (int i = 2; i < 10; ++i) {
             length = (length << 8) | header[i];
         }
         header_size = 10;
+        if (length < 65536) {
+            error_ = "non-minimal length encoding";
+            return kParseError;
+        }
     }
     if (is_control(opcode) && length > 125) {
         error_ = "control frame payload limit";
@@ -349,10 +384,7 @@ ParseResult Parser::next(Frame *frame) {
         }
     }
     offset_ += frame_size;
-    if (offset_ == buffer_.size()) {
-        buffer_.clear();
-        offset_ = 0;
-    }
+    compact_if_needed();
     return kParseFrame;
 }
 

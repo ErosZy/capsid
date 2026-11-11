@@ -304,6 +304,38 @@ public:
         }
     }
 
+    Worker(const capsid_worker_config &config, const capsid_protocol_options &options) : handle_(NULL) {
+        const capsid_result result = capsid_worker_spawn_ex(&config, &options, &handle_);
+        if (result != CAPSID_OK) throw Error(result);
+    }
+
+    capsid_protocol_info protocol_info() const {
+        capsid_protocol_info info;
+        const capsid_result result = capsid_worker_get_protocol_info(handle_, &info, sizeof(info));
+        if (result != CAPSID_OK) throw Error(result);
+        return info;
+    }
+    // Pressure consumes nothing; callers integrate WOULD_BLOCK with their
+    // event pump. RAII still owns the process and all outstanding channels.
+    capsid_result upgrade(uint64_t request, uint32_t channel, uint64_t maximum) {
+        return capsid_worker_upgrade_begin(handle_, request, channel, maximum);
+    }
+    capsid_result send(uint32_t channel, const uint8_t *data, size_t size, uint32_t flags) {
+        return capsid_worker_channel_send(handle_, channel, data, size, flags);
+    }
+    capsid_result grant(uint32_t channel, uint64_t credit) {
+        return capsid_worker_channel_grant(handle_, channel, credit);
+    }
+    capsid_result close(uint32_t channel, uint16_t code = 0, const char *reason = "") {
+        return capsid_worker_channel_close(handle_, channel, code, reason);
+    }
+    capsid_result cancel(uint32_t channel, uint32_t reason = CAPSID_CANCEL_REASON_LOCAL) {
+        return capsid_worker_channel_cancel(handle_, channel, reason);
+    }
+    capsid_result confirm(uint32_t channel, uint64_t dial, uint32_t kind) {
+        return capsid_worker_channel_confirm(handle_, channel, dial, kind);
+    }
+
     ~Worker() {
         if (handle_) {
             capsid_worker_destroy(handle_);

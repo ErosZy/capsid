@@ -1,0 +1,29 @@
+{
+  "status": "complete",
+  "complete": true,
+  "rootIntegrated": true,
+  "parentPrivateSnapshot": "ea3b9477b7e1eb371a57aca72c4e6a0dc109176d",
+  "privateSnapshotCommit": "aa31f4312ec5c4499f495e17a17645486a1aa9a7",
+  "privateSnapshotRef": "refs/capsid-private/sdk78-tls-test-listener-race-20261110",
+  "mainSourceManifestFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-tls-test-listener-race-main-integration-r1\\main-source-manifest.json",
+  "mainSourceManifestSHA256": "ee5d8cf00cc1589ae23e6f91ff1cb144b786b51af5a163c091d6bc0a5448a51b",
+  "sourceCount": 5100,
+  "changedFiles": [
+    "tests/test_direct_fetch_tls.cc"
+  ],
+  "originalSHA256": "a47396c65bc3260dbd6b49d96bcf06582844cb63761aead572a13c9d9e7ffefc",
+  "qualifiedSHA256": "5ce83de07a481b42b8179d6b94f5b55fee730c820e155a5651b567422793d99e",
+  "proofRecordSHA256": "ab7b198478e3426eafe367f27e3c64e047dc98927a36f97c06200d22b1be8004",
+  "actualOriginalFocusedCasesPassed": 8,
+  "fourTsanRaceScenariosPassedWithoutSuppression": true,
+  "originalRawFourRaceFailuresRetained": true,
+  "originalFixtureWorkloadsAssertionsAndOuterTimeoutsUnchanged": true,
+  "allOtherRepositorySourcesUnchanged": true,
+  "mainHead": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "mainHeadBefore": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "mainHeadUnchanged": true,
+  "windowsFinalQualificationStillRequired": true,
+  "mainCommitPushTagOrPublicationPerformed": false,
+  "generatedIdentityAndFinalCombinedArtifactNotYetQualified": true,
+  "fullV030GoalComplete": false
+}

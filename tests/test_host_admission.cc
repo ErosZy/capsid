@@ -30,6 +30,7 @@
 #endif
 
 #include "win32_compat.h"
+#include "worker_exit_assertions.h"
 #if defined(_WIN32)
 #else
 #include <arpa/inet.h>
@@ -64,12 +65,15 @@
 #endif
 
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -78,8 +82,8 @@
 namespace {
 
 [[noreturn]] void fail(const std::string& message) {
-    std::cerr << "FAIL: " << message << std::endl;
-    std::exit(1);
+    // Unwind the server so failed assertions also join/reap its Worker.
+    throw std::runtime_error(message);
 }
 
 void require(bool condition, const std::string& message) {
@@ -143,10 +147,13 @@ const std::vector<std::uint8_t>& slow_bundle() {
     return bundle;
 }
 
-// The fast fixture: immediate response, no worker-side delay.
-const std::vector<std::uint8_t>& fast_bundle() {
+// A warm-up response plus requests that cannot complete before the fault.
+// Queue occupancy is established by a real 429, rather than a timed sleep.
+const std::vector<std::uint8_t>& worker_death_bundle() {
     static const std::string source =
-        "export default { fetch: () => new Response('admission-ok') };";
+        "export default { fetch: request => "
+        "  new URL(request.url).pathname.endsWith('/alive') ? "
+        "  new Response('admission-ok') : new Promise(() => {}) };";
     static const std::vector<std::uint8_t> bundle(source.begin(),
                                                   source.end());
     return bundle;
@@ -159,10 +166,11 @@ const std::vector<std::uint8_t>& fast_bundle() {
 const std::vector<std::uint8_t>& streamed_bundle() {
     static const std::string source =
         "const body = new TextEncoder().encode('streamed-ok');\n"
-        "export default { fetch: () => new Response(\n"
+        "export default { fetch: request => new Response(\n"
         "  new ReadableStream({ start(controller) {\n"
         "    controller.enqueue(body);\n"
-        "    setTimeout(() => controller.close(), 80);\n"
+        "    setTimeout(() => controller.close(),\n"
+        "      new URL(request.url).pathname.endsWith('/pending-end') ? 600000 : 80);\n"
         "  }}),\n"
         "  { headers: { 'content-length': String(body.length) } }) };";
     static const std::vector<std::uint8_t> bundle(source.begin(),
@@ -204,6 +212,7 @@ void send_request(int fd, const std::string& target, bool keep_alive) {
 struct RawHttpResponse {
     unsigned status = 0;
     std::string body;
+    bool connection_close = false;
 };
 
 bool lower_starts_with(const std::string& value, const char* prefix) {
@@ -300,7 +309,13 @@ RawHttpResponse read_response(int fd) {
     std::string header_line;
     while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch),
                                      deadline)).empty()) {
-        if (lower_starts_with(header_line, "content-length:")) {
+        if (lower_starts_with(header_line, "connection:")) {
+            std::string value = header_line.substr(11);
+            const auto first = value.find_first_not_of(" \t");
+            const auto last = value.find_last_not_of(" \t");
+            value = first == std::string::npos ? "" : value.substr(first, last - first + 1);
+            response.connection_close = value.size() == 5 && lower_starts_with(value, "close");
+        } else if (lower_starts_with(header_line, "content-length:")) {
 
             body_length = static_cast<std::size_t>(
                 std::strtoul(header_line.c_str() + 15, nullptr, 10));
@@ -347,7 +362,9 @@ RawHttpResponse read_response(int fd) {
         require_bytes(fd, buffer, body_length, scratch, sizeof(scratch),
                       deadline);
         response.body = buffer.substr(0, body_length);
+        buffer.erase(0, body_length);
     }
+    require(buffer.empty(), "admission response contains unexpected trailing bytes");
     return response;
 }
 
@@ -366,8 +383,9 @@ RawHttpResponse http_get(std::uint16_t port, const std::string& target) {
 // (Linux-only: the worker-death case is not registered on Windows, where
 // the child-pid scan would need Toolhelp and SIGKILL has no portable
 // form; see docs/windows.md.)
-pid_t find_worker_child_pid() {
+pid_t find_worker_child_pid(const char* worker_path) {
 #if defined(_WIN32)
+    (void)worker_path;
     return static_cast<pid_t>(0);
 #else
     const pid_t self = getpid();
@@ -395,9 +413,13 @@ pid_t find_worker_child_pid() {
         const int scanned = std::fscanf(
             file, "%*d %255[^)]%*c %*c %ld", comm, &ppid);
         std::fclose(file);
-        if (scanned == 2 && ppid == static_cast<long>(self)) {
+        if (scanned == 2 && ppid == static_cast<long>(self) &&
+            std::strcmp(comm, "(capsid-worker") == 0) {
+            const auto executable = std::filesystem::path("/proc") / entry->d_name / "exe";
+            require(std::filesystem::canonical(executable) == std::filesystem::canonical(worker_path),
+                    "worker fault must target the requested executable");
+            require(found == -1, "worker-death fixture has more than one Worker child");
             found = static_cast<pid_t>(std::strtol(entry->d_name, nullptr, 10));
-            break;
         }
     }
     closedir(directory);
@@ -405,13 +427,16 @@ pid_t find_worker_child_pid() {
 #endif
 }
 
-void kill_worker_child() {
+pid_t kill_worker_child(const char* worker_path) {
 #if defined(_WIN32)
+    (void)worker_path;
     fail("worker-death fault injection is unavailable on Windows");
 #else
-    const pid_t worker_pid = find_worker_child_pid();
+    const pid_t worker_pid = find_worker_child_pid(worker_path);
     require(worker_pid > 0, "cannot find the live worker child process");
+    std::cout << "worker-fault-pid: " << worker_pid << std::endl;
     require(kill(worker_pid, SIGKILL) == 0, "cannot SIGKILL the worker");
+    return worker_pid;
 #endif
 }
 
@@ -577,38 +602,92 @@ void test_queue_timeout_returns_504(const char* worker_path) {
     require(server.wait(&error), "admission server wait failed: " + error);
 }
 
-// ④ gate: after the worker is killed, an established connection gets 503
-// (not 502) on its next request once the exit has been processed.
+// ④ gate: requests already admitted before Worker exit get complete 503
+// responses before their connections close. An idle keep-alive socket has
+// no pending request; its bounded reclamation is covered by the external-
+// accept exit tests, and it cannot be kept alive to await a future request.
 void test_worker_death_returns_503(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
+    options.max_inflight_per_worker = 1;
+    options.max_streaming_inflight_per_worker = 1;
+    options.queue_requests = 1;
+    options.request_timeout_ms = 15000;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(fast_bundle(), &error),
+    require(server.start(worker_death_bundle(), &error),
             "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
-    // The worker answers one request, then the test kills it.
-    const int connection = connect_to(port);
-    send_request(connection, "/@capsid/orders/alive", true);
-    const RawHttpResponse alive = read_response(connection);
-    require(alive.status == 200, "worker did not answer before the kill");
-    kill_worker_child();
+    const int warm = connect_to(port);
+    send_request(warm, "/@capsid/orders/alive", false);
+    const RawHttpResponse alive = read_response(warm);
+    require(alive.status == 200 && alive.body == "admission-ok",
+            "worker did not answer before the fault");
+    char warm_extra = 0;
+    require(capsid::win32::recv_fd(warm, &warm_extra, 1, 0) == 0,
+            "warm-up response must finish before filling admission slots");
+    close(warm);
 
-    // The worker exit closes the acceptor; wait for that deterministic
-    // signal before asserting the 503 on the already-established connection.
+    std::vector<capsid_pollfd> pending(3);
+    for (auto& descriptor : pending) {
+        const int connection = connect_to(port);
+        descriptor.fd = connection;
+        descriptor.events = POLLIN;
+        send_request(connection, "/@capsid/orders/pending", true);
+    }
+    // Which request wins the execution/queue slots is intentionally not
+    // assumed. A third request can get 429 only after both slots are full;
+    // neither parked request can finish or time out at this barrier.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    int rejected = -1;
+    while (rejected < 0) {
+        require(std::chrono::steady_clock::now() < deadline,
+                "worker-death fixture never filled inflight and queue slots");
+        const int polled = capsid::win32::capsid_poll(pending.data(), pending.size(), 50);
+        require(polled >= 0, "cannot poll admission capacity barrier");
+        for (std::size_t index = 0; index < pending.size(); ++index) {
+            if (pending[index].revents == 0) continue;
+            require(rejected < 0 && (pending[index].revents & POLLIN) != 0,
+                    "unexpected connection termination at admission barrier");
+            // These poll descriptors were populated exclusively from the
+            // int-valued compatibility handles returned by connect_to().
+            const RawHttpResponse full = read_response(static_cast<int>(pending[index].fd));
+            require(full.status == 429 && full.body == "app queue full",
+                    "capacity barrier must be an actual queue-full 429");
+            rejected = static_cast<int>(index);
+        }
+    }
+    close(static_cast<int>(pending[static_cast<std::size_t>(rejected)].fd));
+    require(server.worker_available(), "Worker exited before the admission barrier");
+    std::cout << "admission-full: inflight=1 queued=1 rejected=1" << std::endl;
+    const pid_t worker_pid = kill_worker_child(worker_path);
     require_acceptor_closed(port);
-    send_request(connection, "/@capsid/orders/after-death", true);
-    const RawHttpResponse after = read_response(connection);
-    require(after.status == 503,
-            "request after worker death must return 503, got " +
-                std::to_string(after.status));
-    close(connection);
+    unsigned unavailable_responses = 0;
+    for (std::size_t index = 0; index < pending.size(); ++index) {
+        if (static_cast<int>(index) == rejected) continue;
+        const int connection = static_cast<int>(pending[index].fd);
+        const RawHttpResponse after = read_response(connection);
+        require(after.status == 503 && after.body == "worker exited" && after.connection_close,
+                "admitted request must receive a complete 503 with Connection: close");
+        char extra = 0;
+        require(capsid::win32::recv_fd(connection, &extra, 1, 0) == 0,
+                "503 response must be followed by TCP EOF without extra bytes");
+        close(connection);
+        ++unavailable_responses;
+    }
+    require(unavailable_responses == 2, "inflight and queued requests must both receive 503");
 
     server.request_stop();
     require(server.wait(&error), "admission server wait failed: " + error);
+#if !defined(_WIN32)
+    require(kill(worker_pid, 0) != 0 && errno == ESRCH, "faulted Worker PID was not reaped");
+#else
+    (void)worker_pid;
+#endif
+    std::cout << "worker-exit: complete503=2 tcpEof=2 workerReaped=true" << std::endl;
 }
 
 
@@ -619,18 +698,22 @@ void test_worker_death_returns_503(const char* worker_path) {
 // be left in the socket buffer for the next read_request, not treated as
 // forbidden pipelining (the probe closes the connection). Frozen by ab -k:
 // before the fix every run had dozens of failed requests.
-void test_keepalive_streamed_responses(const char* worker_path) {
+void test_keepalive_streamed_responses(const char* worker_path, const std::string& mode) {
+    const bool drain = mode != "keepalive-streamed";
+    const bool forced = mode == "keepalive-streamed-drain-deadline";
+    const bool idle = mode == "idle-drain";
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
     capsid::host::SingleWorkerServerOptions options =
         make_worker_options(worker_path, ready[1]);
+    options.install_process_signals = mode != "keepalive-streamed-drain-no-signals";
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
     require(server.start(streamed_bundle(), &error),
             "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
-    constexpr int kConnections = 4;
+    const int kConnections = idle ? 0 : 4;
     constexpr int kRequestsPerConnection = 12;
     std::vector<int> connections;
     connections.reserve(kConnections);
@@ -651,14 +734,50 @@ void test_keepalive_streamed_responses(const char* worker_path) {
                 // Send the next request immediately, exactly like ab -k /
                 // a keep-alive agent: the previous response is complete
                 // from the client's point of view.
-                send_request(fd, "/@capsid/orders/stream", true);
+                // The stop control leaves the final stream genuinely open;
+                // scheduling cannot turn its cancellation into a clean end.
+                const bool final_pending = (!drain || forced) && request + 2 == kRequestsPerConnection;
+                send_request(fd, final_pending ? "/@capsid/orders/pending-end"
+                                               : "/@capsid/orders/stream", true);
             }
         }
-        close(fd);
+        if (!drain) close(fd);
     }
 
-    server.request_stop();
+    const auto started = std::chrono::steady_clock::now();
+    if (drain) server.begin_drain(forced ? 200 : 5000);
+    else server.request_stop();
+    if (drain) {
+        const auto deadline = started + std::chrono::milliseconds(2500);
+        while (!server.worker_exit_status().observed &&
+               std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        // Separate a completed Worker reap from an io_context still held
+        // alive by an unrelated outstanding operation (such as signal wait).
+        std::cout << "HOST_WORKER_BEFORE_WAIT ";
+        capsid_test::print_worker_exit(server.worker_exit_status());
+        std::cout << std::endl;
+    }
     require(server.wait(&error), "admission server wait failed: " + error);
+    if (drain) {
+        for (const int fd : connections) close(fd);
+        const auto metrics = server.drain_metrics();
+        std::cout << "HOST_DRAIN {\"finished\":" << (metrics.finished ? "true" : "false")
+                  << ",\"forcedCancellations\":" << metrics.forced_cancellations
+                  << ",\"totalMs\":" << metrics.total_ms << "}" << std::endl;
+        require(metrics.draining && metrics.finished &&
+                    metrics.forced_cancellations == static_cast<std::uint64_t>(forced ? kConnections : 0),
+                "streamed drain cancellation count disagrees with its deadline");
+        require(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(2500),
+                "drain did not join promptly after completion/deadline");
+    }
+    const auto status = server.worker_exit_status();
+    std::cout << "HOST_WORKER_EXIT ";
+    capsid_test::print_worker_exit(status);
+    std::cout << std::endl;
+    require(drain && !forced ? status.clean() : capsid_test::natural_exit(status, 1),
+            "streamed drain/unfinished stop has the wrong actual Worker exit");
 }
 
 #endif  // CAPSID_HAS_SINGLE_WORKER_SERVER
@@ -721,7 +840,7 @@ void test_pool_forwards_admission(const char* worker_path) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) try {
     require(argc == 3, "expected mode and capsid-worker path");
 #if !CAPSID_HAS_SINGLE_WORKER_SERVER
     (void)argv;
@@ -735,7 +854,11 @@ int main(int argc, char** argv) {
     } else if (mode == "queue-timeout-504") {
         test_queue_timeout_returns_504(argv[2]);
     } else if (mode == "keepalive-streamed") {
-        test_keepalive_streamed_responses(argv[2]);
+        test_keepalive_streamed_responses(argv[2], mode);
+    } else if (mode == "keepalive-streamed-drain" || mode == "idle-drain" ||
+               mode == "keepalive-streamed-drain-deadline" ||
+               mode == "keepalive-streamed-drain-no-signals") {
+        test_keepalive_streamed_responses(argv[2], mode);
     } else if (mode == "worker-death-503") {
         test_worker_death_returns_503(argv[2]);
 #if CAPSID_HAS_STATIC_POOL_SERVER
@@ -748,4 +871,7 @@ int main(int argc, char** argv) {
     std::cout << "PASS" << std::endl;
     return 0;
 #endif
+} catch (const std::exception& error) {
+    std::cerr << "FAIL: " << error.what() << std::endl;
+    return 1;
 }

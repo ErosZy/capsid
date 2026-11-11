@@ -1,0 +1,149 @@
+{
+  "status": "complete",
+  "complete": true,
+  "runnerSHA256": "4bc1f3d161b0f85a88575810172e3f31025b005dd6844d38898e9ae0a3a5d6df",
+  "source": "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2",
+  "build": "/root/capsid-verification-20261109/build-sanitizer",
+  "sourceCount": 5068,
+  "snapshotCommit": "56d487722e9d207a53225444fc32914f80fba155",
+  "sourceManifestFile": "/mnt/d/capsid-verification-20261108/evidence/sdk78-wpt-soak-snapshot-r3/source-manifest.json",
+  "sourceManifestSHA256": "36fb6e83b51feae6c5cadd88829b84de6399e475831d2d9e3b820982b7a185a4",
+  "originalFullRecordSHA256": "27e77dd3a8a93424a911c2c4a773da419f3bf3884df2625e4dc7396a867d6ad6",
+  "originalFullRawExitCode": 8,
+  "originalFullRawFailuresRetained": [
+    "websocket_fetch_arguments_prototype_static-pool",
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+    "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+    "worker_wpt_fetch_api_headers_headers_basic_any_js",
+    "worker_wpt_fetch_api_headers_headers_errors_any_js"
+  ],
+  "originalFullExecuted": 1108,
+  "fullJunitSHA256": "7b9c081333d976e6e65e6f34ee3a51b98cb61167fd9d646aea851bfc1b1efbea",
+  "fullLastTestSHA256": "4463eba988d8a1603eccdcbc37e33b0c97fc434a9864cebf2795bc3ba72a90c3",
+  "originalFullRunReused": true,
+  "newFuzzerExecution": false,
+  "newFuzzerBuild": false,
+  "originalFuzzTestsPassed": 9,
+  "fuzzTargets": 7,
+  "actualExecutedFuzzInputs": 70000,
+  "actuallyInstrumentedFuzzTranslationUnits": 27,
+  "malformedCompletionTranscriptsRejected": 21,
+  "outputTruncationInJunitHandledByUsingCompleteLastTest": true,
+  "measurements": [
+    {
+      "name": "fuzz-protocol-parser_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-protocol-parser",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/protocol",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "36514a3601cf1715a779b5fef2e38acdfc56431589ca20d2b94aab7b36731105",
+      "currentExecutableSHA256": "5380aee53691e3803fd27549099bd9f4deec77d269378b25c7e9c20e1be80547"
+    },
+    {
+      "name": "fuzz-response-headers_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-response-headers",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/response_headers",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "dd790a8c87d29ff574301f285ecc67d6eb506c1c45d93cfbf817a0a5a8e186d7",
+      "currentExecutableSHA256": "e9c0605e662266de40b4d22db268c7d28c80d8f873fc2fd70c1364e14b14e719"
+    },
+    {
+      "name": "fuzz-worker-protocol_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-worker-protocol",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/worker_protocol",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "b4d855c7beeb508b6e4631bc10f7cbfbc1653f68dc48d7f340d72009830ab50e",
+      "currentExecutableSHA256": "b0e026e75ddee0507390312d2041b6671e04916ead2f4d41b1de47168ad79ec1"
+    },
+    {
+      "name": "fuzz-audit-decode_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-audit-decode",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/audit",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "d8a90ec0f496bd453d7009b4cb22b28d0c936a8ea45f749b6f6ba0978cddc67a",
+      "currentExecutableSHA256": "44bf02c36e763e37f4641fc8d4b8e7289b8f6d710480e9f036bef80b66e317be"
+    },
+    {
+      "name": "fuzz-channel-registry_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-channel-registry",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/channel_registry",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "45ab170bb47a7a1f09743e9ae1e5bac021915c51383cdd52e0b8afffcf76810e",
+      "currentExecutableSHA256": "6aff020d9372168d08ae027df8e0af8c3906c73a65cf70a98dccbb4982806072"
+    },
+    {
+      "name": "fuzz-websocket-frames_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-websocket-frames",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/websocket_frames",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "8cb916e9bf27d0faf010d899aa3d4637b7feb2d7fe22b50b745e7345f3789ad0",
+      "currentExecutableSHA256": "c139b66829f2c5c1a5fc4bf0595cbee6ba8107f514b81965b9a39aef903b73ac"
+    },
+    {
+      "name": "fuzz-websocket-handshake_smoke",
+      "command": [
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz-websocket-handshake",
+        "/root/capsid-verification-20261109/build-sanitizer/fuzz/corpus/websocket_handshake",
+        "-runs=10000",
+        "-max_len=65536",
+        "-timeout=2",
+        "-rss_limit_mb=512",
+        "-print_final_stats=1"
+      ],
+      "actualExecutedUnits": 10000,
+      "fullUntruncatedLastTestSectionSHA256": "55ab0ea5c5b46d579ffa81dc48824f26ba36cf223f5e1a6b7951b77c2615ce11",
+      "currentExecutableSHA256": "57ae5ecb63d3790955cd0783a699942ae6ebc662eb1b2a766fabdc1293b52c21"
+    }
+  ],
+  "currentBinaryHashesCapturedAtReuseAudit": true,
+  "historicalBeforeRunFuzzerHashesNotClaimed": true,
+  "addressUndefinedAndLeakDetectionEnabled": true,
+  "allOriginalFullInputsAndCurrentSourceHashesVerified": true,
+  "compileCommandsSHA256": "a90c1d7c34915baf927b8d087163660bf172fcbbdd93187976a66f2226edad0b",
+  "fullV030GoalComplete": false,
+  "scope": "Current frozen source qualification from the actual completed unfiltered1108 execution, original nine registrations, complete seven10000-run transcripts and matching27 instrumented compile commands. Original unrelated full failures remain failures."
+}

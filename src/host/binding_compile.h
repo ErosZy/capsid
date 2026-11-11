@@ -79,12 +79,12 @@ struct BindingCompileResult {
 std::string compute_effective_profile_digest(
     const std::vector<EffectiveBinding>& bindings);
 
-// Constructs the exact proof a managed worker is required to report. Managed
-// workers currently do not receive a network namespace descriptor; an empty
-// namespace identity is therefore an exact value, not a wildcard.
+// Constructs the exact proof from the effective Worker launch configuration.
+// Host-managed launches currently do not receive a network namespace
+// descriptor; an empty namespace identity is an exact value, not a wildcard.
 capsid::WorkerReadyProof expected_worker_ready_proof(
     const std::vector<EffectiveBinding>& bindings,
-    bool strict_sandbox);
+    const capsid_worker_config& config);
 
 // §4.3: the Host-side READY verdict. The payload must parse as the
 // 71-byte compatibility id plus an optional proof; a Binding worker's

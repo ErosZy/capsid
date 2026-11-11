@@ -4,6 +4,7 @@
 #include "host/metrics.h"
 
 #include <atomic>
+#include <functional>
 #if defined(_WIN32)
 #include "win32_compat.h"
 #else
@@ -11,6 +12,12 @@
 #endif
 
 namespace capsid::host {
+
+// Select identity when metrics are rendered. Managed mode supplies a
+// selector over its published routing table, so warming and rollback do
+// not need a second mutable copy of the serving worker identity.
+MetricsRegistry::ProcessSnapshotProvider process_snapshot_provider(
+    std::function<pid_t()> worker_pid);
 
 // M2 item 7 (design §12.1 "process family"): the default render-time
 // snapshot provider. Reads the Host's own RSS/PSS from /proc/self and its

@@ -11,6 +11,9 @@
 
 #include "host/binding_registry.h"
 #include "host/generation_identity.h"
+#include <boost/asio/io_context.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/websocket.hpp>
 
 #include "win32_compat.h"
 #if defined(_WIN32)
@@ -50,6 +53,7 @@
 #include <limits>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -705,6 +709,90 @@ void test_start_stop_race(const char* worker_path) {
 #endif
 }
 
+// Exercise actual sockets and credit replenishment concurrently. Small
+// HTTP requests did not expose a Windows socket retaining the acceptor's
+// executor while Worker events ran on its shard's different reactor.
+void test_websocket_io(const char* worker_path, std::uint32_t workers) {
+    int ready[2];
+    require(capsid::win32::create_socket_pair(ready),
+            "cannot create WebSocket pool READY pipe");
+    auto options = make_options(worker_path, ready[1], workers);
+    const std::string source =
+        "export default { fetch() { const p = new WebSocketPair();"
+        "const s = p[1]; s.accept(); s.binaryType = 'arraybuffer';"
+        "s.onmessage = e => s.send(e.data);"
+        "return new Response(null, {status: 101, webSocket: p[0]}); } };";
+    const std::vector<std::uint8_t> bundle(source.begin(), source.end());
+    capsid::host::StaticPoolServer pool(std::move(options));
+    std::string error;
+    require(pool.start(bundle, &error), "cannot start WebSocket pool: " + error);
+    close(ready[1]);
+    const auto port = ready_port(read_one_ready_line(ready[0]));
+    close(ready[0]);
+
+    std::vector<std::string> failures(4);
+    std::vector<std::thread> clients;
+    for (std::size_t client = 0; client < failures.size(); ++client) {
+        clients.emplace_back([&, client] {
+            try {
+                namespace asio = boost::asio;
+                namespace beast = boost::beast;
+                asio::io_context io;
+                beast::websocket::stream<asio::ip::tcp::socket> socket(io);
+                socket.next_layer().connect(
+                    {asio::ip::address_v4::loopback(), port});
+#if defined(_WIN32)
+                const DWORD timeout = 5000;
+                const char* timeout_data = reinterpret_cast<const char*>(&timeout);
+                const int timeout_size = static_cast<int>(sizeof(timeout));
+#else
+                const timeval timeout = {5, 0};
+                const auto* timeout_data = &timeout;
+                const socklen_t timeout_size = sizeof(timeout);
+#endif
+                for (const int option : {SO_RCVTIMEO, SO_SNDTIMEO}) {
+                    if (::setsockopt(socket.next_layer().native_handle(),
+                            SOL_SOCKET, option, timeout_data, timeout_size) != 0)
+                        throw std::runtime_error("cannot set WebSocket IO timeout");
+                }
+                socket.handshake("public.example", "/@capsid/orders/echo");
+                // Includes both WebSocket extended-length boundaries, the
+                // 64 KiB credit window, and the original 180,000-byte crash.
+                for (const std::size_t size : {0u, 1u, 125u, 126u, 65535u,
+                        65536u, 65537u, 180000u, 1048576u}) {
+                    for (const bool binary : {false, true}) {
+                        std::string payload(size, '\0');
+                        for (std::size_t i = 0; i < size; ++i)
+                            payload[i] = binary
+                                ? static_cast<char>((i * 31 + client * 7) % 251)
+                                : static_cast<char>('a' + (i + client) % 26);
+                        socket.binary(binary);
+                        socket.write(asio::buffer(payload));
+                        beast::flat_buffer echoed;
+                        socket.read(echoed);
+                        if (socket.got_binary() != binary ||
+                            beast::buffers_to_string(echoed.data()) != payload)
+                            throw std::runtime_error("WebSocket echo type or bytes differ at " +
+                                                     std::to_string(size));
+                    }
+                }
+                socket.close(beast::websocket::close_code::normal);
+                if (socket.reason().code != beast::websocket::close_code::normal)
+                    throw std::runtime_error("WebSocket normal close was not acknowledged");
+            } catch (const std::exception& failure) {
+                failures[client] = failure.what();
+            }
+        });
+    }
+    for (auto& client : clients) client.join();
+    pool.request_stop();
+    require(pool.wait(&error), "WebSocket pool did not stop normally: " + error);
+    require(pool.active_workers() == 0, "WebSocket pool retained a worker");
+    for (std::size_t client = 0; client < failures.size(); ++client)
+        require(failures[client].empty(), "WebSocket client " +
+                std::to_string(client) + ": " + failures[client]);
+}
+
 #endif  // CAPSID_HAS_STATIC_POOL_SERVER
 
 }  // namespace
@@ -734,6 +822,10 @@ int main(int argc, char** argv) {
         test_stop_before_start(argv[2]);
     } else if (mode == "start-stop-race") {
         test_start_stop_race(argv[2]);
+    } else if (mode == "websocket-io-1") {
+        test_websocket_io(argv[2], 1);
+    } else if (mode == "websocket-io-4") {
+        test_websocket_io(argv[2], 4);
     } else {
         fail("unknown static-pool server mode");
     }

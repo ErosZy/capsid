@@ -1,0 +1,83 @@
+{
+  "complete": true,
+  "phase": 106,
+  "sourceFiles": 4761,
+  "changedSources": [
+    "docs/fetchrpc-v4.md",
+    "docs/superpowers/plans/2026-10-12-v0.3.0-remediation-and-delivery.md",
+    "docs/testing.md",
+    "docs/v0.3.0-glm-continuation-handoff.md",
+    "docs/v0.3.0-glm-takeover-review.md",
+    "docs/v0.3.0-native-fetch-branches-plan.md",
+    "docs/v0.3.0-next-ai-handoff.md",
+    "docs/v0.3.0-test-completeness-review.md",
+    "docs/workerd-websocket-semantics.md"
+  ],
+  "previousSourceManifest": {
+    "file": "build-v030-dev/evidence/response-retirement-20261107/post-document-source-manifest.json",
+    "sha256": "20975e501591325e901dc07fcf966454a64f8cced135db767892b638c9c5f267"
+  },
+  "newSourceManifestSHA256": "2771afe665edbc83058a83c3c7c6eb9520ab1b8b3b0dd8b272872ad888af1174",
+  "changes": {
+    "docs/v0.3.0-next-ai-handoff.md": {
+      "offset": 37,
+      "bytes": 4469,
+      "beforeSHA256": "8fc31cf3016a8af3c0e463566ace6414c0dc329ef7eab1df092f58a45c06e1b4",
+      "afterSHA256": "2884f348170d7c17a0da49349fba66cc0bdee501633430514ace94b2c4286479"
+    },
+    "docs/fetchrpc-v4.md": {
+      "offset": 23,
+      "bytes": 2717,
+      "beforeSHA256": "46e4b72dd9e6abdadc1a9de9dd39f90683fcdbf2681d39aee833fb0a42dd2651",
+      "afterSHA256": "2056cb50fa6b8d584faaded81d2ec84e21648a2b5e1f480245e49d8019e947f7"
+    },
+    "docs/testing.md": {
+      "offset": 31,
+      "bytes": 2717,
+      "beforeSHA256": "e1827dd6f41d636fbbf1b74508218fe3de9eba819fcee4290794577c86415b59",
+      "afterSHA256": "aecfa1bb4aa046083e65ad5ed41affe046ba8ab47d52d55d4ef1622215d726c1"
+    },
+    "docs/v0.3.0-glm-continuation-handoff.md": {
+      "offset": 26,
+      "bytes": 2717,
+      "beforeSHA256": "0cc73e313416418f1e347ccd2a454261440f1c59b39dac2c174142b45ec4e152",
+      "afterSHA256": "e255c2e59d3c08bcf4c44a3b53ca8f3b8d7ded5945bd77c6039056623f5cc8fa"
+    },
+    "docs/v0.3.0-glm-takeover-review.md": {
+      "offset": 57,
+      "bytes": 2717,
+      "beforeSHA256": "b5e0385c4813fd1b46c682ed6baa94fd868aad75265ebdca1cf092de27f21204",
+      "afterSHA256": "d39f9952d03f6249bf1429d96fdd2408efaff7a4a93fa0312e171329f4a198d4"
+    },
+    "docs/superpowers/plans/2026-10-12-v0.3.0-remediation-and-delivery.md": {
+      "offset": 33,
+      "bytes": 2747,
+      "beforeSHA256": "43763418b9615f1e97cb3383d6da9f9e2e8877e769dba58094192d80814a64ce",
+      "afterSHA256": "170f66ed75d6d19234bb28ac77c2872b821b170a3b3a19e36c80abddee33d03d"
+    },
+    "docs/v0.3.0-test-completeness-review.md": {
+      "offset": 52,
+      "bytes": 4469,
+      "beforeSHA256": "1e16910c6f1206db5c6ad302a5ee38bd64be0d6584dfed9e1d02ef1f24401a98",
+      "afterSHA256": "898b0fb3b0b96d04ea9834ca87829d5dee23af87ea001bfdf32905b6bc9ea95f"
+    },
+    "docs/workerd-websocket-semantics.md": {
+      "offset": 57,
+      "bytes": 2717,
+      "beforeSHA256": "13e2f387e692248ec6a7ab22c6bb03100471ebd438a439232b786ced0cf0afd9",
+      "afterSHA256": "55e37338aefbcd915b71ac04f03d8914ac6b0b37d575c8725b4f23949a69f704"
+    },
+    "docs/v0.3.0-native-fetch-branches-plan.md": {
+      "offset": 72,
+      "bytes": 4469,
+      "beforeSHA256": "8285901cf4bc3eda7beeb3e786d5eb693d08f83a90a5e024590043a4829fec46",
+      "afterSHA256": "0720b624fdacafda4f0e1a6e1d302a9dec5764c26ceb73df711e573b89c55a20"
+    }
+  },
+  "testCodeAndProductSourcesUnchanged": true,
+  "historicalBodyBytesPreserved": true,
+  "allThreePrivateAdjacentRunsCompleteBeforeDocumentEdits": true,
+  "currentMainDistinctCTestPairs": 501,
+  "privateJsIntegrated": false,
+  "fullV030GoalComplete": false
+}

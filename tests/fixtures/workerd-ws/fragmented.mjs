@@ -15,6 +15,9 @@ export default {
     }
     const [client, server] = Object.values(new WebSocketPair());
     server.accept();
+    // Byte-exact binary contract requires the ArrayBuffer view (the
+    // reference default binaryType is "blob").
+    server.binaryType = "arraybuffer";
     server.addEventListener("message", (event) => {
       server.send(new Uint8Array([event.data.byteLength & 0xff]));
     });

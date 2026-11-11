@@ -9,7 +9,7 @@ Being able to build does not mean being able to isolate in production. Native bu
 
 ## Unified Capability Contract (Three-Platform Intersection)
 
-**single-worker and static-pool are committed to uniform behavior across the three platforms**: `static-pool`'s single and multi shard modes are available on Linux, macOS, and Windows with identical external behavior (same public port, same READY/drain/request contract). Linux/macOS share the port through kernel `SO_REUSEPORT`; Windows uses a pool-level shared acceptor that polls and dispatches. Only capabilities whose behavior is consistent across all three platforms enter the ✅ list; any capability that is missing, semantically inconsistent, or only partially implemented on any platform is listed separately as a difference.
+**single-worker and static-pool are committed to uniform behavior across the three platforms**: `static-pool`'s single and multi shard modes are available on Linux, macOS, and Windows with identical external behavior (same public port, same READY/drain/request contract). All three use one pool-owned acceptor that dispatches connections to available shards. If all Workers exit, the endpoint remains available for HTTP 503 responses, including failed WebSocket handshakes, until stop/drain closes it. This local fixture uses round-robin among available Workers; it does not implement managed-pool recovery. Only capabilities whose behavior is consistent across all three platforms enter the ✅ list; any capability that is missing, semantically inconsistent, or only partially implemented on any platform is listed separately as a difference.
 
 Unified commitments:
 
@@ -28,7 +28,7 @@ Unified commitments:
 - Host `--mode managed` (coordinator/Admin/multi-App): Linux only; macOS/Windows exit after a direct CLI message
 - `capsid:fs` (read/stat/list): fully supported on Linux; degraded but usable on macOS/Windows, and always rejects symlink/reparse paths (macOS: `openat(O_NOFOLLOW)` dirfd walk; Windows: drive-letter absolute paths, reparse points rejected)
 - strict sandbox (seccomp/Landlock/namespace/cgroup): Linux only
-- Multi-shard shared port (`SO_REUSEPORT`): internal implementation only on Linux/macOS; Windows uses a pool-level shared acceptor to achieve the same external behavior
+- `SO_REUSEPORT` socket option: available on Linux/macOS only; static-pool uses a pool-owned shared acceptor on all platforms
 - Worker CPU affinity: full on Linux; current processor group only on Windows; none on macOS
 - `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`: semantics differ by platform, so there is no unified commitment
 - Secure `bindingsRoot` scanning for local Binding development: Linux/macOS
@@ -50,7 +50,7 @@ For consistent cross-platform behavior, rely only on the ✅ list; before using 
 ### macOS
 
 - Built natively with the system Clang; the Release package is `capsid-<version>-darwin-arm64.tar.gz`;
-- single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; multi shard uses `SO_REUSEPORT`;
+- single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; static-pool uses one pool-owned acceptor;
 - `capsid:fs` is degraded but usable: readText/stat/list behave consistently with Linux, implemented as a component-by-component `openat(O_NOFOLLOW)` dirfd walk; symlinks are always rejected;
 - There is no API equivalent to `sched_setaffinity`; CPU affinity tests are skipped with CTest 77;
 - `--strict-sandbox on` fails directly at the CLI ("requires Linux strict sandbox"); `--mode managed` fails directly at the CLI with the message "managed coordinator requires Linux strict sandbox", matching Windows behavior. A programmatic spawn that still requests strict sandbox fails during the worker startup handshake (defense in depth).

@@ -1,0 +1,131 @@
+{
+  "status": "complete",
+  "complete": true,
+  "frames": 76,
+  "sequences": 30,
+  "stepsInFrozenCorpus": 168,
+  "reusedWindowsControls": 13,
+  "reusedProductionControls": 13,
+  "measurements": [
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "wrong-schema",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "8da9b6c54000338fccacfc21dceb6fa364e12f950736ec9e64221e16c65b9be8"
+    },
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "missing-sequences",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e2ebe2b4d79bd1756937e8435814ca9c0f684aa22d5edc47e18f4c7de620144c"
+    },
+    {
+      "target": "channel_registry",
+      "mutation": "missing-sequences",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "c6b6a4f60919f06a17630bed249e676fa2b99c101a771e080674e8168097df34"
+    },
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "empty-sequences",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e2ebe2b4d79bd1756937e8435814ca9c0f684aa22d5edc47e18f4c7de620144c"
+    },
+    {
+      "target": "channel_registry",
+      "mutation": "empty-sequences",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "c6b6a4f60919f06a17630bed249e676fa2b99c101a771e080674e8168097df34"
+    },
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "empty-steps",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "97a8f8508d8df9df1939912097b0eee404972403223df3703cc9effa4c6c50bd"
+    },
+    {
+      "target": "channel_registry",
+      "mutation": "empty-steps",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "1a0e030ada1dd2068d383d4b7298bab4b6bf56c816bc16a5e4af770e4dbedd2f"
+    },
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "duplicate-sequence",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "57e6a4a0d325103b5e08aa2c317e8bb98b4465dc7ba0dd488b1c5b1365198217"
+    },
+    {
+      "target": "channel_registry",
+      "mutation": "duplicate-sequence",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "1f9272aceca33a1f53ad827e4c9fe7ea618d4eb35853abb3302bf9da70206179"
+    },
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "wrong-step-expectation",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "45c43d1938342eede87a3879f95222a4788874f5e08ac3d3f91d3a72dbef1f2b"
+    },
+    {
+      "target": "channel_registry",
+      "mutation": "wrong-step-expectation",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "45c43d1938342eede87a3879f95222a4788874f5e08ac3d3f91d3a72dbef1f2b"
+    },
+    {
+      "target": "fetchrpc_v4_boundary",
+      "mutation": "missing-frame",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "03c8dde84424a075900850f99cad9a53564f814161eebdf44cccb792fc5a8954"
+    },
+    {
+      "target": "channel_registry",
+      "mutation": "missing-frame",
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "03c8dde84424a075900850f99cad9a53564f814161eebdf44cccb792fc5a8954"
+    }
+  ],
+  "binarySHA256": {
+    "/root/capsid-verification-20261109/build-sanitizer/test-fetchrpc-v4": "ca1f4c2f134ad004d968c7507c32ed640150dd78350a577b8d5f2fb272e6f6a8",
+    "/root/capsid-verification-20261109/build-sanitizer/test-channel-registry": "0396e62091d13dcc6d5254742820edcd9b5cb77ebb5b515b26cf841c0e7ef9a5",
+    "/root/capsid-verification-20261109/build-sanitizer/test-channel-races": "3d2f68169344194deda89cb1eeba97ad00c7a8de32809dfa96cae3688c032dc2"
+  },
+  "originalSanitizerFullPositiveNames": [
+    "fetchrpc_v4_boundary",
+    "channel_registry",
+    "channel_two_peer_races"
+  ],
+  "junitSHA256": "7b9c081333d976e6e65e6f34ee3a51b98cb61167fd9d646aea851bfc1b1efbea",
+  "priorQualifierError": "R2 required one combined flag; actual CMake emits separate address and undefined flags. Both were present on every selected translation unit.",
+  "independentReferenceDoesNotCompileProductionRegistry": true,
+  "actualRegistryCompiledInProductionReplay": true,
+  "originalFullFailuresRetained": [
+    "websocket_fetch_arguments_prototype_static-pool",
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+    "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+    "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+    "worker_wpt_fetch_api_headers_headers_basic_any_js",
+    "worker_wpt_fetch_api_headers_headers_errors_any_js"
+  ],
+  "fullV030GoalComplete": false,
+  "scope": "All frozen 76 vectors and 30 ordered sequences, plus original two-peer race. Bounded corpus replay, not exhaustive arbitrary-state proof.",
+  "totalActualInvalidFixtureControlsRejectedAcrossThreeProfiles": 39,
+  "actualNewSanitizerNegativeControls": 13,
+  "allOriginalInputAndBinaryHashesUnchanged": true
+}

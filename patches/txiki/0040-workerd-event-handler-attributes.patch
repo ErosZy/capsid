@@ -1,0 +1,172 @@
+--- a/src/js/polyfills/event-target.js
++++ b/src/js/polyfills/event-target.js
+@@ -349,6 +349,8 @@
+ const listenersMap = new WeakMap();
+ const abortSignals = new WeakMap();
+ const callbackObservers = new WeakMap();
++const eventHandlerAttributes = new WeakMap();
++const applyCallback = Reflect.apply;
+ 
+ function registerAbortSignal(signal) {
+     abortSignals.set(signal, { aborted: false, algorithms: new Set() });
+@@ -425,63 +427,44 @@
+ function defineEventAttributeDescriptor(eventName) {
+     return {
+         get() {
++            getListeners(this);
++            return eventHandlerAttributes.get(this).get(eventName)?.value ?? null;
++        },
++        set(value) {
+             const listeners = getListeners(this);
+-            let node = listeners.get(eventName);
+-
+-            while (node) {
+-                if (node.listenerType === ATTRIBUTE) {
+-                    return node.listener;
++            const attributes = eventHandlerAttributes.get(this);
++            const next = typeof value === 'function' || isObject(value) ? value : null;
++            let attribute = attributes.get(eventName);
++            if (next === null) {
++                if (attribute) {
++                    attribute.value = null;
++                    if (attribute.node) unlinkListener(listeners, eventName, attribute.node);
++                    attribute.node = null;
+                 }
+-
+-                node = node.next;
++                // A previously managed type remains managed after clearing.
++                // A never-assigned null does not suppress reflected properties.
++                return;
+             }
+-
+-            return null;
+-        },
+-
+-        set(listener) {
+-            if (typeof listener !== 'function' && !isObject(listener)) {
+-                listener = null;
++            if (!attribute) {
++                attribute = { value: next, node: null };
++                attributes.set(eventName, attribute);
+             }
+-
+-            const listeners = getListeners(this);
+-
+-            // Traverse to the tail while removing old value.
+-            let prev = null;
+-            let node = listeners.get(eventName);
+-
+-            while (node) {
+-                if (node.listenerType === ATTRIBUTE) {
+-                    // Remove old value.
+-                    if (prev !== null) {
+-                        prev.next = node.next;
+-                    } else if (node.next !== null) {
+-                        listeners.set(eventName, node.next);
+-                    } else {
+-                        listeners.delete(eventName);
+-                    }
+-                } else {
+-                    prev = node;
+-                }
+-
+-                node = node.next;
+-            }
+-
+-            // Add new value.
+-            if (listener !== null) {
+-                const newNode = {
+-                    listener,
+-                    listenerType: ATTRIBUTE,
+-                    passive: false,
+-                    once: false,
+-                    next: null,
+-                };
+-
+-                if (prev === null) {
+-                    listeners.set(eventName, newNode);
+-                } else {
+-                    prev.next = newNode;
+-                }
++            attribute.value = next;
++            if (attribute.node) return;
++            // Identity belongs to the registration, not the user's function.
++            // Replacement retains position; clearing/readding uses a fresh identity.
++            const node = { listener: {}, listenerType: ATTRIBUTE, once: false,
++                passive: false, abortCleanup: null, next: null,
++                callback(event) {
++                    const handler = attribute.value;
++                    if (typeof handler === 'function') return applyCallback(handler, globalThis, [event]);
++                } };
++            attribute.node = node;
++            let tail = listeners.get(eventName);
++            if (!tail) listeners.set(eventName, node);
++            else {
++                while (tail.next) tail = tail.next;
++                tail.next = node;
+             }
+         },
+         configurable: true,
+@@ -513,6 +496,7 @@
+ 
+     __init() {
+         listenersMap.set(this, new Map());
++        eventHandlerAttributes.set(this, new Map());
+     }
+ 
+     /**
+@@ -604,20 +588,27 @@
+         setCurrentTarget(event, self);
+         const type = data.eventType;
+         const callbacks = [];
+-        for (let node = listeners.get(type); node; node = node.next) callbacks.push(node);
+         try {
++            // The pinned default profile reflects arbitrary on<type> properties
++            // before ordinary listeners. Managed IDL attributes use their own
++            // positioned registration and must not also run through reflection.
++            if (!eventHandlerAttributes.get(self).has(type)) {
++                const handler = self[`on${type}`];
++                if (typeof handler === 'function') {
++                    callbacks.push({ callback: handler, receiver: globalThis, reflected: true });
++                }
++            }
++            for (let node = listeners.get(type); node; node = node.next) callbacks.push(node);
+             for (const snapshot of callbacks) {
+                 if (isStopped(event)) break;
+-                // Re-added identities remain eligible, but newly added identities
+-                // wait for the next dispatch. Invoke the original callback snapshot.
+-                const live = findListener(listeners, type, snapshot.listener, snapshot.listenerType);
+-                if (!live) continue;
+-                if (snapshot.once) unlinkListener(listeners, type, live);
+-                let result;
+-                if (snapshot.listenerType === ATTRIBUTE) {
+-                    if (typeof snapshot.listener !== 'function') continue;
+-                    result = snapshot.listener.call(self, event);
+-                } else result = snapshot.callback.call(snapshot.receiver ?? self, event);
++                if (!snapshot.reflected) {
++                    // Re-added identities remain eligible, but newly added identities
++                    // wait for the next dispatch. Preserve the callback snapshot.
++                    const live = findListener(listeners, type, snapshot.listener, snapshot.listenerType);
++                    if (!live) continue;
++                    if (snapshot.once) unlinkListener(listeners, type, live);
++                }
++                const result = applyCallback(snapshot.callback, snapshot.receiver ?? self, [event]);
+                 if (result === true) setCancelFlag(data);
+                 callbackObservers.get(event)?.(result);
+             }
+--- a/src/js/polyfills/event-target-polyfill.js
++++ b/src/js/polyfills/event-target-polyfill.js
+@@ -176,10 +176,10 @@
+     }
+ });
+ 
+-Object.setPrototypeOf(globalThis, EventTarget.prototype);
++// Global handler attributes must not become attributes of every EventTarget.
++const globalProto = Object.create(EventTarget.prototype);
++Object.setPrototypeOf(globalThis, globalProto);
+ EventTarget.prototype.__init.call(globalThis);
+-
+-const globalProto = Object.getPrototypeOf(globalThis);
+ 
+ defineEventAttribute(globalProto, 'load');
+ defineEventAttribute(globalProto, 'beforeunload');

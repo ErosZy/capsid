@@ -1,0 +1,114 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -17661,9 +17661,38 @@
+     return can_store_error_stack(exc) || can_add_backtrace(exc);
+ }
+ 
+ /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
++/* Native calls do not need the interpreter's large stack frame. Keeping
++ * dispatch outside it avoids initializing that frame on every built-in call,
++ * especially with MSVC ASan. The common entry still polls exactly once. */
++static no_inline JSValue JS_CallInternalBytecode(JSContext *caller_ctx,
++    JSValueConst func_obj, JSValueConst this_obj, JSValueConst new_target,
++    int argc, JSValueConst *argv, int flags);
++
+ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
++    JSValueConst this_obj, JSValueConst new_target,
++    int argc, JSValueConst *argv, int flags)
++{
++    if (js_poll_interrupts(caller_ctx))
++        return JS_EXCEPTION;
++    if (unlikely(JS_VALUE_GET_TAG(func_obj) != JS_TAG_OBJECT)) {
++        if (!(flags & JS_CALL_FLAG_GENERATOR))
++            return JS_ThrowTypeErrorNotAFunction(caller_ctx);
++    } else {
++        JSObject *p = JS_VALUE_GET_OBJ(func_obj);
++        if (unlikely(p->class_id != JS_CLASS_BYTECODE_FUNCTION)) {
++            JSClassCall *call_func = caller_ctx->rt->class_array[p->class_id].call;
++            if (!call_func)
++                return JS_ThrowTypeErrorNotAFunction(caller_ctx);
++            return call_func(caller_ctx, func_obj, this_obj, argc, argv, flags);
++        }
++    }
++    return JS_CallInternalBytecode(caller_ctx, func_obj, this_obj, new_target,
++                                   argc, argv, flags);
++}
++
++static no_inline JSValue JS_CallInternalBytecode(JSContext *caller_ctx, JSValueConst func_obj,
+                                JSValueConst this_obj, JSValueConst new_target,
+                                int argc, JSValueConst *argv, int flags)
+ {
+     JSRuntime *rt = caller_ctx->rt;
+@@ -17701,10 +17730,8 @@
+ #define DEFAULT         case_default
+ #define BREAK           SWITCH(pc)
+ #endif
+ 
+-    if (js_poll_interrupts(caller_ctx))
+-        return JS_EXCEPTION;
+     if (unlikely(JS_VALUE_GET_TAG(func_obj) != JS_TAG_OBJECT)) {
+         if (flags & JS_CALL_FLAG_GENERATOR) {
+             JSAsyncFunctionState *s = JS_VALUE_GET_PTR(func_obj);
+             /* func_obj get contains a pointer to JSFuncAsyncState */
+@@ -17725,23 +17752,11 @@
+             if (s->throw_flag)
+                 goto exception;
+             else
+                 goto restart;
+-        } else {
+-            goto not_a_function;
+         }
+     }
+     p = JS_VALUE_GET_OBJ(func_obj);
+-    if (unlikely(p->class_id != JS_CLASS_BYTECODE_FUNCTION)) {
+-        JSClassCall *call_func;
+-        call_func = rt->class_array[p->class_id].call;
+-        if (!call_func) {
+-        not_a_function:
+-            return JS_ThrowTypeErrorNotAFunction(caller_ctx);
+-        }
+-        return call_func(caller_ctx, func_obj, this_obj, argc,
+-                         argv, flags);
+-    }
+     b = p->u.func.function_bytecode;
+ 
+     if (unlikely(argc < b->arg_count || (flags & JS_CALL_FLAG_COPY_ARGV))) {
+         arg_allocated_size = b->arg_count;
+@@ -48683,8 +48698,11 @@
+     JSValue t, ret, str_val, obj, val, groups;
+     JSValue indices, indices_groups;
+     uint8_t *re_bytecode;
+     uint8_t **capture, *str_buf;
++    /* Most expressions need only a few capture pairs. Keep those on the
++       stack; larger expressions retain the heap path and its error cleanup. */
++    uint8_t *capture_storage[16];
+     int64_t last_index;
+     const char *group_name_ptr;
+     JSProperty props[4]; // length, index, input, groups, in that order
+ 
+@@ -48713,9 +48731,12 @@
+     }
+     str = JS_VALUE_GET_STRING(str_val);
+     capture_count = lre_get_capture_count(re_bytecode);
+     if (capture_count > 0) {
+-        capture = js_malloc(ctx, sizeof(capture[0]) * capture_count * 2);
++        if (capture_count <= countof(capture_storage) / 2)
++            capture = capture_storage;
++        else
++            capture = js_malloc(ctx, sizeof(capture[0]) * capture_count * 2);
+         if (!capture)
+             goto fail;
+     }
+     shift = str->is_wide_char;
+@@ -48872,9 +48893,10 @@
+     JS_FreeValue(ctx, indices);
+     JS_FreeValue(ctx, str_val);
+     JS_FreeValue(ctx, groups);
+     JS_FreeValue(ctx, obj);
+-    js_free(ctx, capture);
++    if (capture != capture_storage)
++        js_free(ctx, capture);
+     return ret;
+ }
+ 
+ /* delete portions of a string that match a given regex */

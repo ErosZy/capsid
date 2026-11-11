@@ -1,0 +1,91 @@
+--- a/src/js/polyfills/event-target.js
++++ b/src/js/polyfills/event-target.js
+@@ -1,3 +1,4 @@
++const eventWeakGet = Function.prototype.call.bind(WeakMap.prototype.get);
+ /**
+  * Modified from the original:
+  *
+@@ -33,7 +34,7 @@
+  * @private
+  */
+ function pd(event) {
+-    const retv = privateData.get(event);
++    const retv = eventWeakGet(privateData, event);
+ 
+     if (!retv) {
+         throw new TypeError('Illegal invocation');
+@@ -63,11 +64,14 @@
+ }
+ 
+ 
++// Web IDL conversion uses the intrinsic, independently of application writes
++// to globalThis.String (including while a trusted runtime event is pending).
++const eventString = String;
+ // JSG's legacy string round-trip replaces each invalid UTF-8 byte of a
+ // lone UTF-16 surrogate. CloseEvent.reason explicitly uses USVString instead.
+ function toEventString(value, replacement = '\uFFFD\uFFFD\uFFFD') {
+     if (typeof value === 'symbol') throw new TypeError('Cannot convert a Symbol to a string');
+-    const text = String(value);
++    const text = eventString(value);
+     let result = '';
+     for (let index = 0; index < text.length; ++index) {
+         const code = text.charCodeAt(index);
+@@ -357,7 +361,7 @@
+ }
+ 
+ function runAbortAlgorithms(signal) {
+-    const state = abortSignals.get(signal);
++    const state = eventWeakGet(abortSignals, signal);
+     state.aborted = true;
+     const algorithms = [...state.algorithms];
+     state.algorithms.clear();
+@@ -407,7 +411,7 @@
+  * @private
+  */
+ function getListeners(eventTarget) {
+-    const listeners = listenersMap.get(eventTarget);
++    const listeners = eventWeakGet(listenersMap, eventTarget);
+ 
+     if (!listeners) {
+         throw new TypeError(
+@@ -428,11 +432,11 @@
+     return {
+         get() {
+             getListeners(this);
+-            return eventHandlerAttributes.get(this).get(eventName)?.value ?? null;
++            return eventWeakGet(eventHandlerAttributes, this).get(eventName)?.value ?? null;
+         },
+         set(value) {
+             const listeners = getListeners(this);
+-            const attributes = eventHandlerAttributes.get(this);
++            const attributes = eventWeakGet(eventHandlerAttributes, this);
+             const next = typeof value === 'function' || isObject(value) ? value : null;
+             let attribute = attributes.get(eventName);
+             if (next === null) {
+@@ -518,7 +522,7 @@
+         const passive = dictionary ? !!options.passive : false;
+         const once = dictionary ? !!options.once : false;
+         const signal = dictionary ? options.signal : undefined;
+-        const signalState = signal === undefined ? null : abortSignals.get(signal);
++        const signalState = signal === undefined ? null : eventWeakGet(abortSignals, signal);
+         if (signal !== undefined && !signalState) throw new TypeError('Invalid AbortSignal');
+         if (capture || passive) throw new TypeError('capture and passive must be false');
+         if (signalState?.aborted) return;
+@@ -592,7 +596,7 @@
+             // The pinned default profile reflects arbitrary on<type> properties
+             // before ordinary listeners. Managed IDL attributes use their own
+             // positioned registration and must not also run through reflection.
+-            if (!eventHandlerAttributes.get(self).has(type)) {
++            if (!eventWeakGet(eventHandlerAttributes, self).has(type)) {
+                 const handler = self[`on${type}`];
+                 if (typeof handler === 'function') {
+                     callbacks.push({ callback: handler, receiver: globalThis, reflected: true });
+@@ -610,7 +614,7 @@
+                 }
+                 const result = applyCallback(snapshot.callback, snapshot.receiver ?? self, [event]);
+                 if (result === true) setCancelFlag(data);
+-                callbackObservers.get(event)?.(result);
++                eventWeakGet(callbackObservers, event)?.(result);
+             }
+         } finally {
+             setPassiveListener(event, null);

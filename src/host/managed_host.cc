@@ -9,6 +9,7 @@
 // compatibility check, and finally the active-state persist API.
 
 #include "host/managed_host.h"
+#include "host/protocol_launch.h"
 
 #include "capsid/runtime.h"
 #include "host/active_state.h"
@@ -277,28 +278,33 @@ struct WarmResult {
 // and checks the compatibility id itself (PR-09c §8.3/§9.3). On failure the
 // worker is destroyed and nullptr is returned — a half-started worker never
 // escapes.
-capsid_worker* spawn_loaded_worker(
-    const ManagedHostOptions& options,
-    const std::vector<std::uint8_t>& bundle,
-    bool trusted_bytecode,
-    const std::string& source_name,
-    const EffectiveConfig& effective,
-    const std::vector<std::pair<std::string, std::string>>& env_values,
-    const std::vector<capsid::host::EffectiveBinding>& bindings,
-    std::string* error) {
-    capsid_worker* worker = nullptr;
-    // ---- two-phase descriptor build (shared with the local-capsid.json
-    // data planes; see build_runtime_policy) ----
-    RuntimePolicy runtime_policy;
-    if (!build_runtime_policy(effective, env_values, &runtime_policy,
-                              error)) {
-        return nullptr;
-    }
+namespace {
 
-    capsid_worker_config config;
+capsid::protocol::ChannelLimits protocol_limits_from(
+    const capsid::host::ChannelsConfig& channels) {
+    capsid::protocol::ChannelLimits limits;
+    limits.max_channels = channels.max_channels;
+    limits.max_message_bytes = channels.max_message_bytes;
+    limits.reassembly_budget_bytes = channels.reassembly_budget_bytes;
+    limits.send_budget_bytes = channels.send_budget_bytes;
+    limits.close_timeout_ms = channels.close_timeout_ms;
+    limits.dial_timeout_ms = channels.dial_timeout_ms;
+    limits.idle_timeout_ms = channels.idle_timeout_ms;
+    limits.per_channel_queue_bytes = channels.per_channel_queue_bytes;
+    return limits;
+}
+
+// Share the effective resource configuration between spawning and READY
+// expectations, including sanitizer defaults and forwarded limits.
+bool prepare_managed_worker_config(
+    const ManagedHostOptions& options, const EffectiveConfig& effective,
+    capsid_worker_config& config, capsid_resource_limits& limits,
+    std::string* error) {
     capsid_worker_config_init(&config);
     config.worker_path = options.worker_path.c_str();
-    runtime_policy.apply(&config);
+    if (effective.request_timeout_ms != 0) {
+        config.request_timeout_ms = effective.request_timeout_ms;
+    }
     // Effective resource/request/strict-sandbox controls reach the worker,
     // each in its own Runtime field: jsHeap bounds the QuickJS heap,
     // processAddressSpace bounds the process address space
@@ -335,13 +341,12 @@ capsid_worker* spawn_loaded_worker(
         effective.process_address_bytes > 0) {
         config.process_memory_limit = effective.process_address_bytes;
     }
-    capsid_resource_limits limits;
     capsid_resource_limits_init(&limits);
     if (effective.file_descriptors > 0) {
         if (effective.file_descriptors >
             std::numeric_limits<std::uint32_t>::max()) {
             *error = "file descriptor limit exceeds the worker window";
-            return nullptr;
+            return false;
         }
         limits.enabled_fields |= CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS;
         limits.file_descriptors =
@@ -352,13 +357,53 @@ capsid_worker* spawn_loaded_worker(
         if (effective.requests_per_worker >
             static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
             *error = "request limit exceeds the worker window";
-            return nullptr;
+            return false;
         }
         config.max_inflight_requests =
             static_cast<std::uint32_t>(effective.requests_per_worker);
     }
     config.strict_sandbox = effective.strict_sandbox ? 1 : 0;
-    const capsid_result spawn_result = capsid_worker_spawn(&config, &worker);
+    return true;
+}
+
+}  // namespace
+
+capsid_worker* spawn_loaded_worker(
+    const ManagedHostOptions& options,
+    const std::vector<std::uint8_t>& bundle,
+    bool trusted_bytecode,
+    const std::string& source_name,
+    const EffectiveConfig& effective,
+    const std::vector<std::pair<std::string, std::string>>& env_values,
+    const std::vector<capsid::host::EffectiveBinding>& bindings,
+    std::string* error,
+    capsid::WorkerReadyProof* expected_ready = nullptr) {
+    capsid_worker* worker = nullptr;
+    // GLM T08: first-party spawns ride spawn_ex at v4; a channels
+    // config additionally requests the channel capability set.
+    const capsid::host::ProtocolLaunch launch =
+        capsid::host::ProtocolLaunch::from(options.channels);
+    // ---- two-phase descriptor build (shared with the local-capsid.json
+    // data planes; see build_runtime_policy) ----
+    RuntimePolicy runtime_policy;
+    if (!build_runtime_policy(effective, env_values, &runtime_policy,
+                              error)) {
+        return nullptr;
+    }
+
+    capsid_worker_config config;
+    capsid_resource_limits limits;
+    if (!prepare_managed_worker_config(
+            options, effective, config, limits, error)) {
+        return nullptr;
+    }
+    runtime_policy.apply(&config);
+    if (expected_ready != nullptr) {
+        *expected_ready = capsid::host::expected_worker_ready_proof(
+            bindings, config);
+    }
+    const capsid_result spawn_result = capsid::host::
+        spawn_with_protocol(&config, launch, &worker);
     if (spawn_result != CAPSID_OK) {
         *error = "worker spawn failed";
         return nullptr;
@@ -421,9 +466,10 @@ WarmResult warm_worker(const ManagedHostOptions& options,
               .generation = generation});
     count_event(options.metrics, "starting", options.application, generation);
     std::string spawn_error;
+    capsid::WorkerReadyProof expected_ready;
     capsid_worker* spawned = spawn_loaded_worker(
         options, bundle, trusted_bytecode, source_name, effective, env_values,
-        bindings, &spawn_error);
+        bindings, &spawn_error, &expected_ready);
     if (spawned == nullptr) {
         out.error = spawn_error;
         return out;
@@ -470,9 +516,6 @@ WarmResult warm_worker(const ManagedHostOptions& options,
                 // compares both — the compat prefix and its own expected
                 // profile digest — never a whole-payload string equality.
                 std::string ready_error;
-                const capsid::WorkerReadyProof expected_ready =
-                    capsid::host::expected_worker_ready_proof(
-                        bindings, effective.strict_sandbox);
                 if (!capsid::host::verify_worker_ready(
                         std::vector<std::uint8_t>(
                             event.payload.data,
@@ -565,10 +608,19 @@ WorkerExecutor::WorkerFactory make_generation_factory(
     const EffectiveConfig& effective,
     const std::vector<std::pair<std::string, std::string>>& env_values,
     const std::vector<capsid::host::EffectiveBinding>& bindings) {
+    capsid_worker_config config;
+    capsid_resource_limits limits;
+    std::string configuration_error;
+    const bool configured = prepare_managed_worker_config(
+        options, effective, config, limits, &configuration_error);
     WorkerExecutor::WorkerFactory factory =
         [options, bundle, trusted_bytecode, source_name, effective,
-            env_values, bindings](capsid_worker** out,
-                        std::string* factory_error) -> bool {
+            env_values, bindings, configured, configuration_error](
+                capsid_worker** out, std::string* factory_error) -> bool {
+        if (!configured) {
+            *factory_error = configuration_error;
+            return false;
+        }
         if (options.stop_requested != nullptr &&
             options.stop_requested->load()) {
             *factory_error = "host stop requested";
@@ -585,9 +637,10 @@ WorkerExecutor::WorkerFactory make_generation_factory(
         *out = worker;
         return true;
     };
-    factory.expected_ready =
-        capsid::host::expected_worker_ready_proof(
-            bindings, effective.strict_sandbox);
+    if (configured) {
+        factory.expected_ready =
+            capsid::host::expected_worker_ready_proof(bindings, config);
+    }
     return factory;
 }
 
@@ -888,6 +941,7 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
         if (options->commit_activation == nullptr ||
             options->abort_activation == nullptr) {
             destroy_pool(warm);
+            if (options->ledger) options->ledger->abort_reserve(options->application, warm.size(), replacement);
             status->state = OperationState::kFailed;
             status->error = "activation transaction misconfigured";
             outcome->error = status->error;
@@ -900,6 +954,7 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
                                            &plan_error);
         if (plan == nullptr) {
             // The failed prepare destroyed the warmed workers.
+            if (options->ledger) options->ledger->abort_reserve(options->application, warm.size(), replacement);
             status->state = OperationState::kFailed;
             status->error =
                 plan_error.empty() ? "cannot activate the new generation"
@@ -909,6 +964,14 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
             outcome->worker = nullptr;
             return false;
         }
+    }
+    const auto capacity = plan && plan->new_pool ? plan->new_pool->capacity_lease() : nullptr;
+    if (capacity && replacement && (!plan->old_pool || !plan->old_pool->capacity_lease())) {
+        options->abort_activation(plan.get());
+        plan->new_pool->stop_and_join(); capacity->abort(true);
+        status->state = OperationState::kFailed; status->error = "replacement capacity ownership missing";
+        outcome->error = status->error; outcome->workers.clear(); outcome->worker = nullptr;
+        return false;
     }
     // ---- persist (may fail) ----
     ActiveStateDocument document;
@@ -925,11 +988,13 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
         // and the old active pool stay untouched.
         if (plan != nullptr) {
             options->abort_activation(plan.get());
+            if (plan->new_pool) plan->new_pool->stop_and_join();
         } else {
             destroy_pool(warm);
         }
         if (options->ledger != nullptr) {
-            options->ledger->abort_reserve(
+            if (capacity) capacity->abort(replacement);
+            else options->ledger->abort_reserve(
                 options->application, static_cast<std::uint64_t>(warm.size()),
                 replacement);
         }
@@ -941,6 +1006,16 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
         return false;
     }
     // ---- commit (noexcept; see activation_transaction.h) ----
+    // Classify the old pool before a commit callback can let its reaper
+    // finish. A pool lease also handles a generation reaped during warm.
+    if (options->ledger != nullptr) {
+        if (capacity) {
+            if (replacement) capacity->activate_replacement(plan->old_pool ? plan->old_pool->capacity_lease() : nullptr);
+            else capacity->activate_fresh();
+        } else if (replacement) {
+            options->ledger->commit_replace(options->application, warm.size(), options->ledger->steady_of(options->application));
+        } else options->ledger->commit_fresh(options->application);
+    }
     if (plan != nullptr) {
         options->commit_activation(plan.get());
         // Ownership moved to the plan: the warmed pointers are stale.
@@ -949,19 +1024,6 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
     } else {
         // Legacy caller path: the coordinator hands the owning pool back.
         publish_pool(outcome, warm);
-    }
-    // §9.4 settle the reserve: the new pool holds its count. (Commit
-    // callback and ledger settle are both after the persist; the ledger
-    // switch is part of the transactional settle.)
-    if (options->ledger != nullptr) {
-        if (replacement) {
-            options->ledger->commit_replace(
-                options->application,
-                static_cast<std::uint64_t>(warm.size()),
-                options->ledger->steady_of(options->application));
-        } else {
-            options->ledger->commit_fresh(options->application);
-        }
     }
     status->state = OperationState::kActive;
     outcome->ok = true;
@@ -1566,6 +1628,12 @@ std::string host_policy_identity(const HostPolicy& host) {
         << ";idle:" << host.max_stream_idle_timeout_ms
         << ";wtimeout:" << host.max_write_timeout_ms
         << ";sandbox:" << (host.strict_sandbox ? 1 : 0);
+    if (host.default_request_timeout_ms != 0) {
+        out << ";requestTimeoutDefault:" << host.default_request_timeout_ms;
+    }
+    if (host.max_request_timeout_ms != 0) {
+        out << ";requestTimeoutMaximum:" << host.max_request_timeout_ms;
+    }
     return sha256_hex(out.str());
 }
 
@@ -2170,6 +2238,8 @@ bool has_secret_requests = false;
     identity.secret_revision = snapshot_revision;
     identity.runtime_compatibility_id = options->runtime_compatibility_id;
     identity.binding_set_digest = std::move(binding_set_digest);
+    identity.protocol_limits_digest = compute_protocol_limits_digest(
+        4, protocol_limits_from(options->channels));
     prepared.generation_digest = compute_generation_digest(identity);
     prepared.selected = selected;
     prepared.source_name = std::move(source_name);
@@ -2697,6 +2767,8 @@ ValidatedGeneration validate_committed_generation(
                     &validated.bindings);
         }
     }
+    identity.protocol_limits_digest = compute_protocol_limits_digest(
+        4, protocol_limits_from(options.channels));
     const std::string recomputed_digest = compute_generation_digest(identity);
     if (recomputed_digest != generation) {
         fail("committed generation identity mismatch");
@@ -3244,16 +3316,15 @@ DeployOutcome run_retire_operation(ManagedHostOptions* options,
         status->state = OperationState::kFailed;
         return outcome;
     }
-    if (plan != nullptr) {
-        options->commit_retire(plan.get());
-    }
     // §9.4: the serving pool leaves steady for surge (draining); its
     // count is released when the reaper finished (the pool's
     // on_drain_complete hook).
     if (options->ledger != nullptr) {
-        options->ledger->begin_retire(
-            options->application, options->ledger->steady_of(options->application));
+        const auto capacity = plan && plan->pool ? plan->pool->capacity_lease() : nullptr;
+        if (capacity) capacity->begin_drain();
+        else options->ledger->begin_retire(options->application, options->ledger->steady_of(options->application));
     }
+    if (plan != nullptr) options->commit_retire(plan.get());
     status->state = OperationState::kActive;
     outcome.ok = true;
     // M2 item 7: §12.1 recovery family — a retire is a terminal recovery
@@ -3288,7 +3359,9 @@ DeployOutcome managed_retire(ManagedHostOptions* options,
 // per-App mutex, same persist chain. Idempotent: an already-quarantined
 // or retired App is a no-op success.
 DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
-                                       OperationStatus* status) {
+                                       const std::string& expected_generation,
+                                       OperationStatus* status,
+                                       const std::function<bool()>& still_current) {
     DeployOutcome outcome;
     outcome.operation_id = unique_operation_id();
     status->operation_id = outcome.operation_id;
@@ -3306,10 +3379,16 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
         status->state = OperationState::kFailed;
         return outcome;
     }
+    // Own the App directory before a stale-pool guard can return or throw.
+    PosixActiveStateFilesystem filesystem(app_state_fd);
     // Per-App mutex: the quarantine read-modify-write must not interleave
     // with a concurrent deploy/retire/recover on the same App.
     capsid::host::AppOperationLock app_lock(options->application);
-    PosixActiveStateFilesystem filesystem(app_state_fd);
+    if (still_current && !still_current()) {
+        outcome.ok = true;
+        status->state = OperationState::kActive;
+        return outcome;
+    }
     const ActiveStateReadResult current = filesystem.read_active_file();
     if (current.status == ActiveStateIoStatus::kNotFound) {
         // No durable document at all: nothing to quarantine.
@@ -3331,6 +3410,13 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
     }
     if (parsed.document.state != ActiveServiceState::kActive) {
         // Already quarantined or retired: the App is already not serving.
+        outcome.ok = true;
+        status->state = OperationState::kActive;
+        return outcome;
+    }
+    if (parsed.document.generation != expected_generation) {
+        // The event belongs to a replaced/aborted pool. In particular,
+        // a matching digest alone cannot identify a same-version replay.
         outcome.ok = true;
         status->state = OperationState::kActive;
         return outcome;
@@ -3364,13 +3450,18 @@ DeployOutcome run_quarantine_operation(ManagedHostOptions* options,
 }
 
 DeployOutcome managed_quarantine(ManagedHostOptions* options,
-                                 OperationStatus* status) {
+                                 const std::string& expected_generation,
+                                 OperationStatus* status,
+                                 const std::function<bool()>& still_current) {
     DeployOutcome outcome;
-    if (options == nullptr || options->state_root.empty()) {
+    if (options == nullptr || status == nullptr || options->state_root.empty() ||
+        expected_generation.size() != 71 || expected_generation.compare(0, 7, "sha256:") != 0 ||
+        expected_generation.find_first_not_of("0123456789abcdef", 7) != std::string::npos) {
         outcome.error = "invalid managed host arguments";
+        if (status != nullptr) { status->state = OperationState::kFailed; status->error = outcome.error; }
         return outcome;
     }
-    outcome = run_quarantine_operation(options, status);
+    outcome = run_quarantine_operation(options, expected_generation, status, still_current);
     record_operation(outcome.operation_id, *status);
     return outcome;
 }
@@ -3686,6 +3777,12 @@ std::string managed_app_status(const ManagedHostOptions& options) {
     const ActiveStateDocumentResult parsed =
         parse_active_state_json(options.application, current.bytes);
     if (!parsed.ok) {
+        return inactive;
+    }
+    // A retired tombstone carries previousVersion/previousGeneration, not
+    // the active document's version/generation. Emit the canonical inactive
+    // shape rather than empty identity fields rejected by the Admin boundary.
+    if (parsed.document.state == ActiveServiceState::kRetired) {
         return inactive;
     }
     std::ostringstream out;

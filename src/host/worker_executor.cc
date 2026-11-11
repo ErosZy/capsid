@@ -5,6 +5,9 @@
 // it (capsid_worker_destroy) in its exit path — the only destroy site.
 
 #include "host/worker_executor.h"
+#include <stdexcept>
+#include "host/websocket_dialer.h"
+#include "client_channel_state.h"
 
 #include "host/binding_compile.h"
 #include "host/config.h"
@@ -131,6 +134,11 @@ bool decode_worker_log_event(const capsid_event& event,
     return true;
 }
 
+WorkerExecutor::WorkerExecutor() = default;
+void WorkerExecutor::set_channel_budget(std::shared_ptr<ServiceChannelBudget> budget) {
+    if (started_) throw std::logic_error("channel budget must be set before worker startup");
+    channel_budget_ = std::move(budget);
+}
 WorkerExecutor::~WorkerExecutor() {
     stop_and_join();
 }
@@ -150,7 +158,11 @@ bool WorkerExecutor::start(const WorkerFactory& factory, std::string* error) {
         return false;
     }
     expected_ready_ = factory.expected_ready;
-    worker_ = worker;
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        worker_ = worker;
+        process_id_.store(capsid_worker_pid(worker));
+    }
     source_.set_worker(worker);
 
     // The worker thread takes exclusive ownership of every further Runtime
@@ -188,10 +200,15 @@ bool WorkerExecutor::adopt(capsid_worker* worker, std::string* error) {
     // The adopter consumed the READY handshake (including the compatibility
     // check); ownership transfers here, and from now on destroy runs only
     // on this executor's reaper thread.
-    worker_ = worker;
     source_.set_worker(worker);
     {
         std::unique_lock<std::mutex> lock(mutex_);
+        worker_ = worker;
+        process_id_.store(capsid_worker_pid(worker));
+        capsid_protocol_info info;
+        if (capsid_worker_get_protocol_info(worker, &info, sizeof(info)) == CAPSID_OK)
+            effective_channel_caps_ = info.effective_capabilities;
+        capsid::client_channel_limits(worker,&channel_limits_);
         ready_ = true;
         ready_match_ = true;
     }
@@ -212,6 +229,9 @@ void WorkerExecutor::stop_and_join() {
     if (worker_thread_.joinable()) {
         worker_thread_.join();
     }
+#ifdef CAPSID_HOST_NETWORKING
+    if(outbound_) outbound_->stop_and_join();
+#endif
 }
 
 void WorkerExecutor::submit(Command command) {
@@ -223,7 +243,7 @@ void WorkerExecutor::submit(Command command) {
     const std::uint64_t request_id = command.request_id;
     std::unique_lock<std::mutex> lock(mutex_);
     if (counts_inflight && inflight_ids_.insert(request_id).second) {
-        inflight_.fetch_add(1, std::memory_order_relaxed);
+        inflight_.fetch_add(1, std::memory_order_acq_rel);
     }
     const bool was_empty = commands_.empty();
     commands_.push_back(std::move(command));
@@ -251,6 +271,28 @@ void WorkerExecutor::submit(Command command) {
         }
     }
     cv_.notify_one();
+}
+
+bool WorkerExecutor::try_submit_channel(Command command) {
+    const size_t limit = command.type == CommandType::kChannelData ? 16u*1024u*1024u - 65536 : 16u*1024u*1024u;
+    size_t charge = 1024;
+    const auto add_charge = [&](size_t bytes) {
+        if (bytes > limit - charge) return false;
+        charge += bytes; return true;
+    };
+    if (!add_charge(command.body.size()) || !add_charge(command.close_reason.size()) ||
+        !add_charge(command.http_response.url.size()) || !add_charge(command.http_response.status_text.size())) return false;
+    for (const auto &header : command.http_response.headers)
+        if (!add_charge(header.first.size()) || !add_charge(header.second.size()) || !add_charge(64)) return false;
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (exited_ || charge > limit || channel_command_bytes_ > limit - charge) return false;
+    const bool was_empty = commands_.empty();
+    command.channel_charge = charge;
+    commands_.push_back(std::move(command));
+    channel_command_bytes_ += charge;
+    if (was_empty) source_.wake();
+    cv_.notify_one();
+    return true;
 }
 
 void WorkerExecutor::submit_probe(const std::string& url) {
@@ -294,7 +336,7 @@ void WorkerExecutor::mark_canceled(std::uint64_t request_id) {
     // REQUEST_TIMEOUT) wins; a cancel racing an already-queued RESPONSE_END
     // cannot double-count.
     if (inflight_ids_.erase(request_id) == 1) {
-        inflight_.fetch_sub(1, std::memory_order_relaxed);
+        inflight_.fetch_sub(1, std::memory_order_acq_rel);
     }
 }
 
@@ -302,7 +344,7 @@ void WorkerExecutor::retire_terminal_request(std::uint64_t request_id) {
     std::unique_lock<std::mutex> lock(mutex_);
     canceled_.insert(request_id);
     if (inflight_ids_.erase(request_id) == 1) {
-        inflight_.fetch_sub(1, std::memory_order_relaxed);
+        inflight_.fetch_sub(1, std::memory_order_acq_rel);
     }
     // Anything still in the shared queue has not reached the Runtime and is
     // stale now. A command already swapped into the worker's local batch is
@@ -334,12 +376,13 @@ std::deque<WorkerEvent> WorkerExecutor::drain_events() {
     std::unique_lock<std::mutex> lock(mutex_);
     std::deque<WorkerEvent> local;
     local.swap(events_);
+    for (const auto &event:local) channel_event_bytes_ -= event.channel_charge;
     return local;
 }
 
 bool WorkerExecutor::available() const {
     std::unique_lock<std::mutex> lock(mutex_);
-    return ready_ && !exited_;
+    return ready_ && !exit_event_queued_ && !destroying_ && !exited_;
 }
 
 bool WorkerExecutor::exited() const {
@@ -348,7 +391,7 @@ bool WorkerExecutor::exited() const {
 }
 
 std::uint64_t WorkerExecutor::inflight() const {
-    return inflight_.load(std::memory_order_relaxed);
+    return inflight_.load(std::memory_order_acquire);
 }
 
 WorkerExecutor::Metrics& WorkerExecutor::metrics() {
@@ -363,10 +406,27 @@ void WorkerExecutor::set_metrics_enabled(bool enabled) {
 
 capsid_worker* WorkerExecutor::worker() const {
     std::unique_lock<std::mutex> lock(mutex_);
-    // destroying_ gates the window between the destroy call and the
-    // worker_ = nullptr store: a diagnostic snapshot must never touch
-    // freed memory.
+    // This accessor only observes publication. A diagnostic reader must
+    // use snapshot_client_metrics(), which holds the owner lock through
+    // the actual reads instead of borrowing this pointer.
     return destroying_ ? nullptr : worker_;
+}
+
+bool WorkerExecutor::snapshot_client_metrics(capsid::ClientIpcMetrics* metrics) {
+    if (metrics == nullptr) {
+        return false;
+    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (worker_ != nullptr && !destroying_) {
+        return capsid::client_ipc_metrics_snapshot(worker_, metrics);
+    }
+    return final_client_metrics_valid_ &&
+        capsid::client_ipc_metrics_drain(&final_client_metrics_, metrics);
+}
+
+capsid::WorkerExitStatus WorkerExecutor::exit_status() const {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return exit_status_;
 }
 
 void WorkerExecutor::worker_thread_main() {
@@ -388,12 +448,24 @@ void WorkerExecutor::worker_thread_main() {
                 }
             }
             lock.unlock();
-            for (Command& command : local) {
+            while (!local.empty()) {
+                Command command = std::move(local.front()); local.pop_front();
+                const size_t charge = command.channel_charge;
+                command_would_block_ = false;
                 if (!execute_command(std::move(command))) {
                     // A closed or wedged worker: fail every pending request
                     // on the io thread and reap below.
                     queue_worker_exit_event();
                     goto worker_exit;
+                }
+                if (command_would_block_) {
+                    std::unique_lock<std::mutex> retry_lock(mutex_);
+                    commands_.insert(commands_.begin()+1, std::make_move_iterator(local.begin()), std::make_move_iterator(local.end()));
+                    break;
+                }
+                if (charge) {
+                    std::unique_lock<std::mutex> charge_lock(mutex_);
+                    channel_command_bytes_ -= charge;
                 }
             }
             // Batch flush: every queued frame reaches the worker in one
@@ -402,6 +474,7 @@ void WorkerExecutor::worker_thread_main() {
                 queue_worker_exit_event();
                 goto worker_exit;
             }
+            if (notifier_) notifier_(); // channel capacity may have returned without a byte event
             // The owner has observed these Runtime-terminal requests and
             // promised not to submit another frame for them. Clearing after
             // the local batch also covers stale commands that were swapped
@@ -456,29 +529,44 @@ void WorkerExecutor::worker_thread_main() {
                 until = shutdown_deadline_;
             }
         }
-        if (!source_.wait(until)) {
+        const bool waited = ipc_write_pending_
+            ? source_.wait_writable_or_wake(until) != WorkerEventSource::WakeResult::kError
+            : source_.wait(until);
+        if (!waited) {
             queue_worker_exit_event();
             goto worker_exit;
         }
     }
 
 worker_exit:
+#ifdef CAPSID_HOST_NETWORKING
+    if(outbound_) outbound_->request_stop();
+#endif
     // The worker thread remains the sole owner up to and including the
     // blocking destroy (§8.1: capsid_worker_destroy runs only on the
-    // owner/reaper thread). destroying_ gates worker() during the destroy
-    // window so a diagnostic snapshot can never touch freed memory.
+    // owner/reaper thread). Snapshot and unpublication share the same
+    // lock. The abortive destroy only closes/signals/reaps: every IPC
+    // increment has happened before this final transfer.
+    capsid_worker* retired_worker = nullptr;
     {
         std::unique_lock<std::mutex> lock(mutex_);
         destroying_ = true;
+        retired_worker = worker_;
+        final_client_metrics_valid_ = capsid::client_ipc_metrics_snapshot(
+            retired_worker, &final_client_metrics_);
+        worker_ = nullptr;
         // A worker that died mid-probe leaves no verdict: the supervisor
         // sees in_flight=false/complete=false and treats the probe as
         // failed (the pool owns the instability decision).
         probe_in_flight_ = false;
         probe_complete_ = false;
     }
-    capsid_worker_destroy(worker_);
+    source_.set_worker(nullptr);
+    const capsid::WorkerExitStatus status =
+        capsid::destroy_worker_with_status(retired_worker);
     {
         std::unique_lock<std::mutex> lock(mutex_);
+        exit_status_ = status;
         worker_ = nullptr;
         destroying_ = false;
         exited_ = true;
@@ -486,7 +574,9 @@ worker_exit:
         // pool sees inflight 0 and routes new work to a replacement.
         inflight_ids_.clear();
     }
-    inflight_.store(0, std::memory_order_relaxed);
+    retained_contexts_.store(0, std::memory_order_relaxed);
+    publish_channels(0);
+    inflight_.store(0, std::memory_order_release);
     cv_.notify_all();
     // The exit event (and its notifier) fired before the blocking destroy
     // above; this second notify carries the exited_ flip. An owner whose
@@ -543,6 +633,12 @@ bool WorkerExecutor::execute_command(Command command) {
     }
     switch (command.type) {
     case CommandType::kBeginRequest: {
+        if (command.upgrade_request && command.channel_id == 0) {
+            if (next_channel_id_ == 0) return report_runtime_failure(command.request_id, CAPSID_INVALID_ARGUMENT, "channel id exhaustion");
+            command.channel_id = next_channel_id_++;
+            const auto reserved = capsid_worker_upgrade_begin(worker_, command.request_id, command.channel_id, command.channel_max_message);
+            if (reserved != CAPSID_OK) return report_runtime_failure(command.request_id, reserved, "upgrade reserve");
+        }
         std::vector<capsid_header> headers;
         headers.reserve(command.headers.size());
         for (const auto& header : command.headers) {
@@ -565,9 +661,19 @@ bool WorkerExecutor::execute_command(Command command) {
                 worker_, command.request_id, command.method.c_str(),
                 command.url.c_str(), header_ptr, headers.size());
         }
+        if (result == CAPSID_WOULD_BLOCK) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            commands_.push_front(std::move(command)); command_would_block_ = true;
+            return true;
+        }
         if (result != CAPSID_OK) {
+            if (command.upgrade_request) (void)capsid_worker_channel_cancel(worker_,command.channel_id,CAPSID_CANCEL_REASON_LOCAL);
             return report_runtime_failure(command.request_id, result,
                                           "begin_request");
+        }
+        if (command.upgrade_request) {
+            live_channel_ids_.insert(command.channel_id);
+            publish_channels(live_channel_ids_.size());
         }
         break;
     }
@@ -581,6 +687,7 @@ bool WorkerExecutor::execute_command(Command command) {
             // chunk. Nothing was queued, so no flush is needed.
             std::unique_lock<std::mutex> lock(mutex_);
             commands_.push_front(std::move(command));
+            command_would_block_ = true;
             return true;
         }
         if (result != CAPSID_OK) {
@@ -632,6 +739,7 @@ bool WorkerExecutor::execute_command(Command command) {
         if (result == CAPSID_WOULD_BLOCK) {
             std::unique_lock<std::mutex> lock(mutex_);
             commands_.push_front(std::move(command));
+            command_would_block_ = true;
             return true;
         }
         if (result != CAPSID_OK) {
@@ -643,6 +751,82 @@ bool WorkerExecutor::execute_command(Command command) {
                                           "grant_response_credit");
         }
         break;
+    }
+    case CommandType::kChannelData:
+    case CommandType::kChannelGrant:
+    case CommandType::kChannelClose:
+    case CommandType::kChannelCancel:
+    case CommandType::kChannelConfirm: {
+        capsid::ChannelEntry entry;
+        if (!command.channel_id && command.type==CommandType::kChannelConfirm) {
+            bool cancelled=false;
+            if(!capsid::client_pending_dial(worker_,command.dial_id,&entry,&cancelled) || !cancelled) return true;
+        } else if (!capsid::client_channel_snapshot(worker_, command.channel_id, &entry)) return true;
+        const auto &host = entry.direction[0];
+        const auto &peer = entry.direction[1];
+        if (command.type != CommandType::kChannelConfirm &&
+            (host.close_sent || host.terminal_sent || entry.phase == capsid::ChannelPhase::Cancelling)) return true;
+        capsid_result result = CAPSID_INVALID_ARGUMENT;
+        switch (command.type) {
+        case CommandType::kChannelData:
+            result = capsid_worker_channel_send(worker_, command.channel_id, command.body.data(), command.body.size(), command.channel_flags); break;
+        case CommandType::kChannelGrant:
+            result = capsid_worker_channel_grant(worker_, command.channel_id, command.channel_credit); break;
+        case CommandType::kChannelClose:
+            result = capsid_worker_channel_close_bytes(worker_, command.channel_id, command.close_kind, command.close_code,
+                reinterpret_cast<const uint8_t *>(command.close_reason.data()),command.close_reason.size()); break;
+        case CommandType::kChannelCancel:
+            result = capsid_worker_channel_cancel(worker_, command.channel_id, command.channel_flags); break;
+        case CommandType::kChannelConfirm:
+            if (command.channel_id && (!peer.terminal_sent || host.terminal_ack_sent)) return true;
+            result = capsid_worker_channel_confirm(worker_, command.channel_id, command.dial_id, command.channel_flags); break;
+        default: break;
+        }
+        if (result == CAPSID_WOULD_BLOCK) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            commands_.push_front(std::move(command)); command_would_block_ = true;
+            return true;
+        }
+        if (result != CAPSID_OK) return false;
+        refresh_channels();
+        break;
+    }
+    case CommandType::kDialAccept:
+    case CommandType::kDialReject: {
+        capsid::ChannelEntry entry; bool cancelled=false,unresolved=false;
+        if(!capsid::client_pending_dial(worker_,command.dial_id,&entry,&cancelled,&unresolved) || cancelled || !unresolved) return true;
+        uint32_t rejection=8;
+        const bool capacity=live_channel_ids_.size()>=channel_limits_.max_channels ||
+            capsid::client_dial_must_reject(worker_,command.dial_id,&rejection);
+        if(command.type==CommandType::kDialAccept && (capacity || !next_channel_id_)) {
+            command.type=CommandType::kDialReject; command.channel_flags=rejection;
+            command.close_reason="WebSocket worker channel capacity exhausted";
+        }
+        const bool accepting=command.type==CommandType::kDialAccept;
+        const uint32_t assigned=accepting ? next_channel_id_ : 0;
+        capsid_result result;
+        if (accepting && command.fetch_upgrade) {
+            std::vector<capsid_header> headers; headers.reserve(command.http_response.headers.size());
+            for (const auto &header : command.http_response.headers) headers.push_back({
+                {reinterpret_cast<const uint8_t *>(header.first.data()),header.first.size()},
+                {reinterpret_cast<const uint8_t *>(header.second.data()),header.second.size()}});
+            capsid_fetch_upgrade_response response{}; response.struct_size=sizeof(response);
+            response.version=CAPSID_FETCH_UPGRADE_RESPONSE_VERSION; response.status=command.http_response.status;
+            response.redirected=command.http_response.redirected;
+            response.status_text={reinterpret_cast<const uint8_t *>(command.http_response.status_text.data()),command.http_response.status_text.size()};
+            response.url={reinterpret_cast<const uint8_t *>(command.http_response.url.data()),command.http_response.url.size()};
+            response.headers=headers.data(); response.header_count=headers.size();
+            result=capsid_worker_dial_accept_http(worker_,command.dial_id,assigned,command.channel_max_message,&response);
+        } else if (accepting) result=capsid_worker_dial_accept(worker_,command.dial_id,assigned,command.channel_max_message,command.close_reason.c_str());
+        else result=capsid_worker_dial_reject(worker_,command.dial_id,command.channel_flags,command.close_reason.c_str());
+        if(result==CAPSID_WOULD_BLOCK) {
+            std::unique_lock<std::mutex> lock(mutex_); commands_.push_front(std::move(command)); command_would_block_=true; return true;
+        }
+        if(result!=CAPSID_OK) return false;
+        if(accepting) { ++next_channel_id_; live_channel_ids_.insert(assigned); outbound_channel_ids_.insert(assigned); }
+        WorkerEvent ready; ready.type=WorkerEvent::Type::kChannelReady; ready.outbound=true;
+        ready.dial_id=command.dial_id; ready.channel_id=assigned; queue_worker_event(std::move(ready));
+        refresh_channels(); break;
     }
     case CommandType::kShutdown:
         capsid_worker_shutdown(worker_);
@@ -709,6 +893,7 @@ bool WorkerExecutor::execute_command(Command command) {
 // batch of N GET requests produces one write syscall instead of N.
 bool WorkerExecutor::batch_flush() {
     const capsid_result result = capsid_worker_flush(worker_);
+    ipc_write_pending_ = result == CAPSID_WOULD_BLOCK;
     if (result == CAPSID_OK || result == CAPSID_WOULD_BLOCK) {
         // WOULD_BLOCK is fine — the frames are in the worker's input buffer;
         // the next batch's poll/wait will drain and flush more.
@@ -717,6 +902,27 @@ bool WorkerExecutor::batch_flush() {
     write_stderr(std::string("capsid-host: worker batch flush failed: ") +
                  capsid_result_string(result));
     return false;
+}
+
+void WorkerExecutor::publish_channels(std::uint64_t count) {
+    channels_.store(count, std::memory_order_relaxed);
+    connection_owners_.store(count+retained_contexts_.load(std::memory_order_relaxed),std::memory_order_release);
+}
+
+void WorkerExecutor::refresh_channels() {
+    for (auto it = live_channel_ids_.begin(); it != live_channel_ids_.end();) {
+        if (!capsid::client_channel_snapshot(worker_, *it, nullptr)) {
+            quarantined_channel_ids_.erase(*it); outbound_channel_ids_.erase(*it); it = live_channel_ids_.erase(it);
+        }
+        else ++it;
+    }
+    size_t pending_count=0;
+    for(auto it=outbound_dial_ids_.begin();it!=outbound_dial_ids_.end();) {
+        capsid::ChannelEntry entry;
+        if(!capsid::client_pending_dial(worker_,*it,&entry)) it=outbound_dial_ids_.erase(it);
+        else { if(!entry.channel_id) ++pending_count; ++it; }
+    }
+    publish_channels(live_channel_ids_.size()+pending_count);
 }
 
 bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
@@ -759,6 +965,19 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
     }
     switch (event.type) {
     case CAPSID_EVENT_READY: {
+        // GLM T08: capture the negotiated channel capability set (the
+        // client already split and stripped the v4 tail; the typed
+        // getter is the only reader). Zero = channels unavailable.
+        {
+            capsid_protocol_info protocol_info;
+            if (capsid_worker_get_protocol_info(
+                    worker_, &protocol_info, sizeof(protocol_info)) ==
+                CAPSID_OK) {
+                effective_channel_caps_ =
+                    protocol_info.effective_capabilities;
+                capsid::client_channel_limits(worker_,&channel_limits_);
+            }
+        }
         // §4.3: the payload is the 71-byte compatibility id plus, for
         // workers with bindings, the sandbox proof. The id prefix must
         // match exactly; a malformed extension fails the ready match.
@@ -791,6 +1010,11 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
         cv_.notify_all();
         return true;
     }
+    case CAPSID_EVENT_CONNECTION_LIFETIME:
+        retained_contexts_.store(event.credit, std::memory_order_relaxed);
+        publish_channels(channels_.load(std::memory_order_relaxed));
+        if (notifier_) notifier_();
+        return true;
     case CAPSID_EVENT_REQUEST_CREDIT: {
         WorkerEvent worker_event;
         worker_event.type = WorkerEvent::Type::kRequestCredit;
@@ -804,6 +1028,10 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
         worker_event.type = WorkerEvent::Type::kResponseHead;
         worker_event.request_id = event.request_id;
         worker_event.status = static_cast<std::uint16_t>(event.status);
+        worker_event.upgrade = (event.flags & CAPSID_RESPONSE_HEAD_FLAG_UPGRADE) != 0;
+        worker_event.channel_id = worker_event.upgrade ? event.credit : 0;
+        if (worker_event.upgrade) mark_canceled(event.request_id);
+        refresh_channels();
         worker_event.fixed_body =
             (event.flags & CAPSID_RESPONSE_HEAD_FLAG_FIXED_BODY) != 0;
         worker_event.fixed_body_size =
@@ -827,6 +1055,98 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
             }
         }
         queue_worker_event(std::move(worker_event));
+        return true;
+    }
+    case CAPSID_EVENT_CHANNEL_DIAL: {
+#ifdef CAPSID_HOST_NETWORKING
+        if(!outbound_) {
+            capsid::EgressPolicy authority;
+            if(!capsid::client_egress_snapshot(worker_,&authority)) return false;
+            WebSocketDialerOptions options; options.budget = channel_budget_;
+            outbound_=std::make_unique<WebSocketDialer>(std::move(authority),channel_limits_,
+                [this](Command command) { return try_submit_channel(std::move(command)); },
+                [this](size_t bytes) { std::unique_lock<std::mutex> lock(mutex_); channel_event_bytes_-=bytes; },std::move(options));
+        }
+#endif
+        capsid::protocol::ChannelOpenPayload open; std::string error;
+        if(!capsid::protocol::decode_channel_open(event.payload.data,event.payload.size,&open,&error,effective_channel_caps())) return false;
+        outbound_dial_ids_.insert(open.dial_id);
+        WorkerEvent output; output.type=WorkerEvent::Type::kChannelDial; output.outbound=true;
+        output.dial_id=open.dial_id; output.channel_max_message=open.max_message_bytes;
+        output.channel_kind=open.channel_kind; output.http_request=std::move(open.http_request);
+        output.text=std::move(open.url); output.protocols=std::move(open.protocols);
+        output.dial_refused=capsid::client_dial_must_reject(worker_,open.dial_id,&output.channel_flags);
+        if (output.channel_kind==capsid::protocol::kChannelKindFetchUpgrade) {
+            size_t charge=output.text.size()+1024;
+            for (const auto &header : output.http_request.headers) charge+=header.first.size()+header.second.size()+64;
+            bool exhausted;
+            { std::unique_lock<std::mutex> lock(mutex_);
+              exhausted=charge>16u*1024u*1024u || channel_event_bytes_>16u*1024u*1024u-charge;
+              if (!exhausted) {channel_event_bytes_+=charge; output.channel_charge=charge;}
+            }
+            if (exhausted) {
+                Command rejected; rejected.type=CommandType::kDialReject; rejected.dial_id=open.dial_id;
+                rejected.channel_flags=8; rejected.close_reason="HTTP upgrade event queue exhausted";
+                return execute_command(std::move(rejected));
+            }
+        }
+#ifndef CAPSID_HOST_NETWORKING
+        Command rejected; rejected.type=CommandType::kDialReject; rejected.dial_id=open.dial_id;
+        rejected.channel_flags=8; rejected.close_reason="Host WebSocket networking is unavailable";
+        if(!execute_command(std::move(rejected))) return false;
+#endif
+        queue_worker_event(std::move(output)); refresh_channels(); return true;
+    }
+    case CAPSID_EVENT_CHANNEL_DATA:
+    case CAPSID_EVENT_CHANNEL_CREDIT:
+    case CAPSID_EVENT_CHANNEL_CLOSE:
+    case CAPSID_EVENT_CHANNEL_CANCEL:
+    case CAPSID_EVENT_CHANNEL_ACK: {
+        capsid_channel_event view; capsid_channel_event_init(&view);
+        if (capsid_channel_event_decode(&event, &view, sizeof(view)) != CAPSID_OK) return false;
+        WorkerEvent output;
+        output.channel_id = view.channel_id;
+        output.dial_id = view.dial_id;
+        output.outbound=outbound_channel_ids_.count(view.channel_id) || outbound_dial_ids_.count(view.dial_id);
+        output.channel_flags = event.flags;
+        output.channel_credit = view.credit;
+        output.close_kind = view.close_kind;
+        output.close_code = view.code;
+        if (view.diagnostic.size) output.text.assign(reinterpret_cast<const char *>(view.diagnostic.data), view.diagnostic.size);
+        if (event.type == CAPSID_EVENT_CHANNEL_DATA) {
+            if (quarantined_channel_ids_.count(view.channel_id)) return true;
+            bool exhausted = false;
+            { std::unique_lock<std::mutex> lock(mutex_);
+              const size_t charge = view.message.size + 1024;
+              exhausted = charge > 16u*1024u*1024u || channel_event_bytes_ > 16u*1024u*1024u - charge;
+              if (!exhausted) channel_event_bytes_ += charge;
+            }
+            if (exhausted) {
+                // Stop only this producer. The owner's bounded terminal
+                // event will close its network socket and release its pin.
+                Command cancel; cancel.type = CommandType::kChannelCancel;
+                cancel.channel_id = view.channel_id; cancel.channel_flags = CAPSID_CANCEL_REASON_RESOURCE_LIMITS;
+                quarantined_channel_ids_.insert(view.channel_id);
+                if (!execute_command(std::move(cancel))) return false;
+                output.type = WorkerEvent::Type::kChannelCancel;
+            } else {
+                output.type = WorkerEvent::Type::kChannelData;
+                output.channel_charge = view.message.size + 1024;
+                output.body.assign(view.message.data, view.message.data + view.message.size);
+            }
+        } else if (event.type == CAPSID_EVENT_CHANNEL_CREDIT) output.type = WorkerEvent::Type::kChannelCredit;
+        else if (event.type == CAPSID_EVENT_CHANNEL_CLOSE) output.type = WorkerEvent::Type::kChannelClose;
+        else if (event.type == CAPSID_EVENT_CHANNEL_CANCEL) output.type = WorkerEvent::Type::kChannelCancel;
+        else { output.type = WorkerEvent::Type::kChannelAck; if (capsid_channel_ack_kind(&event, &output.ack_kind) != CAPSID_OK) return false; }
+#ifndef CAPSID_HOST_NETWORKING
+        if(output.outbound && event.type==CAPSID_EVENT_CHANNEL_CANCEL && !view.channel_id) {
+            Command confirmation; confirmation.type=CommandType::kChannelConfirm;
+            confirmation.dial_id=view.dial_id; confirmation.channel_flags=1;
+            if(!execute_command(std::move(confirmation))) return false;
+        }
+#endif
+        refresh_channels();
+        queue_worker_event(std::move(output));
         return true;
     }
     case CAPSID_EVENT_RESPONSE_BODY: {
@@ -899,12 +1219,26 @@ bool WorkerExecutor::handle_worker_protocol_event(const capsid_event& event) {
 }
 
 void WorkerExecutor::queue_worker_event(WorkerEvent event) {
+    if(event.outbound) {
+#ifdef CAPSID_HOST_NETWORKING
+        if(outbound_) outbound_->post(std::move(event));
+#else
+        std::unique_lock<std::mutex> lock(mutex_); channel_event_bytes_-=event.channel_charge;
+#endif
+        return;
+    }
     bool need_notify = false;
     {
         // The event-queue size must be read under the mutex: this function
         // runs on both the owner thread and the worker thread, and the other
         // side may be mutating events_ concurrently.
         std::unique_lock<std::mutex> lock(mutex_);
+        if (event.type == WorkerEvent::Type::kChannelCredit) {
+            for (auto &queued:events_) if (queued.type==event.type && queued.channel_id==event.channel_id &&
+                    event.channel_credit <= std::numeric_limits<std::uint64_t>::max()-queued.channel_credit) {
+                queued.channel_credit += event.channel_credit; return;
+            }
+        }
         if (metrics_enabled_.load(std::memory_order_relaxed)) {
             metrics_.events_queued.fetch_add(1, std::memory_order_relaxed);
             {
@@ -964,7 +1298,8 @@ bool WorkerExecutor::wait_for_ready() {
         return false;
     }
     if (!ready_match_) {
-        write_stderr("capsid-host: worker compatibility ID mismatch");
+        write_stderr("capsid-host: " + (ready_error_.empty()
+            ? std::string("worker compatibility ID mismatch") : ready_error_));
         return false;
     }
     return true;

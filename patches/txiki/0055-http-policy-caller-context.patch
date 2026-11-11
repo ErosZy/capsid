@@ -1,0 +1,24 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -368,11 +368,19 @@
+     if (!qrt || !qrt->egress.check) {
+         return 0;
+     }
++    /* Binding resources keep their immutable owner. User runtimes instead
++     * carry the captured async context. An unowned client inherits the
++     * caller: leaving a context we never entered would clear that caller. */
++    void *context = h->owner ? h->owner : h->ctx_data;
+     void *previous_context = NULL;
+-    tjs_enter_ctx(h->ctx, h->owner, &previous_context);
++    if (context) {
++        tjs_enter_ctx(h->ctx, context, &previous_context);
++    }
+     int allowed = qrt->egress.check(qrt->egress.opaque, host, port, address, address_len,
+                                     reason, reason_size);
+-    tjs_leave_ctx(h->ctx, &previous_context);
++    if (context) {
++        tjs_leave_ctx(h->ctx, &previous_context);
++    }
+     return allowed;
+ }
+ #endif

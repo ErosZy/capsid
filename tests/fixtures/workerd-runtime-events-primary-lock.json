@@ -1,0 +1,57 @@
+{
+  "schema": "capsid-runtime-events-primary-lock-v1",
+  "profile": {
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": []
+  },
+  "archive": {
+    "file": "tests/fixtures/workerd-runtime-events-primary.json.gz",
+    "sha256": "cda53acfe7fe2e1941a23e9b242bec00ba1b10a23f990fa6759e5c2d67e3494d",
+    "uncompressedSha256": "74653cacb8b6e54ce86917e02a137def01ba2ad21e0e481e56d0ef9855d6bb13"
+  },
+  "programs": {
+    "api": {
+      "file": "tests/fixtures/workerd-runtime-event-api.mjs",
+      "sha256": "cb2b4525ec973dee86635b227b1eed1f0ab2ba907de8f5f5e8cf865f86f893d0"
+    },
+    "mutations": {
+      "file": "tests/fixtures/workerd-runtime-event-mutations.mjs",
+      "sha256": "8a23acafcf712570ac0e7af7457b8de97bd8f89fb278970da09f8db4a0ae1f92"
+    }
+  },
+  "reportsSha256": {
+    "api": "464d9a4d809c2113e22ded5644cb06f4dc0b4f21abc37b9c0a76dc1e38b35f0f",
+    "mutations": {
+      "baseline": "c36c9c11ebe3cdf5755217f59eed750d7823fde952af6cee4c62f400db61325d",
+      "write-fields": "885d820fc25fdc164059965fda9ea15cfc063814927d4d970924fbf2388816c9",
+      "delete-fields": "ec97cfffd5b2dd9561036a7020dadbf78cafb937ee4ec060bf766e114ad7e8bc",
+      "redefine-fields": "7058c83f5c53af84f72d6281c7b4301da220f61d59f399b6d12697d24ccf95fb",
+      "replace-global-constructor": "470f29e406608b629209a5496e5a21df2063c0fcb1fa4362d5117218a4904711",
+      "replace-public-prototype": "872e786caf2430f88f9ea4ac7530c256a99c1eedcb1e339eea7012d648493e50",
+      "freeze-public-prototype": "3f05948565a674b32837cbd70313f80cf3060d94cbf00127f7cb5d89156cc3e3",
+      "replace-intrinsics": "be9493c7c714c376b40562d67bb083b8def0ee2bda0d01e9a8f73f34fa784cc7",
+      "poison-inherited-reason": "cb6dc1b7aab74217874e29d78f93377716bc6c78a5fab1afbeff56d3a1789c67",
+      "replace-global-dispatch": "47ea59f76e85ce80a51bd11fb90f58a89fd435e8b3c9a8728da58d56160e65a1",
+      "replace-weak-map-set": "a7fdcfbc258b777531ca120a83b0c71aeaf4954425806a88c1d69de4ae89d3be",
+      "replace-weak-map-get": "e991bac90ef7ffca2bd0f427792c1dc506d8bea5b23c7de6dc347d1e77a1b247",
+      "replace-weak-map-delete": "e506f377a7a59045065b6a6d458357f026be0b59f09385474dfd9db329318988",
+      "poison-descriptor-get": "c537030571c5d8ffc0bad156a576e606332f891d2eb8b25efa086a9b3490d6ff",
+      "poison-descriptor-set": "cd30cf02d481791e81bb1c685afc07ae2c61c73caf45a0de5a8620b74f2c5714",
+      "poison-event-init": "1dec1a6f9956ceb6abdfd26f91d10136b2ba392369e7a0d224520c31971f27c4",
+      "replace-public-prototype-null": "cf0012595f5e4a495fdeb1161f39a96c6db0ab39fb7c49f4dfbc74c5d292b326",
+      "replace-public-prototype-number": "397c31e76d4b5b58c650e59461fa6b5c23c8ce1dfe8bd8907f9a39eb6ab7e830"
+    }
+  },
+  "referenceBinarySha256": {
+    "win32": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "linux": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd"
+  },
+  "unresolvedApiConstructorIntrospectionFields": [
+    "globalDescriptor",
+    "prototypeSymbols"
+  ],
+  "nativeEventDeadlineMilliseconds": 5000,
+  "nativeNaturalExitDeadlineMilliseconds": 2500
+}

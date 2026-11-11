@@ -1,0 +1,298 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -17840,6 +17840,15 @@
+                                JSValueConst this_obj, JSValueConst new_target,
+                                int argc, JSValueConst *argv, int flags)
+ {
++    /* Reuse immutable literals instead of materializing a C compound literal
++       at every opcode site. MSVC /Od retains distinct aggregate temporaries
++       for those expressions for the entire interpreter call, inflating each
++       recursive native frame. Keep the original stack limit and Debug checks. */
++    const JSValue undefined_value = JS_UNDEFINED;
++    const JSValue null_value = JS_NULL;
++    const JSValue true_value = JS_TRUE;
++    const JSValue false_value = JS_FALSE;
++    const JSValue uninitialized_value = JS_UNINITIALIZED;
+     JSRuntime *rt = caller_ctx->rt;
+     JSContext *ctx;
+     JSObject *p;
+@@ -17928,7 +17937,7 @@
+         for(i = 0; i < n; i++)
+             arg_buf[i] = js_dup(argv[i]);
+         for(; i < b->arg_count; i++)
+-            arg_buf[i] = JS_UNDEFINED;
++            arg_buf[i] = undefined_value;
+         sf->arg_count = b->arg_count;
+     }
+     var_buf = local_buf + arg_allocated_size;
+@@ -17936,7 +17945,7 @@
+     sf->arg_buf = arg_buf;
+ 
+     for(i = 0; i < b->var_count; i++)
+-        var_buf[i] = JS_UNDEFINED;
++        var_buf[i] = undefined_value;
+ 
+     stack_buf = var_buf + b->var_count;
+     sf->async_func = NULL;
+@@ -18033,7 +18042,7 @@
+                         }
+                         p = p->shape->proto;
+                         if (!p) {
+-                            val = JS_UNDEFINED;
++                            val = undefined_value;
+                             break;
+                         }
+                     }
+@@ -18053,10 +18062,10 @@
+             pc += 4;
+             BREAK;
+         CASE(OP_undefined):
+-            *sp++ = JS_UNDEFINED;
++            *sp++ = undefined_value;
+             BREAK;
+         CASE(OP_null):
+-            *sp++ = JS_NULL;
++            *sp++ = null_value;
+             BREAK;
+         CASE(OP_push_this):
+             /* OP_push_this is only called at the start of a function */
+@@ -18081,10 +18090,10 @@
+             }
+             BREAK;
+         CASE(OP_push_false):
+-            *sp++ = JS_FALSE;
++            *sp++ = false_value;
+             BREAK;
+         CASE(OP_push_true):
+-            *sp++ = JS_TRUE;
++            *sp++ = true_value;
+             BREAK;
+         CASE(OP_object):
+             *sp++ = JS_NewObject(ctx);
+@@ -18117,13 +18126,13 @@
+                         JSObject *p1;
+                         p1 = p->u.func.home_object;
+                         if (unlikely(!p1))
+-                            *sp++ = JS_UNDEFINED;
++                            *sp++ = undefined_value;
+                         else
+                             *sp++ = js_dup(JS_MKPTR(JS_TAG_OBJECT, p1));
+                     }
+                     break;
+                 case OP_SPECIAL_OBJECT_VAR_OBJECT:
+-                    *sp++ = JS_NewObjectProto(ctx, JS_NULL);
++                    *sp++ = JS_NewObjectProto(ctx, null_value);
+                     if (unlikely(JS_IsException(sp[-1])))
+                         goto exception;
+                     break;
+@@ -18133,7 +18142,7 @@
+                         goto exception;
+                     break;
+                 case OP_SPECIAL_OBJECT_NULL_PROTO:
+-                    *sp++ = JS_NewObjectProtoClass(ctx, JS_NULL, JS_CLASS_OBJECT);
++                    *sp++ = JS_NewObjectProtoClass(ctx, null_value, JS_CLASS_OBJECT);
+                     if (unlikely(JS_IsException(sp[-1])))
+                         goto exception;
+                     break;
+@@ -18320,8 +18329,8 @@
+             has_call_argc:
+                 call_argv = sp - call_argc;
+                 sf->cur_pc = pc;
+-                ret_val = JS_CallInternal(ctx, call_argv[-1], JS_UNDEFINED,
+-                                          JS_UNDEFINED, call_argc,
++                ret_val = JS_CallInternal(ctx, call_argv[-1], undefined_value,
++                                          undefined_value, call_argc,
+                                           vc(call_argv), 0);
+                 if (unlikely(JS_IsException(ret_val)))
+                     goto exception;
+@@ -18358,7 +18367,7 @@
+                 call_argv = sp - call_argc;
+                 sf->cur_pc = pc;
+                 ret_val = JS_CallInternal(ctx, call_argv[-1], call_argv[-2],
+-                                          JS_UNDEFINED, call_argc,
++                                          undefined_value, call_argc,
+                                           vc(call_argv), 0);
+                 if (unlikely(JS_IsException(ret_val)))
+                     goto exception;
+@@ -18404,7 +18413,7 @@
+             ret_val = *--sp;
+             goto done;
+         CASE(OP_return_undef):
+-            ret_val = JS_UNDEFINED;
++            ret_val = undefined_value;
+             goto done;
+ 
+         CASE(OP_check_ctor_return):
+@@ -18414,9 +18423,9 @@
+                     JS_ThrowTypeError(caller_ctx, "derived class constructor must return an object or undefined");
+                     goto exception;
+                 }
+-                sp[0] = JS_TRUE;
++                sp[0] = true_value;
+             } else {
+-                sp[0] = JS_FALSE;
++                sp[0] = false_value;
+             }
+             sp++;
+             BREAK;
+@@ -18510,12 +18519,12 @@
+                     if (call_argc >= 1)
+                         obj = call_argv[0];
+                     else
+-                        obj = JS_UNDEFINED;
+-                    ret_val = JS_EvalObject(ctx, JS_UNDEFINED, obj,
++                        obj = undefined_value;
++                    ret_val = JS_EvalObject(ctx, undefined_value, obj,
+                                             JS_EVAL_TYPE_DIRECT, scope_idx);
+                 } else {
+-                    ret_val = JS_CallInternal(ctx, call_argv[-1], JS_UNDEFINED,
+-                                              JS_UNDEFINED, call_argc,
++                    ret_val = JS_CallInternal(ctx, call_argv[-1], undefined_value,
++                                              undefined_value, call_argc,
+                                               vc(call_argv), 0);
+                 }
+                 if (unlikely(JS_IsException(ret_val)))
+@@ -18544,11 +18553,11 @@
+                     if (len >= 1)
+                         obj = tab[0];
+                     else
+-                        obj = JS_UNDEFINED;
+-                    ret_val = JS_EvalObject(ctx, JS_UNDEFINED, obj,
++                        obj = undefined_value;
++                    ret_val = JS_EvalObject(ctx, undefined_value, obj,
+                                             JS_EVAL_TYPE_DIRECT, scope_idx);
+                 } else {
+-                    ret_val = JS_Call(ctx, sp[-2], JS_UNDEFINED, len, vc(tab));
++                    ret_val = JS_Call(ctx, sp[-2], undefined_value, len, vc(tab));
+                 }
+                 free_arg_list(ctx, tab, len);
+                 if (unlikely(JS_IsException(ret_val)))
+@@ -18562,7 +18571,7 @@
+ 
+         CASE(OP_regexp):
+             {
+-                sp[-2] = js_regexp_constructor_internal(ctx, JS_UNDEFINED,
++                sp[-2] = js_regexp_constructor_internal(ctx, undefined_value,
+                                                         sp[-2], sp[-1]);
+                 sp--;
+                 if (JS_IsException(sp[-1]))
+@@ -18839,7 +18848,7 @@
+                 int idx;
+                 idx = get_u16(pc);
+                 pc += 2;
+-                set_value(ctx, &var_buf[idx], JS_UNINITIALIZED);
++                set_value(ctx, &var_buf[idx], uninitialized_value);
+             }
+             BREAK;
+         CASE(OP_get_loc_check):
+@@ -18904,7 +18913,7 @@
+                 atom = get_u32(pc);
+                 idx = get_u16(pc + 4);
+                 pc += 6;
+-                *sp++ = JS_NewObjectProto(ctx, JS_NULL);
++                *sp++ = JS_NewObjectProto(ctx, null_value);
+                 if (unlikely(JS_IsException(sp[-1])))
+                     goto exception;
+                 if (opcode == OP_make_var_ref_ref) {
+@@ -19149,7 +19158,7 @@
+             BREAK;
+ 
+         CASE(OP_using_dispose_init):
+-            sp[0] = JS_UNINITIALIZED;
++            sp[0] = uninitialized_value;
+             sp++;
+             BREAK;
+ 
+@@ -19208,7 +19217,7 @@
+ 
+                 if (JS_IsNull(val) || JS_IsUndefined(val) ||
+                     JS_IsUninitialized(val)) {
+-                    sp[0] = JS_UNDEFINED;
++                    sp[0] = undefined_value;
+                     sp++;
+                     BREAK;
+                 }
+@@ -19360,7 +19369,7 @@
+                         }
+                         p = p->shape->proto;
+                         if (!p) {
+-                            val = JS_UNDEFINED;
++                            val = undefined_value;
+                             break;
+                         }
+                     }
+@@ -19408,7 +19417,7 @@
+                         }
+                         p = p->shape->proto;
+                         if (!p) {
+-                            val = JS_UNDEFINED;
++                            val = undefined_value;
+                             break;
+                         }
+                     }
+@@ -19596,9 +19605,9 @@
+                 if (op_flags & OP_DEFINE_METHOD_ENUMERABLE)
+                     flags |= JS_PROP_ENUMERABLE;
+                 op_flags &= 3;
+-                value = JS_UNDEFINED;
+-                getter = JS_UNDEFINED;
+-                setter = JS_UNDEFINED;
++                value = undefined_value;
++                getter = undefined_value;
++                setter = undefined_value;
+                 if (op_flags == OP_DEFINE_METHOD_METHOD) {
+                     value = sp[-1];
+                     flags |= JS_PROP_HAS_VALUE | JS_PROP_HAS_WRITABLE | JS_PROP_WRITABLE;
+@@ -20514,7 +20523,7 @@
+                         if (unlikely(JS_IsException(val)))
+                             goto exception;
+                         JS_FreeValue(ctx, sp[-1]);
+-                        sp[-1] = JS_UNDEFINED;
++                        sp[-1] = undefined_value;
+                         *sp++ = val;
+                         break;
+                     }
+@@ -20539,7 +20548,7 @@
+             ret_val = js_int32(FUNC_RET_YIELD_STAR);
+             goto done_generator;
+         CASE(OP_return_async):
+-            ret_val = JS_UNDEFINED;
++            ret_val = undefined_value;
+             goto done_generator;
+         CASE(OP_initial_yield):
+             ret_val = js_int32(FUNC_RET_INITIAL_YIELD);
+@@ -20583,11 +20592,11 @@
+         free_and_set_true:
+             JS_FreeValue(ctx, sp[-1]);
+         set_true:
+-            sp[-1] = JS_TRUE;
++            sp[-1] = true_value;
+             BREAK;
+         free_and_set_false:
+             JS_FreeValue(ctx, sp[-1]);
+-            sp[-1] = JS_FALSE;
++            sp[-1] = false_value;
+             BREAK;
+         CASE(OP_invalid):
+         DEFAULT:
+@@ -20600,7 +20609,7 @@
+     if (needs_backtrace(rt->current_exception)
+     || JS_IsUndefined(ctx->error_back_trace)) {
+         sf->cur_pc = pc;
+-        build_backtrace(ctx, rt->current_exception, JS_UNDEFINED,
++        build_backtrace(ctx, rt->current_exception, undefined_value,
+                         NULL, 0, 0, 0);
+     }
+     if (!JS_IsUncatchableError(rt->current_exception)) {
+@@ -20616,9 +20625,9 @@
+                     JS_IteratorClose(ctx, sp[-1], true);
+                 } else {
+                     *sp++ = rt->current_exception;
+-                    rt->current_exception = JS_UNINITIALIZED;
++                    rt->current_exception = uninitialized_value;
+                     JS_FreeValueRT(rt, ctx->error_back_trace);
+-                    ctx->error_back_trace = JS_UNDEFINED;
++                    ctx->error_back_trace = undefined_value;
+                     pc = b->byte_code_buf + pos;
+                     goto restart;
+                 }

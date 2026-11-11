@@ -19,19 +19,24 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
-// TSan slows worker startup and host boot by an order of magnitude. The
-// hosted tsan matrix keeps the fixed deadlines scaled so the tests verify
-// the mechanism, not the clock (the scaling is compile-time: release,
-// asan and ubsan builds keep the original deadlines).
-// Both GCC (-fsanitize=thread) and Clang define __SANITIZE_THREAD__ for
-// the TSan build, so the gate needs no compiler-specific __has_feature
-// spelling (GCC errors on the function-like macro even in the dead
-// branch of the #if expression).
-#if defined(__SANITIZE_THREAD__)
-constexpr int kTestWaitScale = 8;
-#else
-constexpr int kTestWaitScale = 1;
+#if defined(__linux__)
+#include <sys/prctl.h>
 #endif
+#if defined(__SANITIZE_THREAD__)
+#define CAPSID_TEST_TSAN_BUILD 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define CAPSID_TEST_TSAN_BUILD 1
+#endif
+#endif
+#if !defined(CAPSID_TEST_TSAN_BUILD)
+#define CAPSID_TEST_TSAN_BUILD 0
+#endif
+
+// Preserve the existing TSan-only 8x test-driver wait scale for both
+// compiler families: GCC uses __SANITIZE_THREAD__, while Clang uses
+// __has_feature(thread_sanitizer). Other configurations keep their waits.
+constexpr int kTestWaitScale = CAPSID_TEST_TSAN_BUILD ? 8 : 1;
 
 
 #include <chrono>
@@ -41,6 +46,7 @@ constexpr int kTestWaitScale = 1;
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -48,6 +54,29 @@ constexpr int kTestWaitScale = 1;
 namespace {
 
 pid_t child_process = -1;
+bool owns_adopted_children = false;
+
+// Only this test driver's descendants are eligible. A deliberate Host
+// crash and a failing fixture must not leave Workers under init; these
+// explicit cleanup exits never count as a successful product reap.
+bool cleanup_adopted_children(const char* reason) {
+    if (!owns_adopted_children) return true;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    for (;;) {
+        std::error_code error;
+        for (std::filesystem::directory_iterator it("/proc/self/task", error), end; it != end && !error; it.increment(error)) {
+            std::ifstream children(it->path() / "children"); long pid = 0;
+            while (children >> pid) (void)kill(static_cast<pid_t>(pid), SIGKILL);
+        }
+        int status = 0; pid_t reaped;
+        while ((reaped = waitpid(-1, &status, WNOHANG)) > 0) {
+            std::cerr << "FIXTURE_CHILD_CLEANUP reason=" << reason << " pid=" << reaped << " status=" << status << '\n';
+        }
+        if (reaped == -1 && errno == ECHILD) return true;
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
 
 [[noreturn]] void fail(const std::string& message) {
     if (child_process > 0) {
@@ -56,6 +85,7 @@ pid_t child_process = -1;
         (void)waitpid(child_process, &ignored, 0);
         child_process = -1;
     }
+    (void)cleanup_adopted_children("failed-fixture");
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
@@ -487,6 +517,12 @@ void stop_host(const Fixture& fixture) {
     }
     require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
             "managed Host shutdown was not clean: " + fixture.diagnostics());
+    if (owns_adopted_children) {
+        int orphan_status = 0; pid_t orphan;
+        do { orphan = waitpid(-1, &orphan_status, WNOHANG); } while (orphan < 0 && errno == EINTR);
+        require(orphan == -1 && errno == ECHILD,
+                "clean Host shutdown left an adopted live or zombie child (probe cleanup cannot count as product reap)");
+    }
     struct stat metadata = {};
     require(lstat(fixture.socket_path.c_str(), &metadata) != 0 &&
                 errno == ENOENT,
@@ -505,6 +541,7 @@ void kill_host() {
     child_process = -1;
     require(WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL,
             "managed Host did not die from SIGKILL");
+    require(cleanup_adopted_children("intentional-host-crash"), "intentional crash descendants did not finish fixture cleanup");
 }
 
 bool path_exists(const std::string& path) {
@@ -929,6 +966,10 @@ int main(int argc, char** argv) {
     require(argc == 4,
             "expected mode, capsid-host and capsid-worker paths");
     const std::string mode = argv[1];
+#if defined(__linux__)
+    require(prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0, "enable ownership of this fixture's crash descendants");
+    owns_adopted_children = true;
+#endif
     Fixture fixture;
     if (mode == "host_managed_executable_binding_deploy") {
         // Binding v1 through the real capsid-host process: the scanned
@@ -1096,64 +1137,57 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (mode == "host_managed_executable_active_state_validation_fail_closed") {
-        // Release hardening: the durable active pointer is read through a
-        // verified descriptor (O_NONBLOCK + fstat: regular file, owned by
-        // the Host euid, bounded size). A directory, a foreign-owned file or
-        // an oversized document at active.json must make recovery fail
-        // closed — the Host refuses to start rather than parse unverified
-        // bytes or silently drop a durable active pointer. Run once per
-        // corruption class; each class must reject startup.
+    if (mode == "host_managed_executable_active_state_directory" ||
+        mode == "host_managed_executable_active_state_oversized" ||
+        mode == "host_managed_executable_active_state_foreign_owner") {
+        // Each corruption class is independent. Lack of chown privilege
+        // must never suppress directory or size validation.
         start_host(fixture, argv[2], argv[3]);
         wait_for_socket(fixture);
         const std::string operation = deploy(fixture);
         wait_active(fixture, operation);
         stop_host(fixture);
-
+        // Positive recovery control with the same valid persisted document.
+        start_host(fixture, argv[2], argv[3]);
+        wait_for_socket(fixture);
+        require_active_app(fixture);
+        stop_host(fixture);
         const std::string active_path =
             fixture.state_root + "/apps/orders/active.json";
 
-        // Corruption class 3 needs the privilege to transfer file
-        // ownership. Unprivileged runners (GitHub hosted) cannot chown to
-        // a foreign uid; probe once and skip the whole mode (77) instead
-        // of failing the class-3 setup.
-        const std::string probe_path =
-            fixture.state_root + "/active-state-chown-probe";
-        write_file(probe_path, "{}");
-        if (chown(probe_path.c_str(), 65534, 65534) != 0) {
-            remove(probe_path.c_str());
-            std::cout << "SKIP (chown to a foreign uid is not permitted)"
-                      << std::endl;
-            return 77;
+        if (mode == "host_managed_executable_active_state_foreign_owner") {
+            // Preserve a valid committed document: owner rejection must
+            // not accidentally pass because JSON validation failed first.
+            const uid_t foreign_owner = geteuid() == 65534 ? 65533 : 65534;
+            if (chown(active_path.c_str(), foreign_owner,
+                      static_cast<gid_t>(-1)) != 0) {
+                if (errno != EPERM && errno != EACCES) {
+                    fail("cannot change active-state fixture owner");
+                }
+                std::cout << "SKIP (chown to a foreign uid is not permitted)"
+                          << std::endl;
+                return 77;
+            }
+            struct stat changed = {};
+            require(stat(active_path.c_str(), &changed) == 0 &&
+                        changed.st_uid == foreign_owner,
+                    "ownership-change fixture did not change the owner");
+        } else {
+            require(remove(active_path.c_str()) == 0,
+                    "cannot detach the active state document");
+            if (mode == "host_managed_executable_active_state_directory") {
+                require(mkdir(active_path.c_str(), 0700) == 0,
+                        "cannot plant a directory at active.json");
+            } else {
+                write_file(active_path, std::string(17U * 1024U, 'x'));
+            }
         }
-        remove(probe_path.c_str());
-
-        require(remove(active_path.c_str()) == 0,
-                "cannot detach the active state document");
-
-        // Corruption class 1: a directory at active.json.
-        require(mkdir(active_path.c_str(), 0700) == 0,
-                "cannot plant a directory at active.json");
         start_host(fixture, argv[2], argv[3]);
         require_startup_rejected(fixture, std::chrono::seconds(5 * kTestWaitScale));
-
-        // Corruption class 2: an oversized active document (> 16 KiB).
-        require(rmdir(active_path.c_str()) == 0,
-                "cannot remove the directory active-state fixture");
-        write_file(active_path, std::string(17U * 1024U, 'x'));
-        start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(5 * kTestWaitScale));
-
-        // Corruption class 3: a foreign-owned active document. The Host
-        // (running as euid) must reject a file it does not own even when
-        // the contents are parseable.
-        require(remove(active_path.c_str()) == 0,
-                "cannot detach the oversized active-state fixture");
-        write_file(active_path, "{}");
-        require(chown(active_path.c_str(), 65534, 65534) == 0,
-                "cannot chown active.json to a foreign uid");
-        start_host(fixture, argv[2], argv[3]);
-        require_startup_rejected(fixture, std::chrono::seconds(5 * kTestWaitScale));
+        require(fixture.diagnostics().find("cannot recover active application orders") !=
+                    std::string::npos,
+                "startup failed outside active-state validation: " +
+                    fixture.diagnostics());
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1701,6 +1735,93 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (mode == "host_managed_executable_deploy_overlaps_quarantine") {
+        // Hold only the next real Worker exec, before READY, so deployment
+        // owns the App operation lock while the old generation exhausts
+        // its budget. No protocol messages or Worker replies are faked.
+        configure_small_crash_budget(fixture);
+        fixture.replace_host_text("\"capacity\":{\"workersTotal\":1,\"startupsConcurrent\":1}",
+            "\"capacity\":{\"workersTotal\":1,\"activationSurgeWorkers\":1,\"startupsConcurrent\":2}");
+        fixture.replace_host_text("\"recovery\":{\"crashBudget\":",
+            "\"recovery\":{\"restartBackoff\":{\"initial\":\"20ms\",\"maximum\":\"100ms\",\"jitter\":\"0%\"},\"crashBudget\":");
+        const int port = pick_port(); add_public_listener(fixture, port);
+        fixture.create_version("orders", "v2", "quarantine-new-generation");
+        const std::string arm = fixture.root + "/arm", claim = fixture.root + "/claim";
+        const std::string held_pid_file = fixture.root + "/held.pid", release = fixture.root + "/release";
+        const std::string wrapper = fixture.root + "/gated-real-worker";
+        write_file(wrapper, "#!/bin/sh\n"
+            "if [ -e '" + arm + "' ] && mkdir '" + claim + "' 2>/dev/null; then\n"
+            "  printf '%s\\n' \"$$\" > '" + held_pid_file + "'\n"
+            "  count=0\n  while [ ! -e '" + release + "' ]; do\n"
+            "    count=$((count+1))\n    [ \"$count\" -le 1000 ] || exit 90\n    sleep 0.01\n  done\nfi\n"
+            "exec '" + std::string(argv[3]) + "' \"$@\"\n");
+        require(chmod(wrapper.c_str(), 0700) == 0, "make actual Worker exec gate executable");
+        start_host(fixture, argv[2], wrapper.c_str()); wait_for_socket(fixture);
+        wait_active(fixture, deploy(fixture));
+        const std::string old_generation = active_generation(fixture);
+        long worker = wait_current_worker(fixture);
+        const std::string fetch = "GET /@capsid/orders/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        require_http(http_exchange_tcp(port, fetch), 200, "managed-executable-ok", "old generation serves before overlap");
+        // The shared startup permit is singleflight per App. Consume the
+        // first two budget events before holding the new warm; only the
+        // final event needs to overlap the deployment's App lock.
+        for (unsigned event = 0; event < 2; ++event) {
+            require(kill(worker, SIGKILL) == 0, "terminate exact old Worker before the overlap barrier");
+            worker = wait_replacement(fixture, worker);
+            bool served = false;
+            const auto ready_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5 * kTestWaitScale);
+            while (std::chrono::steady_clock::now() < ready_deadline) {
+                const auto reply = http_exchange_tcp(port, fetch);
+                if (reply.status == 200 && reply.body == "managed-executable-ok") { served = true; break; }
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            require(served, "each old replacement actually serves before the next budget event");
+        }
+        write_file(arm, "");
+        const auto next = deploy(fixture, "orders", "v2");
+        long held_pid = -1;
+        const auto held_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5 * kTestWaitScale);
+        while (std::chrono::steady_clock::now() < held_deadline) {
+            if (path_exists(held_pid_file)) held_pid = std::strtol(read_file(held_pid_file).c_str(), nullptr, 10);
+            if (held_pid > 0) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        require(held_pid > 0 && held_pid != worker, "new generation really waits before exec/READY");
+        require(kill(worker, SIGKILL) == 0, "final old-generation budget event overlaps the new warm");
+        bool decision = false;
+        const auto decision_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5 * kTestWaitScale);
+        while (std::chrono::steady_clock::now() < decision_deadline && !decision) {
+            std::istringstream lines(fixture.diagnostics()); std::string line;
+            while (std::getline(lines, line)) {
+                json_t* root = json_loads(line.c_str(), JSON_REJECT_DUPLICATES, nullptr);
+                if (!root) continue;
+                const auto* event = json_string_value(json_object_get(root, "event"));
+                const auto* generation = json_string_value(json_object_get(root, "generation"));
+                const auto* result = json_string_value(json_object_get(root, "result"));
+                decision = decision || (event && generation && result && std::string(event) == "quarantine" &&
+                    generation == old_generation && std::string(result) == "crash_budget_exceeded");
+                json_decref(root);
+            }
+            if (!decision) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        // Release the bounded gate even on an assertion failure below.
+        write_file(release, "");
+        require(decision, "actual old pool reaches quarantine while new warm holds the App lock");
+        require(wait_terminal_state(fixture, next) == "active", "deployment commit must not deadlock with old quarantine");
+        require_active_app(fixture, "orders", "v2");
+        require_http(http_exchange_tcp(port, fetch), 200, "quarantine-new-generation", "new generation serves after old quarantine");
+        const auto new_generation = active_generation(fixture);
+        require(new_generation != old_generation, "overlap test activates a different immutable generation");
+        stop_host(fixture); // joins the persistence queue before inspecting disk
+        require(active_generation(fixture) == new_generation, "late old event cannot replace the new durable identity");
+        start_host(fixture, argv[2], wrapper.c_str()); wait_for_socket(fixture);
+        require_active_app(fixture, "orders", "v2");
+        require_http(http_exchange_tcp(port, fetch), 200, "quarantine-new-generation", "restart recovers new generation after the queued event");
+        stop_host(fixture);
+        std::cout << "PASS: real Host deployment overlaps old quarantine without deadlock or stale tombstone" << std::endl;
+        return 0;
+    }
+
     if (mode == "host_managed_executable_crash_loop_quarantines") {
         // M2 item 5a rows 2-3: repeated unexpected exits within the
         // instability window consume the generation's crash budget
@@ -1717,6 +1838,25 @@ int main(int argc, char** argv) {
         (void)crash_to_quarantine(fixture);
         stop_host(fixture);
         std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_executable_quarantine_releases_capacity") {
+        configure_small_crash_budget(fixture);
+        fixture.create_application("invoices", "capacity-reused");
+        const int port = pick_port(); add_public_listener(fixture, port);
+        start_host(fixture, argv[2], argv[3]); wait_for_socket(fixture);
+        wait_active(fixture, deploy(fixture));
+        crash_to_quarantine(fixture);
+        const auto next = deploy(fixture, "invoices", "v1");
+        const bool activated = wait_terminal_state(fixture, next) == "active";
+        if (activated) {
+            require_http(http_exchange_tcp(port, "GET /@capsid/invoices/ HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"),
+                         200, "capacity-reused", "another App uses the actual reaped generation's capacity");
+        }
+        stop_host(fixture); // clean up the old implementation before reporting RED
+        require(activated, "quarantined and actually reaped generation must release steady capacity for another App");
+        std::cout << "PASS: quarantined generation releases actual worker capacity" << std::endl;
         return 0;
     }
 

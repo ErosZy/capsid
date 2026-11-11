@@ -1,0 +1,4184 @@
+{
+  "status": "complete",
+  "complete": true,
+  "capturedUTC": "2026-11-10T12:19:03.805483+00:00",
+  "scope": "Availability of file pointers in the canonical goal ledger after the explicitly requested aggressive cleanup; not a semantic acceptance audit.",
+  "canonicalLedgerSHA256": "33ec0b41633f0c97c9e2b9036edb65dff4c8aba754762e9e4dd57a9434437ad6",
+  "deletionJournalSHA256": "0e630277286992b652ed44af22b19d7e2b0dcdb3e9597041dc0ab60693cdedd5",
+  "counts": {
+    "available": 70,
+    "removed-by-user-authorized-cleanup": 302
+  },
+  "rows": [
+    {
+      "pointer": [
+        "historicalLedger"
+      ],
+      "file": "build-v030-dev/evidence/fetch-encoded-layer-20261107/documents-before/historical-goal-requirements.json",
+      "originalExpectedSHA256": "216b3d0c32b13887fe9e18955a38d00dfa2a6104e83ecb16bff5b00c2d97943d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\documents-before",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "currentMainQualification",
+        "progress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r69/run.json",
+      "originalExpectedSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r69\\run.json",
+      "actualSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestPrivateProgress"
+      ],
+      "file": "build-v030-dev/evidence/fetch-encoded-layer-20261107/v11-framed-r8-progress-audit.json",
+      "originalExpectedSHA256": "1de18d2ee31a28a2fc619de3bcf3113f9904459fbcf9116492e928cf2df0bfeb",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v11-framed-r8-progress-audit.json",
+      "actualSHA256": "1de18d2ee31a28a2fc619de3bcf3113f9904459fbcf9116492e928cf2df0bfeb",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "currentPrivateCandidate",
+        "currentQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r69/run.json",
+      "originalExpectedSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r69\\run.json",
+      "actualSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "previousMainQualification"
+      ],
+      "file": "build-v030-dev/evidence/response-retirement-20261107/progress-audit.json",
+      "originalExpectedSHA256": "6b6f62eb60bea3510e6fc844b0f0a016c9c6b7f0a25173baccfaa73ced528ab1",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\response-retirement-20261107",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "additionalPrivateNativeArgumentProof"
+      ],
+      "file": "private-r3-native-arguments-linux-r2-review.json",
+      "originalExpectedSHA256": "3b754b14f25d3e72772974f54158a9bf2d8928279d2f5430c53a83cfe4e54186",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\private-r3-native-arguments-linux-r2-review.json",
+      "actualSHA256": "3b754b14f25d3e72772974f54158a9bf2d8928279d2f5430c53a83cfe4e54186",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "additionalPrivateRichJsonProof"
+      ],
+      "file": "r6-rich-json-state-review-r1/review.json",
+      "originalExpectedSHA256": "712554436cc8508a135d238a80819f61ef87413f900fbe3d6ff687fc754599de",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-rich-json-state-review-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "additionalPrivateRichJsonProof",
+        "sdk69AlsoMatches"
+      ],
+      "file": "r6-sdk69-rich-json-state-review-r1.json",
+      "originalExpectedSHA256": "90474a368866a2b51e4340c3e01f170b84ca86fc642dc27ae90956c0b8bb683d",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk69-rich-json-state-review-r1.json",
+      "actualSHA256": "90474a368866a2b51e4340c3e01f170b84ca86fc642dc27ae90956c0b8bb683d",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "historicalRichJsonDiagnosis",
+        "originalBinaryIdentity"
+      ],
+      "file": "r6-original-binary-identity-audit-r2/run.json",
+      "originalExpectedSHA256": "04c2daad148ddc3ca776183f2849233e10f6f96dd08a79eb8faa3d652fe8b059",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-original-binary-identity-audit-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalRichJsonDiagnosis",
+        "latestExactOriginalPairRootCauseProof"
+      ],
+      "file": "r6-exact-original-ipc-root-cause-review-r9/run.json",
+      "originalExpectedSHA256": "39ea538b02ecc36684c4ea86335e05480cb291989ebed8e85ce19d19f441c5d6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-exact-original-ipc-root-cause-review-r9",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "integrationReviewPatch"
+      ],
+      "file": "sdk70-main-integrated-change-r2.patch",
+      "originalExpectedSHA256": "c70a4a59e6eb751de65602593df42f8a95d9cf4727bb74737f46a94aa13c5d48",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-main-integrated-change-r2.patch",
+      "actualSHA256": "c70a4a59e6eb751de65602593df42f8a95d9cf4727bb74737f46a94aa13c5d48",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "preparedCorrections",
+        "sdk70-full-failure-corrections-r2"
+      ],
+      "file": "sdk70-full-failure-corrections-r2/proposal.json",
+      "originalExpectedSHA256": "89406e61feecd48d09acb309ea7ca19ac86576a25069df54be88e5e7edd58693",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-full-failure-corrections-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "preparedCorrections",
+        "sdk70-portable-documentation-proposal-r1"
+      ],
+      "file": "sdk70-portable-documentation-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "f35a664bd11a60b0d02e21069618386fe694b2bd1a66c9d8c70b592a87c38b75",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-portable-documentation-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "preparedCorrections",
+        "sdk70-v4-fuzz-paths-proposal-r1"
+      ],
+      "file": "sdk70-v4-fuzz-paths-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "cd7aeaf5a2b21a057196f9eaeeec6894324ea84241778fc81c227d920ded3f1e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-v4-fuzz-paths-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "preparedCorrections",
+        "sdk70-v4-fuzz-paths-proposal-r2"
+      ],
+      "file": "sdk70-v4-fuzz-paths-proposal-r2/proposal.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-v4-fuzz-paths-proposal-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestFuzzCorpusControls"
+      ],
+      "file": "r8-v4-fuzz-corpus-controls-r1/run.json",
+      "originalExpectedSHA256": "59b797567827fac4fd7a57fe65e33f198f2e40227205588123d10c8a88248be3",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-v4-fuzz-corpus-controls-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestCiReadOnlyLookup"
+      ],
+      "file": "sdk70-ci-readonly-lookup-r1.json",
+      "originalExpectedSHA256": "bc4e51c76202144b47b7ee55e312067518eb887c0d4efea3b27f6d858cdbaac3",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk70-ci-readonly-lookup-r1.json",
+      "actualSHA256": "bc4e51c76202144b47b7ee55e312067518eb887c0d4efea3b27f6d858cdbaac3",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestProgressAudit"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r51/run.json",
+      "originalExpectedSHA256": "b5ff9eee443ef4caae71723ecf62843a4d1c6db930257f0099e25387f5b61118",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r51\\run.json",
+      "actualSHA256": "b5ff9eee443ef4caae71723ecf62843a4d1c6db930257f0099e25387f5b61118",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestFuzzExecution"
+      ],
+      "file": "r8-v4-fuzz-paths-linux-r2/run.json",
+      "originalExpectedSHA256": "65ab12da8a2ae999c491e1d0dedf2e648e8e1695b24e84ed83487b69efdb6882",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-v4-fuzz-paths-linux-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latest304Diagnosis"
+      ],
+      "file": "r7-lws-bodyless-prototype-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-lws-bodyless-prototype-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestBodylessIntegration"
+      ],
+      "file": "sdk71-bodyless-integration-r1/integration.json",
+      "originalExpectedSHA256": "46690d7a727be58b980a2d8761440e66f3b5030dbaa74c4f61f976ae15c974cf",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-bodyless-integration-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQueueIntegration"
+      ],
+      "file": "r7-queue-main-integration-r1/integration.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-queue-main-integration-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestChannelStateFuzz"
+      ],
+      "file": "r8-channel-state-fuzz-linux-r5/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-channel-state-fuzz-linux-r5",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestViewportReview"
+      ],
+      "file": "r8-site-viewport-native-r1/server.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-site-viewport-native-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "liveSdk71FullSequence"
+      ],
+      "file": "sdk71-full-sequence-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-full-sequence-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOriginalFailureBinaryIdentityAudit"
+      ],
+      "file": "r6-original-binary-identity-audit-r2/run.json",
+      "originalExpectedSHA256": "04c2daad148ddc3ca776183f2849233e10f6f96dd08a79eb8faa3d652fe8b059",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-original-binary-identity-audit-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestEstablishedPressureProposal"
+      ],
+      "file": "r7-queue-pressure-proposal-r8/proposal.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-queue-pressure-proposal-r8",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestBoundaryFuzzIntegrationQualification"
+      ],
+      "file": "r8-boundary-fuzz-qualification-r1/run.json",
+      "originalExpectedSHA256": "e6d769e62a55a0089445339a15dec0927404330665e531408d9dea4d1fe74933",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-boundary-fuzz-qualification-r1\\run.json",
+      "actualSHA256": "e6d769e62a55a0089445339a15dec0927404330665e531408d9dea4d1fe74933",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestHeaderBudgetFix"
+      ],
+      "file": "r8-boundary-progress-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-boundary-progress-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestPartialFullSuiteSkipReview"
+      ],
+      "file": "r7-sdk71-partial-skips-review-r1.json",
+      "originalExpectedSHA256": "743c919198caedb0f7fa9b54ae5d4d320bf5e631389bd3694729511f52cdec16",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-sdk71-partial-skips-review-r1.json",
+      "actualSHA256": "743c919198caedb0f7fa9b54ae5d4d320bf5e631389bd3694729511f52cdec16",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "combinedCandidateBuilds",
+        "windows-debug"
+      ],
+      "file": "r7-r8-combined-windows-debug-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-windows-debug-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "combinedCandidateBuilds",
+        "windows-asan"
+      ],
+      "file": "r7-r8-combined-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "combinedCandidateBuilds",
+        "windows-release"
+      ],
+      "file": "r7-r8-combined-windows-release-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-windows-release-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "combinedCandidateBuilds",
+        "linux-release-lto"
+      ],
+      "file": "r7-r8-combined-linux-release-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-linux-release-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestCombinedOverlay"
+      ],
+      "file": "r3-r7-r8-combined-integration-proposal-r5/proposal.json",
+      "originalExpectedSHA256": "d84fb8d17767215491364fd7d8bd27ac04c772a8fd2677440a72d7112852d6e7",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-r8-combined-integration-proposal-r5",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestTerminalDebugFullSuite"
+      ],
+      "file": "sdk71-clean-windows-debug-full-r1/run.json",
+      "originalExpectedSHA256": "03de373e6c174508802d61949f894b1c5d9aa47fdec300e432482ac026e4a6fc",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-clean-windows-debug-full-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestAuxiliaryLogCompletenessAudit"
+      ],
+      "file": "sdk71-clean-windows-debug-full-r1/LastTest.log",
+      "originalExpectedSHA256": "26798a9ca3ae87689a6e6f8fed9a5d10e4998bd603acc4f01d5d8d958394733e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-clean-windows-debug-full-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestUnresolvedClangDependencyFinding"
+      ],
+      "file": "r8-instrumented-dependency-smoke-linux-r1/run.json",
+      "originalExpectedSHA256": "a84087c7a5f26093e7092e632ea91caca780930d003c40b86c2146a6645ccb5e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-instrumented-dependency-smoke-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestCurrentHeadersWptReference"
+      ],
+      "file": "r7-headers-wpt-reference-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-headers-wpt-reference-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "queuedCombinedFullSequence"
+      ],
+      "file": "r7-r8-combined-final-linux-sequence-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-final-linux-sequence-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshInstrumentedLinuxBuild"
+      ],
+      "file": "r7-r8-combined-instrumented-linux-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-instrumented-linux-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestAsyncReferencePrerequisite"
+      ],
+      "file": "r7-promise-messageport-wpt-reference-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-promise-messageport-wpt-reference-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestLiveFollowupObservation"
+      ],
+      "file": "r7-r8-live-followups-r1/run.json",
+      "originalExpectedSHA256": "a33315625ad77ba709472cdd263988b9b7a09a9e04df66ea24cb1e4ab22d5434",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-live-followups-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestTerminalAsanFullSuite"
+      ],
+      "file": "sdk71-clean-windows-asan-full-r1/run.json",
+      "originalExpectedSHA256": "314a540b68334a0b20d8fdef13931d0cc81377b8a0f33576ce4994807d7cc863",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-clean-windows-asan-full-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestHonoTimeoutInvestigation",
+        "latestNativeIteratorStorageFix"
+      ],
+      "file": "r3-r5-r7-sdk74-progress-r22/run.json",
+      "originalExpectedSHA256": "895401bf26d3e715c3dbfb77a9b07bf0cc7886fd37f6901cbf909889e300696b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-progress-r22",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestStrictSandboxLsanDiagnosis",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk73-progress-r19/run.json",
+      "originalExpectedSHA256": "0d3521e526dea1bd1a3e9b3d287069176da6c979b583f19b87dda547af10b755",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-progress-r19",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestStrictSandboxLsanDiagnosis",
+        "fresh107Renewed"
+      ],
+      "file": "r8-fresh107-strict-tls-asan-stderr-diagnostic-r4/run.json",
+      "originalExpectedSHA256": "cdbe1df7c26dd54356466a73a980b847d32d1c149de066800397058d9dfc9864",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-fresh107-strict-tls-asan-stderr-diagnostic-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshInstrumentedWindowsBuild"
+      ],
+      "file": "r7-r8-combined-instrumented-windows-asan-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-instrumented-windows-asan-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalMainQualificationPointers",
+        "0"
+      ],
+      "file": "r7-r8-combined-progress-r4/ledger-before.json",
+      "originalExpectedSHA256": "852677a33ecd08814ff4b98af63735b3787189b0f9fc09044f2af81a085bd096",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-progress-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalMainQualificationPointers",
+        "1",
+        "value",
+        "originalFullSequence"
+      ],
+      "file": "sdk71-full-sequence-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-full-sequence-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalMainQualificationPointers",
+        "1",
+        "value",
+        "originalFullSequenceBuilds",
+        "windows-debug"
+      ],
+      "file": "sdk71-queue-windows-debug-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-queue-windows-debug-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalMainQualificationPointers",
+        "1",
+        "value",
+        "originalFullSequenceBuilds",
+        "windows-asan"
+      ],
+      "file": "sdk71-queue-windows-asan-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-queue-windows-asan-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalMainQualificationPointers",
+        "1",
+        "value",
+        "originalFullSequenceBuilds",
+        "windows-release"
+      ],
+      "file": "sdk71-clean-windows-release-build-r3/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-clean-windows-release-build-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "historicalMainQualificationPointers",
+        "1",
+        "value",
+        "originalFullSequenceBuilds",
+        "linux-release-lto"
+      ],
+      "file": "sdk71-clean-linux-release-lto-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-clean-linux-release-lto-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOrdinaryNativeArguments"
+      ],
+      "file": "r7-r8-combined-progress-r4/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-progress-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshInstrumentedWindowsQualification"
+      ],
+      "file": "r7-r8-combined-instrumented-focused-windows-r1/run.json",
+      "originalExpectedSHA256": "6fc3e2c48ba368ade97a6267f2aa254ae4d67e483197901d484f41435edc6413",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-instrumented-focused-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestDocumentationRepair"
+      ],
+      "file": "r3-r7-r8-combined-integration-proposal-r3/proposal.json",
+      "originalExpectedSHA256": "9d4ca176a592e27243204560227c26728653e880ca63fce8642d8307118f32d9",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-r8-combined-integration-proposal-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestEventApiCompatibilityFindings",
+        "audit"
+      ],
+      "file": "sdk72-events-original-full-progress-r7/run.json",
+      "originalExpectedSHA256": "234e2f377dc69c1932515ebd7380ec4faadcd14fe0ec2d48eb4669d25b6b9c2d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-events-original-full-progress-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk72EventAndNativeRegressionAudit"
+      ],
+      "file": "sdk72-events-original-full-progress-r7/run.json",
+      "originalExpectedSHA256": "234e2f377dc69c1932515ebd7380ec4faadcd14fe0ec2d48eb4669d25b6b9c2d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-events-original-full-progress-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestRepositoryRuntimeEvents",
+        "audit"
+      ],
+      "file": "sdk72-events-original-full-progress-r7/run.json",
+      "originalExpectedSHA256": "234e2f377dc69c1932515ebd7380ec4faadcd14fe0ec2d48eb4669d25b6b9c2d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-events-original-full-progress-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestEmbeddingInitTestCorrection",
+        "audit"
+      ],
+      "file": "sdk72-events-original-full-progress-r7/run.json",
+      "originalExpectedSHA256": "234e2f377dc69c1932515ebd7380ec4faadcd14fe0ec2d48eb4669d25b6b9c2d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-events-original-full-progress-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestTerminalLinuxReleaseLtoFullSuite"
+      ],
+      "file": "sdk71-clean-linux-release-lto-full-r1/run.json",
+      "originalExpectedSHA256": "c0c06a9aa29d1d80162f6dd48d2bf20c9458c7198f0f760173cfa831e49a6ea5",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk71-clean-linux-release-lto-full-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshSdk72InstrumentedWindowsBuild"
+      ],
+      "file": "r3-reader-sdk72-instrumented-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": "ea624272e0c164be8c68289be99d6b702a3763b0ba12bd4097d7e1b643a2ed0a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-sdk72-instrumented-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshSdk72TargetedSequence"
+      ],
+      "file": "r3-reader-sdk72-instrumented-focused-windows-r1/run.json",
+      "originalExpectedSHA256": "f4eb5a2d16cbf91867244010bb9312c3567712f0efdd07eb82b992694e4c9baf",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-sdk72-instrumented-focused-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderContextAudit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderContextCorrection",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestRepositoryReaderContextRegressions",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderAdjacentRegressions",
+        "windows-asan"
+      ],
+      "file": "r3-pending-before-scope-adjacent-windows-asan-r7/run.json",
+      "originalExpectedSHA256": "98c746a52262bb7ff05a76bd00f60d2a3b9215eb5878985644d44e944ec9f97d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-pending-before-scope-adjacent-windows-asan-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderAdjacentRegressions",
+        "linux-asan-ubsan"
+      ],
+      "file": "r3-pending-before-scope-adjacent-linux-asan-ubsan-r7/run.json",
+      "originalExpectedSHA256": "4333b680ecc40635e510907bbd41f022c13036d94cbfe5b59ee78c5652fb9822",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-pending-before-scope-adjacent-linux-asan-ubsan-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderAdjacentRegressions",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOriginalLinuxQueueWatchdogFinding",
+        "observation"
+      ],
+      "file": "r7-native-queue-terminal-audit-r3/run.json",
+      "originalExpectedSHA256": "fc2041322cb83a1b671351850a313dddcc3bfadc9653eadbe15a1fcc46f31751",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-native-queue-terminal-audit-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOriginalLinuxQueueWatchdogFinding",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk72CompilerRecovery",
+        "qualification"
+      ],
+      "file": "sdk72-instrumented-focused-windows-r3/run.json",
+      "originalExpectedSHA256": "6b386ab8e2c15c53f93dfe6f5f90210229e10df749875e17e2d895209c2df996",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-instrumented-focused-windows-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk72CompilerRecovery",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk72LiveBuilds",
+        "queued53FinalLinuxController"
+      ],
+      "file": "r7-r8-combined-final-linux-sequence-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-final-linux-sequence-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk72LiveBuilds",
+        "experimentalR12WindowsOriginal63"
+      ],
+      "file": "r5-native-promise-forwarding-regressions-windows-asan-r12/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-promise-forwarding-regressions-windows-asan-r12",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk72LiveBuilds",
+        "experimentalR12LinuxOriginal63"
+      ],
+      "file": "r5-native-promise-forwarding-regressions-linux-asan-ubsan-r12/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-promise-forwarding-regressions-linux-asan-ubsan-r12",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk72LiveBuilds",
+        "experimentalR14WindowsQualification"
+      ],
+      "file": "r5-native-iterator-qualification-windows-asan-r14/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-iterator-qualification-windows-asan-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk72LiveBuilds",
+        "experimentalR14LinuxQualification"
+      ],
+      "file": "r5-native-iterator-qualification-linux-asan-ubsan-r14/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-iterator-qualification-linux-asan-ubsan-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeQueueTerminalObservation",
+        "observation"
+      ],
+      "file": "r7-native-queue-terminal-audit-r3/run.json",
+      "originalExpectedSHA256": "fc2041322cb83a1b671351850a313dddcc3bfadc9653eadbe15a1fcc46f31751",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-native-queue-terminal-audit-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeQueueTerminalObservation",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQueued53TerminalFull"
+      ],
+      "file": "r7-r8-combined-windows-debug-full-r2/run.json",
+      "originalExpectedSHA256": "1ba60e27fddfff76cfd9eb47c45b071410c4c46d5de3a5cf3039cf2a6108d0bc",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-windows-debug-full-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQueued53TerminalFull",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderFiveConstructorQualification",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "additionalUnintegratedHostWatchdogProposal"
+      ],
+      "file": "r7-client-resume-watchdog-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "73926815a2101a2af6fe88cb60a99f337276c0cb2b59ec3438376f657017a777",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-client-resume-watchdog-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "additionalUnintegratedHostWatchdogProposal",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "additionalUnintegratedQualificationAuditorCorrections"
+      ],
+      "file": "r7-qualification-auditor-corrections-proposal-r2/proposal.json",
+      "originalExpectedSHA256": "d7d9ba7daea6c6a9b0806e8fffa78d201b2a82af9131b9432de1fac21f95a2d2",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-qualification-auditor-corrections-proposal-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "additionalUnintegratedQualificationAuditorCorrections",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r10/run.json",
+      "originalExpectedSHA256": "5d9264e6f4e77818bdadcceb83be7dc09e2dfb43b57d0de903dff2e66e69300d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBefore93Matrix"
+      ],
+      "file": "r3-reader-sdk72-integration-proposal-r4/proposal.json",
+      "originalExpectedSHA256": "4068b16e4c81a15e17b00ce612918bb67526c7da2200c3035bf484ca51b98e92",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-sdk72-integration-proposal-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "review",
+        "proofs",
+        "win32-reference"
+      ],
+      "file": "r3-reader-pending-encoded-context-reference-win32-r6/run.json",
+      "originalExpectedSHA256": "bd4e2617294cf20132e9be30a98df0438e909df94d54cf2333f139179e27ef4a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-pending-encoded-context-reference-win32-r6",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "review",
+        "proofs",
+        "win32-native-before"
+      ],
+      "file": "r3-reader-pending-encoded-context-native-win32-r6/run.json",
+      "originalExpectedSHA256": "98293f84fa52b5502918fabcb92c0d828e7834fcf144657cc061f88474987598",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-pending-encoded-context-native-win32-r6",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "review",
+        "proofs",
+        "win32-native-after"
+      ],
+      "file": "r3-reader-pending-encoded-context-native-win32-r7/run.json",
+      "originalExpectedSHA256": "b490f601ae7edcc678dd689fbc58455725f719dac6d611e3b074a274168e9c2e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-pending-encoded-context-native-win32-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "review",
+        "proofs",
+        "linux-reference"
+      ],
+      "file": "r3-reader-pending-encoded-context-reference-linux-r6/run.json",
+      "originalExpectedSHA256": "2d401c764a78eab88ba9c42a50529096fe4b6675f2cc56ba1502a75ecef10a54",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-pending-encoded-context-reference-linux-r6",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "review",
+        "proofs",
+        "linux-native-before"
+      ],
+      "file": "r3-reader-pending-encoded-context-native-linux-r6/run.json",
+      "originalExpectedSHA256": "a1040bc848b671a1f228cdae7f44c872f191a1362e7529260408a206e6a1ee9a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-pending-encoded-context-native-linux-r6",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "review",
+        "proofs",
+        "linux-native-after"
+      ],
+      "file": "r3-reader-pending-encoded-context-native-linux-r7/run.json",
+      "originalExpectedSHA256": "b5d10f9a853d1326b64830c6ab55246932484a4961760322f97847672465e317",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-pending-encoded-context-native-linux-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "repositoryQualification",
+        "windows-asan"
+      ],
+      "file": "r3-repository-reader-context-matrix-windows-asan-r2/run.json",
+      "originalExpectedSHA256": "fe88956799e317c34cb8170cb6df566ad924033bae7ab4716a3d1d8c37ae8e22",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-repository-reader-context-matrix-windows-asan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "repositoryQualification",
+        "linux-asan-ubsan"
+      ],
+      "file": "r3-repository-reader-context-matrix-linux-asan-ubsan-r2/run.json",
+      "originalExpectedSHA256": "2fec9b16e242dcfa6c7b69dee1a4862ea613bebb01e8c6f240a46157ccd34d10",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-repository-reader-context-matrix-linux-asan-ubsan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "adjacentQualification",
+        "windows-asan"
+      ],
+      "file": "r3-pending-before-scope-adjacent-windows-asan-r7/run.json",
+      "originalExpectedSHA256": "98c746a52262bb7ff05a76bd00f60d2a3b9215eb5878985644d44e944ec9f97d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-pending-before-scope-adjacent-windows-asan-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "adjacentQualification",
+        "linux-asan-ubsan"
+      ],
+      "file": "r3-pending-before-scope-adjacent-linux-asan-ubsan-r7/run.json",
+      "originalExpectedSHA256": "4333b680ecc40635e510907bbd41f022c13036d94cbfe5b59ee78c5652fb9822",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-pending-before-scope-adjacent-linux-asan-ubsan-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeReaderPendingEncodedMatrix",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestRepositoryReaderContextMatrixRegressions",
+        "windows-asan"
+      ],
+      "file": "r3-repository-reader-context-matrix-windows-asan-r2/run.json",
+      "originalExpectedSHA256": "fe88956799e317c34cb8170cb6df566ad924033bae7ab4716a3d1d8c37ae8e22",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-repository-reader-context-matrix-windows-asan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestRepositoryReaderContextMatrixRegressions",
+        "linux-asan-ubsan"
+      ],
+      "file": "r3-repository-reader-context-matrix-linux-asan-ubsan-r2/run.json",
+      "originalExpectedSHA256": "2fec9b16e242dcfa6c7b69dee1a4862ea613bebb01e8c6f240a46157ccd34d10",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-repository-reader-context-matrix-linux-asan-ubsan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestRepositoryReaderContextMatrixRegressions",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestHostWatchdogSemanticCorrection",
+        "configurations",
+        "linux-release-lto"
+      ],
+      "file": "r7-client-resume-watchdog-linux-lto-r3/run.json",
+      "originalExpectedSHA256": "435beab07e5f5cd3a0f1240da55eb0d4fab111baf2dea4fdb2940de80ad2ddb0",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-client-resume-watchdog-linux-lto-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestHostWatchdogSemanticCorrection",
+        "configurations",
+        "linux-asan-ubsan-lsan"
+      ],
+      "file": "r7-client-resume-watchdog-linux-asan-ubsan-r5/run.json",
+      "originalExpectedSHA256": "597e6a9613be06d5b22674474e08dc0c7c73475621edf783ea200d129c5c1986",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-client-resume-watchdog-linux-asan-ubsan-r5",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestHostWatchdogSemanticCorrection",
+        "configurations",
+        "windows-asan"
+      ],
+      "file": "r7-client-resume-watchdog-windows-asan-r1/run.json",
+      "originalExpectedSHA256": "61cf44d0ad5839ee2fbd5acc969553bdc814429915a532b77ad69c2aa6cc325c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-client-resume-watchdog-windows-asan-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestHostWatchdogSemanticCorrection",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQualificationAuditorCorrections",
+        "audit"
+      ],
+      "file": "r3-r7-sdk72-progress-r11/run.json",
+      "originalExpectedSHA256": "585cf0dc0089c28b0d6913ee47c7aa32e932e955be9b95a2364a600a26412957",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r7-sdk72-progress-r11",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousSdk72WindowsBuildPointer"
+      ],
+      "file": "sdk72-instrumented-windows-asan-build-r3/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-instrumented-windows-asan-build-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousSdk72WindowsTargetedPointer"
+      ],
+      "file": "sdk72-instrumented-targeted-sequence-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk72-instrumented-targeted-sequence-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshSdk72InstrumentedLinuxBuild"
+      ],
+      "file": "r3-reader-sdk72-instrumented-linux-build-r1/build.json",
+      "originalExpectedSHA256": "cefcc151b30ca5b974b110f20f0ed6f92d4c5de9c7a9543f8819217f8251973f",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-sdk72-instrumented-linux-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "freshSdk72LinuxQualification"
+      ],
+      "file": "r3-reader-sdk72-instrumented-focused-linux-r1/run.json",
+      "originalExpectedSHA256": "15e673f5d5ced9fc0079a8224a7e8de08c96a52955d37e6cabcd41a1f089555c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-reader-sdk72-instrumented-focused-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5HeldBranchGraphDiagnosis",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r13/run.json",
+      "originalExpectedSHA256": "0fa2387ee23f9c4d8b4e813448ac97e517f8557d71361fabf14eb20c946a8f0a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r13",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestMatrixRegressionOldWorkerControls",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r12/run.json",
+      "originalExpectedSHA256": "b3b7238e123ae61287d1d623da452a1afcff02064fe8a6cff456b06da63012cd",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r12",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedScopeCandidate"
+      ],
+      "file": "r3-r5-r7-sdk72-combined-proposal-r9/proposal.json",
+      "originalExpectedSHA256": "bc41421586342494e2da580cfc060df41c241e7b9012f91d6ef6493c5147f76d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-combined-proposal-r9",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedScopeCandidate",
+        "scopeDeltaQualifiedAgainstFresh107WindowsAllBinaries"
+      ],
+      "file": "r7-reader-scope-concurrency-windows-asan-r3/run.json",
+      "originalExpectedSHA256": "a1e70930b52ac1612ab8123dc207c0f0653e742d9697af4330606e9f5c4dc84c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-reader-scope-concurrency-windows-asan-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedScopeCandidate",
+        "scopeDeltaQualifiedAgainstFresh107LinuxAllBinaries"
+      ],
+      "file": "r7-reader-scope-concurrency-linux-asan-ubsan-r3/run.json",
+      "originalExpectedSHA256": "c989896c177d746dbe9ad421505fd079d2fbf63c7a995ef8694ab055af523815",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-reader-scope-concurrency-linux-asan-ubsan-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOriginalBudgetScopeQualification",
+        "platforms",
+        "windows-asan"
+      ],
+      "file": "r7-reader-scope-concurrency-windows-asan-r1/run.json",
+      "originalExpectedSHA256": "ca63f6a401df1a8adb3bdca4490e9db0774ea21aba6233ce2e28ec864a2fd8c1",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-reader-scope-concurrency-windows-asan-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOriginalBudgetScopeQualification",
+        "platforms",
+        "linux-asan-ubsan"
+      ],
+      "file": "r7-reader-scope-concurrency-linux-asan-ubsan-r2/run.json",
+      "originalExpectedSHA256": "1405d6e502dcc707aa35190a7d68bea38b2e51f8955abeb735c582920ccabbf6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-reader-scope-concurrency-linux-asan-ubsan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOriginalBudgetScopeQualification",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r14/run.json",
+      "originalExpectedSHA256": "88ed4c818df14332b3b6a4eaaa740ce0415ecdbf44ef61b9221c76671d958ac6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "win32",
+        "r42"
+      ],
+      "file": "r5-held-branch-graphs-win32-r42/run.json",
+      "originalExpectedSHA256": "8f01c48c9a1db10e15b5c109388b6f7c7ff8b9d4d6c094d3f617adfaf2e6277b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r42",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "win32",
+        "r43"
+      ],
+      "file": "r5-held-branch-graphs-win32-r43/run.json",
+      "originalExpectedSHA256": "d4bbeba54096b4117581f5402ae29ce3790ae76fcf02768885ffcf0bd4d00531",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r43",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "win32",
+        "r44"
+      ],
+      "file": "r5-held-branch-graphs-win32-r44/run.json",
+      "originalExpectedSHA256": "0c5d8bf80e5045c319152809bfc2f48556e25f7a9194a8808387bc7e2773c7c3",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r44",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "win32",
+        "r45"
+      ],
+      "file": "r5-held-branch-graphs-win32-r45/run.json",
+      "originalExpectedSHA256": "d49c375d66722ad6714998b43121a15fe602697465b6f4d35ea14bd0bf688696",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r45",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "linux",
+        "r42"
+      ],
+      "file": "r5-held-branch-graphs-linux-r42/run.json",
+      "originalExpectedSHA256": "64d6bafce993a3d06312701bf24ee88ebad6ca7f917dfad6c2fb54daf3f47e85",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r42",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "linux",
+        "r43"
+      ],
+      "file": "r5-held-branch-graphs-linux-r43/run.json",
+      "originalExpectedSHA256": "33c5072ecc651dab6b8a7fd0451c0c027c2f841fe09cb5f1e14f21facb53837c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r43",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "linux",
+        "r44"
+      ],
+      "file": "r5-held-branch-graphs-linux-r44/run.json",
+      "originalExpectedSHA256": "6a02c773c265daee7c2d8e63415026b2110b198bcbb17a6b647aaf3fe229db84",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r44",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "platforms",
+        "linux",
+        "r45"
+      ],
+      "file": "r5-held-branch-graphs-linux-r45/run.json",
+      "originalExpectedSHA256": "54d32d6b74f15ebe66fa286006f16add28c8609ec861d129859bcc500425b857",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r45",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5RetiredOwnerDiagnosis",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r14/run.json",
+      "originalExpectedSHA256": "88ed4c818df14332b3b6a4eaaa740ce0415ecdbf44ef61b9221c76671d958ac6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "win32",
+        "experimentalBuild"
+      ],
+      "file": "r5-passive-async-result-worker-windows-asan-build-r9/build.json",
+      "originalExpectedSHA256": "99fdd113e5fecd69124c25bd2d4db47b21f1783c56a3d3aa1dc8e04b4c43f87c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-passive-async-result-worker-windows-asan-build-r9",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "win32",
+        "nativeControls"
+      ],
+      "file": "r5-passive-async-result-controls-windows-asan-r8/run.json",
+      "originalExpectedSHA256": "25c98221d2080fdd07f90e2a265eb18e0856b355e87b9d7a1f4d97f17ec72e08",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-passive-async-result-controls-windows-asan-r8",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "win32",
+        "observations",
+        "r46"
+      ],
+      "file": "r5-held-branch-graphs-win32-r46/run.json",
+      "originalExpectedSHA256": "0d491bae80d0dd12484ec3fb35716a478a7c5de876d2aaa4483f4d6a052a22b7",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r46",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "win32",
+        "observations",
+        "r47"
+      ],
+      "file": "r5-held-branch-graphs-win32-r47/run.json",
+      "originalExpectedSHA256": "a40229331f157c3b6dc093f97046835f4eb6c63d8664daa0be2f6d0f65163bc6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r47",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "linux",
+        "experimentalBuild"
+      ],
+      "file": "r5-passive-async-result-worker-linux-asan-ubsan-build-r8/build.json",
+      "originalExpectedSHA256": "a0339c81d14e715e18916092aeb1d24e2d1555f0d2558fa5e4da7e18d9d46127",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-passive-async-result-worker-linux-asan-ubsan-build-r8",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "linux",
+        "nativeControls"
+      ],
+      "file": "r5-passive-async-result-controls-linux-asan-ubsan-r8/run.json",
+      "originalExpectedSHA256": "afa5697fe1af851ff1db144d3c2ba0c87498b13bac78146ebd998d3e59add9ef",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-passive-async-result-controls-linux-asan-ubsan-r8",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "linux",
+        "observations",
+        "r46"
+      ],
+      "file": "r5-held-branch-graphs-linux-r46/run.json",
+      "originalExpectedSHA256": "96ac651b38dcbeafb8682285c8ad08fdfab31c9f07394abf38136b3d7a90a9bd",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r46",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "platforms",
+        "linux",
+        "observations",
+        "r47"
+      ],
+      "file": "r5-held-branch-graphs-linux-r47/run.json",
+      "originalExpectedSHA256": "20ba3f9b839ab227cc93291d649219b9531217d3285af99c8a327b7ca7db9996",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r47",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5PassiveAsyncResultDiagnosis",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r16/run.json",
+      "originalExpectedSHA256": "9d1e626cb30ff3d7a32cf720f643046ca8d839d2658cb1fad9643bd0db8d27d6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r16",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r18/run.json",
+      "originalExpectedSHA256": "07c8f700cd24bef221bde0308b1a4a5fa4d0e85c7de82b519a6075cd3b232a7a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r18",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "nativeObserverProperties"
+      ],
+      "file": "r5-promise-observation-unit-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": "5e1ba2da2d4c3059188c1385efb72771bbcaee49fa7d7ba80578f65fff9f1537",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-promise-observation-unit-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "retiredR12_96"
+      ],
+      "file": "r5-held-branch-graphs-win32-r54/run.json",
+      "originalExpectedSHA256": "5b312a128b4c67ce7fac860d64ee4cbbcf5bbf6bfacba65fdd8fc2a1a7776ab3",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r54",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "retiredR12_16"
+      ],
+      "file": "r5-held-branch-graphs-win32-r55/run.json",
+      "originalExpectedSHA256": "e006321a7e1076e9c52efc0ed9ee5ca58bb0925c56c637b18a8885160a61411e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r55",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "r12Iterator24Failures"
+      ],
+      "file": "r5-held-branch-graphs-win32-r57/run.json",
+      "originalExpectedSHA256": "4993f6466f4b8e7070ee81eff2485d63c0e9473ebcb1b9aae9ab386c1aee6218",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r57",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "r14Iterator24Passed"
+      ],
+      "file": "r5-held-branch-graphs-win32-r62/run.json",
+      "originalExpectedSHA256": "b77b02c12ca0dfba45d3cb46692c17fcc1c3567c1a4b2b653da31f779c915b3a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r62",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "liveOrdinaryPromiseTimerMixedAndCustomThenControls"
+      ],
+      "file": "r5-held-branch-graphs-win32-r61/run.json",
+      "originalExpectedSHA256": "bd24f8bec6ec6d8102c0f15c181ccf49677a2f6f8cf939535dd21685eab699f0",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-win32-r61",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "oldTerminalTransformSettlementFaultStillRejected"
+      ],
+      "file": "r5-current-vm-terminal-settlement-fault-controls-win32-r14/run.json",
+      "originalExpectedSHA256": "69fae0487c9cc2bf4809251b3c424ea112d9d3da9def6ce0dc67e617e351226d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-current-vm-terminal-settlement-fault-controls-win32-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "win32",
+        "experimentalR10Original63RegressionsPassed"
+      ],
+      "file": "r5-native-pipe-regressions-windows-asan-r10/run.json",
+      "originalExpectedSHA256": "0c091a222d42377baf10f6ee28841cd2489c5b80e382014e59010a2b902f7ce8",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-pipe-regressions-windows-asan-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "nativeObserverProperties"
+      ],
+      "file": "r5-promise-observation-unit-linux-asan-ubsan-build-r1/build.json",
+      "originalExpectedSHA256": "dc004fabaf751db7636424904290e7a8c84294fb5241c901f162b286cde0d69e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-promise-observation-unit-linux-asan-ubsan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "retiredR12_96"
+      ],
+      "file": "r5-held-branch-graphs-linux-r54/run.json",
+      "originalExpectedSHA256": "0d26bb965c9e10c6879f630d4106c259482747e90634c4db4f0937d75123239d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r54",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "retiredR12_16"
+      ],
+      "file": "r5-held-branch-graphs-linux-r55/run.json",
+      "originalExpectedSHA256": "a148c263f567dfdaa61cfe24a52f3bb7b0c408228e7cca5a3427b46e005f6fed",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r55",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "r12Iterator24Failures"
+      ],
+      "file": "r5-held-branch-graphs-linux-r57/run.json",
+      "originalExpectedSHA256": "e08026c9d153a9d8cd57c1f74f49e8d0bf080d77623857f5b94076ecfe26f9d5",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r57",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "r14Iterator24Passed"
+      ],
+      "file": "r5-held-branch-graphs-linux-r62/run.json",
+      "originalExpectedSHA256": "6bc7640262df4afa3c1cd679bcb8848fcb711d02df54199cad321d1d9cfa7b58",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r62",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "liveOrdinaryPromiseTimerMixedAndCustomThenControls"
+      ],
+      "file": "r5-held-branch-graphs-linux-r61/run.json",
+      "originalExpectedSHA256": "bcd30ad4ee78be1c5596a1b250b8134a7b41e0cbc8f5438756e240b9931d7ff9",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-held-branch-graphs-linux-r61",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "oldTerminalTransformSettlementFaultStillRejected"
+      ],
+      "file": "r5-current-vm-terminal-settlement-fault-controls-linux-r14/run.json",
+      "originalExpectedSHA256": "9bfc3ebd8c596a6f1d173068689f382b8454a509ce2059513f16dca57d8ad916",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-current-vm-terminal-settlement-fault-controls-linux-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestR5NativePipeAndPromiseCombinatorDiagnosis",
+        "platforms",
+        "linux",
+        "experimentalR10Original63RegressionsPassed"
+      ],
+      "file": "r5-native-pipe-regressions-linux-asan-ubsan-r10/run.json",
+      "originalExpectedSHA256": "5565ca05fa916a5956556338ba833079ecbe2ea9ead2375e5f6a74cc050afd4b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-pipe-regressions-linux-asan-ubsan-r10",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeIteratorOwnershipQualification",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk72-progress-r18/run.json",
+      "originalExpectedSHA256": "07c8f700cd24bef221bde0308b1a4a5fa4d0e85c7de82b519a6075cd3b232a7a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-progress-r18",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQueued53ReleaseRecovery"
+      ],
+      "file": "r7-r8-combined-windows-release-full-recovery-r3/run.json",
+      "originalExpectedSHA256": "ee0cf92aa40d0dd7dd9eabb0054e46b156c76e9c6db27c18c6181c8b09273209",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-windows-release-full-recovery-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate"
+      ],
+      "file": "r3-r5-r7-sdk73-combined-proposal-r2/proposal.json",
+      "originalExpectedSHA256": "5fcc38255f366be3ab71c7976fc1adcfaccb2f65ede9ff32e219887fda7efd7b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-combined-proposal-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate",
+        "sources",
+        "windows"
+      ],
+      "file": "r3-r5-r7-sdk73-source-windows-r1/run.json",
+      "originalExpectedSHA256": "a60d5855fa5fab3b9593c22b4984f72dff6ed6888fd8dbc9865791fdb5f653f7",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-source-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate",
+        "sources",
+        "linux"
+      ],
+      "file": "r3-r5-r7-sdk73-source-linux-r1/run.json",
+      "originalExpectedSHA256": "36eb138f2310ad33a2ec73afaa99b88e50524f7f71e6ed5b212bad21e80035c8",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-source-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate",
+        "freshWindowsAll"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate",
+        "originalBudget103And104FocusedQualification",
+        "sdk73WindowsFocusedR2"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-focused-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-focused-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate",
+        "originalBudget103And104FocusedQualification",
+        "sdk73LinuxFocusedR2"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-focused-linux-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-focused-linux-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk73Candidate",
+        "freshLinuxAll"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-linux-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-linux-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "audit"
+      ],
+      "file": "r3-r5-r7-sdk73-progress-r19/run.json",
+      "originalExpectedSHA256": "0d3521e526dea1bd1a3e9b3d287069176da6c979b583f19b87dda547af10b755",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-progress-r19",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "windows",
+        "pristineSdk73Audit"
+      ],
+      "file": "sdk73-native-promise-overlay-windows-r2/run.json",
+      "originalExpectedSHA256": "5eedeed4556de0754ebf458e119556d293b952613699037f36400f3840f9277d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk73-native-promise-overlay-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "windows",
+        "actualR14Original63RegressionCommandsPassed"
+      ],
+      "file": "r5-native-iterator-qualification-windows-asan-r14/run.json",
+      "originalExpectedSHA256": "3e5012b204fb1aa73bd0f4a57bcbbf21227ac88ef5b767a1d8291b605087ea3b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-iterator-qualification-windows-asan-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "windows",
+        "actualRepository23Commands148CasesAnd48OracleChecksPassed"
+      ],
+      "file": "r5-retired-ownership-repository-windows-asan-r4/run.json",
+      "originalExpectedSHA256": "9e48b9b0d02b1db3da75deff7888e882b60ebcf755ce31ba2d23cc56ed769138",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-retired-ownership-repository-windows-asan-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "windows",
+        "source"
+      ],
+      "file": "r3-r5-r7-sdk73-source-windows-r1/run.json",
+      "originalExpectedSHA256": "a60d5855fa5fab3b9593c22b4984f72dff6ed6888fd8dbc9865791fdb5f653f7",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-source-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "linux",
+        "pristineSdk73Audit"
+      ],
+      "file": "sdk73-native-promise-overlay-linux-r2/run.json",
+      "originalExpectedSHA256": "fa56296ce54eed8b3d3ed3b64384a39cbb915175e7ff6edd97fdca2cd22289ca",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk73-native-promise-overlay-linux-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "linux",
+        "actualR14Original63RegressionCommandsPassed"
+      ],
+      "file": "r5-native-iterator-qualification-linux-asan-ubsan-r14/run.json",
+      "originalExpectedSHA256": "346115fceb3f397a53359f87e0b78d32f254e0fb3264fff4b52ac7ddabf4ed9d",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-native-iterator-qualification-linux-asan-ubsan-r14",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "linux",
+        "actualRepository23Commands148CasesAnd48OracleChecksPassed"
+      ],
+      "file": "r5-retired-ownership-repository-linux-asan-ubsan-r4/run.json",
+      "originalExpectedSHA256": "28e348385fa6445e9be6bcfacb974b635f2fee28352efeb81be8fa4bc3161a79",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-retired-ownership-repository-linux-asan-ubsan-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73NativeOwnershipQualification",
+        "platforms",
+        "linux",
+        "source"
+      ],
+      "file": "r3-r5-r7-sdk73-source-linux-r1/run.json",
+      "originalExpectedSHA256": "36eb138f2310ad33a2ec73afaa99b88e50524f7f71e6ed5b212bad21e80035c8",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-source-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "queued53FinalLinuxSequence"
+      ],
+      "file": "r7-r8-combined-final-linux-sequence-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-combined-final-linux-sequence-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73WindowsAll"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73LinuxAll"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-linux-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-linux-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73WindowsFocusedR1Preparation"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-focused-windows-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-focused-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73LinuxFocusedR1Preparation"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-focused-linux-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-focused-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73WindowsFocusedR2"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-focused-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-focused-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73LinuxFocusedR2"
+      ],
+      "file": "r3-r5-r7-sdk73-instrumented-focused-linux-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk73-instrumented-focused-linux-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk73LiveBuilds",
+        "sdk73OriginalRichJson"
+      ],
+      "file": "r6-sdk73-original-rich-json-linux-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk73-original-rich-json-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestExactOriginalInvalidIpcRootCause"
+      ],
+      "file": "r6-exact-original-ipc-root-cause-review-r9/run.json",
+      "originalExpectedSHA256": "39ea538b02ecc36684c4ea86335e05480cb291989ebed8e85ce19d19f441c5d6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-exact-original-ipc-root-cause-review-r9",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk73OriginalRichJson"
+      ],
+      "file": "r6-sdk73-original-rich-json-linux-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk73-original-rich-json-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQueued53TerminalFourSuites",
+        "audit"
+      ],
+      "file": "r3-r5-r6-r7-sdk73-progress-r21/run.json",
+      "originalExpectedSHA256": "c2ac0c289d372527237e642939745a157fea8c1698857c9d9860d4bff6dc51a2",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk73-progress-r21",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk74Candidate"
+      ],
+      "file": "r3-r5-r7-sdk74-combined-proposal-r2/proposal.json",
+      "originalExpectedSHA256": "3d147ac9e4cfc5a68db0eb4ddb1bef3c68254455cdc46b13874164457fa1ca1f",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-combined-proposal-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk74Candidate",
+        "sources",
+        "windows"
+      ],
+      "file": "r3-r5-r7-sdk74-source-windows-r1/run.json",
+      "originalExpectedSHA256": "a663727f26c146fb5e23dd884e4904a2aaf044b83de493d8df33316d820dbdfc",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-source-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk74Candidate",
+        "sources",
+        "linux"
+      ],
+      "file": "r3-r5-r7-sdk74-source-linux-r1/run.json",
+      "originalExpectedSHA256": "4131c0129bfc932506368cda38121d64fd0d9ae653696c8fec0ac9dff9f107d3",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-source-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk74Candidate",
+        "nativeUnitProofs",
+        "nativeUnitWindows"
+      ],
+      "file": "r7-iterator-storage-windows-asan-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-iterator-storage-windows-asan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk74Candidate",
+        "nativeUnitProofs",
+        "nativeUnitLinux"
+      ],
+      "file": "r7-iterator-storage-linux-asan-ubsan-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-iterator-storage-linux-asan-ubsan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsAll"
+      ],
+      "file": "r3-r5-r7-sdk74-instrumented-windows-asan-build-r2/build.json",
+      "originalExpectedSHA256": "f4eb26fc9d63ce4b2ca47cdfa6b4e57094652f21ec9015defe7bca88bada0941",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-instrumented-windows-asan-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsFocused"
+      ],
+      "file": "r3-r5-r7-sdk74-instrumented-focused-windows-r1/run.json",
+      "originalExpectedSHA256": "b66b553f2e3345ff52dfa6beae510e4d1c09b3ad61edee543594ccec52227304",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-instrumented-focused-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsordinarySdk74Gate"
+      ],
+      "file": "r6-sdk74-gated-default-reader-ordinary-windows-asan-r4/run.json",
+      "originalExpectedSHA256": "15be3cc25597565a29c02aee0e637e700276b2dcef69196259745a318f657a2b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk74-gated-default-reader-ordinary-windows-asan-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsupgradeSdk74Gate"
+      ],
+      "file": "r6-sdk74-gated-default-reader-upgrade-windows-asan-r4/run.json",
+      "originalExpectedSHA256": "66da1308f51c0c304325f43fd8f54a3398dd44dbc941d08f656affdc11b53bad",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk74-gated-default-reader-upgrade-windows-asan-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsUpgradeGzipFixGate"
+      ],
+      "file": "r6-upgrade-gzip-gated-upgrade-windows-asan-r1/run.json",
+      "originalExpectedSHA256": "1b2c6d2922f965918046e77908cca1d4ecb9ea9c64e0433c40443a7a6cd625e5",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-upgrade-gzip-gated-upgrade-windows-asan-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsActualCreditCausality"
+      ],
+      "file": "r6-native-credit-causality-windows-asan-r2/run.json",
+      "originalExpectedSHA256": "588946141608b7eb2833aeeb601cfcb86fa5132cfee191d7c216eb838e849a6e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-native-credit-causality-windows-asan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "windowsGzipPrototypeBuild"
+      ],
+      "file": "r6-upgrade-gzip-windows-asan-r3/build.json",
+      "originalExpectedSHA256": "2d595a914448716143c59b3de420afe398bd960eef3e56ce7d2815811149d920",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-upgrade-gzip-windows-asan-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxAll"
+      ],
+      "file": "r3-r5-r7-sdk74-instrumented-linux-build-r2/build.json",
+      "originalExpectedSHA256": "98b26b534434aa7f9170350a8390cfe1df49ff36ecd5e9d92d8a9c8509e070ec",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-instrumented-linux-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxFocused"
+      ],
+      "file": "r3-r5-r7-sdk74-instrumented-focused-linux-r1/run.json",
+      "originalExpectedSHA256": "0caebfb03089c3c5bd83291546ef70748cb6867bbe4acc02a5ab08b2f5d6c4f3",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk74-instrumented-focused-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxordinarySdk74Gate"
+      ],
+      "file": "r6-sdk74-gated-default-reader-ordinary-linux-asan-ubsan-r4/run.json",
+      "originalExpectedSHA256": "09852fa21058b3c96f8599e825e0c26e261516c057d9c67cdb6366096b102552",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk74-gated-default-reader-ordinary-linux-asan-ubsan-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxupgradeSdk74Gate"
+      ],
+      "file": "r6-sdk74-gated-default-reader-upgrade-linux-asan-ubsan-r4/run.json",
+      "originalExpectedSHA256": "9b5f3cb5c7a918a13ed255db9a51e4358dca636003947c1351332237c910b68f",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk74-gated-default-reader-upgrade-linux-asan-ubsan-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxUpgradeGzipFixGate"
+      ],
+      "file": "r6-upgrade-gzip-gated-upgrade-linux-asan-ubsan-r1/run.json",
+      "originalExpectedSHA256": "4e6af7a8a9706f3863722ea2362d61ce61b564a13441e3865fa8041440457dee",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-upgrade-gzip-gated-upgrade-linux-asan-ubsan-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxActualCreditCausality"
+      ],
+      "file": "r6-native-credit-causality-linux-asan-ubsan-r2/run.json",
+      "originalExpectedSHA256": "f6f7e6f236b0757c4c1b8fa8af41383992a030ec62a9f96089c7b44a620a5018",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-native-credit-causality-linux-asan-ubsan-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "linuxGzipPrototypeBuild"
+      ],
+      "file": "r6-upgrade-gzip-linux-asan-ubsan-r3/build.json",
+      "originalExpectedSHA256": "04d21558e895818ba0cbbd46833000ad8ab13f1d4b16e5d6f8111d49bcf5efd4",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-upgrade-gzip-linux-asan-ubsan-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "original14RichJson"
+      ],
+      "file": "r6-sdk74-original-rich-json-linux-r1/run.json",
+      "originalExpectedSHA256": "89bcb5581c5800acba078d63fc5caf35e83ab0a83ac349aefe0c9d3e8c9f03f2",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk74-original-rich-json-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestReaderSdk74Jobs",
+        "official022BaselineInputs"
+      ],
+      "file": "r8-v022-release-baseline-inputs-r1/run.json",
+      "originalExpectedSHA256": "d52d1001d2d647ff0e8970d1194be43d16ca97be157020bea3e348042da94730",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-v022-release-baseline-inputs-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestDefaultReaderTimelinessCreditAndGzipReview"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r24/run.json",
+      "originalExpectedSHA256": "cc53df21128dcda3373a2d4d3219e7341cb685029151244f111afd8ff971e738",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r24",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk75Candidate"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-combined-proposal-r2/proposal.json",
+      "originalExpectedSHA256": "10a5cf18687d8bc703ff84577116cd5b8cd1ad853a0f5225d8e4b0c5ea2ab74a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-combined-proposal-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk75Candidate",
+        "freshAllJobs",
+        "windows"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-windows-asan-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-windows-asan-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk75Candidate",
+        "freshAllJobs",
+        "linux"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-linux-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-linux-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk75Candidate",
+        "focusedJobs",
+        "windows"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-focused-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-focused-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "pendingPreparedSdk75Candidate",
+        "focusedJobs",
+        "linux"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-focused-linux-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-focused-linux-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windowsSdk75R2All"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-windows-asan-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-windows-asan-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windowsSdk75R2Focused"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-focused-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-focused-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windowsSdk75R2Unfiltered"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-unfiltered-windows-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-unfiltered-windows-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linuxSdk75R2All"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-linux-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-linux-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linuxSdk75R2Focused"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-instrumented-focused-linux-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-instrumented-focused-linux-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linuxSdk75R2Unfiltered"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-unfiltered-linux-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-unfiltered-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "original14RichJson"
+      ],
+      "file": "r6-sdk75-original-rich-json-linux-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r6-sdk75-original-rich-json-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windows-debugCleanBuildr1"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-clean-windows-debug-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-clean-windows-debug-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windows-debugCleanBuildr2"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-clean-windows-debug-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-clean-windows-debug-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windows-releaseCleanBuildr1"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-clean-windows-release-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-clean-windows-release-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windows-releaseCleanBuildr2"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-clean-windows-release-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-clean-windows-release-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linux-release-ltoCleanBuildr1"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-clean-linux-release-lto-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-clean-linux-release-lto-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linux-release-ltoCleanBuildr2"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-clean-linux-release-lto-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-clean-linux-release-lto-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windows-debugUnfilteredQueue"
+      ],
+      "file": "sdk75-clean-windows-debug-unfiltered-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-windows-debug-unfiltered-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windows-releaseUnfilteredQueue"
+      ],
+      "file": "sdk75-clean-windows-release-unfiltered-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-windows-release-unfiltered-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linux-release-ltoUnfilteredQueue"
+      ],
+      "file": "sdk75-clean-linux-release-lto-unfiltered-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-release-lto-unfiltered-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linux-clang-sanitizersUnfilteredQueue"
+      ],
+      "file": "sdk75-clean-linux-clang-sanitizers-unfiltered-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-clang-sanitizers-unfiltered-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "cleanTypedOpenSsl32FileProvider"
+      ],
+      "file": "r8-openssl-typed-callback-clean-provider-r3/build.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-openssl-typed-callback-clean-provider-r3\\build.json",
+      "actualSHA256": "4f745ce49e475977a195e3c6b009c201c8fdd426e171dd35cd844d9889b7a6be"
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "firstClangAllActualWarnings"
+      ],
+      "file": "r8-sdk75-clang-project-build-r1/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-clang-project-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "syntheticGzipCreditFixtureCorrected"
+      ],
+      "file": "sdk75-helper-credit-gzip-fixture-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-helper-credit-gzip-fixture-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "firstFixtureReporterGuard"
+      ],
+      "file": "sdk75-helper-credit-gzip-fixture-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-helper-credit-gzip-fixture-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "firstGitCheckoutByteGuard"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-source-linux-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-source-linux-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "compilerAndFixtureSourceCorrection"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-source-linux-r4/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-source-linux-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "originalDerWriteFunctionFailure"
+      ],
+      "file": "r8-typed-cli-key-formats-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-typed-cli-key-formats-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "originalLegacyDecoderFunctionFailure"
+      ],
+      "file": "r8-typed-cli-key-formats-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-typed-cli-key-formats-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "typedEvpBioEncoders"
+      ],
+      "file": "r8-typed-cli-evp-bio-adapters-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-typed-cli-evp-bio-adapters-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "typedPvkAndMsBlobDecoders"
+      ],
+      "file": "r8-typed-cli-legacy-key-decoders-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-typed-cli-legacy-key-decoders-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "sevenAlgorithmPemDerPkcs8Qualification"
+      ],
+      "file": "r8-typed-cli-key-formats-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-typed-cli-key-formats-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "cleanTypedOpenSsl34FileProvider"
+      ],
+      "file": "r8-openssl-typed-callback-clean-provider-r4/build.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-openssl-typed-callback-clean-provider-r4\\build.json",
+      "actualSHA256": "286e8223881370ccd4c12079e833c19343a0b2ab5b854a90531a09b51ca07dd3"
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "originalLargeGzipFiveSecondFailure"
+      ],
+      "file": "sdk75-large-gzip-original-budget-replay-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-original-budget-replay-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "tenSecondLargeGzipDiagnostic"
+      ],
+      "file": "sdk75-large-gzip-ten-second-diagnostic-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-ten-second-diagnostic-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "largeGzipStageDiagnostic"
+      ],
+      "file": "sdk75-large-gzip-stage-diagnostic-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-stage-diagnostic-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "currentSdk75StrictLsanDiagnostic"
+      ],
+      "file": "r8-sdk75-strict-tls-asan-stderr-diagnostic-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-strict-tls-asan-stderr-diagnostic-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "shaO1OriginalFiveSecondPositive"
+      ],
+      "file": "sdk75-large-gzip-sha-o1-prototype-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-sha-o1-prototype-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "clangBuildr2"
+      ],
+      "file": "r8-sdk75-clang-project-build-r2/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-clang-project-build-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "clangUnfilteredr2"
+      ],
+      "file": "sdk75-clean-linux-clang-sanitizers-unfiltered-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-clang-sanitizers-unfiltered-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "clangBuildr3"
+      ],
+      "file": "r8-sdk75-clang-project-build-r3/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-clang-project-build-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "clangUnfilteredr3"
+      ],
+      "file": "sdk75-clean-linux-clang-sanitizers-unfiltered-r3/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-clang-sanitizers-unfiltered-r3",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "clangBuildr4"
+      ],
+      "file": "r8-sdk75-clang-project-build-r4/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-clang-project-build-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "clangUnfilteredr4"
+      ],
+      "file": "sdk75-clean-linux-clang-sanitizers-unfiltered-r4/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-clang-sanitizers-unfiltered-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "completeVendorSourceLinuxR6"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-source-linux-r6/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-source-linux-r6",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "completeVendorSourceWindowsR6"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-source-windows-r6/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-source-windows-r6",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "compilerFixtureMbedTlsCombinedProposal"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-combined-proposal-r4/proposal.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-combined-proposal-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "windowsCompleteVendorSourceR7"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-source-windows-r7/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-source-windows-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "linuxCompleteVendorSourceR7"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-source-linux-r7/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-source-linux-r7",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "runtimeDebugFiveTargetProposal"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-combined-proposal-r5/proposal.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-combined-proposal-r5",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "earlyClangO0StackRangeError"
+      ],
+      "file": "sdk75-large-gzip-early-clang-worker-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-early-clang-worker-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "quickJsO1OriginalLargeGzipPrototype"
+      ],
+      "file": "sdk75-large-gzip-clang-quickjs-o1-prototype-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-clang-quickjs-o1-prototype-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "actualFreshClangBuildWorkerLargeGzip"
+      ],
+      "file": "sdk75-large-gzip-early-clang-worker-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-large-gzip-early-clang-worker-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "currentFreshClangR5All"
+      ],
+      "file": "r8-sdk75-clang-project-build-r5/build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-clang-project-build-r5",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "currentFreshClangR5Unfiltered"
+      ],
+      "file": "sdk75-clean-linux-clang-sanitizers-unfiltered-r5/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-clang-sanitizers-unfiltered-r5",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "supersededClangR4AllReason"
+      ],
+      "file": "r8-sdk75-clang-project-build-r4/superseded-during-build.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk75-clang-project-build-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "supersededClangR4FullReason"
+      ],
+      "file": "sdk75-clean-linux-clang-sanitizers-unfiltered-r4/superseded-before-product-tests.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk75-clean-linux-clang-sanitizers-unfiltered-r4",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "fullOpenSslOriginalUpstream"
+      ],
+      "file": "r8-openssl-upstream-sanitizers-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-openssl-upstream-sanitizers-r1\\run.json",
+      "actualSHA256": "09b7595b44011f5630bb5ab35902bc86a361a02e01ecff181a9b16ef28192be1"
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "upstreamFinalCallbackFindings"
+      ],
+      "file": "r8-upstream-callback-findings-snapshot-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-upstream-callback-findings-snapshot-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "purposeComparatorFirstProbeContractGuard"
+      ],
+      "file": "r8-x509-purpose-comparator-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-x509-purpose-comparator-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75Jobs",
+        "purposeComparatorOriginalNegativeAndTypedPositive"
+      ],
+      "file": "r8-x509-purpose-comparator-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-x509-purpose-comparator-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75ReportDirectoryCorrection"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r25/run.json",
+      "originalExpectedSHA256": "ef13bc2fc03328fa64bef9b879b87597ec8a5e86925d520998296520af81beba",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r25",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOpenSslTypedCallbackDiagnostic"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r28/run.json",
+      "originalExpectedSHA256": "3b3914ea0263ec0074336abf500a0100eb2181bddbe03a0c79fa5f58d4a10b89",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r28",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestHistoricalFourWptCurrentQualification"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r25/run.json",
+      "originalExpectedSHA256": "ef13bc2fc03328fa64bef9b879b87597ec8a5e86925d520998296520af81beba",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r25",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestWindowsSdk75TwelveReaderGates"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r28/run.json",
+      "originalExpectedSHA256": "3b3914ea0263ec0074336abf500a0100eb2181bddbe03a0c79fa5f58d4a10b89",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r28",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk75CleanBuildAndFullSuiteQueue"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r31/run.json",
+      "originalExpectedSHA256": "ee024f060d320c40304f1b2616ef25abba892e37c08e1d54fbb22f2db229a80a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r31",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestBothSdk75TwentyFourReaderGates"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r28/run.json",
+      "originalExpectedSHA256": "3b3914ea0263ec0074336abf500a0100eb2181bddbe03a0c79fa5f58d4a10b89",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r28",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestCleanTypedOpenSslProvider"
+      ],
+      "file": "r8-openssl-typed-callback-clean-provider-r4/build.json",
+      "originalExpectedSHA256": "286e8223881370ccd4c12079e833c19343a0b2ab5b854a90531a09b51ca07dd3",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-openssl-typed-callback-clean-provider-r4\\build.json",
+      "actualSHA256": "286e8223881370ccd4c12079e833c19343a0b2ab5b854a90531a09b51ca07dd3",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestCompilerAndGzipFixtureCorrections"
+      ],
+      "file": "r3-r5-r6-r7-sdk75-progress-r31/run.json",
+      "originalExpectedSHA256": "ee024f060d320c40304f1b2616ef25abba892e37c08e1d54fbb22f2db229a80a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk75-progress-r31",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk76Candidate"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r35/run.json",
+      "originalExpectedSHA256": "1baf5900aacc431bb692fed493aeb0525edd3244b13d88a33c00d9562306606a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r35",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestWasmStorageAndValidationFix"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r32/run.json",
+      "originalExpectedSHA256": "481e19f639342a630433055ff3aafe7887158a066ab2391da0314499d93887ef",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r32",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestCleanBuildAndFullQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestLinuxStorageFault"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r32/run.json",
+      "originalExpectedSHA256": "481e19f639342a630433055ff3aafe7887158a066ab2391da0314499d93887ef",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r32",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh"
+      ],
+      "file": "r3-r5-r7-sdk72-combined-proposal-r8/proposal.json",
+      "originalExpectedSHA256": "5a986345e52d18e6d18493d3501302a09f4cce705aadbf5fe6ecb07e44f8f8f0",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-combined-proposal-r8",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "sources",
+        "windows"
+      ],
+      "file": "r3-r5-r7-sdk72-source-windows-r1/run.json",
+      "originalExpectedSHA256": "c6beeccd8004455461c97c08b59a36e82e9eb415fefd56d82ee5056b4a07456e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-source-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "sources",
+        "linux"
+      ],
+      "file": "r3-r5-r7-sdk72-source-linux-r1/run.json",
+      "originalExpectedSHA256": "8a7e1949aeccac376c6385084295b93ac6031285634b915248e07395754c7c8c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-source-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "freshWindowsAll"
+      ],
+      "file": "r3-r5-r7-sdk72-instrumented-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": "218bdcbc85748d00a6851ab0fed6be1c0bd57274c8d90f378a56aced35bd01db",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-instrumented-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "freshLinuxAll"
+      ],
+      "file": "r3-r5-r7-sdk72-instrumented-linux-build-r1/build.json",
+      "originalExpectedSHA256": "a9d178f66c36ce3c6dba31dfcdfaa7819e0285d68b6eec02db0d2db87f26b741",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-instrumented-linux-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "focusedOriginalBudgetQualification",
+        "windows",
+        "freshAll"
+      ],
+      "file": "r3-r5-r7-sdk72-instrumented-windows-asan-build-r1/build.json",
+      "originalExpectedSHA256": "218bdcbc85748d00a6851ab0fed6be1c0bd57274c8d90f378a56aced35bd01db",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-instrumented-windows-asan-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "focusedOriginalBudgetQualification",
+        "windows",
+        "focused"
+      ],
+      "file": "r3-r5-r7-sdk72-instrumented-focused-windows-r1/run.json",
+      "originalExpectedSHA256": "eaadcd1ec0deceffdbf7f9f917175026d662cb8d84195787a283c8ae938100ff",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-instrumented-focused-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "focusedOriginalBudgetQualification",
+        "linux",
+        "freshAll"
+      ],
+      "file": "r3-r5-r7-sdk72-instrumented-linux-build-r1/build.json",
+      "originalExpectedSHA256": "a9d178f66c36ce3c6dba31dfcdfaa7819e0285d68b6eec02db0d2db87f26b741",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-instrumented-linux-build-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousCurrentPrivateCandidateBeforeSdk76Refresh",
+        "focusedOriginalBudgetQualification",
+        "linux",
+        "focused"
+      ],
+      "file": "r3-r5-r7-sdk72-instrumented-focused-linux-r1/run.json",
+      "originalExpectedSHA256": "7192bb698074306023cb67db1cf5b5f46b4d6bb0e2c6847907a3dc90d06abd5e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r7-sdk72-instrumented-focused-linux-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestStandardConstructorReferenceComparison"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r34/run.json",
+      "originalExpectedSHA256": "84f0ecea92e5793c4dca9430e6ebe424434116511a2a85c96742cdb03f6cc537",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r34",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSupportedWindowsConstructorModes"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r35/run.json",
+      "originalExpectedSHA256": "1baf5900aacc431bb692fed493aeb0525edd3244b13d88a33c00d9562306606a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r35",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOrdinaryNativeArgumentWindowsComponent"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r35/run.json",
+      "originalExpectedSHA256": "1baf5900aacc431bb692fed493aeb0525edd3244b13d88a33c00d9562306606a",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r35",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk76WindowsOwnershipAndReaderComponents"
+      ],
+      "file": "r5-r6-sdk76-windows-components-r1/run.json",
+      "originalExpectedSHA256": "fea40680351d1378e9bc45817c46e928d48fb75b5eb9ded117a63d7632f76ed5",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r5-r6-sdk76-windows-components-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestPreparedMessagePortSchedulingCorrection"
+      ],
+      "file": "r7-message-port-microtask-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "3b689a08810bcdcf750b93cfd08d2cbec0503b151252527b4e54e31afab428f4",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-message-port-microtask-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestMessagePortPublicSchedulingQualification"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r38/run.json",
+      "originalExpectedSHA256": "d05a6eab6a0f7e448540977a7193a1e0e4e8a6e51ac67e07273b19b8d63c058f",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r38",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestIndependentLinuxEnvironment"
+      ],
+      "file": "r8-independent-linux-d-r1/run.json",
+      "originalExpectedSHA256": "e731a97e8b2a1b542d801a54eb52c01aa8628c03761a22532202b078eb27ed82",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-independent-linux-d-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestIndependentLinuxSourceAndProviderPreparation"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r39/run.json",
+      "originalExpectedSHA256": "2fffd8b9e042fe0236ac3951558377222c39e11f0e8fbf35a0c2ac57ea37342b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r39",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeMessagePortAndMsvcRefresh"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-combined-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "4d53dd9ce96ab7e20492c5130d6866594645437f0709f25da6d09d0b78f425a6",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-combined-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeMessagePortAndMsvcRefresh",
+        "windowsSource"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-source-windows-r1/run.json",
+      "originalExpectedSHA256": "ea781ada36145468798303b36457635936c058448dcfa5f3f2c0ceed61c2088e",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-source-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeMessagePortAndMsvcRefresh",
+        "fullUnfilteredRun"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-unfiltered-windows-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-unfiltered-windows-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeMessagePortAndMsvcRefresh",
+        "independentLinuxEnvironment"
+      ],
+      "file": "r8-independent-linux-d-r1/run.json",
+      "originalExpectedSHA256": "e731a97e8b2a1b542d801a54eb52c01aa8628c03761a22532202b078eb27ed82",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-independent-linux-d-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestMsvcPrefixEncodingQualification"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r40/run.json",
+      "originalExpectedSHA256": "9942caee86e6554cfa24544051791924db73d7394f314a5605c80ea06136e7a3",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r40",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestPrivateUnifiedWindowsCandidate"
+      ],
+      "file": "sdk76-message-port-msvc-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "8b822ac9dba288674c679d850f0899235ad33f558dd19f7a65e1504a955d1a11",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk76-message-port-msvc-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestInterruptedWindowsFailureReview"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r41/run.json",
+      "originalExpectedSHA256": "85e0c17b866f598a8769091052100e3fdf66f3e810e61944d6a7bbe1a2d81b1b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r41",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestFullOpenSslUpstreamQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r41/run.json",
+      "originalExpectedSHA256": "85e0c17b866f598a8769091052100e3fdf66f3e810e61944d6a7bbe1a2d81b1b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r41",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestPreparedSdk77Proposal"
+      ],
+      "file": "sdk77-null-view-combined-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "5d69849279a34f20bebddc71dadb49902e8052a8894e2ac7e6ae240fa950c19f",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk77-null-view-combined-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestQuickJsNullViewTransferCorrection"
+      ],
+      "file": "r3-r5-r6-r7-sdk77-progress-r42/run.json",
+      "originalExpectedSHA256": "574a0495a8478a82df8db05f53ca3990e987d4738f5263d97205795cb9aa944c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk77-progress-r42",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestRegisteredTestRuntimePathAndClangDetectionCorrections"
+      ],
+      "file": "r3-r5-r6-r7-sdk77-progress-r42/run.json",
+      "originalExpectedSHA256": "574a0495a8478a82df8db05f53ca3990e987d4738f5263d97205795cb9aa944c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk77-progress-r42",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestNativeFilesystemAndManagedLsanQualificationEvidence"
+      ],
+      "file": "r3-r5-r6-r7-sdk77-progress-r42/run.json",
+      "originalExpectedSHA256": "574a0495a8478a82df8db05f53ca3990e987d4738f5263d97205795cb9aa944c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk77-progress-r42",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestExplicit15sWptRequestContextEvidence"
+      ],
+      "file": "r3-r5-r6-r7-sdk77-progress-r42/run.json",
+      "originalExpectedSHA256": "574a0495a8478a82df8db05f53ca3990e987d4738f5263d97205795cb9aa944c",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk77-progress-r42",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestSdk78UnifiedCandidateProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeSdk78",
+        "windowsSourcePreparation"
+      ],
+      "file": "sdk76-message-port-msvc-source-windows-r1/run.json",
+      "originalExpectedSHA256": "d2f8c41132377dfb868b3825f99d14fca87721843f9c9c45cd961acf2237d264",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk76-message-port-msvc-source-windows-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeSdk78",
+        "windowsUnifiedProposal"
+      ],
+      "file": "sdk76-message-port-msvc-proposal-r1/proposal.json",
+      "originalExpectedSHA256": "8b822ac9dba288674c679d850f0899235ad33f558dd19f7a65e1504a955d1a11",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk76-message-port-msvc-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousPrivateCandidateBeforeSdk78",
+        "currentQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk76-progress-r41/run.json",
+      "originalExpectedSHA256": "85e0c17b866f598a8769091052100e3fdf66f3e810e61944d6a7bbe1a2d81b1b",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk76-progress-r41",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestOpenSslCallbackRuntimeCorrections"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestProductionReleaseLtoQualification"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestOpenSslBlockAlgorithmCorrections"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestLtoTransitiveUsageRequirementCorrection"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestWindowsAsanFullTerminal"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78CleanAllFocusedAndFullCheckpoint"
+      ],
+      "file": "sdk78-focused28-full-progress-r45/run.json",
+      "originalExpectedSHA256": "26a1d40cc8cc2ff717aa03315552eb492f350c78a95b878000e1164fe4f9f40d",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-focused28-full-progress-r45\\run.json",
+      "actualSHA256": "26a1d40cc8cc2ff717aa03315552eb492f350c78a95b878000e1164fe4f9f40d",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestUserStatusCheckpoint"
+      ],
+      "file": "v030-user-status-r50/run.json",
+      "originalExpectedSHA256": "a6a2cdf4209ab21edd37730dc1b66f1cda9fa0cc99c85bba118daaad41e9dcc9",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-user-status-r50",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestAsn1AndOwnershipProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r47/run.json",
+      "originalExpectedSHA256": "c1188dd1a6a3c246d91e372578390629297006a1f92787413faab79c3b56d59e",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r47\\run.json",
+      "actualSHA256": "c1188dd1a6a3c246d91e372578390629297006a1f92787413faab79c3b56d59e",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestMainProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r69/run.json",
+      "originalExpectedSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r69\\run.json",
+      "actualSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestFullTerminalAndDependencyProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r48/run.json",
+      "originalExpectedSHA256": "dd21d9b7574d4747c58f1bb055e6d531d5123c8813e0255a084dff12125cf945",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r48\\run.json",
+      "actualSHA256": "dd21d9b7574d4747c58f1bb055e6d531d5123c8813e0255a084dff12125cf945",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestLtoAuditObservationMsvcAndDependencyProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r49/run.json",
+      "originalExpectedSHA256": "58e7e1881c46764b8a4479bc812b5a2f7c753dc781a7bd60c4e40bab60f00955",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r49\\run.json",
+      "actualSHA256": "58e7e1881c46764b8a4479bc812b5a2f7c753dc781a7bd60c4e40bab60f00955",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestHeadersStandardDiagnosis"
+      ],
+      "file": "r7-headers-standard-diagnosis-review-r2/run.json",
+      "originalExpectedSHA256": "f8644abc6696402d1490a769a2457037f48633a2e8c70033f3201285fb0a9179",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-headers-standard-diagnosis-review-r2",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "latestPublicHeadersDiagnosticCorrection"
+      ],
+      "file": "r7-public-headers-profile-diagnosis-r2/run.json",
+      "originalExpectedSHA256": "52d9825884c94e0b590ec452b417b3723b9c8b1868477834c2f25f30c7810691",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-public-headers-profile-diagnosis-r2\\run.json",
+      "actualSHA256": "52d9825884c94e0b590ec452b417b3723b9c8b1868477834c2f25f30c7810691",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestAcceptanceBoundaryProposal"
+      ],
+      "file": "r7-r8-acceptance-boundary-proposal-r1/run.json",
+      "originalExpectedSHA256": "66121f84ebcb57cd50c8fc5cbb6720cc761b7a8bc9516439ad732d16b530ae89",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-acceptance-boundary-proposal-r1",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousUserStatusCheckpoint"
+      ],
+      "file": "v030-user-status-r46/run.json",
+      "originalExpectedSHA256": "cb4075fd08eb8a7254904841d96250bbf5e5f7fe575b570d2876a7ee29793251",
+      "status": "removed-by-user-authorized-cleanup",
+      "deletionJournalTarget": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-user-status-r46",
+      "currentlyRehashable": false
+    },
+    {
+      "pointer": [
+        "previousMainProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r68/run.json",
+      "originalExpectedSHA256": "a7e87670f8e7d2a295b09429b826ffeea1d4dc2f7045365bd83498c5e58c7cdd",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r68\\run.json",
+      "actualSHA256": "a7e87670f8e7d2a295b09429b826ffeea1d4dc2f7045365bd83498c5e58c7cdd",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestQualifiedOpenSslUpstream"
+      ],
+      "file": "r8-openssl-upstream-sanitizers-r9/run.json",
+      "originalExpectedSHA256": "9e5e8b7f7fa3de2d7282239dd4ce0656efc02fdf20dfe8d31aaa01aa5ec8fe14",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-openssl-upstream-sanitizers-r9\\run.json",
+      "actualSHA256": "9e5e8b7f7fa3de2d7282239dd4ce0656efc02fdf20dfe8d31aaa01aa5ec8fe14",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestQualifiedCaresUpstream"
+      ],
+      "file": "r8-cares-upstream-isolated-dns-r3/run.json",
+      "originalExpectedSHA256": "4b9c7b7ad22e7d7f3c25506e0bf6ea170f9e3d5226be685bb587c69ac1447df8",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-cares-upstream-isolated-dns-r3\\run.json",
+      "actualSHA256": "4b9c7b7ad22e7d7f3c25506e0bf6ea170f9e3d5226be685bb587c69ac1447df8",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestManagedWorkerExitRootCauseEvidence"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r51/run.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r51\\run.json",
+      "actualSHA256": "b5ff9eee443ef4caae71723ecf62843a4d1c6db930257f0099e25387f5b61118"
+    },
+    {
+      "pointer": [
+        "latestGoalTurnAudit"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r69/run.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r69\\run.json",
+      "actualSHA256": "ff3cb344e1be9f752803d4e1fa4439d0cd69251af4e17a5ce280868401063bd9"
+    },
+    {
+      "pointer": [
+        "acceptedV030Boundaries"
+      ],
+      "file": "r7-r8-acceptance-boundary-decision-r2/run.json",
+      "originalExpectedSHA256": "3dc4f24ecac0b2369b0f76ba0b860b7811a0ef052c42270af7ac22f4233f3e47",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-r8-acceptance-boundary-decision-r2\\run.json",
+      "actualSHA256": "3dc4f24ecac0b2369b0f76ba0b860b7811a0ef052c42270af7ac22f4233f3e47",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestNativePublicHeadersProfile"
+      ],
+      "file": "r7-public-headers-current-candidate-linux-r1/run.json",
+      "originalExpectedSHA256": "3d96f42638ee6570c2fb0e738280f3effbe0f896d6671815138e60f477e27a9e",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-public-headers-current-candidate-linux-r1\\run.json",
+      "actualSHA256": "3d96f42638ee6570c2fb0e738280f3effbe0f896d6671815138e60f477e27a9e",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestWindowsQualifiedProviderRuntimeObservation"
+      ],
+      "file": "r8-windows-network-api-handle-attribution-r15/run.json",
+      "originalExpectedSHA256": "e776756da93c0cecd5c03f96a6baaba785b4984ff4f15c0ad97e7a8f8fe36e77",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-windows-network-api-handle-attribution-r15\\run.json",
+      "actualSHA256": "e776756da93c0cecd5c03f96a6baaba785b4984ff4f15c0ad97e7a8f8fe36e77",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestWindowsQualifiedProviderRuntimeObservation",
+        "progress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r62/run.json",
+      "originalExpectedSHA256": "d15eac958925523e00a0509dd7be306369cfb3b479cb9927ee2da2b1d9b1690e",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r62\\run.json",
+      "actualSHA256": "d15eac958925523e00a0509dd7be306369cfb3b479cb9927ee2da2b1d9b1690e",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestCurrentCandidateFuzzQualification"
+      ],
+      "file": "r8-sdk78-current-fuzz-linux-r1/run.json",
+      "originalExpectedSHA256": "14da34c0b484227c0379eabe2e4c044e4e9b8ca9af97274e78ed0655e381d541",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-sdk78-current-fuzz-linux-r1\\run.json",
+      "actualSHA256": "14da34c0b484227c0379eabe2e4c044e4e9b8ca9af97274e78ed0655e381d541",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestCurrentCandidateWindowsSource"
+      ],
+      "file": "sdk78-ci-integration-and-source-windows-r3/run.json",
+      "originalExpectedSHA256": "f94a90a935c909ec803e30a7df10b5f8ab69bd9360d552196081449120786de1",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-ci-integration-and-source-windows-r3\\run.json",
+      "actualSHA256": "f94a90a935c909ec803e30a7df10b5f8ab69bd9360d552196081449120786de1",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "historicalCurrentCandidatePointers",
+        "0",
+        "value",
+        "currentQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r45/run.json",
+      "originalExpectedSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r45\\run.json",
+      "actualSHA256": "cec24ab6270cfaac18abadbe764158dbff610fc70d7cedb273e0a619776f4cde",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "historicalCurrentCandidatePointers",
+        "1",
+        "value",
+        "currentQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r62/run.json",
+      "originalExpectedSHA256": "d15eac958925523e00a0509dd7be306369cfb3b479cb9927ee2da2b1d9b1690e",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r62\\run.json",
+      "actualSHA256": "d15eac958925523e00a0509dd7be306369cfb3b479cb9927ee2da2b1d9b1690e",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "historicalCurrentCandidatePointers",
+        "2",
+        "value",
+        "currentQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r63/run.json",
+      "originalExpectedSHA256": "1a9cfdc53a31a9b7bfcbcacdd8efd98256e55f0c4e25b54efe4c626979594047",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r63\\run.json",
+      "actualSHA256": "1a9cfdc53a31a9b7bfcbcacdd8efd98256e55f0c4e25b54efe4c626979594047",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "historicalCurrentCandidatePointers",
+        "3",
+        "value",
+        "currentQualificationProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r64/run.json",
+      "originalExpectedSHA256": "d478e8375ce073443500e5accaeebd1f92c26b0af8ed0785556adbdd92ad2dc9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r64\\run.json",
+      "actualSHA256": "d478e8375ce073443500e5accaeebd1f92c26b0af8ed0785556adbdd92ad2dc9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestRootIntegration"
+      ],
+      "file": "sdk78-current-candidate-main-integration-r1/run.json",
+      "originalExpectedSHA256": "6b9796d7eaee1bcd25363ef51f457fa4896039a5bca65cea35d5fc772abe3928",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-candidate-main-integration-r1\\run.json",
+      "actualSHA256": "6b9796d7eaee1bcd25363ef51f457fa4896039a5bca65cea35d5fc772abe3928",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestResumedLinuxSource"
+      ],
+      "file": "sdk78-resumed-source-linux-r2/run.json",
+      "originalExpectedSHA256": "c82a2f42d37ae881a7d0ddbac0e5fa0ffa6434e05e8809ffb157f2094306e533",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-resumed-source-linux-r2\\run.json",
+      "actualSHA256": "c82a2f42d37ae881a7d0ddbac0e5fa0ffa6434e05e8809ffb157f2094306e533",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestResumedLinuxSanitizerQualification"
+      ],
+      "file": "sdk78-resumed-sanitizer-linux-build-r5/build.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-resumed-sanitizer-linux-build-r5\\build.json",
+      "actualSHA256": "17ba275abdd737eaba7a8cd6093d9348711732e246c0274f5ec063f39e93d3a0"
+    },
+    {
+      "pointer": [
+        "latestWriterFixtureSchedulingCorrection",
+        "progress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r61/run.json",
+      "originalExpectedSHA256": "1e365ce0832520fd7efcc435ad32ba96f8183ffe9c6670f221b5a3f4fe4cbdff",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r61\\run.json",
+      "actualSHA256": "1e365ce0832520fd7efcc435ad32ba96f8183ffe9c6670f221b5a3f4fe4cbdff",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestArgumentContractOriginalBudgetRerun"
+      ],
+      "file": "sdk78-argument-controls-linux-r1/run.json",
+      "originalExpectedSHA256": "fedf4e7812190f093136ada0c8da7f207ffa2acb3aba600ac7a901ebae43ac22",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-argument-controls-linux-r1\\run.json",
+      "actualSHA256": "fedf4e7812190f093136ada0c8da7f207ffa2acb3aba600ac7a901ebae43ac22",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestPreparedCiProviderCorrections",
+        "progress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r62/run.json",
+      "originalExpectedSHA256": "d15eac958925523e00a0509dd7be306369cfb3b479cb9927ee2da2b1d9b1690e",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r62\\run.json",
+      "actualSHA256": "d15eac958925523e00a0509dd7be306369cfb3b479cb9927ee2da2b1d9b1690e",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78LinuxUnfilteredFindings"
+      ],
+      "file": "sdk78-linux-full-findings-r1/run.json",
+      "originalExpectedSHA256": "56879013df49d2290e098c9e5ebe28ffed12f806c6e9390d98c0db7046caa5b8",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-linux-full-findings-r1\\run.json",
+      "actualSHA256": "56879013df49d2290e098c9e5ebe28ffed12f806c6e9390d98c0db7046caa5b8",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78LinuxUnfilteredFindings",
+        "scopedFollowupProgress"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r64/run.json",
+      "originalExpectedSHA256": "d478e8375ce073443500e5accaeebd1f92c26b0af8ed0785556adbdd92ad2dc9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r64\\run.json",
+      "actualSHA256": "d478e8375ce073443500e5accaeebd1f92c26b0af8ed0785556adbdd92ad2dc9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestScopedTestControlCorrections"
+      ],
+      "file": "r3-r5-r6-r7-sdk78-progress-r64/run.json",
+      "originalExpectedSHA256": "d478e8375ce073443500e5accaeebd1f92c26b0af8ed0785556adbdd92ad2dc9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r3-r5-r6-r7-sdk78-progress-r64\\run.json",
+      "actualSHA256": "d478e8375ce073443500e5accaeebd1f92c26b0af8ed0785556adbdd92ad2dc9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestCurrentCandidateLinuxSource"
+      ],
+      "file": "sdk78-controls-source-linux-r3/run.json",
+      "originalExpectedSHA256": "2e67f7cbde4f58527143691f1fb3b0949ef1bd73de835e9ff5790c35f32b4c8b",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-controls-source-linux-r3\\run.json",
+      "actualSHA256": "2e67f7cbde4f58527143691f1fb3b0949ef1bd73de835e9ff5790c35f32b4c8b",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78SanitizerFocusedQualification"
+      ],
+      "file": "sdk78-controls-sanitizer-linux-r1/run.json",
+      "originalExpectedSHA256": "e84d007581f8d0927aef5177c13c279346c6d7a20353c875fdbee499a6781db9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-controls-sanitizer-linux-r1\\run.json",
+      "actualSHA256": "e84d007581f8d0927aef5177c13c279346c6d7a20353c875fdbee499a6781db9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78ProductionBuild"
+      ],
+      "file": "sdk78-controls-production-linux-build-r4/build.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-controls-production-linux-build-r4\\build.json",
+      "actualSHA256": "9a9d30991f3e1563e21f2777b427b73e019620ffbdbbc391a2d1de2f7aeefdc6"
+    },
+    {
+      "pointer": [
+        "latestSdk78CompleteWptReferenceDiagnosis"
+      ],
+      "file": "sdk78-complete-wpt-request-context-linux-r4/run.json",
+      "originalExpectedSHA256": "388cd6015f2a1912800421a099b5cd1398019d210f3e6fe67639eca988143f92",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-complete-wpt-request-context-linux-r4\\run.json",
+      "actualSHA256": "388cd6015f2a1912800421a099b5cd1398019d210f3e6fe67639eca988143f92",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78CompleteWptReferenceDiagnosis",
+        "timeoutPolicyDecision"
+      ],
+      "file": "r7-message-channel-acceptance-boundary-decision-r1/run.json",
+      "originalExpectedSHA256": "201f5c2c4553e6c7ae9b8b9d91025764a7bacaf7d74925509d6cc562cd6739e9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-message-channel-acceptance-boundary-decision-r1\\run.json",
+      "actualSHA256": "201f5c2c4553e6c7ae9b8b9d91025764a7bacaf7d74925509d6cc562cd6739e9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestNativeWindowsHandleTraceOrderControls"
+      ],
+      "file": "r8-windows-handle-trace-order-controls-r2/run.json",
+      "originalExpectedSHA256": "dac787350e9050eae285ed90089a31209c41e844b0443887725278ed1fcdc993",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-windows-handle-trace-order-controls-r2\\run.json",
+      "actualSHA256": "dac787350e9050eae285ed90089a31209c41e844b0443887725278ed1fcdc993",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "messageChannelAcceptanceBoundaryDecision"
+      ],
+      "file": "r7-message-channel-acceptance-boundary-decision-r1/run.json",
+      "originalExpectedSHA256": "201f5c2c4553e6c7ae9b8b9d91025764a7bacaf7d74925509d6cc562cd6739e9",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-message-channel-acceptance-boundary-decision-r1\\run.json",
+      "actualSHA256": "201f5c2c4553e6c7ae9b8b9d91025764a7bacaf7d74925509d6cc562cd6739e9",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78ProductionMemoryGates"
+      ],
+      "file": "sdk78-production-memory-gates-r1/run.json",
+      "originalExpectedSHA256": "bc9142fbd4e36b1cc7f59766a499f96d69c3a74b059d39a3651d077417b06788",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-production-memory-gates-r1\\run.json",
+      "actualSHA256": "bc9142fbd4e36b1cc7f59766a499f96d69c3a74b059d39a3651d077417b06788",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78ManagedSoakControls"
+      ],
+      "file": "sdk78-managed-soak-controls-r1/run.json",
+      "originalExpectedSHA256": "5ae7c70ad03bd8c30fff51c5670a8dca11e59ff7faf71cc6bd65a49fe9237f70",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-managed-soak-controls-r1\\run.json",
+      "actualSHA256": "5ae7c70ad03bd8c30fff51c5670a8dca11e59ff7faf71cc6bd65a49fe9237f70",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78ManagedContinuousSoak"
+      ],
+      "file": "sdk78-managed-websocket-soak-linux-r1/run.json",
+      "originalExpectedSHA256": "c70be33a10b80d8c226f159d53e3d3e749805ef44ea282abfdfea16a30de87d4",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-managed-websocket-soak-linux-r1\\run.json",
+      "actualSHA256": "c70be33a10b80d8c226f159d53e3d3e749805ef44ea282abfdfea16a30de87d4",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78PersistFixtureControls"
+      ],
+      "file": "sdk78-persist-fixture-controls-r3/run.json",
+      "originalExpectedSHA256": "f1acfbd875ce8eccc37911070252cccd714a6ab47de36795f402f7dc6dc70497",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-persist-fixture-controls-r3\\run.json",
+      "actualSHA256": "f1acfbd875ce8eccc37911070252cccd714a6ab47de36795f402f7dc6dc70497",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78WptSoakSnapshot"
+      ],
+      "file": "sdk78-wpt-soak-snapshot-r2/run.json",
+      "originalExpectedSHA256": "d1f7dc1aff33314813897fdd87c4186ded75c98d580b4bd65647db2108b980bc",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-wpt-soak-snapshot-r2\\run.json",
+      "actualSHA256": "d1f7dc1aff33314813897fdd87c4186ded75c98d580b4bd65647db2108b980bc",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78WptV2RawReports"
+      ],
+      "file": "sdk78-workerd-wpt-v2-context-linux-r2/run.json",
+      "originalExpectedSHA256": "bd602188eb0aecd2d4484c8f9e9b70d1f2215cf639daf2f0ae224190d4f35699",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-workerd-wpt-v2-context-linux-r2\\run.json",
+      "actualSHA256": "bd602188eb0aecd2d4484c8f9e9b70d1f2215cf639daf2f0ae224190d4f35699",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78ProductionPackageGates"
+      ],
+      "file": "sdk78-production-package-gates-r1/run.json",
+      "originalExpectedSHA256": "f6e8b3f66dc0857ebcdd3b19e2b23291581a0cb92607d8c16702570d12037813",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-production-package-gates-r1\\run.json",
+      "actualSHA256": "f6e8b3f66dc0857ebcdd3b19e2b23291581a0cb92607d8c16702570d12037813",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78IntegratedManagedSoakControls"
+      ],
+      "file": "sdk78-integrated-managed-soak-controls-r1/run.json",
+      "originalExpectedSHA256": "a9021f049fbce4b504ac79948c666b1c7f6c3405a3561ac583e45cc9df4eb731",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-integrated-managed-soak-controls-r1\\run.json",
+      "actualSHA256": "a9021f049fbce4b504ac79948c666b1c7f6c3405a3561ac583e45cc9df4eb731",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78AsyncBudgetFixtureControls"
+      ],
+      "file": "sdk78-constant-space-async-budget-r1/run.json",
+      "originalExpectedSHA256": "0e89a5bf6c0bfaa0264ec8824e1c5da06d5f14fe92eb8be6e9a4f5495a959a9c",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-constant-space-async-budget-r1\\run.json",
+      "actualSHA256": "0e89a5bf6c0bfaa0264ec8824e1c5da06d5f14fe92eb8be6e9a4f5495a959a9c",
+      "recordedHashMatchesCurrentBytes": true
+    },
+    {
+      "pointer": [
+        "latestSdk78CurrentLinuxFullSequence"
+      ],
+      "file": "sdk78-current-linux-full-sequence-r1/run.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-current-linux-full-sequence-r1\\run.json",
+      "actualSHA256": "ddc8701630829059f031d4a9a18fcd10e35722a081cf9907413e0d7dc5f9f5f3"
+    },
+    {
+      "pointer": [
+        "latestSdk78RequiredReferenceGate"
+      ],
+      "file": "sdk78-production-reference-gate-linux-r2/run.json",
+      "originalExpectedSHA256": null,
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-production-reference-gate-linux-r2\\run.json",
+      "actualSHA256": "c44bdefd595e677a80265e53b027d9dfea5bc0877e0dc307078de7a548e3eb12"
+    },
+    {
+      "pointer": [
+        "latestNativeWindowsProviderResourceScope"
+      ],
+      "file": "r8-windows-native-provider-resource-scope-r6/run.json",
+      "originalExpectedSHA256": "9ba737f7bd4582b89512f113e6a79370a0a2c6bcaca5ed1d46e97ef916c1c3e3",
+      "status": "available",
+      "resolved": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-windows-native-provider-resource-scope-r6\\run.json",
+      "actualSHA256": "9ba737f7bd4582b89512f113e6a79370a0a2c6bcaca5ed1d46e97ef916c1c3e3",
+      "recordedHashMatchesCurrentBytes": true
+    }
+  ],
+  "hashDifferences": [],
+  "unavailableEvidenceNotReconstructedOrDeclaredRevalidated": true,
+  "originalHistoricalPointersRetained": true,
+  "liveSuiteInputsNotModified": true,
+  "fullV030GoalComplete": false
+}

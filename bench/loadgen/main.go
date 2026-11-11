@@ -4,13 +4,19 @@
 // CAPSID_BENCH_CONNECTIONS keep-alive connections), separates warm-up from
 // the measured phase, and writes:
 //
-//   - one raw sample line per run (side/round tagged) to
+//   - one raw sample line per phase (side/round tagged) to
 //     CAPSID_BENCH_SAMPLES_OUT: qps, p50/p95/p99 latency, dispatch wait
 //     (request creation -> actual dispatch, including the closed-loop
 //     inflight slot wait), completed/errors/timeouts;
 //   - one correctness verdict to CAPSID_BENCH_CORRECTNESS_OUT: responses are
 //     content-checked, and error responses are never counted as success
 //     (errors_as_success is always false).
+//
+// Frozen serving workloads (matrix-json-1k, matrix-json-16k, stream) verify
+// every body byte and record the expected payload identity plus attempted /
+// checked / completed counts. CAPSID_BENCH_TIMEOUT_MS defaults to 30000;
+// short correctness fixtures may use an explicit smaller deadline. A failed
+// warm phase never starts measurement, and any failed verdict exits nonzero.
 //
 // Workloads:
 //
@@ -35,9 +41,12 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -50,6 +59,11 @@ import (
 
 type sample struct {
 	Side           string  `json:"side"`
+	Workload       string  `json:"workload"`
+	Validation     string  `json:"response_validation"`
+	PayloadBytes   int     `json:"payload_bytes"`
+	ExpectedSHA256 string  `json:"expected_body_sha256"`
+	RequestTimeout int     `json:"request_timeout_ms"`
 	Round          int     `json:"round"`
 	Phase          string  `json:"phase"`
 	QPS            float64 `json:"qps"`
@@ -58,6 +72,8 @@ type sample struct {
 	P99Ms          float64 `json:"p99_ms"`
 	DispatchWaitMs float64 `json:"dispatch_wait_ms"`
 	Completed      int     `json:"completed"`
+	Attempted      int     `json:"requests_attempted"`
+	Checked        int     `json:"responses_checked"`
 	Errors         int     `json:"errors"`
 	Timeouts       int     `json:"timeouts"`
 	DurationS      float64 `json:"duration_s"`
@@ -68,13 +84,18 @@ type sample struct {
 }
 
 type correctness struct {
-	OK               bool   `json:"ok"`
-	Error            string `json:"error,omitempty"`
-	ResponsesChecked int    `json:"responses_checked"`
-	Mismatches       int    `json:"mismatches"`
-	Errors           int    `json:"errors"`
-	Timeouts         int    `json:"timeouts"`
-	ErrorsAsSuccess  bool   `json:"errors_as_success"`
+	OK                bool   `json:"ok"`
+	Workload          string `json:"workload"`
+	Validation        string `json:"response_validation"`
+	PayloadBytes      int    `json:"payload_bytes"`
+	ExpectedSHA256    string `json:"expected_body_sha256"`
+	RequestsAttempted int    `json:"requests_attempted"`
+	Error             string `json:"error,omitempty"`
+	ResponsesChecked  int    `json:"responses_checked"`
+	Mismatches        int    `json:"mismatches"`
+	Errors            int    `json:"errors"`
+	Timeouts          int    `json:"timeouts"`
+	ErrorsAsSuccess   bool   `json:"errors_as_success"`
 }
 
 func envOr(name, fallback string) string {
@@ -85,11 +106,20 @@ func envOr(name, fallback string) string {
 }
 
 func envInt(name string, fallback int) int {
-	value, err := strconv.Atoi(os.Getenv(name))
-	if err != nil {
+	text, exists := os.LookupEnv(name)
+	if !exists {
 		return fallback
 	}
+	value, err := strconv.Atoi(text)
+	if err != nil {
+		fatal(name + " must be an integer")
+	}
 	return value
+}
+
+func requestTimedOut(err error) bool {
+	var deadline net.Error
+	return stderrors.As(err, &deadline) && deadline.Timeout()
 }
 
 func main() {
@@ -104,11 +134,15 @@ func main() {
 	durationS := envInt("CAPSID_BENCH_DURATION_S", 10)
 	connections := envInt("CAPSID_BENCH_CONNECTIONS", 16)
 	inflight := envInt("CAPSID_BENCH_INFLIGHT", 64)
+	timeoutMs := envInt("CAPSID_BENCH_TIMEOUT_MS", 30000)
 	samplesOut := envOr("CAPSID_BENCH_SAMPLES_OUT", "")
 	correctnessOut := envOr("CAPSID_BENCH_CORRECTNESS_OUT", "")
 	phaseOut := envOr("CAPSID_BENCH_PHASE_OUT", "")
 	if samplesOut == "" || correctnessOut == "" {
 		fatal("CAPSID_BENCH_SAMPLES_OUT and CAPSID_BENCH_CORRECTNESS_OUT are required")
+	}
+	if round <= 0 || warmupS < 0 || durationS <= 0 || connections <= 0 || inflight <= 0 || timeoutMs <= 0 || timeoutMs > 300000 {
+		fatal("round, duration, connections, inflight and request timeout must be positive; warmup must be nonnegative; timeout is bounded to 300000 ms")
 	}
 
 	path := "/@capsid/orders/fixed"
@@ -248,7 +282,7 @@ func main() {
 	}
 
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: time.Duration(timeoutMs) * time.Millisecond,
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: connections,
 			MaxConnsPerHost:     connections,
@@ -264,6 +298,8 @@ func main() {
 		errors    int
 		timeouts  int
 		mismatch  int
+		attempted int
+		checked   int
 	)
 
 	// Precomputed expected payload for uniform-byte workloads: the
@@ -274,8 +310,20 @@ func main() {
 	var expectedBuf []byte
 	if matrixKind == "json" {
 		expectedBuf = []byte(`{"data":"` + strings.Repeat("x", expectedLen-11) + `"}`)
+	} else if workload == "stream" {
+		// The frozen stream workload checks every byte, including the
+		// interiors of all three thirds, rather than three sentinel offsets.
+		third := expectedLen / 3
+		expectedBuf = []byte(strings.Repeat("b", third) + strings.Repeat("c", third) + strings.Repeat("d", expectedLen-2*third))
 	} else if expectedLen > 0 {
 		expectedBuf = bytes.Repeat([]byte{expectedByte}, expectedLen)
+	}
+	exactBody := matrixKind != "" || workload == "stream"
+	validation, payloadBytes, expectedSHA := "legacy-v1", 0, ""
+	if exactBody {
+		validation = "exact-bytes-v2"
+		payloadBytes = len(expectedBuf)
+		expectedSHA = fmt.Sprintf("%x", sha256.Sum256(expectedBuf))
 	}
 	// JSON marker check is serializer-format-agnostic: compact (PHP json_encode
 	// / Ruby JSON.generate) and spaced (Python json.dumps default) forms both
@@ -285,17 +333,13 @@ func main() {
 			bytes.Contains(body, []byte(`"status": "ok"`))
 	}
 	verify := func(body []byte) bool {
-		if matrixKind != "" {
+		if exactBody {
 			return len(body) == expectedLen && bytes.Equal(body, expectedBuf)
 		}
 		switch workload {
 		case "json":
 			// The JSON document starts with '{' and carries the marker.
 			return len(body) > 2 && body[0] == '{' && jsonMarker(body)
-		case "stream":
-			// 1024 streamed bytes: b*341 c*341 d*342.
-			return len(body) == 1024 && body[0] == 0x62 &&
-				body[341] == 0x63 && body[1023] == 0x64
 		case "json8k":
 			// ~8 KiB JSON document with the status marker.
 			return len(body) > 8000 && body[0] == '{' && jsonMarker(body)
@@ -360,6 +404,7 @@ func main() {
 		phaseLatencies := []float64{}
 		phaseLag := time.Duration(0)
 		phaseCompleted, phaseErrors, phaseTimeouts, phaseMismatch := 0, 0, 0, 0
+		phaseAttempted, phaseChecked := 0, 0
 
 		// The dispatch loop saturates: every slot in flight is replaced as
 		// soon as it completes, so the measured rate is the system's own.
@@ -368,6 +413,7 @@ func main() {
 			defer func() { <-sem }()
 			startedAt := time.Now()
 			mu.Lock()
+			phaseAttempted++
 			lag := startedAt.Sub(createdAt)
 			phaseLag += lag
 			mu.Unlock()
@@ -386,20 +432,33 @@ func main() {
 			response, err := client.Do(req)
 			if err != nil {
 				mu.Lock()
-				phaseTimeouts++
+				if requestTimedOut(err) {
+					phaseTimeouts++
+				} else {
+					phaseErrors++
+				}
 				mu.Unlock()
 				return
 			}
-			body, readErr := io.ReadAll(response.Body)
+			var reader io.Reader = response.Body
+			if exactBody {
+				reader = io.LimitReader(reader, int64(len(expectedBuf))+1)
+			}
+			body, readErr := io.ReadAll(reader)
 			response.Body.Close()
 			if readErr != nil {
 				mu.Lock()
-				phaseErrors++
+				if requestTimedOut(readErr) {
+					phaseTimeouts++
+				} else {
+					phaseErrors++
+				}
 				mu.Unlock()
 				return
 			}
 			elapsed := float64(time.Since(startedAt)) / float64(time.Millisecond)
 			mu.Lock()
+			phaseChecked++
 			phaseLatencies = append(phaseLatencies, elapsed)
 			if response.StatusCode != 200 || !verify(body) {
 				phaseMismatch++
@@ -426,6 +485,8 @@ func main() {
 		errors += phaseErrors
 		timeouts += phaseTimeouts
 		mismatch += phaseMismatch
+		attempted += phaseAttempted
+		checked += phaseChecked
 
 		measured := time.Since(start).Seconds()
 		clientCPUS := processCPUSeconds() - cpuStart
@@ -440,30 +501,39 @@ func main() {
 		}
 		writeJSON(samplesOut, sample{
 			Side: side, Round: round, Phase: phase,
+			Workload: workload, Validation: validation, PayloadBytes: payloadBytes,
+			ExpectedSHA256: expectedSHA, RequestTimeout: timeoutMs,
 			QPS: qps, P50Ms: p50, P95Ms: p95, P99Ms: p99,
 			DispatchWaitMs: lagMs,
-			Completed:      phaseCompleted, Errors: phaseErrors, Timeouts: phaseTimeouts,
+			Completed:      phaseCompleted, Attempted: phaseAttempted, Checked: phaseChecked,
+			Errors: phaseErrors, Timeouts: phaseTimeouts,
 			DurationS: measured, Connections: connections, Inflight: inflight,
 			ClientCPUS: clientCPUS, ClientAvgCores: clientCPUS / measured,
 		})
 	}
 
 	runPhase("warmup", warmupS)
-	runPhase("measured", durationS)
+	if errors == 0 && timeouts == 0 && mismatch == 0 {
+		runPhase("measured", durationS)
+	}
 
 	verdict := correctness{
-		OK:               errors == 0 && mismatch == 0,
-		ResponsesChecked: completed + errors,
-		Mismatches:       mismatch,
-		Errors:           errors,
-		Timeouts:         timeouts,
-		ErrorsAsSuccess:  false,
+		OK:       errors == 0 && timeouts == 0 && mismatch == 0 && completed > 0,
+		Workload: workload, Validation: validation, PayloadBytes: payloadBytes, ExpectedSHA256: expectedSHA,
+		RequestsAttempted: attempted, ResponsesChecked: checked,
+		Mismatches:      mismatch,
+		Errors:          errors,
+		Timeouts:        timeouts,
+		ErrorsAsSuccess: false,
 	}
 	if !verdict.OK {
-		verdict.Error = fmt.Sprintf("%d of %d responses failed validation",
-			errors, verdict.ResponsesChecked)
+		verdict.Error = fmt.Sprintf("validation failed: errors=%d timeouts=%d mismatches=%d checked=%d attempted=%d",
+			errors, timeouts, mismatch, checked, attempted)
 	}
 	writeJSON(correctnessOut, verdict)
+	if !verdict.OK {
+		os.Exit(1)
+	}
 }
 
 func processCPUSeconds() float64 {

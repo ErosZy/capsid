@@ -1,0 +1,79 @@
+{
+  "status": "complete",
+  "complete": true,
+  "changedFiles": [
+    ".github/workflows/testing-validity.yml",
+    "tests/audit-testing-validity-workflow.mjs",
+    "tests/test_testing_validity_workflow.mjs"
+  ],
+  "beforeSHA256": {
+    ".github/workflows/testing-validity.yml": "1cc6bc3fa5cdc1ecb48092d926e60583cccf92be5cf4ce3717921547dca63896",
+    "tests/audit-testing-validity-workflow.mjs": "eb4b4930c6e100e72d802914e21e5642b3b39be8ed73d7a36a93d3883c83e4fa",
+    "tests/test_testing_validity_workflow.mjs": "6e357155660d64c3af89b102c6295d515fb4bf7459e9a32a471d24a78b717d14"
+  },
+  "afterSHA256": {
+    ".github/workflows/testing-validity.yml": "f602526501fd8aa97edfa0f142c0c31e5bc9be9928b1b4836a087ae21aa33acf",
+    "tests/audit-testing-validity-workflow.mjs": "88bf3af8c2079cb262d076ec1c32d5fe1f28b1ec8e4ab0264d17a96a09a81501",
+    "tests/test_testing_validity_workflow.mjs": "b110c94be9896485748d4770ad2c79a1f449cb1fe967b44cfe1faf06d499df2e"
+  },
+  "rawTsanRssFailuresPreserved": true,
+  "allOtherTsanChecksRemainMandatory": true,
+  "productionRssAndCompleteAsanLsanRemainIndependentMandatoryGates": true,
+  "explicitTsanLeakSanitizerClaim": false,
+  "hostedCiExecuted": false,
+  "workflowControlsPassed": 736,
+  "checks": [
+    {
+      "platform": "windows",
+      "lineEnding": "lf",
+      "counts": {
+        "tests": 184,
+        "pass": 184,
+        "fail": 0,
+        "skipped": 0
+      },
+      "logSHA256": "9fe4d7199738517e062fdaa4f8d14654e549d340bb41020df20f3921fcd6a91f"
+    },
+    {
+      "platform": "windows",
+      "lineEnding": "crlf",
+      "counts": {
+        "tests": 184,
+        "pass": 184,
+        "fail": 0,
+        "skipped": 0
+      },
+      "logSHA256": "ba0c7e99a33dcd790dcb6d56a9ef26bf7f195aa0da0cd599efcca89856e7f61b"
+    },
+    {
+      "platform": "linux",
+      "lineEnding": "lf",
+      "counts": {
+        "tests": 184,
+        "pass": 184,
+        "fail": 0,
+        "skipped": 0
+      },
+      "logSHA256": "cd9d3c5ca84a00afaa7ca4e21f0d91c30b69a7880f769b643c9ba353ad446210"
+    },
+    {
+      "platform": "linux",
+      "lineEnding": "crlf",
+      "counts": {
+        "tests": 184,
+        "pass": 184,
+        "fail": 0,
+        "skipped": 0
+      },
+      "logSHA256": "9cfa1c0b7939821e4924feb03d0884f68832dd13dd3747c604d9de9074f055c2"
+    }
+  ],
+  "changedFilesSHA256": {
+    ".github/workflows/testing-validity.yml": "f602526501fd8aa97edfa0f142c0c31e5bc9be9928b1b4836a087ae21aa33acf",
+    "tests/audit-testing-validity-workflow.mjs": "88bf3af8c2079cb262d076ec1c32d5fe1f28b1ec8e4ab0264d17a96a09a81501",
+    "tests/test_testing_validity_workflow.mjs": "6238d2e13c14c321c339c449703ee28e9fa1748ebdf565f67fcf1c58269fa4e4"
+  },
+  "currentMemoryParserUnitTestsPassed": 16,
+  "currentMemoryParserFaultMutationsRejected": 98,
+  "fullTsanMatrixExecutionStillRequired": true
+}

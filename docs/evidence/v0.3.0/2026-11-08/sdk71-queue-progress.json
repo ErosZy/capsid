@@ -1,0 +1,193 @@
+{
+  "complete": false,
+  "scope": "SDK71 focused bodyless native qualification and queue-pressure repair progress; full v0.3.0 acceptance is open",
+  "sdkPatchCount": 71,
+  "version": "0.2.2",
+  "mainQueueCTestPending": true,
+  "fullV030GoalComplete": false,
+  "bodylessNative": [
+    {
+      "mode": "debug",
+      "complete": true,
+      "passed": 19,
+      "failures": [],
+      "skipped": [],
+      "workerSHA256": "9fa83fc3cb318bd74dce29d55fac31d740bec35481beccf375e1e9f53dd2f6e0",
+      "junitSHA256": "0eec44935ee9283c42ae5031bef3b36e5a95196696b1683a139d39c8c09fef15",
+      "runSHA256": "d6763e7f5dc7716468ce25cec35276d055ac52d85b641077e46a0381b1f56c3c",
+      "sourceCount": 4938,
+      "expectedTests": [
+        "worker_direct_fetch_bodyless",
+        "worker_direct_fetch_http_matrix",
+        "worker_p0_contract",
+        "worker_p1_platform_contract",
+        "worker_itty_router_autorouter",
+        "worker_itty_router_router",
+        "worker_itty_router_manual",
+        "native_fetch_encoded_finished",
+        "native_fetch_encoded_held",
+        "native_fetch_encoded_owner",
+        "native_fetch_gzip_members",
+        "native_fetch_large_gzip",
+        "txiki_upgrade_report_contract_controls",
+        "current_documentation_audit",
+        "txiki_async_context_inventory_audit",
+        "txiki_vendor_patch_integrity",
+        "txiki_overlay_key_canonicalization",
+        "host_qualification_matrix_controls",
+        "host_qualification_matrix"
+      ]
+    },
+    {
+      "mode": "asan",
+      "complete": true,
+      "passed": 19,
+      "failures": [],
+      "skipped": [],
+      "workerSHA256": "ad0aaa20c7d6338133748e1311a9fc35f45ed25c5a45027b86b8441d0445631b",
+      "junitSHA256": "e5810619720506f2f643fca4fa94ae585cbdecd4296b242186916fbfa1676e1c",
+      "runSHA256": "7fa7118b3685c0906dbb71ffafc7bf8042a9ca2ca3b6a4ab2300d7b4ffca1924",
+      "sourceCount": 4938,
+      "expectedTests": [
+        "worker_direct_fetch_bodyless",
+        "worker_direct_fetch_http_matrix",
+        "worker_p0_contract",
+        "worker_p1_platform_contract",
+        "worker_itty_router_autorouter",
+        "worker_itty_router_router",
+        "worker_itty_router_manual",
+        "native_fetch_encoded_finished",
+        "native_fetch_encoded_held",
+        "native_fetch_encoded_owner",
+        "native_fetch_gzip_members",
+        "native_fetch_large_gzip",
+        "txiki_upgrade_report_contract_controls",
+        "current_documentation_audit",
+        "txiki_async_context_inventory_audit",
+        "txiki_vendor_patch_integrity",
+        "txiki_overlay_key_canonicalization",
+        "host_qualification_matrix_controls",
+        "host_qualification_matrix"
+      ]
+    }
+  ],
+  "privateQueue": [
+    {
+      "mode": "debug",
+      "allVerdictsMatched": true,
+      "inputsUnchanged": true,
+      "runSHA256": "60c5ab1c0e696518834d7b9c853a1975264902ba7e29d1e75665f787175f98d9",
+      "cases": [
+        {
+          "name": "actual-pressure",
+          "exitCode": 0,
+          "expected": 0,
+          "gates": [
+            {
+              "complete": true,
+              "runtimeExit": 0,
+              "queuePeak": 1048576,
+              "stalls": 142090,
+              "blockedTerminals": 2,
+              "acceptedTerminals": 1,
+              "terminalHeldMs": 1251,
+              "invalid": false
+            }
+          ],
+          "passed": true
+        },
+        {
+          "name": "original-all-17",
+          "exitCode": 0,
+          "expected": 0,
+          "gates": [],
+          "passed": true
+        },
+        {
+          "name": "observer-paused-past-deadline",
+          "exitCode": 0,
+          "expected": 0,
+          "gates": [],
+          "passed": true
+        },
+        {
+          "name": "negative-no-stall-worker",
+          "exitCode": 1,
+          "expected": 1,
+          "gates": [
+            {
+              "complete": false,
+              "runtimeExit": 0,
+              "queuePeak": 1715,
+              "stalls": 0,
+              "blockedTerminals": 0,
+              "acceptedTerminals": 1,
+              "terminalHeldMs": 57342098,
+              "invalid": true
+            }
+          ],
+          "passed": true
+        },
+        {
+          "name": "negative-duplicate-worker",
+          "exitCode": 1,
+          "expected": 1,
+          "gates": [],
+          "passed": true
+        }
+      ]
+    },
+    {
+      "mode": "asan",
+      "allVerdictsMatched": true,
+      "inputsUnchanged": true,
+      "runSHA256": "a46dd129d6b8c938a04d34a21a68509b5e6686e32c775bc322cff1fc05775ab3",
+      "cases": [
+        {
+          "name": "actual-pressure",
+          "exitCode": 0,
+          "expected": 0,
+          "gates": [
+            {
+              "complete": true,
+              "runtimeExit": 0,
+              "queuePeak": 1048576,
+              "stalls": 105944,
+              "blockedTerminals": 2,
+              "acceptedTerminals": 1,
+              "terminalHeldMs": 1433,
+              "invalid": false
+            }
+          ],
+          "passed": true
+        },
+        {
+          "name": "original-all-17",
+          "exitCode": 0,
+          "expected": 0,
+          "gates": [],
+          "passed": true
+        },
+        {
+          "name": "observer-paused-past-deadline",
+          "exitCode": 0,
+          "expected": 0,
+          "gates": [],
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "unchangedBudgets": {
+    "requestTimeoutMs": 300,
+    "phaseASeconds": 3,
+    "phaseBMilliseconds": 1500,
+    "phaseCSeconds": 15
+  },
+  "remaining": [
+    "R3/R5/R6/R7/R8 qualification and R9 final combined acceptance",
+    "Full Debug/Release/Linux LTO suites and declared WPT/profile review",
+    "Full dependency instrumentation, A2 channel state and WS handshake/frame fuzz, live-channel soak",
+    "Supported native macOS, real Hosted CI, formal performance/density/four-viewport acceptance"
+  ]
+}

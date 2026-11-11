@@ -182,7 +182,7 @@ bool normalize_path(const std::string &input,
     if (!windows_drive && input[0] != '/') {
         return false;
     }
-    std::vector<std::string> components;
+    std::vector<std::string> components(0);
     while (start <= input.size()) {
         const std::size_t end = windows_drive
             ? input.find_first_of("/\\", start)
@@ -294,7 +294,7 @@ bool normalize_rule_resource(capsid_permission_name permission,
         case CAPSID_PERMISSION_READ:
         case CAPSID_PERMISSION_WRITE:
         case CAPSID_PERMISSION_FFI: {
-            std::string normalized;
+            std::string normalized("");
             if (!normalize_path(value, &normalized) ||
                 normalized != value) {
                 return false;
@@ -475,9 +475,14 @@ uint32_t permission_name_value(
 
 namespace capsid {
 
+// Keep empty Debug STL member construction inside the caller's error guard.
 CapabilityPolicy::CapabilityPolicy()
     : enabled_(false),
       version_(0),
+      application_identity_(""),
+      allowed_modules_(0),
+      rules_(0),
+      env_entries_(0),
       has_net_policy_(false) {}
 
 bool CapabilityPolicy::configure(
@@ -523,6 +528,7 @@ bool CapabilityPolicy::configure(
         return false;
     }
 
+    compiled.allowed_modules_.reserve(policy->allowed_module_count);
     std::set<std::string> module_names;
     for (uint32_t index = 0;
          index < policy->allowed_module_count;
@@ -541,6 +547,7 @@ bool CapabilityPolicy::configure(
         compiled.allowed_modules_.push_back(name);
     }
 
+    compiled.rules_.reserve(policy->rule_count);
     std::set<uint32_t> rule_ids;
     for (uint32_t index = 0; index < policy->rule_count; ++index) {
         const capsid_permission_rule &source = policy->rules[index];
@@ -575,7 +582,7 @@ bool CapabilityPolicy::configure(
     }
 
     if (policy->net_policy) {
-        std::string net_error;
+        std::string net_error("");
         if (!compiled.net_policy_.configure(
                 policy->net_policy, &net_error)) {
             set_error(error, "invalid capability net policy");
@@ -594,6 +601,7 @@ bool CapabilityPolicy::configure(
             "environment entries require an authorized capsid:env module");
         return false;
     }
+    compiled.env_entries_.reserve(env_entry_count);
     std::set<std::string> env_names;
     size_t env_payload_size = 0;
     for (uint32_t index = 0;
@@ -628,8 +636,7 @@ bool CapabilityPolicy::configure(
             set_error(error, "environment snapshot is too large");
             return false;
         }
-        compiled.env_entries_.push_back(
-            std::make_pair(name, value));
+        compiled.env_entries_.emplace_back(name, value);
     }
     swap(compiled);
     return true;
@@ -659,7 +666,7 @@ PermissionDecision CapabilityPolicy::evaluate(
     if (!enabled_ || !generic_permission(permission)) {
         return PermissionDecision();
     }
-    std::string resource;
+    std::string resource("");
     if (!normalize_query_resource(permission, input, &resource)) {
         return PermissionDecision();
     }
@@ -774,7 +781,7 @@ void CapabilityPolicy::swap(CapabilityPolicy &other) {
     rules_.swap(other.rules_);
     env_entries_.swap(other.env_entries_);
     std::swap(has_net_policy_, other.has_net_policy_);
-    std::swap(net_policy_, other.net_policy_);
+    net_policy_.swap(other.net_policy_);
 }
 
 const char *permission_name(capsid_permission_name permission) {
@@ -1090,7 +1097,7 @@ std::string compute_binding_profile_digest(
             profiles.insert(descriptor.profiles[index]);
         }
     }
-    std::string canonical;
+    std::string canonical("");
     for (std::set<std::string>::const_iterator profile =
              profiles.begin();
          profile != profiles.end();
@@ -1134,7 +1141,7 @@ bool BindingPolicySet::configure(
     if (error) {
         error->clear();
     }
-    std::vector<BindingPolicy> compiled;
+    std::vector<BindingPolicy> compiled(0);
     compiled.reserve(bindings.size());
     std::set<std::string> seen_ids;
     for (size_t binding_index = 0;
@@ -1252,8 +1259,8 @@ bool BindingPolicySet::configure(
         policy.env = descriptor.env;
         policy.stdio = descriptor.stdio;
 
-        std::vector<std::string> resources;
-        std::vector<capsid_permission_rule> rules;
+        std::vector<std::string> resources(0);
+        std::vector<capsid_permission_rule> rules(0);
         resources.reserve(descriptor.fs_read.size() +
                           descriptor.fs_write.size());
         rules.reserve(descriptor.fs_read.size() +
@@ -1301,14 +1308,14 @@ bool BindingPolicySet::configure(
         }
 
         if (!descriptor.net_rules.empty()) {
-            std::vector<std::string> targets;
-            std::vector<capsid_egress_rule> egress_rules;
+            std::vector<std::string> targets(0);
+            std::vector<capsid_egress_rule> egress_rules(0);
             targets.reserve(descriptor.net_rules.size());
             egress_rules.reserve(descriptor.net_rules.size());
             for (size_t index = 0;
                  index < descriptor.net_rules.size();
                  ++index) {
-                std::string host;
+                std::string host("");
                 uint16_t port = 0;
                 if (!split_net_target(
                         descriptor.net_rules[index], &host, &port)) {
@@ -1377,7 +1384,7 @@ PermissionDecision BindingPolicySet::evaluate(
 }
 
 std::vector<std::string> BindingPolicySet::ids() const {
-    std::vector<std::string> result;
+    std::vector<std::string> result(0);
     result.reserve(policies_.size());
     for (size_t index = 0; index < policies_.size(); ++index) {
         result.push_back(policies_[index].binding_id);

@@ -1,0 +1,1289 @@
+Subject: [PATCH] Keep aggregate value temporaries out of recursive bytecode frames
+
+Retain original constructors, ownership and exception checks at each site.
+Pointer operands are read once before the original operation; only private
+interpreter call conventions change. Public APIs and stack limits are unchanged.
+
+diff --git a/deps/quickjs/quickjs.c b/deps/quickjs/quickjs.c
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -17836,6 +17836,49 @@
+                                    argc, argv, flags);
+ }
+ 
++/* Keep aggregate call results out of the recursive interpreter frame.
++   MSVC /Od gives each returned JSValue a distinct temporary slot. These
++   output helpers retain the original constructors and reference counts;
++   optimized compilers can inline them back to the original assignment. */
++static inline void js_bytecode_dup_to(JSValue *out, JSValueConst * value)
++{
++    *out = js_dup(*value);
++}
++
++static inline void js_bytecode_int32_to(JSValue *out, int32_t value)
++{
++    *out = js_int32(value);
++}
++
++static inline void js_bytecode_bool_to(JSValue *out, bool value)
++{
++    *out = js_bool(value);
++}
++
++static inline void js_bytecode_float64_to(JSValue *out, double value)
++{
++    *out = js_float64(value);
++}
++
++
++/* MSVC also reserves a separate aggregate argument slot at each /Od call.
++   Read the original operand once, before the original operation. In
++   particular, do not read the operand storage after a finalizer can run. */
++static inline void js_bytecode_free_value(JSContext *ctx, JSValueConst *value)
++{
++    JS_FreeValue(ctx, *value);
++}
++
++static inline void js_bytecode_free_value_rt(JSRuntime *rt, JSValueConst *value)
++{
++    JS_FreeValueRT(rt, *value);
++}
++
++static inline bool js_bytecode_is_exception(JSValueConst *value)
++{
++    return JS_IsException(*value);
++}
++
+ static no_inline JSValue JS_CallInternalBytecode(JSContext *caller_ctx, JSValueConst func_obj,
+                                JSValueConst this_obj, JSValueConst new_target,
+                                int argc, JSValueConst *argv, int flags)
+@@ -17935,7 +17978,7 @@
+         int n = min_int(argc, b->arg_count);
+         arg_buf = local_buf;
+         for(i = 0; i < n; i++)
+-            arg_buf[i] = js_dup(argv[i]);
++            js_bytecode_dup_to(&(arg_buf[i]), &(argv[i]));
+         for(; i < b->arg_count; i++)
+             arg_buf[i] = undefined_value;
+         sf->arg_count = b->arg_count;
+@@ -17973,7 +18016,7 @@
+ 
+         SWITCH(pc) {
+         CASE(OP_push_i32):
+-            *sp++ = js_int32(get_u32(pc));
++            js_bytecode_int32_to(&(*sp++), get_u32(pc));
+             pc += 4;
+             BREAK;
+         CASE(OP_push_bigint_i32):
+@@ -17981,7 +18024,7 @@
+             pc += 4;
+             BREAK;
+         CASE(OP_push_const):
+-            *sp++ = js_dup(b->cpool[get_u32(pc)]);
++            js_bytecode_dup_to(&(*sp++), &(b->cpool[get_u32(pc)]));
+             pc += 4;
+             BREAK;
+         CASE(OP_push_minus1):
+@@ -17993,22 +18036,22 @@
+         CASE(OP_push_5):
+         CASE(OP_push_6):
+         CASE(OP_push_7):
+-            *sp++ = js_int32(opcode - OP_push_0);
++            js_bytecode_int32_to(&(*sp++), opcode - OP_push_0);
+             BREAK;
+         CASE(OP_push_i8):
+-            *sp++ = js_int32(get_i8(pc));
++            js_bytecode_int32_to(&(*sp++), get_i8(pc));
+             pc += 1;
+             BREAK;
+         CASE(OP_push_i16):
+-            *sp++ = js_int32(get_i16(pc));
++            js_bytecode_int32_to(&(*sp++), get_i16(pc));
+             pc += 2;
+             BREAK;
+         CASE(OP_push_const8):
+-            *sp++ = js_dup(b->cpool[*pc++]);
++            js_bytecode_dup_to(&(*sp++), &(b->cpool[*pc++]));
+             BREAK;
+         CASE(OP_fclosure8):
+             *sp++ = js_closure(ctx, js_dup(b->cpool[*pc++]), var_refs, sf);
+-            if (unlikely(JS_IsException(sp[-1])))
++            if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                 goto exception;
+             BREAK;
+         CASE(OP_push_empty_string):
+@@ -18033,7 +18076,7 @@
+                             /* found */
+                             if (unlikely(prs->flags & JS_PROP_TMASK))
+                                 goto get_length_slow_path;
+-                            val = js_dup(pr->u.value);
++                            js_bytecode_dup_to(&(val), &(pr->u.value));
+                             break;
+                         }
+                         if (unlikely(p->is_exotic)) {
+@@ -18050,10 +18093,10 @@
+                 get_length_slow_path:
+                     sf->cur_pc = pc;
+                     val = JS_GetPropertyInternal(ctx, obj, atom, sp[-1], false);
+-                    if (unlikely(JS_IsException(val)))
++                    if (unlikely(js_bytecode_is_exception(&(val))))
+                         goto exception;
+                 }
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = val;
+             }
+             BREAK;
+@@ -18076,15 +18119,15 @@
+                     if (likely(tag == JS_TAG_OBJECT))
+                         goto normal_this;
+                     if (tag == JS_TAG_NULL || tag == JS_TAG_UNDEFINED) {
+-                        val = js_dup(ctx->global_obj);
++                        js_bytecode_dup_to(&(val), &(ctx->global_obj));
+                     } else {
+                         val = JS_ToObject(ctx, this_obj);
+-                        if (JS_IsException(val))
++                        if (js_bytecode_is_exception(&(val)))
+                             goto exception;
+                     }
+                 } else {
+                 normal_this:
+-                    val = js_dup(this_obj);
++                    js_bytecode_dup_to(&(val), &(this_obj));
+                 }
+                 *sp++ = val;
+             }
+@@ -18097,7 +18140,7 @@
+             BREAK;
+         CASE(OP_object):
+             *sp++ = JS_NewObject(ctx);
+-            if (unlikely(JS_IsException(sp[-1])))
++            if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                 goto exception;
+             BREAK;
+         CASE(OP_special_object):
+@@ -18106,20 +18149,20 @@
+                 switch(arg) {
+                 case OP_SPECIAL_OBJECT_ARGUMENTS:
+                     *sp++ = js_build_arguments(ctx, argc, argv);
+-                    if (unlikely(JS_IsException(sp[-1])))
++                    if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                         goto exception;
+                     break;
+                 case OP_SPECIAL_OBJECT_MAPPED_ARGUMENTS:
+                     *sp++ = js_build_mapped_arguments(ctx, argc, argv,
+                                                       sf, min_int(argc, b->arg_count));
+-                    if (unlikely(JS_IsException(sp[-1])))
++                    if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                         goto exception;
+                     break;
+                 case OP_SPECIAL_OBJECT_THIS_FUNC:
+-                    *sp++ = js_dup(sf->cur_func);
++                    js_bytecode_dup_to(&(*sp++), &(sf->cur_func));
+                     break;
+                 case OP_SPECIAL_OBJECT_NEW_TARGET:
+-                    *sp++ = js_dup(new_target);
++                    js_bytecode_dup_to(&(*sp++), &(new_target));
+                     break;
+                 case OP_SPECIAL_OBJECT_HOME_OBJECT:
+                     {
+@@ -18133,17 +18176,17 @@
+                     break;
+                 case OP_SPECIAL_OBJECT_VAR_OBJECT:
+                     *sp++ = JS_NewObjectProto(ctx, null_value);
+-                    if (unlikely(JS_IsException(sp[-1])))
++                    if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                         goto exception;
+                     break;
+                 case OP_SPECIAL_OBJECT_IMPORT_META:
+                     *sp++ = js_import_meta(ctx);
+-                    if (unlikely(JS_IsException(sp[-1])))
++                    if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                         goto exception;
+                     break;
+                 case OP_SPECIAL_OBJECT_NULL_PROTO:
+                     *sp++ = JS_NewObjectProtoClass(ctx, null_value, JS_CLASS_OBJECT);
+-                    if (unlikely(JS_IsException(sp[-1])))
++                    if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                         goto exception;
+                     break;
+                 default:
+@@ -18158,57 +18201,57 @@
+                 i = min_int(first, argc);
+                 n = argc - i;
+                 *sp++ = js_create_array(ctx, n, n ? &argv[i] : NULL);
+-                if (unlikely(JS_IsException(sp[-1])))
++                if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                     goto exception;
+             }
+             BREAK;
+ 
+         CASE(OP_drop):
+-            JS_FreeValue(ctx, sp[-1]);
++            js_bytecode_free_value(ctx, &(sp[-1]));
+             sp--;
+             BREAK;
+         CASE(OP_nip):
+-            JS_FreeValue(ctx, sp[-2]);
++            js_bytecode_free_value(ctx, &(sp[-2]));
+             sp[-2] = sp[-1];
+             sp--;
+             BREAK;
+         CASE(OP_nip1): /* a b c -> b c */
+-            JS_FreeValue(ctx, sp[-3]);
++            js_bytecode_free_value(ctx, &(sp[-3]));
+             sp[-3] = sp[-2];
+             sp[-2] = sp[-1];
+             sp--;
+             BREAK;
+         CASE(OP_dup):
+-            sp[0] = js_dup(sp[-1]);
++            js_bytecode_dup_to(&(sp[0]), &(sp[-1]));
+             sp++;
+             BREAK;
+         CASE(OP_dup2): /* a b -> a b a b */
+-            sp[0] = js_dup(sp[-2]);
+-            sp[1] = js_dup(sp[-1]);
++            js_bytecode_dup_to(&(sp[0]), &(sp[-2]));
++            js_bytecode_dup_to(&(sp[1]), &(sp[-1]));
+             sp += 2;
+             BREAK;
+         CASE(OP_dup3): /* a b c -> a b c a b c */
+-            sp[0] = js_dup(sp[-3]);
+-            sp[1] = js_dup(sp[-2]);
+-            sp[2] = js_dup(sp[-1]);
++            js_bytecode_dup_to(&(sp[0]), &(sp[-3]));
++            js_bytecode_dup_to(&(sp[1]), &(sp[-2]));
++            js_bytecode_dup_to(&(sp[2]), &(sp[-1]));
+             sp += 3;
+             BREAK;
+         CASE(OP_dup1): /* a b -> a a b */
+             sp[0] = sp[-1];
+-            sp[-1] = js_dup(sp[-2]);
++            js_bytecode_dup_to(&(sp[-1]), &(sp[-2]));
+             sp++;
+             BREAK;
+         CASE(OP_insert2): /* obj a -> a obj a (dup_x1) */
+             sp[0] = sp[-1];
+             sp[-1] = sp[-2];
+-            sp[-2] = js_dup(sp[0]);
++            js_bytecode_dup_to(&(sp[-2]), &(sp[0]));
+             sp++;
+             BREAK;
+         CASE(OP_insert3): /* obj prop a -> a obj prop a (dup_x2) */
+             sp[0] = sp[-1];
+             sp[-1] = sp[-2];
+             sp[-2] = sp[-3];
+-            sp[-3] = js_dup(sp[0]);
++            js_bytecode_dup_to(&(sp[-3]), &(sp[0]));
+             sp++;
+             BREAK;
+         CASE(OP_insert4): /* this obj prop a -> a this obj prop a */
+@@ -18216,7 +18259,7 @@
+             sp[-1] = sp[-2];
+             sp[-2] = sp[-3];
+             sp[-3] = sp[-4];
+-            sp[-4] = js_dup(sp[0]);
++            js_bytecode_dup_to(&(sp[-4]), &(sp[0]));
+             sp++;
+             BREAK;
+         CASE(OP_perm3): /* obj a b -> a obj b (213) */
+@@ -18307,10 +18350,11 @@
+ 
+         CASE(OP_fclosure):
+             {
+-                JSValue bfunc = js_dup(b->cpool[get_u32(pc)]);
++                JSValue bfunc;
++                js_bytecode_dup_to(&(bfunc), &(b->cpool[get_u32(pc)]));
+                 pc += 4;
+                 *sp++ = js_closure(ctx, bfunc, var_refs, sf);
+-                if (unlikely(JS_IsException(sp[-1])))
++                if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                     goto exception;
+             }
+             BREAK;
+@@ -18332,12 +18376,12 @@
+                 ret_val = JS_CallInternal(ctx, call_argv[-1], undefined_value,
+                                           undefined_value, call_argc,
+                                           vc(call_argv), 0);
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+                 if (opcode == OP_tail_call)
+                     goto done;
+                 for(i = -1; i < call_argc; i++)
+-                    JS_FreeValue(ctx, call_argv[i]);
++                    js_bytecode_free_value(ctx, &(call_argv[i]));
+                 sp -= call_argc + 1;
+                 *sp++ = ret_val;
+             }
+@@ -18351,10 +18395,10 @@
+                 ret_val = JS_CallConstructorInternal(ctx, call_argv[-2],
+                                                      call_argv[-1], call_argc,
+                                                      vc(call_argv), 0);
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+                 for(i = -2; i < call_argc; i++)
+-                    JS_FreeValue(ctx, call_argv[i]);
++                    js_bytecode_free_value(ctx, &(call_argv[i]));
+                 sp -= call_argc + 2;
+                 *sp++ = ret_val;
+             }
+@@ -18369,12 +18413,12 @@
+                 ret_val = JS_CallInternal(ctx, call_argv[-1], call_argv[-2],
+                                           undefined_value, call_argc,
+                                           vc(call_argv), 0);
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+                 if (opcode == OP_tail_call_method)
+                     goto done;
+                 for(i = -2; i < call_argc; i++)
+-                    JS_FreeValue(ctx, call_argv[i]);
++                    js_bytecode_free_value(ctx, &(call_argv[i]));
+                 sp -= call_argc + 2;
+                 *sp++ = ret_val;
+             }
+@@ -18386,7 +18430,7 @@
+                 call_argv = sp - call_argc;
+                 ret_val = JS_NewArrayFrom(ctx, call_argc, call_argv);
+                 sp -= call_argc;
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+                 *sp++ = ret_val;
+             }
+@@ -18400,11 +18444,11 @@
+                 sf->cur_pc = pc;
+ 
+                 ret_val = js_function_apply(ctx, sp[-3], 2, vc(&sp[-2]), magic);
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-3]);
+-                JS_FreeValue(ctx, sp[-2]);
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-3]));
++                js_bytecode_free_value(ctx, &(sp[-2]));
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp -= 3;
+                 *sp++ = ret_val;
+             }
+@@ -18443,11 +18487,11 @@
+                 if (JS_IsUndefined(new_target))
+                     goto non_ctor_call;
+                 super = JS_GetPrototype(ctx, func_obj);
+-                if (JS_IsException(super))
++                if (js_bytecode_is_exception(&(super)))
+                     goto exception;
+                 ret = JS_CallConstructor2(ctx, super, new_target, argc, argv);
+-                JS_FreeValue(ctx, super);
+-                if (JS_IsException(ret))
++                js_bytecode_free_value(ctx, &(super));
++                if (js_bytecode_is_exception(&(ret)))
+                     goto exception;
+                 *sp++ = ret;
+             }
+@@ -18466,8 +18510,8 @@
+         CASE(OP_add_brand):
+             if (JS_AddBrand(ctx, sp[-2], sp[-1]) < 0)
+                 goto exception;
+-            JS_FreeValue(ctx, sp[-2]);
+-            JS_FreeValue(ctx, sp[-1]);
++            js_bytecode_free_value(ctx, &(sp[-2]));
++            js_bytecode_free_value(ctx, &(sp[-1]));
+             sp -= 2;
+             BREAK;
+ 
+@@ -18527,10 +18571,10 @@
+                                               undefined_value, call_argc,
+                                               vc(call_argv), 0);
+                 }
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+                 for(i = -1; i < call_argc; i++)
+-                    JS_FreeValue(ctx, call_argv[i]);
++                    js_bytecode_free_value(ctx, &(call_argv[i]));
+                 sp -= call_argc + 1;
+                 *sp++ = ret_val;
+             }
+@@ -18560,10 +18604,10 @@
+                     ret_val = JS_Call(ctx, sp[-2], undefined_value, len, vc(tab));
+                 }
+                 free_arg_list(ctx, tab, len);
+-                if (unlikely(JS_IsException(ret_val)))
++                if (unlikely(js_bytecode_is_exception(&(ret_val))))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-2]);
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-2]));
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp -= 2;
+                 *sp++ = ret_val;
+             }
+@@ -18574,7 +18618,7 @@
+                 sp[-2] = js_regexp_constructor_internal(ctx, undefined_value,
+                                                         sp[-2], sp[-1]);
+                 sp--;
+-                if (JS_IsException(sp[-1]))
++                if (js_bytecode_is_exception(&(sp[-1])))
+                     goto exception;
+             }
+             BREAK;
+@@ -18583,9 +18627,9 @@
+             {
+                 JSValue proto;
+                 proto = JS_GetPrototype(ctx, sp[-1]);
+-                if (JS_IsException(proto))
++                if (js_bytecode_is_exception(&(proto)))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = proto;
+             }
+             BREAK;
+@@ -18595,10 +18639,10 @@
+                 JSValue val;
+                 sf->cur_pc = pc;
+                 val = js_dynamic_import(ctx, sp[-2], sp[-1]);
+-                if (JS_IsException(val))
++                if (js_bytecode_is_exception(&(val)))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-2]);
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-2]));
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp--;
+                 sp[-1] = val;
+             }
+@@ -18614,7 +18658,7 @@
+                 sf->cur_pc = pc;
+ 
+                 val = JS_GetGlobalVar(ctx, atom, opcode - OP_get_var_undef);
+-                if (unlikely(JS_IsException(val)))
++                if (unlikely(js_bytecode_is_exception(&(val))))
+                     goto exception;
+                 *sp++ = val;
+             }
+@@ -18667,7 +18711,7 @@
+                 pc += 5;
+                 if (JS_DefineGlobalFunction(ctx, atom, sp[-1], flags))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp--;
+             }
+             BREAK;
+@@ -18677,7 +18721,7 @@
+                 int idx;
+                 idx = get_u16(pc);
+                 pc += 2;
+-                sp[0] = js_dup(var_buf[idx]);
++                js_bytecode_dup_to(&(sp[0]), &(var_buf[idx]));
+                 sp++;
+             }
+             BREAK;
+@@ -18703,7 +18747,7 @@
+                 int idx;
+                 idx = get_u16(pc);
+                 pc += 2;
+-                sp[0] = js_dup(arg_buf[idx]);
++                js_bytecode_dup_to(&(sp[0]), &(arg_buf[idx]));
+                 sp++;
+             }
+             BREAK;
+@@ -18733,8 +18777,8 @@
+         // frequent opcodes _and_ they are very often paired together,
+         // making them ideal candidates for opcode fusion.
+         CASE(OP_get_loc0_loc1):
+-            *sp++ = js_dup(var_buf[0]);
+-            *sp++ = js_dup(var_buf[1]);
++            js_bytecode_dup_to(&(*sp++), &(var_buf[0]));
++            js_bytecode_dup_to(&(*sp++), &(var_buf[1]));
+             BREAK;
+ 
+         CASE(OP_get_loc0): *sp++ = js_dup(var_buf[0]); BREAK;
+@@ -18781,7 +18825,7 @@
+                 idx = get_u16(pc);
+                 pc += 2;
+                 val = *var_refs[idx]->pvalue;
+-                sp[0] = js_dup(val);
++                js_bytecode_dup_to(&(sp[0]), &(val));
+                 sp++;
+             }
+             BREAK;
+@@ -18813,7 +18857,7 @@
+                     JS_ThrowReferenceErrorUninitialized2(ctx, b, idx, true);
+                     goto exception;
+                 }
+-                sp[0] = js_dup(val);
++                js_bytecode_dup_to(&(sp[0]), &(val));
+                 sp++;
+             }
+             BREAK;
+@@ -18861,7 +18905,7 @@
+                                                          false);
+                     goto exception;
+                 }
+-                sp[0] = js_dup(var_buf[idx]);
++                js_bytecode_dup_to(&(sp[0]), &(var_buf[idx]));
+                 sp++;
+             }
+             BREAK;
+@@ -18914,7 +18958,7 @@
+                 idx = get_u16(pc + 4);
+                 pc += 6;
+                 *sp++ = JS_NewObjectProto(ctx, null_value);
+-                if (unlikely(JS_IsException(sp[-1])))
++                if (unlikely(js_bytecode_is_exception(&(sp[-1]))))
+                     goto exception;
+                 if (opcode == OP_make_var_ref_ref) {
+                     var_ref = var_refs[idx];
+@@ -19055,7 +19099,7 @@
+                 int32_t diff;
+                 diff = get_u32(pc);
+                 /* XXX: should have a different tag to avoid security flaw */
+-                sp[0] = js_int32(pc + 4 - b->byte_code_buf);
++                js_bytecode_int32_to(&(sp[0]), pc + 4 - b->byte_code_buf);
+                 sp++;
+                 pc += diff;
+             }
+@@ -19135,7 +19179,7 @@
+                 sf->cur_pc = pc;
+                 if (JS_IteratorClose(ctx, sp[-1], false))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+             }
+             sp--;
+             BREAK;
+@@ -19150,7 +19194,7 @@
+                 }
+                 if (unlikely(sp == stack_buf)) {
+                     JS_ThrowInternalError(ctx, "nip_catch");
+-                    JS_FreeValue(ctx, ret_val);
++                    js_bytecode_free_value(ctx, &(ret_val));
+                     goto exception;
+                 }
+                 sp[-1] = ret_val;
+@@ -19182,15 +19226,15 @@
+                 }
+                 sf->cur_pc = pc;
+                 ret = JS_Call(ctx, method, val, 0, NULL);
+-                if (JS_IsException(ret)) {
++                if (js_bytecode_is_exception(&(ret))) {
+                     JSValue new_error = JS_GetException(ctx);
+                     if (!JS_IsUninitialized(error_state)) {
+                         JSValue se;
+                         se = js_new_suppressed_error(ctx, new_error,
+                                                      error_state);
+-                        JS_FreeValue(ctx, new_error);
+-                        JS_FreeValue(ctx, error_state);
+-                        if (JS_IsException(se)) {
++                        js_bytecode_free_value(ctx, &(new_error));
++                        js_bytecode_free_value(ctx, &(error_state));
++                        if (js_bytecode_is_exception(&(se))) {
+                             sp[-1] = JS_GetException(ctx);
+                         } else {
+                             sp[-1] = se;
+@@ -19199,7 +19243,7 @@
+                         sp[-1] = new_error;
+                     }
+                 } else {
+-                    JS_FreeValue(ctx, ret);
++                    js_bytecode_free_value(ctx, &(ret));
+                 }
+             }
+             BREAK;
+@@ -19223,7 +19267,7 @@
+                 }
+                 sf->cur_pc = pc;
+                 ret = JS_Call(ctx, method, val, 0, NULL);
+-                if (JS_IsException(ret))
++                if (js_bytecode_is_exception(&(ret)))
+                     goto exception;
+                 sp[0] = ret;
+                 sp++;
+@@ -19238,9 +19282,9 @@
+                 if (!JS_IsUninitialized(error_state)) {
+                     JSValue se = js_new_suppressed_error(ctx, new_error,
+                                                          error_state);
+-                    JS_FreeValue(ctx, new_error);
+-                    JS_FreeValue(ctx, error_state);
+-                    if (JS_IsException(se)) {
++                    js_bytecode_free_value(ctx, &(new_error));
++                    js_bytecode_free_value(ctx, &(error_state));
++                    if (js_bytecode_is_exception(&(se))) {
+                         sp[-1] = JS_GetException(ctx);
+                     } else {
+                         sp[-1] = se;
+@@ -19281,9 +19325,9 @@
+                 JSValue ret;
+                 sf->cur_pc = pc;
+                 ret = JS_Call(ctx, sp[-3], sp[-4], 1, vc(sp - 1));
+-                if (JS_IsException(ret))
++                if (js_bytecode_is_exception(&(ret)))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = ret;
+             }
+             BREAK;
+@@ -19298,7 +19342,7 @@
+                 sf->cur_pc = pc;
+                 method = JS_GetProperty(ctx, sp[-4], (flags & 1) ?
+                                         JS_ATOM_throw : JS_ATOM_return);
+-                if (JS_IsException(method))
++                if (js_bytecode_is_exception(&(method)))
+                     goto exception;
+                 if (JS_IsUndefined(method) || JS_IsNull(method)) {
+                     ret_flag = true;
+@@ -19311,13 +19355,13 @@
+                         ret = JS_CallFree(ctx, method, sp[-4],
+                                           1, vc(sp - 1));
+                     }
+-                    if (JS_IsException(ret))
++                    if (js_bytecode_is_exception(&(ret)))
+                         goto exception;
+-                    JS_FreeValue(ctx, sp[-1]);
++                    js_bytecode_free_value(ctx, &(sp[-1]));
+                     sp[-1] = ret;
+                     ret_flag = false;
+                 }
+-                sp[0] = js_bool(ret_flag);
++                js_bytecode_bool_to(&(sp[0]), ret_flag);
+                 sp += 1;
+             }
+             BREAK;
+@@ -19333,7 +19377,7 @@
+                 } else {
+                     res = JS_ToBoolFree(ctx, op1);
+                 }
+-                sp[-1] = js_bool(!res);
++                js_bytecode_bool_to(&(sp[-1]), !res);
+             }
+             BREAK;
+ 
+@@ -19357,7 +19401,7 @@
+                             /* found */
+                             if (unlikely(prs->flags & JS_PROP_TMASK))
+                                 goto get_field_slow_path;
+-                            val = js_dup(pr->u.value);
++                            js_bytecode_dup_to(&(val), &(pr->u.value));
+                             break;
+                         }
+                         if (unlikely(p->is_exotic)) {
+@@ -19377,10 +19421,10 @@
+                 get_field_slow_path:
+                     sf->cur_pc = pc;
+                     val = JS_GetPropertyInternal(ctx, obj, atom, sp[-1], false);
+-                    if (unlikely(JS_IsException(val)))
++                    if (unlikely(js_bytecode_is_exception(&(val))))
+                         goto exception;
+                 }
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = val;
+             }
+             BREAK;
+@@ -19405,7 +19449,7 @@
+                             /* found */
+                             if (unlikely(prs->flags & JS_PROP_TMASK))
+                                 goto get_field2_slow_path;
+-                            val = js_dup(pr->u.value);
++                            js_bytecode_dup_to(&(val), &(pr->u.value));
+                             break;
+                         }
+                         if (unlikely(p->is_exotic)) {
+@@ -19425,7 +19469,7 @@
+                 get_field2_slow_path:
+                     sf->cur_pc = pc;
+                     val = JS_GetPropertyInternal(ctx, obj, atom, sp[-1], false);
+-                    if (unlikely(JS_IsException(val)))
++                    if (unlikely(js_bytecode_is_exception(&(val))))
+                         goto exception;
+                 }
+                 *sp++ = val;
+@@ -19457,14 +19501,14 @@
+                     } else {
+                         goto put_field_slow_path;
+                     }
+-                    JS_FreeValue(ctx, obj);
++                    js_bytecode_free_value(ctx, &(obj));
+                     sp -= 2;
+                 } else {
+                 put_field_slow_path:
+                     sf->cur_pc = pc;
+                     ret = JS_SetPropertyInternal2(ctx, obj, atom, sp[-1], obj,
+                                                   JS_PROP_THROW_STRICT);
+-                    JS_FreeValue(ctx, obj);
++                    js_bytecode_free_value(ctx, &(obj));
+                     sp -= 2;
+                     if (unlikely(ret < 0))
+                         goto exception;
+@@ -19480,7 +19524,7 @@
+                 atom = get_u32(pc);
+                 pc += 4;
+                 val = JS_NewSymbolFromAtom(ctx, atom, JS_ATOM_TYPE_PRIVATE);
+-                if (JS_IsException(val))
++                if (js_bytecode_is_exception(&(val)))
+                     goto exception;
+                 *sp++ = val;
+             }
+@@ -19491,11 +19535,11 @@
+                 JSValue val;
+                 sf->cur_pc = pc;
+                 val = JS_GetPrivateField(ctx, sp[-2], sp[-1]);
+-                JS_FreeValue(ctx, sp[-1]);
+-                JS_FreeValue(ctx, sp[-2]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
++                js_bytecode_free_value(ctx, &(sp[-2]));
+                 sp[-2] = val;
+                 sp--;
+-                if (unlikely(JS_IsException(val)))
++                if (unlikely(js_bytecode_is_exception(&(val))))
+                     goto exception;
+             }
+             BREAK;
+@@ -19505,8 +19549,8 @@
+                 int ret;
+                 sf->cur_pc = pc;
+                 ret = JS_SetPrivateField(ctx, sp[-3], sp[-1], sp[-2]);
+-                JS_FreeValue(ctx, sp[-3]);
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-3]));
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp -= 3;
+                 if (unlikely(ret < 0))
+                     goto exception;
+@@ -19517,7 +19561,7 @@
+             {
+                 int ret;
+                 ret = JS_DefinePrivateField(ctx, sp[-3], sp[-2], sp[-1]);
+-                JS_FreeValue(ctx, sp[-2]);
++                js_bytecode_free_value(ctx, &(sp[-2]));
+                 sp -= 2;
+                 if (unlikely(ret < 0))
+                     goto exception;
+@@ -19567,7 +19611,7 @@
+                     if (JS_SetPrototypeInternal(ctx, sp[-2], proto, true) < 0)
+                         goto exception;
+                 }
+-                JS_FreeValue(ctx, proto);
++                js_bytecode_free_value(ctx, &(proto));
+                 sp--;
+             }
+             BREAK;
+@@ -19623,10 +19667,10 @@
+                     ret = JS_DefineProperty(ctx, obj, atom, value,
+                                             getter, setter, flags);
+                 }
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 if (is_computed) {
+                     JS_FreeAtom(ctx, atom);
+-                    JS_FreeValue(ctx, sp[-2]);
++                    js_bytecode_free_value(ctx, &(sp[-2]));
+                 }
+                 sp -= 1 + is_computed;
+                 if (unlikely(ret < 0))
+@@ -19656,10 +19700,10 @@
+ 
+                 sf->cur_pc = pc;
+                 val = JS_GetPropertyValue(ctx, sp[-2], sp[-1]);
+-                JS_FreeValue(ctx, sp[-2]);
++                js_bytecode_free_value(ctx, &(sp[-2]));
+                 sp[-2] = val;
+                 sp--;
+-                if (unlikely(JS_IsException(val)))
++                if (unlikely(js_bytecode_is_exception(&(val))))
+                     goto exception;
+             }
+             BREAK;
+@@ -19671,7 +19715,7 @@
+                 sf->cur_pc = pc;
+                 val = JS_GetPropertyValue(ctx, sp[-2], sp[-1]);
+                 sp[-1] = val;
+-                if (unlikely(JS_IsException(val)))
++                if (unlikely(js_bytecode_is_exception(&(val))))
+                     goto exception;
+             }
+             BREAK;
+@@ -19690,7 +19734,7 @@
+                 }
+                 val = JS_GetPropertyValue(ctx, sp[-2],
+                                           js_dup(sp[-1]));
+-                if (unlikely(JS_IsException(val)))
++                if (unlikely(js_bytecode_is_exception(&(val))))
+                     goto exception;
+                 sp[0] = val;
+                 sp++;
+@@ -19707,11 +19751,11 @@
+                     goto exception;
+                 val = JS_GetPropertyInternal(ctx, sp[-2], atom, sp[-3], false);
+                 JS_FreeAtom(ctx, atom);
+-                if (unlikely(JS_IsException(val)))
++                if (unlikely(js_bytecode_is_exception(&(val))))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
+-                JS_FreeValue(ctx, sp[-2]);
+-                JS_FreeValue(ctx, sp[-3]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
++                js_bytecode_free_value(ctx, &(sp[-2]));
++                js_bytecode_free_value(ctx, &(sp[-3]));
+                 sp[-3] = val;
+                 sp -= 2;
+             }
+@@ -19732,7 +19776,7 @@
+                         if (likely(p->class_id == JS_CLASS_ARRAY &&
+                                    idx < (uint32_t)p->u.array.count)) {
+                             set_value(ctx, &p->u.array.u.values[idx], val);
+-                            JS_FreeValue(ctx, sp[-3]);
++                            js_bytecode_free_value(ctx, &(sp[-3]));
+                             sp -= 3;
+                             BREAK;
+                         }
+@@ -19751,8 +19795,8 @@
+                                     p->u.array.u.values[idx] = val;
+                                     p->u.array.count = new_len;
+                                     if (new_len > array_len)
+-                                        p->prop[0].u.value = js_int32(new_len);
+-                                    JS_FreeValue(ctx, sp[-3]);
++                                        js_bytecode_int32_to(&(p->prop[0].u.value), new_len);
++                                    js_bytecode_free_value(ctx, &(sp[-3]));
+                                     sp -= 3;
+                                     BREAK;
+                                 }
+@@ -19762,7 +19806,7 @@
+                 }
+                 sf->cur_pc = pc;
+                 ret = JS_SetPropertyValue(ctx, sp[-3], sp[-2], sp[-1], JS_PROP_THROW_STRICT);
+-                JS_FreeValue(ctx, sp[-3]);
++                js_bytecode_free_value(ctx, &(sp[-3]));
+                 sp -= 3;
+                 if (unlikely(ret < 0))
+                     goto exception;
+@@ -19783,14 +19827,14 @@
+                         }
+                         goto exception;
+                     } else {
+-                        sp[-3] = js_dup(ctx->global_obj);
++                        js_bytecode_dup_to(&(sp[-3]), &(ctx->global_obj));
+                     }
+                 } else {
+                     if (is_strict_mode(ctx))
+                         flags |= JS_PROP_NO_ADD;
+                 }
+                 ret = JS_SetPropertyValue(ctx, sp[-3], sp[-2], sp[-1], flags);
+-                JS_FreeValue(ctx, sp[-3]);
++                js_bytecode_free_value(ctx, &(sp[-3]));
+                 sp -= 3;
+                 if (unlikely(ret < 0))
+                     goto exception;
+@@ -19814,9 +19858,9 @@
+                                               sp[-1], sp[-4],
+                                               JS_PROP_THROW_STRICT);
+                 JS_FreeAtom(ctx, atom);
+-                JS_FreeValue(ctx, sp[-4]);
+-                JS_FreeValue(ctx, sp[-3]);
+-                JS_FreeValue(ctx, sp[-2]);
++                js_bytecode_free_value(ctx, &(sp[-4]));
++                js_bytecode_free_value(ctx, &(sp[-3]));
++                js_bytecode_free_value(ctx, &(sp[-2]));
+                 sp -= 4;
+                 if (ret < 0)
+                     goto exception;
+@@ -19869,9 +19913,9 @@
+                     int64_t r;
+                     r = (int64_t)JS_VALUE_GET_INT(op1) + JS_VALUE_GET_INT(op2);
+                     if (unlikely(r < INT32_MIN || r > INT32_MAX))
+-                        sp[-2] = js_float64(r);
++                        js_bytecode_float64_to(&(sp[-2]), r);
+                     else
+-                        sp[-2] = js_int32(r);
++                        js_bytecode_int32_to(&(sp[-2]), r);
+                     sp--;
+                 } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
+                     JS_X87_FPCW_SAVE_AND_ADJUST(fpcw);
+@@ -19902,7 +19946,7 @@
+                     if (unlikely((int)r != r))
+                         *pv = __JS_NewFloat64((double)r);
+                     else
+-                        *pv = js_int32(r);
++                        js_bytecode_int32_to(&(*pv), r);
+                     sp--;
+                 } else if (JS_VALUE_GET_TAG(*pv) == JS_TAG_STRING) {
+                     JSValue op1;
+@@ -19910,10 +19954,10 @@
+                     sp--;
+                     sf->cur_pc = pc;
+                     op1 = JS_ToPrimitiveFree(ctx, op1, HINT_NONE);
+-                    if (JS_IsException(op1))
++                    if (js_bytecode_is_exception(&(op1)))
+                         goto exception;
+                     op1 = JS_ConcatString(ctx, js_dup(*pv), op1);
+-                    if (JS_IsException(op1))
++                    if (js_bytecode_is_exception(&(op1)))
+                         goto exception;
+                     set_value(ctx, pv, op1);
+                 } else {
+@@ -19921,7 +19965,7 @@
+                     /* In case of exception, js_add_slow frees ops[0]
+                        and ops[1], so we must duplicate *pv */
+                     sf->cur_pc = pc;
+-                    ops[0] = js_dup(*pv);
++                    js_bytecode_dup_to(&(ops[0]), &(*pv));
+                     ops[1] = sp[-1];
+                     sp--;
+                     if (js_add_slow(ctx, ops + 2))
+@@ -19941,7 +19985,7 @@
+                     if (unlikely((int)r != r))
+                         sp[-2] = __JS_NewFloat64((double)r);
+                     else
+-                        sp[-2] = js_int32(r);
++                        js_bytecode_int32_to(&(sp[-2]), r);
+                     sp--;
+                 } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
+                     JS_X87_FPCW_SAVE_AND_ADJUST(fpcw);
+@@ -19975,14 +20019,14 @@
+                         d = -0.0;
+                         goto mul_fp_res;
+                     }
+-                    sp[-2] = js_int32(r);
++                    js_bytecode_int32_to(&(sp[-2]), r);
+                     sp--;
+                 } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
+                     JS_X87_FPCW_SAVE_AND_ADJUST(fpcw);
+                     d = JS_VALUE_GET_FLOAT64(op1) * JS_VALUE_GET_FLOAT64(op2);
+                     JS_X87_FPCW_RESTORE(fpcw);
+                 mul_fp_res:
+-                    sp[-2] = js_float64(d);
++                    js_bytecode_float64_to(&(sp[-2]), d);
+                     sp--;
+                 } else {
+                     goto binary_arith_slow;
+@@ -20019,7 +20063,7 @@
+                     if (unlikely(v1 < 0 || v2 <= 0))
+                         goto binary_arith_slow;
+                     r = v1 % v2;
+-                    sp[-2] = js_int32(r);
++                    js_bytecode_int32_to(&(sp[-2]), r);
+                     sp--;
+                 } else {
+                     goto binary_arith_slow;
+@@ -20067,11 +20111,11 @@
+                         d = -(double)val;
+                         goto neg_fp_res;
+                     }
+-                    sp[-1] = js_int32(-val);
++                    js_bytecode_int32_to(&(sp[-1]), -val);
+                 } else if (JS_TAG_IS_FLOAT64(tag)) {
+                     d = -JS_VALUE_GET_FLOAT64(op1);
+                 neg_fp_res:
+-                    sp[-1] = js_float64(d);
++                    js_bytecode_float64_to(&(sp[-1]), d);
+                 } else {
+                     sf->cur_pc = pc;
+                     if (js_unary_arith_slow(ctx, sp, opcode))
+@@ -20088,7 +20132,7 @@
+                     val = JS_VALUE_GET_INT(op1);
+                     if (unlikely(val == INT32_MAX))
+                         goto inc_slow;
+-                    sp[-1] = js_int32(val + 1);
++                    js_bytecode_int32_to(&(sp[-1]), val + 1);
+                 } else {
+                 inc_slow:
+                     sf->cur_pc = pc;
+@@ -20106,7 +20150,7 @@
+                     val = JS_VALUE_GET_INT(op1);
+                     if (unlikely(val == INT32_MIN))
+                         goto dec_slow;
+-                    sp[-1] = js_int32(val - 1);
++                    js_bytecode_int32_to(&(sp[-1]), val - 1);
+                 } else {
+                 dec_slow:
+                     sf->cur_pc = pc;
+@@ -20124,7 +20168,7 @@
+                     val = JS_VALUE_GET_INT(op1);
+                     if (unlikely(val == INT32_MAX))
+                         goto post_inc_slow;
+-                    sp[0] = js_int32(val + 1);
++                    js_bytecode_int32_to(&(sp[0]), val + 1);
+                 } else {
+                 post_inc_slow:
+                     sf->cur_pc = pc;
+@@ -20143,7 +20187,7 @@
+                     val = JS_VALUE_GET_INT(op1);
+                     if (unlikely(val == INT32_MIN))
+                         goto post_dec_slow;
+-                    sp[0] = js_int32(val - 1);
++                    js_bytecode_int32_to(&(sp[0]), val - 1);
+                 } else {
+                 post_dec_slow:
+                     sf->cur_pc = pc;
+@@ -20166,13 +20210,13 @@
+                     val = JS_VALUE_GET_INT(op1);
+                     if (unlikely(val == INT32_MAX))
+                         goto inc_loc_slow;
+-                    var_buf[idx] = js_int32(val + 1);
++                    js_bytecode_int32_to(&(var_buf[idx]), val + 1);
+                 } else {
+                 inc_loc_slow:
+                     sf->cur_pc = pc;
+                     /* must duplicate otherwise the variable value may
+                        be destroyed before JS code accesses it */
+-                    op1 = js_dup(op1);
++                    js_bytecode_dup_to(&(op1), &(op1));
+                     if (js_unary_arith_slow(ctx, &op1 + 1, OP_inc))
+                         goto exception;
+                     set_value(ctx, &var_buf[idx], op1);
+@@ -20192,13 +20236,13 @@
+                     val = JS_VALUE_GET_INT(op1);
+                     if (unlikely(val == INT32_MIN))
+                         goto dec_loc_slow;
+-                    var_buf[idx] = js_int32(val - 1);
++                    js_bytecode_int32_to(&(var_buf[idx]), val - 1);
+                 } else {
+                 dec_loc_slow:
+                     sf->cur_pc = pc;
+                     /* must duplicate otherwise the variable value may
+                        be destroyed before JS code accesses it */
+-                    op1 = js_dup(op1);
++                    js_bytecode_dup_to(&(op1), &(op1));
+                     if (js_unary_arith_slow(ctx, &op1 + 1, OP_dec))
+                         goto exception;
+                     set_value(ctx, &var_buf[idx], op1);
+@@ -20210,7 +20254,7 @@
+                 JSValue op1;
+                 op1 = sp[-1];
+                 if (JS_VALUE_GET_TAG(op1) == JS_TAG_INT) {
+-                    sp[-1] = js_int32(~JS_VALUE_GET_INT(op1));
++                    js_bytecode_int32_to(&(sp[-1]), ~JS_VALUE_GET_INT(op1));
+                 } else {
+                     sf->cur_pc = pc;
+                     if (js_not_slow(ctx, sp))
+@@ -20228,7 +20272,7 @@
+                     uint32_t v1, v2;
+                     v1 = JS_VALUE_GET_INT(op1);
+                     v2 = JS_VALUE_GET_INT(op2) & 0x1f;
+-                    sp[-2] = js_int32(v1 << v2);
++                    js_bytecode_int32_to(&(sp[-2]), v1 << v2);
+                     sp--;
+                 } else {
+                     sf->cur_pc = pc;
+@@ -20268,7 +20312,7 @@
+                     if (unlikely(v2 > 0x1f)) {
+                         v2 &= 0x1f;
+                     }
+-                    sp[-2] = js_int32((int)JS_VALUE_GET_INT(op1) >> v2);
++                    js_bytecode_int32_to(&(sp[-2]), (int)JS_VALUE_GET_INT(op1) >> v2);
+                     sp--;
+                 } else {
+                     sf->cur_pc = pc;
+@@ -20284,7 +20328,7 @@
+                 op1 = sp[-2];
+                 op2 = sp[-1];
+                 if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
+-                    sp[-2] = js_int32(JS_VALUE_GET_INT(op1) & JS_VALUE_GET_INT(op2));
++                    js_bytecode_int32_to(&(sp[-2]), JS_VALUE_GET_INT(op1) & JS_VALUE_GET_INT(op2));
+                     sp--;
+                 } else {
+                     sf->cur_pc = pc;
+@@ -20300,7 +20344,7 @@
+                 op1 = sp[-2];
+                 op2 = sp[-1];
+                 if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
+-                    sp[-2] = js_int32(JS_VALUE_GET_INT(op1) | JS_VALUE_GET_INT(op2));
++                    js_bytecode_int32_to(&(sp[-2]), JS_VALUE_GET_INT(op1) | JS_VALUE_GET_INT(op2));
+                     sp--;
+                 } else {
+                     sf->cur_pc = pc;
+@@ -20316,7 +20360,7 @@
+                 op1 = sp[-2];
+                 op2 = sp[-1];
+                 if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
+-                    sp[-2] = js_int32(JS_VALUE_GET_INT(op1) ^ JS_VALUE_GET_INT(op2));
++                    js_bytecode_int32_to(&(sp[-2]), JS_VALUE_GET_INT(op1) ^ JS_VALUE_GET_INT(op2));
+                     sp--;
+                 } else {
+                     sf->cur_pc = pc;
+@@ -20379,7 +20423,7 @@
+ 
+                 op1 = sp[-1];
+                 atom = js_operator_typeof(ctx, op1);
+-                JS_FreeValue(ctx, op1);
++                js_bytecode_free_value(ctx, &(op1));
+                 sp[-1] = JS_AtomToString(ctx, atom);
+             }
+             BREAK;
+@@ -20401,7 +20445,7 @@
+                 ret = JS_DeleteGlobalVar(ctx, atom);
+                 if (unlikely(ret < 0))
+                     goto exception;
+-                *sp++ = js_bool(ret);
++                js_bytecode_bool_to(&(*sp++), ret);
+             }
+             BREAK;
+ 
+@@ -20409,9 +20453,9 @@
+             if (JS_VALUE_GET_TAG(sp[-1]) != JS_TAG_OBJECT) {
+                 sf->cur_pc = pc;
+                 ret_val = JS_ToObject(ctx, sp[-1]);
+-                if (JS_IsException(ret_val))
++                if (js_bytecode_is_exception(&(ret_val)))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = ret_val;
+             }
+             BREAK;
+@@ -20425,9 +20469,9 @@
+             default:
+                 sf->cur_pc = pc;
+                 ret_val = JS_ToPropertyKey(ctx, sp[-1]);
+-                if (JS_IsException(ret_val))
++                if (js_bytecode_is_exception(&(ret_val)))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = ret_val;
+                 break;
+             }
+@@ -20447,9 +20491,9 @@
+             default:
+                 sf->cur_pc = pc;
+                 ret_val = JS_ToPropertyKey(ctx, sp[-1]);
+-                if (JS_IsException(ret_val))
++                if (js_bytecode_is_exception(&(ret_val)))
+                     goto exception;
+-                JS_FreeValue(ctx, sp[-1]);
++                js_bytecode_free_value(ctx, &(sp[-1]));
+                 sp[-1] = ret_val;
+                 break;
+             }
+@@ -20486,7 +20530,7 @@
+                     switch (opcode) {
+                     case OP_with_get_var:
+                         val = JS_GetProperty(ctx, obj, atom);
+-                        if (unlikely(JS_IsException(val)))
++                        if (unlikely(js_bytecode_is_exception(&(val))))
+                             goto exception;
+                         set_value(ctx, &sp[-1], val);
+                         break;
+@@ -20494,7 +20538,7 @@
+                         /* XXX: check if strict mode */
+                         ret = JS_SetPropertyInternal(ctx, obj, atom, sp[-2],
+                                                      JS_PROP_THROW_STRICT);
+-                        JS_FreeValue(ctx, sp[-1]);
++                        js_bytecode_free_value(ctx, &(sp[-1]));
+                         sp -= 2;
+                         if (unlikely(ret < 0))
+                             goto exception;
+@@ -20503,8 +20547,8 @@
+                         ret = JS_DeleteProperty(ctx, obj, atom, 0);
+                         if (unlikely(ret < 0))
+                             goto exception;
+-                        JS_FreeValue(ctx, sp[-1]);
+-                        sp[-1] = js_bool(ret);
++                        js_bytecode_free_value(ctx, &(sp[-1]));
++                        js_bytecode_bool_to(&(sp[-1]), ret);
+                         break;
+                     case OP_with_make_ref:
+                         /* produce a pair object/propname on the stack */
+@@ -20513,16 +20557,16 @@
+                     case OP_with_get_ref:
+                         /* produce a pair object/method on the stack */
+                         val = JS_GetProperty(ctx, obj, atom);
+-                        if (unlikely(JS_IsException(val)))
++                        if (unlikely(js_bytecode_is_exception(&(val))))
+                             goto exception;
+                         *sp++ = val;
+                         break;
+                     case OP_with_get_ref_undef:
+                         /* produce a pair undefined/function on the stack */
+                         val = JS_GetProperty(ctx, obj, atom);
+-                        if (unlikely(JS_IsException(val)))
++                        if (unlikely(js_bytecode_is_exception(&(val))))
+                             goto exception;
+-                        JS_FreeValue(ctx, sp[-1]);
++                        js_bytecode_free_value(ctx, &(sp[-1]));
+                         sp[-1] = undefined_value;
+                         *sp++ = val;
+                         break;
+@@ -20531,27 +20575,27 @@
+                 } else {
+                 no_with:
+                     /* if not jumping, drop the object argument */
+-                    JS_FreeValue(ctx, sp[-1]);
++                    js_bytecode_free_value(ctx, &(sp[-1]));
+                     sp--;
+                 }
+             }
+             BREAK;
+ 
+         CASE(OP_await):
+-            ret_val = js_int32(FUNC_RET_AWAIT);
++            js_bytecode_int32_to(&(ret_val), FUNC_RET_AWAIT);
+             goto done_generator;
+         CASE(OP_yield):
+-            ret_val = js_int32(FUNC_RET_YIELD);
++            js_bytecode_int32_to(&(ret_val), FUNC_RET_YIELD);
+             goto done_generator;
+         CASE(OP_yield_star):
+         CASE(OP_async_yield_star):
+-            ret_val = js_int32(FUNC_RET_YIELD_STAR);
++            js_bytecode_int32_to(&(ret_val), FUNC_RET_YIELD_STAR);
+             goto done_generator;
+         CASE(OP_return_async):
+             ret_val = undefined_value;
+             goto done_generator;
+         CASE(OP_initial_yield):
+-            ret_val = js_int32(FUNC_RET_INITIAL_YIELD);
++            js_bytecode_int32_to(&(ret_val), FUNC_RET_INITIAL_YIELD);
+             goto done_generator;
+ 
+         CASE(OP_nop):
+@@ -20590,12 +20634,12 @@
+                 goto free_and_set_false;
+             }
+         free_and_set_true:
+-            JS_FreeValue(ctx, sp[-1]);
++            js_bytecode_free_value(ctx, &(sp[-1]));
+         set_true:
+             sp[-1] = true_value;
+             BREAK;
+         free_and_set_false:
+-            JS_FreeValue(ctx, sp[-1]);
++            js_bytecode_free_value(ctx, &(sp[-1]));
+             sp[-1] = false_value;
+             BREAK;
+         CASE(OP_invalid):
+@@ -20615,7 +20659,7 @@
+     if (!JS_IsUncatchableError(rt->current_exception)) {
+         while (sp > stack_buf) {
+             JSValue val = *--sp;
+-            JS_FreeValue(ctx, val);
++            js_bytecode_free_value(ctx, &(val));
+             if (JS_VALUE_GET_TAG(val) == JS_TAG_CATCH_OFFSET) {
+                 int pos = JS_VALUE_GET_INT(val);
+                 if (pos == 0) {
+@@ -20626,7 +20670,7 @@
+                 } else {
+                     *sp++ = rt->current_exception;
+                     rt->current_exception = uninitialized_value;
+-                    JS_FreeValueRT(rt, ctx->error_back_trace);
++                    js_bytecode_free_value_rt(rt, &(ctx->error_back_trace));
+                     ctx->error_back_trace = undefined_value;
+                     pc = b->byte_code_buf + pos;
+                     goto restart;
+@@ -20650,7 +20694,7 @@
+         }
+         /* free the local variables and stack */
+         for(pval = local_buf; pval < sp; pval++) {
+-            JS_FreeValue(ctx, *pval);
++            js_bytecode_free_value(ctx, &(*pval));
+         }
+     }
+     rt->current_stack_frame = sf->prev_frame;

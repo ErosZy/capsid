@@ -9,6 +9,10 @@
 #include "host/generation_pool.h"
 #include "host/secret_snapshot.h"
 #include "host/worker_executor.h"
+#include "host/quarantine_dispatcher.h"
+#include "host/managed_registry.h"
+#include "host/structured_log.h"
+#include "worker_exit_assertions.h"
 
 #include "capsid/runtime.h"
 
@@ -23,19 +27,6 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-// TSan slows worker startup and host boot by an order of magnitude. The
-// hosted tsan matrix keeps the fixed deadlines scaled so the tests verify
-// the mechanism, not the clock (the scaling is compile-time: release,
-// asan and ubsan builds keep the original deadlines).
-// Both GCC (-fsanitize=thread) and Clang define __SANITIZE_THREAD__ for
-// the TSan build, so the gate needs no compiler-specific __has_feature
-// spelling (GCC errors on the function-like macro even in the dead
-// branch of the #if expression).
-#if defined(__SANITIZE_THREAD__)
-constexpr int kTestWaitScale = 8;
-#else
-constexpr int kTestWaitScale = 1;
-#endif
 
 
 #include <chrono>
@@ -47,6 +38,7 @@ constexpr int kTestWaitScale = 1;
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <poll.h>
 #include <set>
@@ -65,6 +57,22 @@ constexpr int kTestWaitScale = 1;
 #endif
 #if !defined(CAPSID_TEST_TSAN_BUILD)
 #define CAPSID_TEST_TSAN_BUILD 0
+#endif
+
+// Preserve the existing TSan-only 8x test-driver wait scale for both
+// compiler families: GCC uses __SANITIZE_THREAD__, while Clang uses
+// __has_feature(thread_sanitizer). Other configurations keep their waits.
+constexpr int kTestWaitScale = CAPSID_TEST_TSAN_BUILD ? 8 : 1;
+
+#if defined(__SANITIZE_ADDRESS__)
+#define CAPSID_TEST_ASAN_BUILD 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define CAPSID_TEST_ASAN_BUILD 1
+#endif
+#endif
+#if !defined(CAPSID_TEST_ASAN_BUILD)
+#define CAPSID_TEST_ASAN_BUILD 0
 #endif
 
 #include "build_identity.h"
@@ -300,18 +308,106 @@ capsid::host::WorkerRecoveryPolicy generation_recovery_policy() {
     return policy;
 }
 
+// The pool's completed-drain callback runs while every executor still
+// exists and after its sole reaper published the OS status. Copy results
+// there; raw executor pointers must not be read after pool finalization.
+struct ManagedPoolObservation {
+    struct Started {
+        const capsid::host::WorkerExecutor* executor;
+        std::int64_t pid;
+    };
+    struct Exit {
+        std::int64_t pid;
+        capsid::WorkerExitStatus status;
+    };
+
+    std::mutex mutex;
+    std::vector<Started> started;
+    std::vector<Exit> exits;
+    std::size_t drain_callbacks = 0;
+
+    void wire(capsid::host::GenerationPoolOptions* options) {
+        options->on_worker_started = [this](const auto* executor) {
+            std::lock_guard<std::mutex> lock(mutex);
+            const auto pid = executor->process_id();
+            require(pid > 0, "started Managed Worker has no OS identity");
+            for (const auto& prior : started) {
+                require(prior.executor != executor && prior.pid != pid,
+                        "Managed start must identify a distinct Worker");
+            }
+            started.push_back({executor, pid});
+        };
+        options->on_drain_complete = [this] {
+            std::lock_guard<std::mutex> lock(mutex);
+            ++drain_callbacks;
+            for (const auto& child : started) {
+                exits.push_back({child.pid, child.executor->exit_status()});
+            }
+        };
+    }
+
+    std::size_t count() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return started.size();
+    }
+
+    std::int64_t pid_of(const capsid::host::WorkerExecutor* executor) {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (const auto& child : started) {
+            if (child.executor == executor) return child.pid;
+        }
+        fail("executor was not observed starting in this Managed pool");
+        return -1;
+    }
+
+    void require_completed(std::size_t count, std::int64_t killed_pid = -1) {
+        std::lock_guard<std::mutex> lock(mutex);
+        require(drain_callbacks == 1 && started.size() == count && exits.size() == count,
+                "exactly one Managed drain must retain every started Worker's status");
+        std::size_t killed = 0;
+        for (const auto& child : exits) {
+            std::cout << "MANAGED_WORKER_EXIT {\"pid\":" << child.pid << ",\"status\":";
+            capsid_test::print_worker_exit(child.status);
+            std::cout << '}' << std::endl;
+            if (child.pid == killed_pid) {
+                ++killed;
+                require(child.status.observed && !child.status.destroy_forced &&
+                            child.status.wait_error == 0 && child.status.signal == SIGKILL &&
+                            !child.status.clean(),
+                        "a killed Managed Worker must retain its actual signal");
+            } else {
+                require(child.status.clean(), "natural Managed drain must retain actual OS exit zero");
+            }
+            // This probe runs after pool.wait() joined the sole reaper.
+            // ECHILD proves the product already reaped it; a zombie that
+            // this test itself reaps must fail, even if its exit was zero.
+            int status = 0;
+            pid_t waited;
+            do { waited = waitpid(static_cast<pid_t>(child.pid), &status, WNOHANG); }
+            while (waited < 0 && errno == EINTR);
+            require(waited == -1 && errno == ECHILD,
+                    "Managed product reaper must reclaim every owned child before return");
+        }
+        require(killed == (killed_pid > 0 ? 1U : 0U), "exact killed Worker identity");
+    }
+};
+
 struct TransactionHarness {
     std::mutex mutex;
     std::condition_variable condition;
+    // Keep observations alive until the active pool has drained.
+    std::vector<std::shared_ptr<ManagedPoolObservation>> generations;
     std::shared_ptr<capsid::host::GenerationPool> active_pool;
     bool activated = false;
     bool retired = false;
 };
 
 void wire_admin_transactions(capsid::host::ManagedHostOptions* options,
-                             TransactionHarness* harness) {
+                             TransactionHarness* harness,
+                             std::function<void(const capsid::host::DeployOutcome&,
+                                 capsid::host::GenerationPoolOptions&)> customize = {}) {
     options->prepare_activation =
-        [](const std::string& application,
+        [options, harness, customize](const std::string& application,
            const capsid::host::DeployOutcome& prepared,
            std::string* error)
         -> std::unique_ptr<capsid::host::ActivationPlan> {
@@ -327,9 +423,19 @@ void wire_admin_transactions(capsid::host::ManagedHostOptions* options,
             pool_options.workers =
                 static_cast<std::uint32_t>(prepared.workers.size());
             pool_options.factory = prepared.generation_factory;
+            if (options->ledger) pool_options.capacity_lease = std::make_shared<capsid::host::WorkerPoolCapacityLease>(
+                options->ledger, application, prepared.workers.size());
             // Fast deterministic recovery policy: create_adopted rejects a
             // zeroed policy, and this harness mirrors main.cc's wiring.
             pool_options.recovery = generation_recovery_policy();
+            auto observation = std::make_shared<ManagedPoolObservation>();
+            observation->wire(&pool_options);
+            if (customize) customize(prepared, pool_options);
+            {
+                std::lock_guard<std::mutex> lock(harness->mutex);
+                harness->generations.push_back(observation);
+                plan->old_pool = harness->active_pool;
+            }
             std::string pool_error;
             std::shared_ptr<capsid::host::GenerationPool> pool =
                 capsid::host::GenerationPool::create_adopted(
@@ -579,15 +685,42 @@ bool wait_for(const std::function<bool()>& predicate,
     return predicate();
 }
 
-// Submits a bodyless begin plus an upfront credit grant and waits until the
-// pool's inflight returns to 0 — the response completed end-to-end. The
-// pump owns the event drain, so the inflight counter is the only observable
-// completion signal at this layer.
-void generation_round_trip(capsid::host::GenerationPool& pool,
-                           std::uint64_t request_id) {
+// A zero inflight count is also produced by worker exit. Observe the real
+// response through the pool's event sink before accepting completion.
+capsid::host::WorkerExecutor* generation_round_trip(
+    capsid::host::GenerationPool& pool, std::uint64_t request_id,
+    const std::string& expected_body = "managed-ok") {
     capsid::host::WorkerExecutor* worker = pool.pick_worker();
     require(worker != nullptr,
             "generation round trip: no READY worker to serve the request");
+    struct Response {
+        std::mutex mutex;
+        unsigned heads = 0, ends = 0;
+        std::uint16_t status = 0;
+        bool failed = false;
+        std::string body;
+    };
+    auto response = std::make_shared<Response>();
+    pool.set_event_sink([response, worker, request_id](const auto* executor, auto event) {
+        if (executor != worker) return;
+        std::lock_guard<std::mutex> lock(response->mutex);
+        using Type = capsid::host::WorkerEvent::Type;
+        if (event.type == Type::kExit || event.type == Type::kError) response->failed = true;
+        if (event.request_id != request_id) return;
+        if (event.type == Type::kResponseHead) {
+            ++response->heads;
+            response->status = event.status;
+        } else if (event.type == Type::kResponseBody) {
+            if (response->heads != 1 || response->ends != 0 || response->body.size() + event.body.size() > 4096)
+                response->failed = true;
+            else response->body.append(event.body.begin(), event.body.end());
+        } else if (event.type == Type::kResponseEnd) {
+            ++response->ends;
+            if (response->heads != 1) response->failed = true;
+        } else if (event.type == Type::kRequestTimeout || event.type == Type::kRequestFailure) {
+            response->failed = true;
+        }
+    });
     capsid::host::Command begin;
     begin.type = capsid::host::CommandType::kBeginRequest;
     begin.request_id = request_id;
@@ -600,47 +733,23 @@ void generation_round_trip(capsid::host::GenerationPool& pool,
     grant.request_id = request_id;
     grant.credit = 4096;  // covers the whole response body upfront
     worker->submit(std::move(grant));
-    require(wait_for([&] { return pool.inflight() == 0; },
-                     std::chrono::seconds(15 * kTestWaitScale)),
-            "generation round trip did not complete within 15s");
-}
-
-#if defined(__linux__)
-// The pool spawns the workers as OUR direct children; scan /proc for the
-// children of this test process (same idiom as the generation pool suite).
-void generation_kill_worker_child() {
-    const pid_t self = getpid();
-    DIR* directory = opendir("/proc");
-    require(directory != nullptr, "cannot open /proc to find the worker");
-    pid_t found = -1;
-    struct dirent* entry = nullptr;
-    while ((entry = readdir(directory)) != nullptr) {
-        if (entry->d_name[0] < '0' || entry->d_name[0] > '9') {
-            continue;
-        }
-        char path[320];  // NAME_MAX (255) + "/proc/" + "/stat" + NUL
-        std::snprintf(path, sizeof(path), "/proc/%s/stat", entry->d_name);
-        FILE* file = std::fopen(path, "r");
-        if (file == nullptr) {
-            continue;
-        }
-        char comm[256];
-        long ppid = -1;
-        // Format: pid (comm) state ppid ... — see the generation pool suite
-        // for the scan-format notes.
-        const int scanned =
-            std::fscanf(file, "%*d %255[^)]%*c %*c %ld", comm, &ppid);
-        std::fclose(file);
-        if (scanned == 2 && ppid == static_cast<long>(self)) {
-            found = static_cast<pid_t>(std::strtol(entry->d_name, nullptr, 10));
-            break;
-        }
+    const bool terminal = wait_for([&] {
+        std::lock_guard<std::mutex> lock(response->mutex);
+        return response->ends != 0 || response->failed;
+    }, std::chrono::seconds(15 * kTestWaitScale));
+    pool.set_event_sink({});
+    {
+        std::lock_guard<std::mutex> lock(response->mutex);
+        require(terminal && !response->failed && response->heads == 1 && response->ends == 1 &&
+                    response->status == 200 && response->body == expected_body,
+                "generation round trip requires its actual complete 200 response and exact body");
     }
-    closedir(directory);
-    require(found > 0, "cannot find the pool's worker child process");
-    require(kill(found, SIGKILL) == 0, "cannot SIGKILL the pool worker");
+    require(wait_for([&] { return pool.inflight() == 0; }, std::chrono::seconds(2 * kTestWaitScale)),
+            "completed generation response did not release inflight");
+    std::cout << "MANAGED_RESPONSE {\"requestId\":" << request_id
+              << ",\"status\":200,\"body\":\"" << expected_body << "\"}" << std::endl;
+    return worker;
 }
-#endif  // __linux__
 
 std::uint64_t percentile_us(std::vector<std::uint64_t> values,
                             std::size_t percentile) {
@@ -825,6 +934,221 @@ void install_compatibility_mismatch(const Fixtures& fixtures,
                std::string(signature.begin(), signature.end()));
 }
 
+std::size_t open_directory_handles(const std::string& path) {
+    struct stat expected{};
+    require(stat(path.c_str(), &expected) == 0 && S_ISDIR(expected.st_mode), "stat observed App state directory");
+    DIR* descriptors = opendir("/proc/self/fd");
+    require(descriptors != nullptr, "open own descriptor inventory");
+    std::size_t count = 0;
+    while (const auto* entry = readdir(descriptors)) {
+        char* end = nullptr;
+        const long descriptor = std::strtol(entry->d_name, &end, 10);
+        if (end == entry->d_name || *end != '\0' || descriptor < 0) continue;
+        struct stat actual{};
+        if (fstat(static_cast<int>(descriptor), &actual) == 0 && actual.st_dev == expected.st_dev && actual.st_ino == expected.st_ino) ++count;
+    }
+    require(closedir(descriptors) == 0, "close own descriptor inventory");
+    return count;
+}
+
+void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
+    using namespace capsid::host;
+    const std::string prefix = "host_managed_quarantine_";
+    const std::string scenario = mode.substr(prefix.size());
+    const bool aborted = scenario == "aborted_generation";
+    const bool prepared = scenario == "prepared_generation_commits";
+    const bool write_failure = scenario == "persist_failure";
+    const bool replay = scenario == "same_generation_reactivation";
+    const bool stale = scenario == "stale_generation" || replay;
+    const bool retire = scenario == "retire_stale";
+    require(stale || retire || aborted || prepared || write_failure ||
+                scenario == "pending_shutdown" || scenario == "expired_notifications" || scenario == "stale_handles", "known quarantine scenario");
+    std::mutex log_mutex;
+    std::vector<std::string> log_lines;
+    StructuredLog log([&](const std::string& line) {
+        std::lock_guard<std::mutex> lock(log_mutex); log_lines.push_back(line);
+    });
+    auto options = make_options(fixtures); options.log = &log;
+    TransactionHarness harness;
+    QuarantineDispatcher dispatcher;
+    auto box = std::make_shared<std::weak_ptr<GenerationPool>>();
+    std::shared_ptr<QuarantineRequest> request;
+    std::atomic<bool> posted{false};
+    bool configure_async = write_failure, during_prepare = false, queue_old = false;
+    wire_admin_transactions(&options, &harness, [&](const auto& outcome, auto& pool_options) {
+        if (!configure_async) return;
+        request = std::make_shared<QuarantineRequest>(&options, outcome.generation_digest, [&, box] {
+            std::lock_guard<std::mutex> lock(harness.mutex);
+            return harness.active_pool && !box->owner_before(harness.active_pool) &&
+                   !harness.active_pool.owner_before(*box);
+        });
+        pool_options.recovery.max_events = 1;
+        pool_options.quarantine_completion = std::shared_ptr<const std::atomic<bool>>(request, &request->completed);
+        pool_options.on_quarantine = [&, task = request] { dispatcher.enqueue(task); posted.store(true); };
+    });
+    auto original_prepare = options.prepare_activation;
+    std::string active_before;
+    const auto active_path = fixtures.state_root + "/apps/orders/active.json";
+    const auto exhaust = [&](const std::shared_ptr<GenerationPool>& pool,
+                             const std::function<void()>& before_quarantine = {}) {
+        auto* first = pool->current_worker();
+        require(pool->recycle_worker(first), "first actual recycle accepted");
+        require(wait_for([&] { return first->exited() && pool->ready_workers() == 1 &&
+                                      pool->current_worker() != first; }, std::chrono::seconds(20 * kTestWaitScale)),
+                "quarantine fixture replacement is READY and original reaped");
+        generation_round_trip(*pool, 17002, prepared || aborted ? "managed-v2" : "managed-ok");
+        if (before_quarantine) before_quarantine();
+        auto* second = pool->current_worker();
+        require(pool->recycle_worker(second), "second actual recycle exhausts the budget");
+        require(wait_for([&] { return posted.load(); }, std::chrono::seconds(10 * kTestWaitScale)),
+                "pool queues its durable quarantine request");
+        return second;
+    };
+    options.prepare_activation = [&](const std::string& application, const DeployOutcome& outcome, std::string* error) {
+        auto plan = original_prepare(application, outcome, error);
+        require(plan != nullptr, "prepare actual quarantine generation");
+        if (configure_async) {
+            std::lock_guard<std::mutex> lock(harness.mutex); *box = plan->new_pool;
+        }
+        if (queue_old) dispatcher.enqueue(request);
+        if (during_prepare) {
+            auto* target = exhaust(plan->new_pool);
+            const bool exited_pending = wait_for([&] { return target->exited(); },
+                                                std::chrono::milliseconds(500 * kTestWaitScale));
+            require(!request->completed.load() && !exited_pending && !target->exit_status().observed,
+                    "App lock holds persistence; quarantine must not shut down its live target yet");
+            if (aborted) {
+                require(remove(active_path.c_str()) == 0 && mkdir(active_path.c_str(), 0700) == 0,
+                        "deny the actual activation rename after prepare");
+            }
+        }
+        return plan;
+    };
+    write_file(fixtures.vdir + "/bundle.mjs", "export default {fetch(){return new Response('managed-ok');}};");
+    create_version(fixtures, "v2", kMinimalAppConfig, "export default {fetch(){return new Response('managed-v2');}};");
+    OperationStatus status;
+    const auto first = managed_deploy(&options, "v1", &status);
+    require(first.ok && harness.active_pool, "initial real quarantine fixture deploy");
+    auto old_pool = harness.active_pool;
+    generation_round_trip(*old_pool, 17001);
+    active_before = read_file(active_path);
+    bool contract = true;
+    if (scenario == "stale_handles") {
+        const auto directory = fixtures.state_root + "/apps/orders";
+        const auto before = open_directory_handles(directory);
+        unsigned guard_calls = 0;
+        for (unsigned i = 0; i < 100; ++i) {
+            OperationStatus skipped_status;
+            const auto skipped = managed_quarantine(&options, first.generation_digest, &skipped_status,
+                [&] { ++guard_calls; return false; });
+            contract = contract && skipped.ok;
+        }
+        const auto after = open_directory_handles(directory);
+        std::cout << "QUARANTINE_DIRECTORY_HANDLES {\"attempts\":100,\"before\":" << before
+                  << ",\"after\":" << after << ",\"guardCalls\":" << guard_calls << "}" << std::endl;
+        contract = contract && guard_calls == 100 && before == after && read_file(active_path) == active_before;
+    } else if (stale || retire) {
+        const std::weak_ptr<GenerationPool> identity = old_pool;
+        request = std::make_shared<QuarantineRequest>(&options, first.generation_digest,
+            [&, identity] {
+                if (!replay && !retire) return true; // isolate the digest guard for a different generation
+                std::lock_guard<std::mutex> lock(harness.mutex);
+                return harness.active_pool && !identity.owner_before(harness.active_pool) &&
+                       !harness.active_pool.owner_before(identity);
+            });
+        if (retire) {
+            auto original_retire = options.prepare_retire;
+            options.prepare_retire = [&](const std::string& app, std::string* error) {
+                auto plan = original_retire(app, error); dispatcher.enqueue(request); return plan;
+            };
+            require(managed_retire(&options, &status).ok, "retire while old quarantine request is queued");
+        } else {
+            queue_old = true;
+            const auto next = managed_deploy(&options, replay ? "v1" : "v2", &status);
+            require(next.ok && harness.active_pool != old_pool, "new activation owns a distinct actual pool");
+            require((next.generation_digest == first.generation_digest) == replay, "same/different generation fixture identity");
+            generation_round_trip(*harness.active_pool, 17003, replay ? "managed-ok" : "managed-v2");
+        }
+        require(wait_for([&] { return request->completed.load(); }, std::chrono::seconds(10 * kTestWaitScale)), "queued old request completes");
+        const auto lifecycle = managed_read_lifecycle(&options);
+        contract = request->result().ok && lifecycle.ok && lifecycle.state.phase ==
+                    (retire ? ServiceLifecyclePhase::kRetired : ServiceLifecyclePhase::kActive);
+    } else if (aborted || prepared) {
+        configure_async = during_prepare = true;
+        const auto next = managed_deploy(&options, "v2", &status);
+        require(next.ok != aborted, "prepared quarantine deploy has the expected actual persist result");
+        // An aborted candidate must be joinable before this App operation
+        // returns, even while its queued management write awaits that lock.
+        if (aborted) {
+            require(rmdir(active_path.c_str()) == 0, "remove persist-failure directory");
+            write_file(active_path, active_before);
+            generation_round_trip(*old_pool, 17003);
+        }
+        require(wait_for([&] { return request->completed.load(); }, std::chrono::seconds(10 * kTestWaitScale)), "prepared request settles after App lock release");
+        const auto lifecycle = managed_read_lifecycle(&options);
+        contract = request->result().ok && lifecycle.ok && lifecycle.state.phase ==
+                    (aborted ? ServiceLifecyclePhase::kActive : ServiceLifecyclePhase::kQuarantined);
+        if (prepared) {
+            require(wait_for([&] { return harness.active_pool->state() == GenerationPool::State::kDead; },
+                             std::chrono::seconds(10 * kTestWaitScale)), "durable quarantine itself drains the committed pool");
+            const auto recovered = managed_recover(&options, &status);
+            contract = contract && recovered.ok && recovered.workers.empty();
+        }
+    } else if (write_failure) {
+        // Fail the real write (EFBIG), while active.json remains readable.
+        struct rlimit saved{}; require(getrlimit(RLIMIT_FSIZE, &saved) == 0, "read file-size limit");
+        const auto previous_handler = signal(SIGXFSZ, SIG_IGN);
+        struct rlimit limited = saved; limited.rlim_cur = 0;
+        exhaust(old_pool, [&] {
+            require(setrlimit(RLIMIT_FSIZE, &limited) == 0, "bound this test process's actual file writes");
+        });
+        const bool completed = wait_for([&] { return request->completed.load(); }, std::chrono::seconds(10 * kTestWaitScale));
+        require(setrlimit(RLIMIT_FSIZE, &saved) == 0, "restore this test process's file-size limit");
+        signal(SIGXFSZ, previous_handler);
+        require(completed, "failed durable write still completes its barrier");
+        const auto outcome = request->result();
+        contract = !outcome.ok && outcome.error.find("persist") != std::string::npos && read_file(active_path) == active_before;
+        require(wait_for([&] { return old_pool->state() == GenerationPool::State::kDead; },
+                         std::chrono::seconds(10 * kTestWaitScale)), "write failure stops in-memory quarantine without fabricating durable success");
+        log.flush();
+        std::lock_guard<std::mutex> lock(log_mutex);
+        contract = contract && std::any_of(log_lines.begin(), log_lines.end(), [](const auto& line) {
+            return line.find("\"event\":\"quarantine\"") != std::string::npos && line.find("\"result\":\"fail\"") != std::string::npos;
+        });
+    } else if (scenario == "pending_shutdown") {
+        auto app_lock = std::make_unique<AppOperationLock>("orders");
+        request = std::make_shared<QuarantineRequest>(&options, first.generation_digest, [] { return true; });
+        dispatcher.enqueue(request);
+        std::atomic<bool> joined{false};
+        std::thread stop([&] { dispatcher.stop_and_join(); joined.store(true); });
+        require(!request->completed.load(), "App lock keeps the real queued write pending");
+        app_lock.reset(); stop.join();
+        contract = joined.load() && request->completed.load() && request->result().ok &&
+                   managed_read_lifecycle(&options).state.phase == ServiceLifecyclePhase::kQuarantined;
+    } else {
+        std::mutex gate_mutex; std::condition_variable gate_cv; bool entered = false, release = false;
+        request = std::make_shared<QuarantineRequest>(&options, first.generation_digest, [&] {
+            std::unique_lock<std::mutex> lock(gate_mutex); entered = true; gate_cv.notify_all();
+            gate_cv.wait(lock, [&] { return release; }); return false;
+        });
+        dispatcher.enqueue(request);
+        { std::unique_lock<std::mutex> lock(gate_mutex); require(gate_cv.wait_for(lock, std::chrono::seconds(10), [&] { return entered; }), "management worker reaches its controlled pause"); }
+        for (unsigned i = 0; i < 100; ++i) {
+            auto expired = std::make_shared<QuarantineRequest>(&options, first.generation_digest, [] { return false; });
+            const std::weak_ptr<QuarantineRequest> weak = expired; dispatcher.enqueue(expired); expired.reset();
+            contract = contract && weak.expired();
+        }
+        { std::lock_guard<std::mutex> lock(gate_mutex); release = true; } gate_cv.notify_all();
+        dispatcher.stop_and_join();
+        contract = contract && request->completed.load() && read_file(active_path) == active_before;
+    }
+    if (harness.active_pool) harness.active_pool->stop_and_join();
+    old_pool->stop_and_join(); dispatcher.stop_and_join();
+    for (const auto& observed : harness.generations) observed->require_completed(observed->count());
+    require(contract, "scoped durable quarantine contract: " + scenario);
+    std::cout << "PASS: scoped durable quarantine " << scenario << std::endl;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -838,6 +1162,53 @@ int main(int argc, char** argv) {
     Fixtures fixtures = make_fixtures(worker_path, compiler_tool, fixture_source);
     write_file(fixtures.vdir + "/capsid.json", kMinimalAppConfig);
     write_file(fixtures.vdir + "/bundle.mjs", kSourceBundle);
+
+    if (mode.rfind("host_managed_quarantine_", 0) == 0) {
+        test_quarantine_ordering(mode, fixtures); return 0;
+    }
+    if (mode == "host_managed_prepare_failure_capacity" || mode == "host_managed_misconfigured_activation_capacity") {
+        const bool misconfigured = mode == "host_managed_misconfigured_activation_capacity";
+        const auto pid_log = fixtures.vdir + "/prepare-owned-pids.log";
+        const auto wrapper = fixtures.vdir + "/prepare-real-worker";
+        write_file(wrapper, "#!/bin/sh\nprintf '%s\\n' \"$$\" >> '" + pid_log + "'\nexec '" + fixtures.worker_path + "' \"$@\"\n");
+        require(chmod(wrapper.c_str(), 0700) == 0, "make real Worker PID observation wrapper executable");
+        auto options = make_options(fixtures); options.worker_path = wrapper;
+        capsid::host::WorkerCapacityLedger ledger(1, 1); options.ledger = &ledger;
+        bool called = false;
+        options.prepare_activation = [&](const std::string& app, const auto& prepared, std::string* error)
+            -> std::unique_ptr<capsid::host::ActivationPlan> {
+            called = true;
+            capsid::host::GenerationPoolOptions pool_options;
+            pool_options.application_id = app; pool_options.version = prepared.version;
+            pool_options.generation_digest = prepared.generation_digest; pool_options.workers = 1;
+            pool_options.factory = prepared.generation_factory; pool_options.recovery = generation_recovery_policy();
+            ManagedPoolObservation observation; observation.wire(&pool_options);
+            auto pool = capsid::host::GenerationPool::create_adopted(std::move(pool_options), outcome_workers(prepared), error);
+            require(pool != nullptr, "adopt real warmed worker before a refused prepare");
+            pool->stop_and_join(); observation.require_completed(1);
+            require(ledger.steady_used() == 1, "coordinator still owns the warm reservation until prepare returns");
+            *error = "deliberately refused activation"; return nullptr;
+        };
+        options.abort_activation = [](auto*) {};
+        if (!misconfigured) options.commit_activation = [](auto*) {};
+        capsid::host::OperationStatus status;
+        require(!capsid::host::managed_deploy(&options, "v1", &status).ok, "failed prepare cannot activate the App");
+        require(called != misconfigured, "misconfigured transaction must be rejected before prepare");
+        require(ledger.steady_used() == 0 && ledger.surge_used() == 0, "failed prepare returns its held capacity after actual cleanup");
+        std::istringstream pids(read_file(pid_log)); std::int64_t pid = -1; pids >> pid;
+        require(pid > 0, "failed activation really spawned a Worker");
+        int child_status = 0; pid_t child;
+        do { child = waitpid(static_cast<pid_t>(pid), &child_status, WNOHANG); } while (child < 0 && errno == EINTR);
+        require(child == -1 && errno == ECHILD, "failed prepare's Worker was already collected by the product");
+        if (misconfigured) std::cout << "PREPARE_REAP {\"pid\":" << pid << ",\"reapedByProduct\":true,\"exitStatusAvailable\":false}" << std::endl;
+        TransactionHarness harness; wire_admin_transactions(&options, &harness);
+        const auto retried = capsid::host::managed_deploy(&options, "v1", &status);
+        require(retried.ok && harness.active_pool, "returned capacity permits a real idempotent retry");
+        generation_round_trip(*harness.active_pool, 18001);
+        harness.active_pool->stop_and_join(); harness.generations.at(0)->require_completed(1);
+        require(ledger.steady_used() == 0 && ledger.surge_used() == 0, "retry releases capacity after its own actual reap");
+        std::cout << "PASS: activation preparation failure releases actual capacity" << std::endl; return 0;
+    }
 
     if (mode == "host_managed_deploy_integration") {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
@@ -1017,6 +1388,7 @@ int main(int argc, char** argv) {
                     deployed.generation_digest.size() == 71,
                 "deploy outcome lost the generation digest");
 
+        ManagedPoolObservation observation;
         capsid::host::GenerationPoolOptions pool_options;
         pool_options.application_id = "orders";
         pool_options.version = deployed.version;
@@ -1025,6 +1397,7 @@ int main(int argc, char** argv) {
             static_cast<std::uint32_t>(deployed_workers.size());
         pool_options.factory = deployed.generation_factory;
         pool_options.recovery = generation_recovery_policy();
+        observation.wire(&pool_options);
         std::string pool_error;
         std::shared_ptr<capsid::host::GenerationPool> pool =
             capsid::host::GenerationPool::create_adopted(
@@ -1033,21 +1406,195 @@ int main(int argc, char** argv) {
         require(pool->ready_workers() == 3,
                 "adopted pool is not fully READY");
 
-        generation_round_trip(*pool, 1001);
+        auto* original = generation_round_trip(*pool, 1001);
+        require(!original->exit_status().observed && !original->exit_status().clean(),
+                "a live Managed Worker must not report an observed exit");
+        std::int64_t killed_pid = -1;
 
 #if defined(__linux__)
         // Kill one worker child: the pool must respawn it through the
         // GENERATION factory (the deploy's own artifact/config) and return
         // to full READY capacity.
-        generation_kill_worker_child();
-        require(wait_for([&] { return pool->ready_workers() == 3; },
+        killed_pid = observation.pid_of(original);
+        require(kill(static_cast<pid_t>(killed_pid), SIGKILL) == 0,
+                "cannot stop the specifically observed Managed Worker");
+        require(wait_for([&] {
+                    return original->exited() && observation.count() == 4 &&
+                           pool->ready_workers() == 3 && pool->current_worker() != original;
+                },
                          std::chrono::seconds(20 * kTestWaitScale)),
                 "replacement through the generation factory did not restore "
-                "full READY capacity");
-        generation_round_trip(*pool, 1002);  // the replacement serves
+                "full READY capacity with a distinct Worker after the original exit");
+        require(generation_round_trip(*pool, 1002) != original,
+                "the replacement response came from the original Worker");
 #endif  // __linux__
 
         pool->stop_and_join();
+        observation.require_completed(4, killed_pid);
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_admin_generation_replacement_exit_status" ||
+        mode == "host_managed_admin_fixed_generation_replacement_exit_status") {
+        const bool fixed = mode == "host_managed_admin_fixed_generation_replacement_exit_status";
+        const std::size_t count = fixed ? 3 : 1;
+        const char* config = fixed ? kThreeWorkerAppConfig : kMinimalAppConfig;
+        write_file(fixtures.vdir + "/capsid.json", config);
+        create_version(fixtures, "v2", config,
+                       "export default {fetch: () => new Response('managed-v2')};");
+        auto options = make_options(fixtures);
+        options.host_policy.max_workers = static_cast<std::uint32_t>(count);
+        std::vector<capsid::host::ManagedHostOptions*> applications{&options};
+        capsid::host::ManagedAdminBackend managed(applications);
+        TransactionHarness harness;
+        wire_admin_transactions(&options, &harness);
+        capsid::host::AsyncAdminBackendOptions async_options;
+        async_options.max_pending_operations = 2;
+        capsid::host::AsyncAdminBackend backend(&managed, async_options);
+        capsid::host::OperationStatus submitted;
+        const auto first = backend.deploy("orders", "v1", &submitted);
+        require(first.ok && wait_admin_operation(&backend, first.operation_id).state ==
+                               capsid::host::OperationState::kActive,
+                "initial Admin generation did not activate");
+        std::shared_ptr<capsid::host::GenerationPool> old_pool;
+        {
+            std::lock_guard<std::mutex> lock(harness.mutex);
+            old_pool = harness.active_pool;
+        }
+        require(old_pool != nullptr && old_pool->ready_workers() == count, "initial full Managed fleet");
+        generation_round_trip(*old_pool, 8001);
+        const auto second = backend.deploy("orders", "v2", &submitted);
+        require(second.ok && wait_admin_operation(&backend, second.operation_id).state ==
+                                capsid::host::OperationState::kActive,
+                "replacement Admin generation did not activate");
+        std::shared_ptr<capsid::host::GenerationPool> new_pool;
+        {
+            std::lock_guard<std::mutex> lock(harness.mutex);
+            new_pool = harness.active_pool;
+        }
+        require(new_pool != nullptr && new_pool != old_pool && new_pool->version() == "v2" &&
+                    new_pool->generation_digest() != old_pool->generation_digest(),
+                "Admin replacement must publish the distinct new generation");
+        require(wait_for([&] { return old_pool->state() == capsid::host::GenerationPool::State::kDead; },
+                         std::chrono::seconds(10 * kTestWaitScale)),
+                "activation commit must itself drain the previous generation");
+        std::string error;
+        require(old_pool->wait(&error), "join old Managed generation");
+        harness.generations.at(0)->require_completed(count);
+        generation_round_trip(*new_pool, 8002, "managed-v2");
+        const auto retired = backend.retire("orders", &submitted);
+        require(retired.ok && wait_admin_operation(&backend, retired.operation_id).state ==
+                                 capsid::host::OperationState::kActive,
+                "Admin retire of the replacement did not complete");
+        require(wait_for([&] { return new_pool->state() == capsid::host::GenerationPool::State::kDead; },
+                         std::chrono::seconds(10 * kTestWaitScale)),
+                "retire commit must itself drain the replacement generation");
+        require(new_pool->wait(&error), "join retired Managed generation");
+        require(harness.generations.size() == 2, "exactly two Admin generation preparations");
+        harness.generations.at(1)->require_completed(count);
+        require(capsid::host::managed_read_lifecycle(&options).state.phase ==
+                    capsid::host::ServiceLifecyclePhase::kRetired,
+                "Admin retire must retain the durable lifecycle tombstone");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_managed_request_cancel_exit_status" ||
+        mode == "host_managed_fixed_request_cancel_exit_status" ||
+        mode == "host_managed_health_recycle_quarantine_exit_status") {
+        const bool recycle = mode == "host_managed_health_recycle_quarantine_exit_status";
+        const std::size_t count = mode == "host_managed_request_cancel_exit_status" ? 1 : 3;
+        write_file(fixtures.vdir + "/capsid.json", count == 1 ? kMinimalAppConfig : kThreeWorkerAppConfig);
+        write_file(fixtures.vdir + "/bundle.mjs",
+                   "export default {fetch(request) {"
+                   "if(new URL(request.url).pathname === '/held') {"
+                   "console.log('managed-held'); return new Promise(() => {}); }"
+                   "return new Response('managed-ok'); }};");
+        auto options = make_options(fixtures);
+        options.host_policy.max_workers = static_cast<std::uint32_t>(count);
+        capsid::host::OperationStatus status;
+        const auto deployed = capsid::host::managed_deploy(&options, "v1", &status);
+        require(deployed.ok, "deploy actual Managed lifecycle fixture: " + deployed.error);
+        ManagedPoolObservation observation;
+        capsid::host::GenerationPoolOptions pool_options;
+        pool_options.application_id = "orders";
+        pool_options.version = deployed.version;
+        pool_options.generation_digest = deployed.generation_digest;
+        pool_options.workers = static_cast<std::uint32_t>(count);
+        pool_options.factory = deployed.generation_factory;
+        pool_options.recovery = generation_recovery_policy();
+        pool_options.recovery.max_events = 1;
+        observation.wire(&pool_options);
+        std::atomic<unsigned> quarantines{0};
+        std::atomic<bool> persisted{false};
+        pool_options.on_quarantine = [&] {
+            capsid::host::OperationStatus quarantine_status;
+            persisted = capsid::host::managed_quarantine(&options, deployed.generation_digest, &quarantine_status).ok;
+            ++quarantines;
+        };
+        std::string error;
+        auto pool = capsid::host::GenerationPool::create_adopted(
+            std::move(pool_options), outcome_workers(deployed), &error);
+        require(pool != nullptr && observation.count() == count, "adopt actual Managed lifecycle fleet: " + error);
+        auto* target = generation_round_trip(*pool, 9001);
+        require(!target->exit_status().observed && !target->exit_status().clean(),
+                "live Managed executor must retain unknown OS exit status");
+        if (recycle) {
+            require(pool->recycle_worker(target), "first active-health recycle was not recorded");
+            require(wait_for([&] {
+                        return target->exited() && observation.count() == count + 1 &&
+                               pool->ready_workers() == count && pool->current_worker() != target;
+                    }, std::chrono::seconds(20 * kTestWaitScale)),
+                    "health recycle must replace its exact target and restore the fleet");
+            require(target->exit_status().clean(), "health recycle must preserve natural OS exit zero");
+            require(generation_round_trip(*pool, 9002) != target, "health replacement must actually serve");
+            require(!pool->recycle_worker(target), "stale health target must not charge the budget again");
+            require(pool->recycle_worker(pool->current_worker()), "second health recycle must exhaust the budget");
+            require(wait_for([&] { return pool->state() == capsid::host::GenerationPool::State::kDead; },
+                             std::chrono::seconds(10 * kTestWaitScale)),
+                    "quarantine must itself stop the full Managed fleet");
+            require(pool->wait(&error), "join quarantined Managed fleet");
+            require(quarantines == 1 && persisted, "one durable Managed quarantine callback");
+            const auto lifecycle = capsid::host::managed_read_lifecycle(&options);
+            require(lifecycle.ok && lifecycle.state.phase == capsid::host::ServiceLifecyclePhase::kQuarantined &&
+                        lifecycle.state.document.has_value() &&
+                        lifecycle.state.document->generation == deployed.generation_digest,
+                    "quarantine must retain the actual generation tombstone");
+            observation.require_completed(count + 1);
+            pool->stop_and_join();
+            require(observation.count() == count + 1 && quarantines == 1,
+                    "completed quarantine must not spawn or notify again");
+        } else {
+            auto entered = std::make_shared<std::atomic<bool>>(false);
+            pool->set_event_sink([entered, target](const auto* executor, auto event) {
+                if (executor == target && event.type == capsid::host::WorkerEvent::Type::kLog &&
+                    event.text.find("managed-held") != std::string::npos) *entered = true;
+            });
+            capsid::host::Command begin;
+            begin.type = capsid::host::CommandType::kBeginRequest;
+            begin.request_id = 9003;
+            begin.method = "GET";
+            begin.url = "https://pool.invalid/held";
+            begin.end_request = true;
+            target->submit(std::move(begin));
+            require(wait_for([&] { return entered->load(); }, std::chrono::seconds(5 * kTestWaitScale)),
+                    "held request must actually enter the Worker before cancel");
+            require(target->inflight() == 1 && !target->exit_status().observed,
+                    "cancel starts with one live, actually dispatched request");
+            target->mark_canceled(9003);
+            capsid::host::Command cancel;
+            cancel.type = capsid::host::CommandType::kCancel;
+            cancel.request_id = 9003;
+            target->submit(std::move(cancel));
+            require(generation_round_trip(*pool, 9004) == target,
+                    "the same actual Worker must serve after request cancellation");
+            require(pool->inflight() == 0 && pool->ready_workers() == count && observation.count() == count &&
+                        !target->exit_status().observed && quarantines == 0,
+                    "request cancellation must not impersonate process exit, replacement or quarantine");
+            pool->stop_and_join();
+            observation.require_completed(count);
+        }
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1281,6 +1828,7 @@ int main(int argc, char** argv) {
         require(committed->state() ==
                     capsid::host::GenerationPool::State::kDead,
                 "retired pool did not reach kDead");
+        harness.generations.at(0)->require_completed(3);
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1347,6 +1895,7 @@ int main(int argc, char** argv) {
         require(committed->state() ==
                     capsid::host::GenerationPool::State::kDead,
                 "retired Admin worker did not reach kDead");
+        harness.generations.at(0)->require_completed(1);
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -1988,6 +2537,25 @@ int main(int argc, char** argv) {
         require(replay.ok,
                 "idempotent v1 redeploy failed after the aborted v2: " +
                     replay.error);
+        std::shared_ptr<capsid::host::GenerationPool> replay_pool;
+        {
+            std::lock_guard<std::mutex> lock(harness.mutex);
+            replay_pool = harness.active_pool;
+        }
+        require(replay_pool != nullptr && replay_pool != v1_pool,
+                "idempotent redeploy must reactivate its own warmed pool");
+        generation_round_trip(*replay_pool, 7003);
+        require(wait_for([&] { return v1_pool->state() == capsid::host::GenerationPool::State::kDead; },
+                         std::chrono::seconds(10 * kTestWaitScale)),
+                "idempotent reactivation must drain its preceding pool");
+        std::string drain_error;
+        require(v1_pool->wait(&drain_error), "join previous v1 pool after reactivation");
+        replay_pool->stop_and_join();
+        require(harness.generations.size() == 3,
+                "persist failure and reactivation must prepare exactly three pools");
+        harness.generations.at(0)->require_completed(1);
+        harness.generations.at(1)->require_completed(1);
+        harness.generations.at(2)->require_completed(1);
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -2314,6 +2882,9 @@ int main(int argc, char** argv) {
                 "first retire failed: " + first.error);
         const std::string tombstone = read_file(
             fixtures.state_root + "/apps/orders/active.json");
+        const std::string inactive = "{\"active\":false,\"app\":\"orders\"}";
+        require(capsid::host::managed_app_status(options) == inactive,
+                "retired App status must omit empty active identity fields");
 
         capsid::host::OperationStatus second_status;
         const capsid::host::DeployOutcome second =
@@ -2325,6 +2896,8 @@ int main(int argc, char** argv) {
         require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
                     tombstone,
                 "idempotent retire changed the canonical tombstone");
+        require(capsid::host::managed_app_status(options) == inactive,
+                "idempotent retire must preserve canonical inactive status");
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -2945,15 +3518,15 @@ int main(int argc, char** argv) {
     }
 
     if (mode == "host_managed_recovery_rejects_oversized_snapshot") {
-#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
-        // The deterministic Release probe constrains its child with
-        // RLIMIT_AS so an unbounded reader cannot consume host memory.
-        // ASan reserves a huge shadow range and is fundamentally
-        // incompatible with that limit; TSan likewise fails its internal
-        // allocator under the ceiling. The same production read helper is
-        // exercised by the FIFO/type test in this build.
-        std::cout << "PASS" << std::endl;
-        return 0;
+#if defined(__SANITIZE_ADDRESS__) || CAPSID_TEST_TSAN_BUILD
+        // This oracle constrains its child with a finite RLIMIT_AS. Keep
+        // the existing GCC ASan exemption and handle TSan's shadow allocator
+        // explicitly: it can fail before recovery under that ceiling.
+        // Report unavailable coverage rather than PASS. Release, UBSan and
+        // the supported Clang ASan path retain the original bounded probe.
+        std::cout << "SKIP: finite RLIMIT_AS recovery probe is unavailable "
+                     "with this sanitizer runtime" << std::endl;
+        return 77;
 #else
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus deploy_status;
@@ -3579,7 +4152,7 @@ int main(int argc, char** argv) {
 
     if (mode ==
         "host_managed_process_address_space_reaches_release_runtime") {
-#if defined(__SANITIZE_ADDRESS__) || CAPSID_TEST_TSAN_BUILD
+#if CAPSID_TEST_ASAN_BUILD || CAPSID_TEST_TSAN_BUILD
         // A finite RLIMIT_AS is incompatible with ASan's shadow-memory
         // reservation. The production Release path remains required to
         // forward this field; its sanitizer build is covered by the

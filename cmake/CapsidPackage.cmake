@@ -40,6 +40,22 @@ install(EXPORT CapsidTargets
     DESTINATION lib/cmake/Capsid
     FILE CapsidTargets.cmake)
 
+# A targets export alone is not discoverable by find_package(Capsid).
+# Keep both the config and the optional ASan runtime relative to the prefix.
+include(CMakePackageConfigHelpers)
+include("${CMAKE_CURRENT_LIST_DIR}/WindowsAsanRuntime.cmake")
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CapsidConfig.cmake.in"
+    "${CAPSID_GENERATED_DIR}/CapsidConfig.cmake"
+    INSTALL_DESTINATION lib/cmake/Capsid)
+write_basic_package_version_file(
+    "${CAPSID_GENERATED_DIR}/CapsidConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}" COMPATIBILITY SameMinorVersion)
+install(FILES
+    "${CAPSID_GENERATED_DIR}/CapsidConfig.cmake"
+    "${CAPSID_GENERATED_DIR}/CapsidConfigVersion.cmake"
+    DESTINATION lib/cmake/Capsid)
+
 install(FILES
     include/capsid/runtime.h
     include/capsid/runtime.hpp
@@ -60,6 +76,18 @@ install(FILES
     DESTINATION share/doc/capsid)
 
 install(FILES LICENSE DESTINATION share/licenses/capsid)
+if(TARGET capsid-worker)
+    install(FILES licenses/web-streams-polyfill/LICENSE
+        DESTINATION share/licenses/capsid/web-streams-polyfill)
+endif()
+if(TARGET capsid-host AND CAPSID_CARES_TARGET)
+    install(FILES
+        licenses/c-ares/LICENSE.md
+        licenses/c-ares/AUTHORS
+        licenses/c-ares/SOURCE.txt
+        DESTINATION share/licenses/capsid/c-ares
+        COMPONENT HostDnsNotices)
+endif()
 
 # Identity artifacts are generated at configure time (spec §12.3): the
 # package ships build-info.txt (identity summary + both canonical records)

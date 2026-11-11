@@ -1,0 +1,23 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -1421,13 +1421,13 @@
+             maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+             tjs_httpclient_done(h);
+ 
+-            /* Mark the wsi to be killed at the next timeout check.  abort()
+-             * is reachable from inside a lws callback for this very wsi (JS
+-             * reads the response body, which runs under
+-             * RECEIVE_CLIENT_HTTP_READ, and aborts from there).  A synchronous
+-             * kill frees the wsi while lws is still servicing it, and lws
+-             * touches wsi again after the callback returns. */
+-            lws_set_timeout(wsi, PENDING_TIMEOUT_USER_OK, LWS_TO_KILL_ASYNC);
++            /* Use the independent application timer: queued connection or
++             * handshake progress can overwrite the protocol-state timeout
++             * after abort() returns, losing an asynchronous close set there.
++             * TIMER sees completed=true, tears down and returns -1. It runs
++             * outside the current lws callback, so aborts from ondata remain
++             * safe as well. */
++            lws_set_timer_usecs(wsi, 1);
+         }
+     }
+ 

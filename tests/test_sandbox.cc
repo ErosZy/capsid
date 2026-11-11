@@ -29,6 +29,17 @@
 #include <unistd.h>
 #endif
 
+#if defined(__SANITIZE_THREAD__)
+#define CAPSID_TEST_TSAN_BUILD 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define CAPSID_TEST_TSAN_BUILD 1
+#endif
+#endif
+#if !defined(CAPSID_TEST_TSAN_BUILD)
+#define CAPSID_TEST_TSAN_BUILD 0
+#endif
+
 namespace {
 
 void fail(const std::string &message) {
@@ -44,16 +55,40 @@ void require(bool condition, const char *message) {
 
 #if defined(__linux__)
 
-int verify_permanent_denies(int base) {
+// The diagnostic profile needs process creation for sanitizer tracing. Verify
+// that allowance explicitly; the production profile must still deny fork.
+bool fork_matches_profile() {
     errno = 0;
     const pid_t child = fork();
-    if (child >= 0 || errno != EPERM) {
-        if (child == 0) {
-            _exit(0);
-        }
-        if (child > 0) {
-            waitpid(child, NULL, 0);
-        }
+    if (child == 0) {
+        _exit(0);
+    }
+#if defined(CAPSID_SANITIZER_SANDBOX)
+    if (child < 0) {
+        return false;
+    }
+    int status = 0;
+    return waitpid(child, &status, 0) == child && WIFEXITED(status) &&
+        WEXITSTATUS(status) == 0;
+#else
+    if (child > 0) {
+        waitpid(child, NULL, 0);
+    }
+    return child < 0 && errno == EPERM;
+#endif
+}
+
+bool executable_memory_matches_profile(bool succeeded, int failure_errno) {
+#if defined(CAPSID_SANITIZER_SANDBOX)
+    (void) failure_errno;
+    return succeeded;
+#else
+    return !succeeded && failure_errno == EPERM;
+#endif
+}
+
+int verify_permanent_denies(int base) {
+    if (!fork_matches_profile()) {
         return base + 1;
     }
 
@@ -102,10 +137,12 @@ int verify_permanent_denies(int base) {
         MAP_PRIVATE | MAP_ANONYMOUS,
         -1,
         0));
-    if (executable != MAP_FAILED || errno != EPERM) {
-        if (executable != MAP_FAILED) {
-            munmap(executable, 4096);
-        }
+    const bool executable_matches = executable_memory_matches_profile(
+        executable != MAP_FAILED, errno);
+    if (executable != MAP_FAILED) {
+        munmap(executable, 4096);
+    }
+    if (!executable_matches) {
         return base + 6;
     }
     return 0;
@@ -115,6 +152,11 @@ int apply_binding_profile(
     const std::vector<std::string> &profiles,
     const std::vector<std::string> &read_paths,
     const std::vector<std::string> &write_paths) {
+    const uint32_t available_abi = capsid::query_landlock_abi();
+    if (available_abi == 0 || (!write_paths.empty() && available_abi < 3)) {
+        std::cerr << "required Landlock ABI is unavailable" << std::endl;
+        return 77;
+    }
     capsid::SandboxConfig config;
     config.address_space_limit = 0;
     config.file_descriptor_limit = 64;
@@ -131,8 +173,8 @@ int apply_binding_profile(
     std::string error;
     if (!capsid::apply_sandbox(
             config, &features, &landlock_abi, &seccomp_mode, &error)) {
-        std::cerr << "binding sandbox unavailable: " << error << std::endl;
-        return 77;
+        std::cerr << "binding sandbox setup failed: " << error << std::endl;
+        return 1;
     }
     if ((features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) !=
             CAPSID_SANDBOX_FEATURE_STRICT_BASE ||
@@ -211,15 +253,7 @@ int run_linux_probe(const std::string &allowed_path,
     }
 #endif
 
-    errno = 0;
-    const pid_t child = fork();
-    if (child >= 0 || errno != EPERM) {
-        if (child == 0) {
-            _exit(0);
-        }
-        if (child > 0) {
-            waitpid(child, NULL, 0);
-        }
+    if (!fork_matches_profile()) {
         return 16;
     }
 
@@ -285,10 +319,12 @@ int run_linux_probe(const std::string &allowed_path,
         -1,
         0));
     const int executable_errno = errno;
-    if (executable != MAP_FAILED || executable_errno != EPERM) {
-        if (executable != MAP_FAILED) {
-            munmap(executable, 4096);
-        }
+    const bool executable_matches = executable_memory_matches_profile(
+        executable != MAP_FAILED, executable_errno);
+    if (executable != MAP_FAILED) {
+        munmap(executable, 4096);
+    }
+    if (!executable_matches) {
         return 23;
     }
 
@@ -310,7 +346,8 @@ int run_linux_probe(const std::string &allowed_path,
         PROT_READ | PROT_EXEC);
     const int protected_errno = errno;
     munmap(writable_mapping, 4096);
-    if (protected_result == 0 || protected_errno != EPERM) {
+    if (!executable_memory_matches_profile(
+            protected_result == 0, protected_errno)) {
         return 25;
     }
 
@@ -596,7 +633,35 @@ int binding_probe_listener_port = 0;
 
 int main(int argc, char **argv) {
 #if defined(__linux__)
+#if defined(CAPSID_SANITIZER_SANDBOX)
+    std::cout << "Sandbox probe profile: sanitizer (not production)" << std::endl;
+#else
+    std::cout << "Sandbox probe profile: production" << std::endl;
+#endif
+    if (argc == 2 && std::string(argv[1]) == "--binding-setup-error") {
+        if (capsid::query_landlock_abi() == 0) {
+            std::cerr << "Landlock is unavailable for the setup-error control"
+                      << std::endl;
+            return 77;
+        }
+        char directory[] = "/tmp/capsid-binding-setup-error-XXXXXX";
+        require(mkdtemp(directory) != NULL, "setup-error directory created");
+        const std::string missing = std::string(directory) + "/absent";
+        const int result = apply_binding_profile(
+            {"filesystem-read"}, {missing}, {});
+        rmdir(directory);
+        require(result == 1,
+                "missing fixture must fail setup, never pass or skip");
+        return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--namespaces") {
+#if CAPSID_TEST_TSAN_BUILD
+        // This CTest command already owns a dedicated process. TSan
+        // restarts a background thread after fork, making the child
+        // ineligible for unshare(CLONE_NEWUSER). Execute the same real
+        // namespace/profile/feature-mask probe before that extra fork.
+        return run_linux_namespace_probe();
+#else
         const pid_t pid = fork();
         require(pid >= 0, "namespace sandbox probe forked");
         if (pid == 0) {
@@ -610,6 +675,7 @@ int main(int argc, char **argv) {
             return WEXITSTATUS(status);
         }
         fail("namespace sandbox probe terminated by signal");
+#endif
     }
     if (argc == 3 && std::string(argv[1]) == "--binding-write") {
         const pid_t pid = fork();

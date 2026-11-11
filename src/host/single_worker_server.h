@@ -1,11 +1,14 @@
 #ifndef CAPSID_HOST_SINGLE_WORKER_SERVER_H
 #define CAPSID_HOST_SINGLE_WORKER_SERVER_H
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
 #include "host/host_config_model.h"
+#include "host/protocol_launch.h"
 #include "policy_compiler.h"
 #include "request_normalization.h"
+#include "worker_exit_status.h"
 
 #include <cstdint>
 #include <memory>
@@ -27,6 +30,17 @@ class Impl;
 // before the server is constructed.
 struct SingleWorkerServerOptions {
     std::string worker_path;
+    // GLM T08: protocol selection for first-party spawns (v4 carriage
+    // by default; a channels config additionally requests the channel
+    // capability set). Defaults construct the v4 carriage launch.
+    capsid::host::ProtocolLaunch protocol;
+    ChannelBudgetLimits channel_service_limits;
+    ChannelBudgetLimits channel_listener_limits{128,0,16u*1024u*1024u};
+    // Shared by a static pool's shards. Native callers may supply a common
+    // parent for several listeners; production limits are set before start.
+    std::shared_ptr<ServiceChannelBudget> channel_service_budget;
+    std::shared_ptr<ServiceChannelBudget> channel_listener_budget;
+    std::string channel_listener_name = "local";
     std::string source_bundle_path;
     std::string source_name;
     std::string application;
@@ -73,7 +87,7 @@ struct SingleWorkerServerOptions {
     bool write_ready_record = true;
     bool install_process_signals = true;
     bool so_reuseport = false;
-    // External-accept mode (Windows multi-shard static-pool): the shard
+    // External-accept mode (static-pool on every platform): the shard
     // spawns its worker and runs its session reactor, but does NOT bind or
     // accept a listener. The pool owns the single shared acceptor and hands
     // accepted sockets in through adopt_socket(). Mutually exclusive with
@@ -190,8 +204,25 @@ public:
     // External-accept mode only: hands an already-accepted, owned Asio
     // socket to this shard's io thread. Returns false when the shard is not
     // running or cannot take the connection; on false the socket is closed
-    // by the caller's move (or by its destructor).
+    // by the caller's move (or by its destructor). A socket accepted on
+    // another reactor is refused: its network callbacks would race this
+    // shard's Worker events on the same session state.
     bool adopt_socket(boost::asio::ip::tcp::socket socket);
+
+    // Transactional external admission for a pool selector. On false the
+    // caller retains the open socket, its handle and executor, so it may
+    // reselect another shard before starting request IO. On true ownership
+    // has moved to the queued owner handler; later exit/stop/drain may close
+    // it before request IO starts. A completed begin_drain call rejects new
+    // submissions even while its owner transition is still queued.
+    // The by-value adopt_socket wrapper retains its consuming behavior.
+    bool try_adopt_socket(boost::asio::ip::tcp::socket& socket);
+
+    // External-accept mode only: the reactor that must own sockets handed
+    // to adopt_socket(). The static pool arms async_accept with this
+    // executor so accepted peers are BORN on the shard's io thread —
+    // network callbacks and Worker events then share one reactor.
+    boost::asio::any_io_executor accept_executor();
 
     // M2 §7.5 bounded drain. Once the new pool has been published, the old
     // pool begins draining: the listener stops accepting new connections
@@ -215,6 +246,10 @@ public:
         std::uint64_t forced_cancellations = 0;
     };
     DrainMetrics drain_metrics() const;
+
+    // Thread-safe diagnostic snapshot, final after wait(). wait() reports
+    // Host cleanup; this separately reports the actual Worker OS exit.
+    capsid::WorkerExitStatus worker_exit_status() const;
 
 private:
     std::shared_ptr<Impl> impl_;

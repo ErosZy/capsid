@@ -32,6 +32,10 @@ endif()
 file(REMOVE_RECURSE "${CAPSID_TEST_WORK_DIR}")
 file(MAKE_DIRECTORY "${CAPSID_TEST_WORK_DIR}")
 
+if(NOT DEFINED CAPSID_EXPECT_RETAINED_TU_MARKERS)
+    set(CAPSID_EXPECT_RETAINED_TU_MARKERS OFF)
+endif()
+
 function(capsid_expect_audit_failure worker pattern label)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
@@ -40,6 +44,7 @@ function(capsid_expect_audit_failure worker pattern label)
             "-DCAPSID_NM=${CAPSID_NM}"
             "-DCAPSID_AR=${CAPSID_AR}"
             "-DCAPSID_EXPECT_LTO=${CAPSID_EXPECT_LTO}"
+            "-DCAPSID_EXPECT_RETAINED_TU_MARKERS=${CAPSID_EXPECT_RETAINED_TU_MARKERS}"
             -P "${CAPSID_AUDIT_SCRIPT}"
         RESULT_VARIABLE CAPSID_RESULT
         OUTPUT_VARIABLE CAPSID_STDOUT
@@ -127,6 +132,33 @@ if(CAPSID_ENABLE_BINARY_INJECTION)
         "${CAPSID_UNIT}"
         "forbidden translation unit is linked"
         "forbidden LTO translation unit")
+
+    if(CAPSID_EXPECT_RETAINED_TU_MARKERS)
+        set(CAPSID_RETAINED_UNIT "${CAPSID_TEST_WORK_DIR}/capsid-worker-retained-unit")
+        configure_file("${CAPSID_WORKER}" "${CAPSID_RETAINED_UNIT}" COPYONLY)
+        file(APPEND "${CAPSID_RETAINED_UNIT}"
+            "\ncapsid-restricted-tu:/audit-negative/mod_process.c\n")
+        capsid_expect_audit_failure(
+            "${CAPSID_RETAINED_UNIT}"
+            "forbidden translation unit is linked"
+            "forbidden retained translation unit")
+
+        set(CAPSID_NO_RETAINED "${CAPSID_TEST_WORK_DIR}/capsid-worker-without-retained-units")
+        configure_file("${CAPSID_WORKER}" "${CAPSID_NO_RETAINED}" COPYONLY)
+        execute_process(
+            COMMAND "${CAPSID_OBJCOPY}" --remove-section=.capsid.restricted_tu
+                "${CAPSID_NO_RETAINED}"
+            RESULT_VARIABLE CAPSID_OBJCOPY_RESULT
+            ERROR_VARIABLE CAPSID_OBJCOPY_ERROR)
+        if(NOT CAPSID_OBJCOPY_RESULT EQUAL 0)
+            message(FATAL_ERROR
+                "remove retained translation-unit records: ${CAPSID_OBJCOPY_ERROR}")
+        endif()
+        capsid_expect_audit_failure(
+            "${CAPSID_NO_RETAINED}"
+            "expected retained translation-unit markers"
+            "missing required retained translation-unit channel")
+    endif()
 
     message(STATUS
         "restricted worker audit rejects stripped, specifier, symbol, and TU injections")

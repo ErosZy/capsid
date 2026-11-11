@@ -1,0 +1,52 @@
+{
+  "schema": "capsid-native-reader-context-primary-lock-v1",
+  "profile": {
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": []
+  },
+  "program": {
+    "file": "tests/fixtures/workerd-native-reader-context.mjs",
+    "sha256": "9865f607ad2d9d40dddd703c9c104830d6c3bfeacd87541b9ed79a6eb0368f02"
+  },
+  "archive": {
+    "file": "tests/fixtures/workerd-native-reader-context-primary.json.gz",
+    "sha256": "6697f214a1edfe007e41d4ecda0feaa6652ffc72438d703d941b865fd9032788",
+    "uncompressedSHA256": "4c75692855c0ed4871d196b1fc0e1143db0fc99ab1e1fc8657ad357c6e2aeff2"
+  },
+  "referenceBinarySHA256": {
+    "win32": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "linux": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd"
+  },
+  "casesSHA256": {
+    "read": "425a7364aff827000c28f951b2d9ab289a3e4f33b2d18874f998ae618b5d2560",
+    "readAtLeast": "5eacee32fe9ddc70e24b48fc40f40181b1de21855337be0a66410a0f029c51f7",
+    "invalid-view": "544f58e6d303e9f627d4d10b38179a1a4f38463b8a2e78c26483bfd16ca7e80c",
+    "detached-view": "071e731149e7efe173a483c6355b05e558efeb0fa05c376fa20ce4ef4e6fd1b1",
+    "wrong-receiver": "a2dd53e43018ac1d8b1112e41f3b916e72e735fa8b9554cfd92ab171e7658da8",
+    "min-getter-error": "86a9cdcd8ab29c490c590e877a5e8db831591f99930e4c80450dbe8ea596a39f",
+    "read-prototype": "95e445b00779c70549595afc32703fb68f39653ddd3ad9a0edcab7b2ad7b01ba",
+    "read-reflect": "5ddc42f8b8b147d0cb24a0708342adb2e4cfaa71d766ac4efece6a4773a58503",
+    "read&retain=1": "2ef3510f0fe268ab6c5c87ada0986a32e0f84da1659111ec19c789f5ba87ca77",
+    "readAtLeast&retain=1": "f3c9dda32102378e1a4003e4702b23df8c16c933da7dee6c9145e702739799d7",
+    "invalid-view&retain=1": "fd597446f0b7982b864bd29f7b51d41e60be058642d577a3066a0e0ea5b6724a",
+    "detached-view&retain=1": "de103a68810dd8867f207e7e50ac5991ad3ca826366117d90e3b07c01d5d0a66",
+    "wrong-receiver&retain=1": "9026359aa7270539af68558fd2d86a414e15673130a6adbe3d272af97476de0d",
+    "min-getter-error&retain=1": "0a7474b66aadc6d23bed5269291425e73df466f3cb9a3a8d30ae18ba821be526",
+    "read-prototype&retain=1": "1e9b703c7a98812b1145c3b9661c32cbdd517938cb406337421b577fb7d04f1b",
+    "read-reflect&retain=1": "6eebd58bc20421cd788c7e740f8a82b1da21cebb038221e9d6f37b87199ca516"
+  },
+  "nativeEventDeadlineMilliseconds": 5000,
+  "nativeNaturalExitDeadlineMilliseconds": 2500,
+  "requestsPerRuntime": 3,
+  "protocol": {
+    "wire_version": 4,
+    "capabilities": 123,
+    "max_channels": 1
+  },
+  "nativeControlSamples": {
+    "file": "tests/fixtures/native-reader-context-oracle-control.json.gz",
+    "sha256": "d40ccfde10541d9616df0312893fe0a034062f3dbb1035808d33bc5013ed8921"
+  }
+}

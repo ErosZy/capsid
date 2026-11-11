@@ -1,0 +1,197 @@
+--- a/deps/quickjs/quickjs.c
++++ b/deps/quickjs/quickjs.c
+@@ -1131,9 +1131,22 @@
+         } array;    /* 12/20 bytes */
+         JSRegExp regexp;    /* JS_CLASS_REGEXP: 8/16 bytes */
+         JSValue object_data;    /* for JS_SetObjectData(): 8/16/16 bytes */
++        struct {
++            JSValue stack; /* overlaps object_data; existing stack API stays valid */
++            struct JSErrorSourceLocation *source;
++        } error_data;
+     } u;
+     /* byte sizes: 40/48/72 */
+ };
++
++typedef struct JSErrorSourceLocation {
++    JSAtom filename;
++    int line;
++    int column;
++} JSErrorSourceLocation;
++/* Keep the shared JSObject payload size unchanged on the supported targets. */
++typedef char JSErrorSourceFitsObjectPayload[
++    sizeof(((JSObject *)0)->u.error_data) <= sizeof(((JSObject *)0)->u.func) ? 1 : -1];
+ 
+ typedef struct JSCallSiteData {
+     JSValue filename;
+@@ -1235,6 +1248,7 @@
+ static void js_mapped_arguments_mark(JSRuntime *rt, JSValueConst val,
+                                      JS_MarkFunc *mark_func);
+ static void js_object_data_finalizer(JSRuntime *rt, JSValueConst val);
++static void js_error_finalizer(JSRuntime *rt, JSValueConst val);
+ static void js_object_data_mark(JSRuntime *rt, JSValueConst val,
+                                 JS_MarkFunc *mark_func);
+ static void js_c_function_finalizer(JSRuntime *rt, JSValueConst val);
+@@ -1869,7 +1883,7 @@
+ static JSClassShortDef const js_std_class_def[] = {
+     { JS_ATOM_Object, NULL, NULL },                             /* JS_CLASS_OBJECT */
+     { JS_ATOM_Array, js_array_finalizer, js_array_mark },       /* JS_CLASS_ARRAY */
+-    { JS_ATOM_Error, js_object_data_finalizer, js_object_data_mark }, /* JS_CLASS_ERROR */
++    { JS_ATOM_Error, js_error_finalizer, js_object_data_mark }, /* JS_CLASS_ERROR */
+     { JS_ATOM_Number, js_object_data_finalizer, js_object_data_mark }, /* JS_CLASS_NUMBER */
+     { JS_ATOM_String, js_object_data_finalizer, js_object_data_mark }, /* JS_CLASS_STRING */
+     { JS_ATOM_Boolean, js_object_data_finalizer, js_object_data_mark }, /* JS_CLASS_BOOLEAN */
+@@ -5927,6 +5941,9 @@
+         p->u.array.count = 0;
+         break;
+     case JS_CLASS_ERROR:
++        p->u.error_data.stack = JS_UNDEFINED;
++        p->u.error_data.source = NULL;
++        goto set_exotic;
+     case JS_CLASS_NUMBER:
+     case JS_CLASS_STRING:
+     case JS_CLASS_BOOLEAN:
+@@ -6635,6 +6652,17 @@
+     JSObject *p = JS_VALUE_GET_OBJ(val);
+     JS_FreeValueRT(rt, p->u.object_data);
+     p->u.object_data = JS_UNDEFINED;
++}
++
++static void js_error_finalizer(JSRuntime *rt, JSValueConst val)
++{
++    JSObject *p = JS_VALUE_GET_OBJ(val);
++    if (p->u.error_data.source) {
++        JS_FreeAtomRT(rt, p->u.error_data.source->filename);
++        js_free_rt(rt, p->u.error_data.source);
++        p->u.error_data.source = NULL;
++    }
++    js_object_data_finalizer(rt, val);
+ }
+ 
+ static void js_object_data_mark(JSRuntime *rt, JSValueConst val,
+@@ -7391,7 +7419,11 @@
+                 }
+             }
+             break;
+-        case JS_CLASS_ERROR:             /* u.object_data */
++        case JS_CLASS_ERROR:
++            compute_value_size(p->u.object_data, hp);
++            if (p->u.error_data.source)
++                s->memory_used_size += sizeof(*p->u.error_data.source);
++            break;
+         case JS_CLASS_NUMBER:            /* u.object_data */
+         case JS_CLASS_STRING:            /* u.object_data */
+         case JS_CLASS_BOOLEAN:           /* u.object_data */
+@@ -7878,6 +7910,38 @@
+     return true;
+ }
+ 
++static void store_error_source(JSContext *ctx, JSValueConst error, JSAtom filename,
++                               int line, int column)
++{
++    if (JS_VALUE_GET_TAG(error) != JS_TAG_OBJECT || filename == JS_ATOM_NULL)
++        return;
++    JSObject *p = JS_VALUE_GET_OBJ(error);
++    if (p->class_id != JS_CLASS_ERROR || p->u.error_data.source)
++        return;
++    /* Backtrace construction must not replace the original exception on OOM. */
++    JSErrorSourceLocation *source = js_malloc_rt(ctx->rt, sizeof(*source));
++    if (!source) return;
++    source->filename = JS_DupAtom(ctx, filename);
++    source->line = line;
++    source->column = column;
++    p->u.error_data.source = source;
++}
++
++void JS_GetErrorSourceLocation(JSContext *ctx, JSValueConst error,
++                              JSValue *filename, int *line, int *column)
++{
++    *filename = JS_UNDEFINED;
++    *line = 0;
++    *column = -1;
++    if (JS_VALUE_GET_TAG(error) != JS_TAG_OBJECT) return;
++    JSObject *p = JS_VALUE_GET_OBJ(error);
++    if (p->class_id != JS_CLASS_ERROR || !p->u.error_data.source) return;
++    *filename = JS_AtomToString(ctx, p->u.error_data.source->filename);
++    *line = p->u.error_data.source->line;
++    /* QuickJS source columns are one-based; ErrorEvent exposes zero-based. */
++    *column = p->u.error_data.source->column - 1;
++}
++
+ #define JS_BACKTRACE_FLAG_SKIP_FIRST_LEVEL (1 << 0)
+ /* only taken into account if filename is provided */
+ #define JS_BACKTRACE_FLAG_SINGLE_LEVEL     (1 << 1)
+@@ -7988,6 +8052,12 @@
+             backtrace_barrier = b->backtrace_barrier;
+         }
+ 
++        if (b && sf->cur_pc) {
++            int source_column;
++            uint32_t source_pc = sf->cur_pc - b->byte_code_buf - 1;
++            int source_line = find_line_num(ctx, b, source_pc, &source_column);
++            store_error_source(ctx, error_obj, b->filename, source_line, source_column);
++        }
+         if (has_prepare) {
+             js_new_callsite_data(ctx, &csd[i], sf);
+         } else {
+@@ -26601,6 +26671,8 @@
+     FuncCallType call_type;
+     int optional_chaining_label;
+     bool accept_lparen = (parse_flags & PF_POSTFIX_CALL) != 0;
++    const int expression_line = s->token.line_num;
++    const int expression_column = s->token.col_num;
+ 
+     call_type = FUNC_CALL_NORMAL;
+     switch(s->token.val) {
+@@ -26807,6 +26879,7 @@
+             if (s->token.val != '(') {
+                 /* new operator on an object */
+                 emit_op(s, OP_dup);
++                emit_source_loc_at(s, expression_line, expression_column);
+                 emit_op(s, OP_call_constructor);
+                 emit_u16(s, 0);
+             } else {
+@@ -27116,6 +27189,7 @@
+                     } else if (call_type == FUNC_CALL_NEW) {
+                         /* obj func array -> func obj array */
+                         emit_op(s, OP_perm3);
++                        emit_source_loc_at(s, expression_line, expression_column);
+                         emit_op(s, OP_apply);
+                         emit_u16(s, 1);
+                     } else {
+@@ -27158,6 +27232,7 @@
+ 
+                         emit_class_field_init(s);
+                     } else if (call_type == FUNC_CALL_NEW) {
++                        emit_source_loc_at(s, expression_line, expression_column);
+                         emit_op(s, OP_call_constructor);
+                         emit_u16(s, arg_count);
+                     } else {
+--- a/deps/quickjs/quickjs.h
++++ b/deps/quickjs/quickjs.h
+@@ -1172,6 +1172,10 @@
+  * hook so an embedder's finite execution budget cannot become catchable. */
+ JS_EXTERN void JS_SetMicrotaskExceptionHook(JSRuntime *rt,
+     bool (*report)(JSContext *, JSValueConst, void *), void *opaque);
++/* Original native Error source, independent of public stack accessors/writes.
++ * filename is a caller-owned value; non-Errors yield undefined,0,-1. */
++JS_EXTERN void JS_GetErrorSourceLocation(JSContext *ctx, JSValueConst error,
++    JSValue *filename, int *line, int *column);
+ /* Capsid: true when at least one pending job carries exactly job_context.
+  * Unlike JS_IsJobPending, this is per-request so an unrelated request's
+  * jobs cannot defer another request's poison decision. */
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -854,7 +854,13 @@
+         JSValue init = JS_NewObject(ctx);
+         JS_DefinePropertyValueStr(ctx, init, "promise", JS_DupValue(ctx, pr->promise), JS_PROP_C_W_E);
+         JS_DefinePropertyValueStr(ctx, init, "reason", JS_DupValue(ctx, pr->reason), JS_PROP_C_W_E);
++        /* Default workerd runtime rejection events are non-cancelable. The
++         * public PromiseRejectionEvent constructor still honors its init. */
++#ifdef TJS_RESTRICTED_CORE
++        JS_DefinePropertyValueStr(ctx, init, "cancelable", JS_FALSE, JS_PROP_C_W_E);
++#else
+         JS_DefinePropertyValueStr(ctx, init, "cancelable", JS_TRUE, JS_PROP_C_W_E);
++#endif
+         JSValue args[2];
+         args[0] = event_name;
+         args[1] = init;

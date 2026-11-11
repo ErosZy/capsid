@@ -1,0 +1,198 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-07T06:16:09.777386+00:00",
+  "scope": "Current main C++ response retirement and poll shutdown integration; JS v5, SDK69, version0.2.2.",
+  "mainRuntimeSHA256": "e84a2e58510c027f2f8f6ddd4255d5253aa70729fc45663646d08d3f77b52ca6",
+  "originalRuntimeSHA256": "3c23b46bde2dad29498fa5f5766defecbf8028e8e6105c47acb8249413042900",
+  "sourceCount": 4761,
+  "qualifiedDistinctTestConfigurationPairs": 501,
+  "previousDistinctPairs": 480,
+  "newDistinctPairs": 21,
+  "configurations": [
+    {
+      "mode": "native",
+      "required": 169,
+      "refreshedOriginal": 162,
+      "added": 7,
+      "executions": 177
+    },
+    {
+      "mode": "native-asan",
+      "required": 152,
+      "refreshedOriginal": 145,
+      "added": 7,
+      "executions": 152
+    },
+    {
+      "mode": "linux",
+      "required": 180,
+      "refreshedOriginal": 173,
+      "added": 7,
+      "executions": 191
+    }
+  ],
+  "formalBaseline": {
+    "executions": 21,
+    "passed": 13,
+    "failed": 8,
+    "evidence": {
+      "file": "build-v030-dev/evidence/response-retirement-20261107/baseline-audit.json",
+      "sha256": "181c28c7c83e3ea208a8841fa58a73254e13ed1d366e7f2bac8327dff5ee94cf"
+    }
+  },
+  "firstSelectedFailuresPreserved": [
+    {
+      "name": "websocket_crypto_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_http_codec_decode_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_http_codec_metadata_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_bodies_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_core_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_gated_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_pipelines_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_views_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "native-fixed-repair"
+    },
+    {
+      "name": "websocket_cross_context_managed",
+      "reason": "missing-report-directory",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_cross_context_single-worker",
+      "reason": "missing-report-directory",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_cross_context_static-pool",
+      "reason": "missing-report-directory",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_crypto_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_http_codec_decode_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_http_codec_metadata_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_bodies_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_core_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_gated_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_pipelines_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    },
+    {
+      "name": "websocket_ordinary_fetch_views_reference",
+      "reason": "missing-reference-environment",
+      "originalStatus": "failed",
+      "replacement": "linux-fixed-repair"
+    }
+  ],
+  "harnessRepairExecutions": 19,
+  "harnessRepairPassed": 19,
+  "mainCheckpointCommandExecutions": 562,
+  "mainCheckpointCommandPasses": 535,
+  "mainCheckpointCommandFailures": 27,
+  "privateFocusedCommandExecutionsExcludedFromMainCount": 165,
+  "privateFocusedCommandPasses": 165,
+  "duplicateMainSmokeExecutions": 21,
+  "qualifiedSkippedPairs": 0,
+  "quietSerialHonoPairs": 12,
+  "honoApplicationBudgetMs": 500,
+  "originalSnapshotSecondRequestActuallyCompletes": true,
+  "snapshotFailureWasDiagnosticAndExit1": true,
+  "independentPollFailureWithoutHttpOrPendingWrite": true,
+  "pollAfterFailureConfigurations": [
+    "native",
+    "native-asan"
+  ],
+  "pollAfterLinuxReleaseBaselineNaturallyExits": true,
+  "reviews": [
+    {
+      "file": "build-v030-dev/evidence/response-retirement-20261107/native-current-review.json",
+      "sha256": "3e2ec35f135a8ca1069ddf601f4908990dbdd36051d211f34b82b32831e3ee22"
+    },
+    {
+      "file": "build-v030-dev/evidence/response-retirement-20261107/native-asan-current-review.json",
+      "sha256": "6e1fa9960b92da2e4e9d53347eb6a2ba6880abbb2316b44d0dc5b63fd0894bc9"
+    },
+    {
+      "file": "build-v030-dev/evidence/response-retirement-20261107/linux-current-review.json",
+      "sha256": "76cb1e614090191114e2feb54413b241ee367cbb860bf953a8a910fbaca91942"
+    }
+  ],
+  "frozenTestedManifest": {
+    "file": "build-v030-dev/evidence/response-retirement-20261107/native-fixed-selected-no-hono/source-manifest.json",
+    "sha256": "0836464b5b2af636a7ac8e78b9ad71aaf571a577a4403f9e61390e4c54d8f099"
+  },
+  "privateJsIntegrated": false,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,31 @@
+{
+  "status": "complete",
+  "complete": true,
+  "actualPreservedNativeResultsReaccepted": [
+    {
+      "profile": "asan",
+      "exitCode": 0,
+      "rawRssFailuresRetained": [
+        "websocket_managed_reclamation-idle",
+        "websocket_managed_replacement-recursion"
+      ],
+      "perResourceFullLsanClaim": true,
+      "acceptanceSHA256": "9067e4dad59036afb94e72c6f0a367caa41c11e9da97bfe04aac758bfe8fc21d"
+    },
+    {
+      "profile": "tsan",
+      "exitCode": 0,
+      "rawRssFailuresRetained": [
+        "websocket_managed_reclamation-idle"
+      ],
+      "perResourceFullLsanClaim": false,
+      "acceptanceSHA256": "56cf0ee004e75d49ad203ae7a4f30753b2a14b404ee9cc8a0e5f804dd84f3f2e"
+    }
+  ],
+  "sourceSHA256": "f416ffcfdc78ec1f6c48b501957865c4c827c212d5c61a3f87e29769f860cff8",
+  "correctedPriorPerResourceMetadataBug": true,
+  "oldRawArtifactsUnchanged": true,
+  "tsanNeverClaimsLeakSanitizer": true,
+  "completeAsanLsanStillRequired": true,
+  "fullV030GoalComplete": false
+}

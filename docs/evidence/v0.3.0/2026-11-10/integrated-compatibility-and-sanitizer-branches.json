@@ -1,0 +1,105 @@
+{
+  "status": "complete",
+  "complete": true,
+  "changedFiles": [
+    ".github/workflows/testing-validity.yml",
+    "cmake/build_tests.cmake",
+    "tests/audit-testing-validity-workflow.mjs",
+    "tests/test_host_managed.cc",
+    "tests/test_host_managed_executable.cc",
+    "tests/test_testing_validity_workflow.mjs",
+    "tests/test_workerd_wpt_profile_v2.mjs",
+    "tools/workerd-wpt-acceptance.mjs"
+  ],
+  "parentPrivateSnapshot": "5cfc7f6c2add9b107725f90593542d5df349c258",
+  "mainHeadBefore": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "proofRecords": {
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-compatible-release-gate-proposal-r1\\run.json": "d596732e2068b84c4473196de935e212a75f59c49d71ed15408703f137ca2e81",
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-compatible-release-real-positive-r2\\run.json": "078e971f2e9e7dfa1be8166e7b8604f71e533ec4347981ed9817166c6c408b58",
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-sanitizer-branch-correction-proposal-r1\\run.json": "7570181726d21ca8f1fcd65fecea078d3517e0ed230854cb62e8ca9bbb9c5196",
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-sanitizer-branch-correction-native-r1\\run.json": "63602b6b87c457976dac912d39e08a5421dfee672353efecbff1c83e1af7e66a"
+  },
+  "qualifiedSHA256": {
+    ".github/workflows/testing-validity.yml": "9dd000df329b0a1aa84b6fcfe25795f2c8928aaae92543e6be1ea517f7300634",
+    "tests/audit-testing-validity-workflow.mjs": "dabb5e5fd3b6521fbea6b34c61eaaa01ca347797dbac657cd7867fa9f60ec536",
+    "tests/test_testing_validity_workflow.mjs": "991b90eaa5cedf990b1269f73f2ed5280b4cec2164f4ab5f11bcba51c8a3eae7",
+    "tests/test_workerd_wpt_profile_v2.mjs": "58f443bf6741aebf979768a6b171c9a63bceb4299d552e1d5b5b352f96abb8f7",
+    "tools/workerd-wpt-acceptance.mjs": "aa8eda052129cd228a97708767847be8866d1d91c626a565325aef5ae8ca3e3e",
+    "tests/test_host_managed.cc": "a0fc27ceaa715cf6f2bfbf55caa11c44a0a858499b577ec0e4f9ea26d98e7022",
+    "tests/test_host_managed_executable.cc": "dd7ef6d59c66c4663fc80b60fe4e9aa279cbbd757c213902f4aa005973a61d2e",
+    "cmake/build_tests.cmake": "662ff46d53df66ba0fe4dd24edfc74fe143cba268bbe154c075b2a0742a4dca1"
+  },
+  "originalSHA256": {
+    ".github/workflows/testing-validity.yml": "5c761ed533c77b3e35f6e5644bcc6eeee459cac58136d7ac074b64b37e8e2e62",
+    "tests/audit-testing-validity-workflow.mjs": "8aa2885fae72faa324db691aea57dacc935a2d1763d8896a135e051b1a4af602",
+    "tests/test_testing_validity_workflow.mjs": "caec52c51f9c1bb3f1a31e1779b26706ae224d0131d590a0ebfec89c4789717d",
+    "tests/test_workerd_wpt_profile_v2.mjs": "6a4dab29f6aa0e681a4abf0ddd495b6fddb08fdde384787f7c8444db0416d8cb",
+    "tools/workerd-wpt-acceptance.mjs": null,
+    "tests/test_host_managed.cc": "858cd8482601188ac41933e5550943bd07f195c6a9c9cfcc2c668eaaeab968c3",
+    "tests/test_host_managed_executable.cc": "b068b5a74cf9b29aa94c56edd4ef469ddbfcb61ef66f241ef6178b5b36843b9e",
+    "cmake/build_tests.cmake": "b84cac279b667d1b0075741c3f31ce059403f78af67420fd71185b997f667152"
+  },
+  "privateCrossPlatformCiControlsPassed": 640,
+  "actualComplete1097RawResultCompatibilityAccepted": true,
+  "originalOrdinaryCTestExit8AndFailedStepOutcomeRetained": true,
+  "mandatoryReference171AndFullV2AuditPassed": true,
+  "sanitizerCompilerBranchControlsPassed": 8,
+  "realNativeFocusedCasesPassed": 4,
+  "explicitUnsupportedProbeSkipped": 1,
+  "ctestClassificationControlsPassed": 4,
+  "originalProductionAndSupportedClangAsanBoundedProbeRetained": true,
+  "clangTsanTestDriverWaitsNowUseExistingIntended8x": true,
+  "ctestOuterTimeoutsAndProductionRuntimeDeadlinesUnchanged": true,
+  "noSanitizerRssAcceptanceWaiver": true,
+  "originalUnfilteredTsanFailuresRetained": true,
+  "hostedCiExecuted": false,
+  "mainCommitPushTagOrPublicationPerformed": false,
+  "fullV030GoalComplete": false,
+  "mainPathChecks": [
+    {
+      "label": "profile-and-acceptance",
+      "counts": {
+        "tests": 74,
+        "pass": 74,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "f01b143e9af95180d14570d1fe67cf8f66a004f938425174c47f7e9e374e9bda",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "workflow-lf",
+      "counts": {
+        "tests": 123,
+        "pass": 123,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "2e9dc47e6766891d65a0812ff697a8cb5c7e32a7d7415b79670a3abf848cca10",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "workflow-crlf",
+      "counts": {
+        "tests": 123,
+        "pass": 123,
+        "fail": 0,
+        "skipped": 0
+      },
+      "stdoutSHA256": "a8c31fb342e4286d938dbfd3093aa4c285f3a32b8421cb699b5a9e48b93a009d",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "rootIntegrated": true,
+  "privateSnapshotCommit": "3e87fea7c133da0926bb0a301bff607cb20987ab",
+  "privateSnapshotRef": "refs/capsid-private/sdk78-compatible-gate-sanitizer-branches-20261110",
+  "privateSnapshotTree": "5510a9940cea7315536d51260d06822ec2dedcbe",
+  "mainSourceManifestFile": "D:\\capsid-verification-20261108\\evidence\\sdk78-compatible-gate-and-sanitizer-branches-main-integration-r1\\main-source-manifest.json",
+  "mainSourceManifestSHA256": "d2db58c7551c2b3a245cc6c4d18a77cf06abca79876d39ca19ddc6fa83dbc534",
+  "mainPathControlsPassed": 320,
+  "mainHeadUnchanged": true,
+  "allOtherRepositorySourceFilesUnchanged": true,
+  "liveFrozenQualificationSourcesUnmodified": true,
+  "generatedIdentityAndFinalCombinedArtifactForNewSnapshotNotYetQualified": true,
+  "finalCombinedAcceptanceStillRequired": true
+}

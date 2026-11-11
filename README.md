@@ -14,9 +14,13 @@ bundle and only the capabilities the Host approves.
 > development/benchmark entry point, not a production deployment interface;
 > production isolation is only promised by the Linux strict sandbox.
 
-Future development, including the protocol-first WebSocket, Binding v2, and
-progressive Cloudflare workerd compatibility work, is tracked in the
-[project roadmap](ROADMAP.md).
+The development tree supports inbound WebSocketPair/101 and User-origin
+outbound ws/wss across the single-worker, static-pool, and managed hosts.
+See the [inbound echo](examples/websocket.js),
+[outbound example](examples/websocket-outbound.js), and
+[current implementation review](docs/v0.3.0-glm-takeover-review.md).
+The remaining v0.3.0 lifecycle, conformance and release gates are tracked in
+the [project roadmap](ROADMAP.md).
 
 Capsid is aimed at AI app builders, multi-tenant automation, and plugin systems
 that need to execute generated code as a service—not as trusted code inside the
@@ -81,7 +85,7 @@ export default {
 
 ### 2. Build
 
-Linux / macOS:
+Linux / macOS (Host networking requires system Boost, OpenSSL 3.x and c-ares >= 1.27; on Ubuntu 24.04 install `libboost-system-dev libssl-dev libc-ares-dev`, on macOS install `boost openssl@3.5 c-ares` with Homebrew):
 
 ```sh
 git submodule update --init --recursive
@@ -94,7 +98,7 @@ cmake --build build-release --parallel
 Windows (PowerShell + MSVC + vcpkg):
 
 ```powershell
-vcpkg install openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+vcpkg install openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
 cmake -S . -B build-release -G Ninja `
   -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl `
   -DCMAKE_BUILD_TYPE=Release -DCAPSID_BUILD_HOST=ON `
@@ -147,6 +151,15 @@ managed `host.json` — both driven by the same engine. See the
 [host modes and CLI reference](docs/host-config.md); step-by-step
 permission field configuration is in the
 [capsid.json tutorial](docs/capsid-json.md).
+
+WebSocket service limits default to 1024 reserved channels, 128 pending outbound
+dials, and `16MiB` of network write buffers. Static-pool shards share these limits;
+each inbound listener also defaults to 128 channels and `16MiB` of write buffers.
+Configure them with `--channels-total`, `--pending-dials-total`,
+`--channel-queue-bytes-total`, `--listener-channels`, and
+`--listener-channel-queue-bytes` in local modes, or the corresponding
+[`host.json` fields and metrics](docs/host-config.md#websocket-aggregate-limits-and-metrics)
+in managed mode.
 
 ## Configuration Guide
 

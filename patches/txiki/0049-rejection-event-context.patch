@@ -1,0 +1,182 @@
+--- a/src/private.h
++++ b/src/private.h
+@@ -66,6 +66,7 @@
+     struct list_head link;
+     JSValue promise;
+     JSValue reason;
++    void *ctx_data; /* held only until the corresponding runtime event */
+     bool handled;
+ } TJSPendingRejection;
+ 
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -364,6 +364,10 @@
+     if (!pr) {
+         return;
+     }
++    if (tjs_capture_ctx(ctx, &pr->ctx_data) < 0) {
++        js_free(ctx, pr);
++        return;
++    }
+     pr->promise = JS_DupValue(ctx, promise);
+     pr->reason = JS_DupValue(ctx, reason);
+     pr->handled = false;
+@@ -380,11 +384,36 @@
+     uv__maybe_idle(qrt);
+ }
+ 
++#ifdef TJS_RESTRICTED_CORE
++static void tjs__dispatch_handled_rejection(TJSRuntime *qrt, JSContext *ctx, TJSPendingRejection *pr) {
++    /* Workerd reports late handling synchronously from handler attachment.
++     * Remove the node first: the listener may attach another handler to the
++     * same Promise. The caller already owns the active JS execution context. */
++    list_del(&pr->link);
++    JSValue event_name = JS_NewString(ctx, "rejectionhandled");
++    JSValue init = JS_NewObject(ctx);
++    JS_DefinePropertyValueStr(ctx, init, "promise", JS_DupValue(ctx, pr->promise), JS_PROP_C_W_E);
++    JSValue args[2] = { event_name, init };
++    JSValue event = JS_CallConstructor(ctx, qrt->builtins.promise_event_ctor, countof(args), args);
++    CHECK_EQ(JS_IsException(event), 0);
++    JSValue ret = tjs__dispatch_event(ctx, &event);
++    if (JS_IsException(ret)) tjs_dump_error(ctx);
++    JS_FreeValue(ctx, ret);
++    JS_FreeValue(ctx, event);
++    JS_FreeValue(ctx, init);
++    JS_FreeValue(ctx, event_name);
++    JS_FreeValue(ctx, pr->promise);
++    JS_FreeValue(ctx, pr->reason);
++    js_free(ctx, pr);
++}
++#endif
++
+ static void tjs__pending_rejections_remove(TJSRuntime *qrt, JSContext *ctx, JSValue promise) {
+     struct list_head *el, *el1;
+     list_for_each_safe(el, el1, &qrt->pending_rejections) {
+         TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
+         if (JS_VALUE_GET_PTR(pr->promise) == JS_VALUE_GET_PTR(promise)) {
++            tjs_release_ctx(ctx, pr->ctx_data);
+             JS_FreeValue(ctx, pr->promise);
+             JS_FreeValue(ctx, pr->reason);
+             list_del(&pr->link);
+@@ -395,7 +424,16 @@
+     list_for_each_safe(el, el1, &qrt->outstanding_rejections) {
+         TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
+         if (JS_VALUE_GET_PTR(pr->promise) == JS_VALUE_GET_PTR(promise)) {
+-            pr->handled = true;
++            if (!pr->handled) {
++#ifdef TJS_RESTRICTED_CORE
++                tjs__dispatch_handled_rejection(qrt, ctx, pr);
++#else
++                /* A late handler's notification belongs to its attachment turn.
++                 * Do not retain the rejected request after its first event. */
++                if (tjs_capture_ctx(ctx, &pr->ctx_data) < 0) return;
++                pr->handled = true;
++#endif
++            }
+             uv__maybe_idle(qrt);
+             return;
+         }
+@@ -648,6 +686,7 @@
+         struct list_head *el, *el1;
+         list_for_each_safe(el, el1, &qrt->pending_rejections) {
+             TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
++            tjs_release_ctx(qrt->ctx, pr->ctx_data);
+             JS_FreeValue(qrt->ctx, pr->promise);
+             JS_FreeValue(qrt->ctx, pr->reason);
+             list_del(&pr->link);
+@@ -655,6 +694,7 @@
+         }
+         list_for_each_safe(el, el1, &qrt->outstanding_rejections) {
+             TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
++            tjs_release_ctx(qrt->ctx, pr->ctx_data);
+             JS_FreeValue(qrt->ctx, pr->promise);
+             JS_FreeValue(qrt->ctx, pr->reason);
+             list_del(&pr->link);
+@@ -844,11 +884,24 @@
+     TJSRuntime *qrt = TJS_GetRuntime(ctx);
+     CHECK_NOT_NULL(qrt);
+     struct list_head *el, *el1;
+-    list_for_each_safe(el, el1, &qrt->pending_rejections) {
+-        TJSPendingRejection *pr = list_entry(el, TJSPendingRejection, link);
+-
++    /* A listener can attach a handler to a different pending rejection and
++     * remove its node. Pop the current head rather than caching that next node. */
++    while (!list_empty(&qrt->pending_rejections)) {
++        TJSPendingRejection *pr = list_entry(qrt->pending_rejections.next, TJSPendingRejection, link);
++        void *event_context = pr->ctx_data;
++        pr->ctx_data = NULL;
+         list_del(&pr->link);
++        if (event_context && qrt->async_ctx_control.can_run &&
++                !qrt->async_ctx_control.can_run(ctx, event_context, qrt->async_ctx_control_opaque)) {
++            tjs_release_ctx(ctx, event_context);
++            JS_FreeValue(ctx, pr->promise);
++            JS_FreeValue(ctx, pr->reason);
++            js_free(ctx, pr);
++            continue;
++        }
+         list_add_tail(&pr->link, &qrt->outstanding_rejections);
++        void *previous = NULL;
++        if (event_context) tjs_enter_ctx(ctx, event_context, &previous);
+ 
+         JSValue event_name = JS_NewString(ctx, "unhandledrejection");
+         JSValue init = JS_NewObject(ctx);
+@@ -879,7 +932,7 @@
+         /* Web runtimes report unhandledrejection without terminating the
+          * global environment. Keep the outstanding rejection so a handler
+          * attached later can produce rejectionhandled with the same promise. */
+-        (void) ret;
++        if (JS_IsException(ret)) tjs_dump_error(ctx);
+ #else
+         if (JS_IsException(ret)) {
+             tjs_dump_error(ctx);
+@@ -893,13 +946,17 @@
+ #endif
+ 
+         JS_FreeValue(ctx, ret);
++        if (event_context) tjs_leave_ctx(ctx, &previous);
++        tjs_async_context_checkpoint(ctx);
++        tjs_release_ctx(ctx, event_context);
+ 
+         if (should_abort) {
+-            JSValue reason = pr->reason;
++            JSValue reason = JS_DupValue(ctx, pr->reason);
+             /* Free all pending rejections. */
+             struct list_head *el2, *el3;
+             list_for_each_safe(el2, el3, &qrt->pending_rejections) {
+                 TJSPendingRejection *pr2 = list_entry(el2, TJSPendingRejection, link);
++                tjs_release_ctx(ctx, pr2->ctx_data);
+                 JS_FreeValue(ctx, pr2->promise);
+                 if (pr2 != pr) {
+                     JS_FreeValue(ctx, pr2->reason);
+@@ -919,6 +976,19 @@
+             continue;
+         }
+ 
++        void *event_context = pr->ctx_data;
++        pr->ctx_data = NULL;
++        list_del(&pr->link);
++        if (event_context && qrt->async_ctx_control.can_run &&
++                !qrt->async_ctx_control.can_run(ctx, event_context, qrt->async_ctx_control_opaque)) {
++            tjs_release_ctx(ctx, event_context);
++            JS_FreeValue(ctx, pr->promise);
++            JS_FreeValue(ctx, pr->reason);
++            js_free(ctx, pr);
++            continue;
++        }
++        void *previous = NULL;
++        if (event_context) tjs_enter_ctx(ctx, event_context, &previous);
+         JSValue event_name = JS_NewString(ctx, "rejectionhandled");
+         JSValue init = JS_NewObject(ctx);
+         JS_DefinePropertyValueStr(ctx, init, "promise", JS_DupValue(ctx, pr->promise), JS_PROP_C_W_E);
+@@ -936,8 +1006,10 @@
+         JS_FreeValue(ctx, event_name);
+         JS_FreeValue(ctx, pr->promise);
+         JS_FreeValue(ctx, pr->reason);
+-        list_del(&pr->link);
+         js_free(ctx, pr);
++        if (event_context) tjs_leave_ctx(ctx, &previous);
++        tjs_async_context_checkpoint(ctx);
++        tjs_release_ctx(ctx, event_context);
+     }
+ }
+ 

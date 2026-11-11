@@ -1,0 +1,150 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 187633,
+  "startedUTC": "2026-11-10T14:52:47.613098+00:00",
+  "snapshotCommit": "56d487722e9d207a53225444fc32914f80fba155",
+  "sourceCount": 5068,
+  "source": "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2",
+  "build": "/root/capsid-verification-20261109/build-production",
+  "inputs": {
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node": "e237a2839d0cbdc9a9a2adda1a184afc0f5b20306ffbe923af5686550472d8a8",
+    "/root/capsid-verification-20261109/build-production/capsid-host": "0a88b166c6604e7d751a6c4424e1e300bb2e9601a8f271574f84deef4d451429",
+    "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "/root/capsid-verification-20261109/build-production/CMakeCache.txt": "09ee864836c05abe0cd56eaafd2fd997182fabb3bc16f9300ab204c124e64c44",
+    "/root/capsid-verification-20261109/build-production/CTestTestfile.cmake": "85b3383e4d7c6837228a79be46cce702196c58ef54abc77069b83988d499473a",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-r1/inventory.json": "38c9d096e6c2c2cce51694f0a5a032c6f5c449990f281526f54695fcdad8fa58",
+    "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd"
+  },
+  "buildRecordSHA256": "10854055d4ab76e34831969c3d49a5bd0d1dafce8a0acc4902426e77fa46755f",
+  "runnerSHA256": "3ed219139c8dd730f6e83370c526599c72f99d5b8ea662c3b60f707bad4dad61",
+  "steps": [
+    {
+      "label": "complete-wpt-context-capture",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tools/run_workerd_wpt_context.mjs",
+        "--build",
+        "/root/capsid-verification-20261109/build-production",
+        "--registration",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-r1/inventory.json",
+        "--reference",
+        "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd",
+        "--output",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/captured"
+      ],
+      "exitCode": 0,
+      "seconds": 43.250562313000046,
+      "stdoutSHA256": "326023982316c688bdc9ee04c21238b251bdf5ca0037410eb1e56f7f266755e3",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "mandatory-reference-gate",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tools/run-workerd-ws-gate.mjs",
+        "/root/capsid-verification-20261109/build-production",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/gate"
+      ],
+      "exitCode": 0,
+      "seconds": 1309.8783684710015,
+      "stdoutSHA256": "370e564ae47efda71dce1c4f3643dcef38aad44a3da47c175aa2d642f5ce78e0",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "full-v2-profile-audit",
+      "command": [
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tools/workerd-wpt-profile-v2.mjs",
+        "audit",
+        "--last-test",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-unfiltered-r1/LastTest.log",
+        "--junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-unfiltered-r1/full.xml",
+        "--registration",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-r1/inventory.json",
+        "--gate",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/gate",
+        "--build",
+        "/root/capsid-verification-20261109/build-production",
+        "--wpt-root",
+        "/root/capsid-verification-20261109/wpt-1985b47aa897",
+        "--context",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/captured/context.json",
+        "--output",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/full-v2-audit.json",
+        "--python",
+        "/root/capsid-verification-20261109/toolchains/interop-clients-r1/python-venv/bin/python"
+      ],
+      "exitCode": 0,
+      "seconds": 8.04763207599899,
+      "stdoutSHA256": "4273015aa7d5e89943939d4cc778ca035db3ae673935f89924f5399997bad7e8",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "executesOnlyAfterBothLinuxFullSuitesAreTerminalAndArchived": true,
+  "fullV030GoalComplete": false,
+  "precedingFullSuites": [
+    {
+      "profile": "production",
+      "recordSHA256": "8f4b0a697e2cfcccfaca60e3affb7df8cfa9fdd742039a85cd8d34fbca79ab16",
+      "status": "complete-with-findings",
+      "executed": 1097,
+      "failures": [
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js"
+      ],
+      "skipped": []
+    },
+    {
+      "profile": "sanitizer",
+      "recordSHA256": "27e77dd3a8a93424a911c2c4a773da419f3bf3884df2625e4dc7396a867d6ad6",
+      "status": "complete-with-findings",
+      "executed": 1108,
+      "failures": [
+        "websocket_fetch_arguments_prototype_static-pool",
+        "websocket_managed_replacement-recursion",
+        "websocket_managed_reclamation-idle",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js",
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js"
+      ],
+      "skipped": []
+    }
+  ],
+  "activeCommand": [
+    "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tools/workerd-wpt-profile-v2.mjs",
+    "audit",
+    "--last-test",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-unfiltered-r1/LastTest.log",
+    "--junit",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-unfiltered-r1/full.xml",
+    "--registration",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-clients-rebound-production-linux-r1/inventory.json",
+    "--gate",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/gate",
+    "--build",
+    "/root/capsid-verification-20261109/build-production",
+    "--wpt-root",
+    "/root/capsid-verification-20261109/wpt-1985b47aa897",
+    "--context",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/captured/context.json",
+    "--output",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-post-full-reference-r3/full-v2-audit.json",
+    "--python",
+    "/root/capsid-verification-20261109/toolchains/interop-clients-r1/python-venv/bin/python"
+  ],
+  "activeCommandPid": 289692,
+  "mandatoryReferenceGatePassed": true,
+  "mandatoryTestsPassed": 171,
+  "fullV2CompatibilityAuditPassed": true,
+  "fullV2AuditSHA256": "d407d36c4a5a2d9a45fdccb9c25dc50b08dc15e0f5e8be829604fc7a70b69d02",
+  "sourceBinariesProvidersAndRegistrationUnchanged": true,
+  "rawStandardFailuresAndFourTimeoutsRetained": true
+}

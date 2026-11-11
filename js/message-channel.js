@@ -1,20 +1,19 @@
 // Minimal MessageChannel/MessagePort polyfill for v26.6.0.
 import core from 'tjs:internal/core';
+import { MessageEvent, registerMessagePort } from './events.js';
+import { defineEventAttribute, dispatchTrustedEvent } from 'txiki-polyfills/event-target.js';
+const portConstruction = Symbol('MessageChannel port');
 
-// PortMessageEvent — extends vendor's MessageEvent with a `ports` getter.
-class PortMessageEvent extends MessageEvent {
-    constructor(type, data, ports) {
-        super(type, data);
-        this._ports = Object.freeze(ports ?? []);
-    }
-    get ports() {
-        return this._ports;
-    }
-}
+// The locked workerd default delivers messages through Promise reactions.
+// Capture the intrinsic so public Promise overrides cannot change scheduling.
+const portResolvedPromise = Promise.resolve();
+const enqueuePortJob = Function.prototype.call.bind(Promise.prototype.then, portResolvedPromise);
 
 class MessagePort extends EventTarget {
-    constructor() {
+    constructor(token) {
         super();
+        if (token !== portConstruction) throw new TypeError('Illegal constructor');
+        registerMessagePort(this);
         this._entangled = null;
         this._closed = false;
         this._started = true;
@@ -22,21 +21,6 @@ class MessagePort extends EventTarget {
 
     get [Symbol.toStringTag]() {
         return 'MessagePort';
-    }
-
-    get onmessage() {
-        return this._onmessageHandler ?? null;
-    }
-
-    set onmessage(fn) {
-        if (this._onmessageHandler) {
-            this.removeEventListener('message', this._onmessageHandler);
-        }
-        this._onmessageHandler = fn;
-        if (typeof fn === 'function') {
-            this.addEventListener('message', fn);
-        }
-        this._started = true;
     }
 
     postMessage(data, transferList) {
@@ -57,11 +41,10 @@ class MessagePort extends EventTarget {
             }
         }
         const target = this._entangled;
-        setTimeout(() => {
-            target.dispatchEvent(
-                new PortMessageEvent('message', data,
-                    transferPorts.length > 0 ? transferPorts : undefined));
-        }, 0);
+        enqueuePortJob(() => {
+            dispatchTrustedEvent(target,
+                new MessageEvent('message', { data, source: target, ports: transferPorts }));
+        });
     }
 
     start() {
@@ -78,14 +61,16 @@ class MessagePort extends EventTarget {
     }
 }
 
+defineEventAttribute(MessagePort.prototype, 'message');
+
 class MessageChannel {
     get [Symbol.toStringTag]() {
         return 'MessageChannel';
     }
 
     constructor() {
-        const port1 = new MessagePort();
-        const port2 = new MessagePort();
+        const port1 = new MessagePort(portConstruction);
+        const port2 = new MessagePort(portConstruction);
         port1._entangled = port2;
         port2._entangled = port1;
         this.port1 = port1;

@@ -36,14 +36,21 @@ struct StaticPoolServerOptions {
 
 // M2 fixed-pool Host data plane: N independently owned shards, each with
 // its own SingleWorkerServer, its own worker process and its own Asio
-// reactor thread, all listening on the same address:port through
-// SO_REUSEPORT. Workers never migrate or share across shards. The pool
+// reactor thread. One pool-owned acceptor dispatches connections on all
+// platforms; no shard owns the public listener. Workers never migrate or
+// share across shards. With no READY Worker, the endpoint returns 503
+// (including failed WebSocket handshakes) until stop/drain closes it.
+// At most 128 unavailable exchanges are retained; excess peers are closed.
+// Their head and write deadlines are capped at 5 seconds (a smaller
+// configured request/write timeout wins); headers are bounded at 8 KiB.
+// The pool
 // publishes exactly one canonical READY record — only after every shard is
 // READY — and startup is atomic: any shard failure (or a failed pool READY
 // publication) rolls back every started shard before start() returns.
 // The StaticPoolState machine drives the activation contract
-// (register -> READY -> activate; see static_pool.h). Queueing, load
-// selection and SSE admission belong to later M2 batches.
+// (register -> READY -> activate; see static_pool.h). Per-shard admission
+// and SSE permits are configured above; connection selection round-robins
+// over currently available Workers.
 class StaticPoolServer {
 public:
     explicit StaticPoolServer(StaticPoolServerOptions options);
@@ -86,6 +93,10 @@ public:
     // shard's begin to the LAST shard's drain completion. Meaningful after
     // wait().
     SingleWorkerServer::DrainMetrics drain_metrics() const;
+
+    // One retained OS result per shard, in shard order. Final after wait();
+    // an unobserved exit is not a successful Worker exit.
+    std::vector<capsid::WorkerExitStatus> worker_exit_statuses() const;
 
     // Benchmark-only blocking entry (NOT a managed production path): starts
     // the pool, then waits for SIGTERM/SIGINT on the calling thread

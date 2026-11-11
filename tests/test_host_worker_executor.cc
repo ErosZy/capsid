@@ -274,15 +274,18 @@ void test_startup_failure() {
     // second start is rejected instead of double-owning a worker.
     executor.stop_and_join();
     require(!executor.start(factory, &error), "second start must fail");
+    require(!executor.exit_status().observed && !executor.exit_status().clean(),
+            "failed factory must not invent a successful Worker exit");
     require(!executor.adopt(nullptr, &error), "adopt(nullptr) must fail");
     std::cout << "PASS: startup failure leaves nothing behind" << std::endl;
 }
 
 WorkerExecutor::WorkerFactory hello_factory(
     const std::string& worker_path,
-    std::uint32_t initial_stream_window = 0) {
+    std::uint32_t initial_stream_window = 0,
+    bool metrics_enabled = false) {
     const std::string bundle(kBundle);
-    return [worker_path, initial_stream_window, bundle](capsid_worker** out,
+    return [worker_path, initial_stream_window, metrics_enabled, bundle](capsid_worker** out,
                          std::string* factory_error) -> bool {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
@@ -294,6 +297,7 @@ WorkerExecutor::WorkerFactory hello_factory(
             *factory_error = "worker spawn failed";
             return false;
         }
+        if (metrics_enabled) capsid::client_ipc_metrics_enable(worker, true);
         if (capsid_worker_load_bundle(
                 worker,
                 reinterpret_cast<const std::uint8_t*>(bundle.data()),
@@ -472,6 +476,8 @@ void test_factory_lifecycle(const std::string& worker_path) {
     require(executor.worker() == nullptr, "worker reaped exactly once");
     executor.stop_and_join();
     executor.stop_and_join();  // idempotent: no second destroy
+    require(executor.exit_status().clean(),
+            "factory lifecycle did not observe actual Worker exit zero");
     std::cout << "PASS: factory lifecycle + exactly-once reap" << std::endl;
 }
 
@@ -540,7 +546,9 @@ void test_adopt_ready(const std::string& worker_path) {
     WorkerExecutor executor;
     EventHarness harness(executor);
     std::string error;
+    const auto adopted_pid = capsid_worker_pid(worker);
     require(executor.adopt(worker, &error), "adopt: " + error);
+    require(executor.process_id() == adopted_pid && adopted_pid > 0, "cached adopted process identity");
     require(executor.available(), "available after adopt");
 
     std::vector<WorkerEvent> events;
@@ -553,12 +561,277 @@ void test_adopt_ready(const std::string& worker_path) {
     executor.stop_and_join();  // blocks until the worker thread reaped it
     require(executor.exited(), "exited after stop_and_join");
     require(executor.worker() == nullptr, "adopted worker reaped");
+    require(executor.process_id() == adopted_pid, "cached adopted identity survives reaping");
     std::cout << "PASS: adopted READY worker lifecycle" << std::endl;
+}
+
+void require_zero_metrics(const capsid::ClientIpcMetrics& metrics) {
+#define REQUIRE_ZERO(field) require(metrics.field.load() == 0, "unexpected remaining " #field)
+    REQUIRE_ZERO(queued_frames);
+    REQUIRE_ZERO(queued_wire_bytes);
+    REQUIRE_ZERO(queue_would_block);
+    REQUIRE_ZERO(flush_calls);
+    REQUIRE_ZERO(socket_write_calls);
+    REQUIRE_ZERO(socket_write_bytes);
+    REQUIRE_ZERO(socket_write_eagain);
+    REQUIRE_ZERO(next_event_calls);
+    REQUIRE_ZERO(parsed_frames);
+    REQUIRE_ZERO(parser_payload_copied_bytes);
+    REQUIRE_ZERO(socket_read_calls);
+    REQUIRE_ZERO(socket_read_bytes);
+    REQUIRE_ZERO(socket_read_eagain);
+    REQUIRE_ZERO(queued_bytes_high_water);
+#undef REQUIRE_ZERO
+}
+
+void test_metrics_disabled_and_failed(const std::string& worker_path) {
+    WorkerExecutor failed;
+    failed.set_metrics_enabled(true);
+    std::string error;
+    require(!failed.start([](capsid_worker**, std::string*) { return false; }, &error), "factory failure");
+    capsid::ClientIpcMetrics absent;
+    require(!failed.snapshot_client_metrics(&absent), "failed factory has no client counters");
+    failed.stop_and_join();
+    require(!failed.snapshot_client_metrics(&absent), "failed factory invents no final counters");
+    require_zero_metrics(absent);
+
+    WorkerExecutor disabled;
+    EventHarness harness(disabled);
+    require(disabled.start(hello_factory(worker_path), &error), "disabled metrics worker: " + error);
+    capsid::ClientIpcMetrics snapshot;
+    require(!disabled.snapshot_client_metrics(&snapshot), "disabled client metrics stay disabled");
+    disabled.stop_and_join();
+    require(disabled.exit_status().clean(), "disabled metrics worker actual exit zero");
+    require(!disabled.snapshot_client_metrics(&snapshot), "disabled final metrics stay absent");
+    require_zero_metrics(snapshot);
+    std::cout << "PASS: disabled and failed-start metrics remain absent" << std::endl;
+}
+
+void test_metrics_retirement(const std::string& worker_path, bool adopted = false) {
+    WorkerExecutor executor;
+    executor.set_metrics_enabled(true);
+    EventHarness harness(executor);
+    std::string error;
+    if (!adopted) {
+        require(executor.start(hello_factory(worker_path, 0, true), &error), "metrics worker: " + error);
+    } else {
+        capsid_worker* prepared = nullptr;
+        const auto factory = hello_factory(worker_path, 0, true);
+        require(factory(&prepared, &error), "prepare metrics adoption: " + error);
+        bool ready = false;
+        {
+            capsid::host::WorkerEventSource source;
+            source.set_worker(prepared);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (std::chrono::steady_clock::now() < deadline) {
+                capsid_event event = {};
+                event.struct_size = sizeof(event);
+                const auto result = capsid_worker_next_event(prepared, &event);
+                if (result == CAPSID_OK) {
+                    if (event.type == CAPSID_EVENT_READY) { ready = true; break; }
+                    if (event.type == CAPSID_EVENT_EXIT || event.type == CAPSID_EVENT_ERROR) break;
+                } else if (result != CAPSID_WOULD_BLOCK || !source.wait(deadline)) {
+                    break;
+                }
+            }
+        }
+        if (!ready || !executor.adopt(prepared, &error)) {
+            capsid_worker_destroy(prepared);
+            fail("metrics adoption READY/ownership: " + error);
+        }
+    }
+    capsid::ClientIpcMetrics startup;
+    require(executor.snapshot_client_metrics(&startup), "live client metrics");
+    require(startup.queued_frames.load() > 0 && startup.socket_write_bytes.load() > 0,
+            "startup snapshot contains actual transport work");
+    std::vector<WorkerEvent> events;
+    begin_and_observe(executor, harness, 1001, events);
+    require(has_response_head_for(events, 1001), "metrics request really served");
+    executor.retire_terminal_request(1001);
+    executor.stop_and_join();
+    require(executor.exit_status().clean(), "metrics worker actual exit zero");
+    require(executor.exited() && executor.worker() == nullptr, "metrics worker actually reaped");
+    require(!executor.snapshot_client_metrics(nullptr), "null output must not consume final counters");
+    capsid::ClientIpcMetrics retired;
+    const bool present = executor.snapshot_client_metrics(&retired);
+    std::cout << "METRICS retirement mode=" << (adopted ? "adopted" : "factory") << " pid=" << executor.process_id()
+              << " startup_frames=" << startup.queued_frames.load()
+              << " present=" << present << " retired_frames=" << retired.queued_frames.load()
+              << " retired_parsed=" << retired.parsed_frames.load() << std::endl;
+    require(present, "retired IPC deltas must remain readable after actual reap");
+    require(retired.queued_frames.load() >= 2 && retired.socket_write_bytes.load() > 0 &&
+            retired.parsed_frames.load() > 0 && retired.socket_read_bytes.load() > 0,
+            "request and shutdown counters survive actual reap");
+    capsid::ClientIpcMetrics repeated;
+    require(executor.snapshot_client_metrics(&repeated), "a retained metrics bank remains readable");
+    require_zero_metrics(repeated);
+    executor.stop_and_join();
+    require(executor.snapshot_client_metrics(&repeated), "repeated stop preserves drained bank");
+    require_zero_metrics(repeated);
+    require(!executor.snapshot_client_metrics(nullptr), "null metrics target is rejected");
+    std::cout << "PASS: actual request/stop/reap retains final deltas exactly once" << std::endl;
+}
+
+void add_metrics(capsid::ClientIpcMetrics& total, const capsid::ClientIpcMetrics& interval) {
+#define ADD_METRIC(field) total.field.fetch_add(interval.field.load())
+    ADD_METRIC(queued_frames);
+    ADD_METRIC(queued_wire_bytes);
+    ADD_METRIC(queue_would_block);
+    ADD_METRIC(flush_calls);
+    ADD_METRIC(socket_write_calls);
+    ADD_METRIC(socket_write_bytes);
+    ADD_METRIC(socket_write_eagain);
+    ADD_METRIC(next_event_calls);
+    ADD_METRIC(parsed_frames);
+    ADD_METRIC(parser_payload_copied_bytes);
+    ADD_METRIC(socket_read_calls);
+    ADD_METRIC(socket_read_bytes);
+    ADD_METRIC(socket_read_eagain);
+#undef ADD_METRIC
+    const auto value = interval.queued_bytes_high_water.load();
+    auto old = total.queued_bytes_high_water.load();
+    while (old < value && !total.queued_bytes_high_water.compare_exchange_weak(old, value)) {}
+}
+
+void test_metrics_bank() {
+    capsid::ClientIpcMetrics bank, output;
+    std::uint64_t index = 0;
+    const std::uint64_t base = (UINT64_C(1) << 40) + 3;
+#define SEED_METRIC(field) bank.field.store(base + ++index)
+    SEED_METRIC(queued_frames);
+    SEED_METRIC(queued_wire_bytes);
+    SEED_METRIC(queue_would_block);
+    SEED_METRIC(flush_calls);
+    SEED_METRIC(socket_write_calls);
+    SEED_METRIC(socket_write_bytes);
+    SEED_METRIC(socket_write_eagain);
+    SEED_METRIC(next_event_calls);
+    SEED_METRIC(parsed_frames);
+    SEED_METRIC(parser_payload_copied_bytes);
+    SEED_METRIC(socket_read_calls);
+    SEED_METRIC(socket_read_bytes);
+    SEED_METRIC(socket_read_eagain);
+#undef SEED_METRIC
+    bank.queued_bytes_high_water.store(321);
+    require(!capsid::client_ipc_metrics_drain(&bank, nullptr), "null bank output rejected");
+    require(!capsid::client_ipc_metrics_drain(&bank, &bank), "bank alias rejected without consuming");
+    require(capsid::client_ipc_metrics_drain(&bank, &output), "transfer real atomic bank");
+    index = 0;
+#define CHECK_METRIC(field) require(output.field.load() == base + ++index, "bank transfer: " #field)
+    CHECK_METRIC(queued_frames);
+    CHECK_METRIC(queued_wire_bytes);
+    CHECK_METRIC(queue_would_block);
+    CHECK_METRIC(flush_calls);
+    CHECK_METRIC(socket_write_calls);
+    CHECK_METRIC(socket_write_bytes);
+    CHECK_METRIC(socket_write_eagain);
+    CHECK_METRIC(next_event_calls);
+    CHECK_METRIC(parsed_frames);
+    CHECK_METRIC(parser_payload_copied_bytes);
+    CHECK_METRIC(socket_read_calls);
+    CHECK_METRIC(socket_read_bytes);
+    CHECK_METRIC(socket_read_eagain);
+#undef CHECK_METRIC
+    require(output.queued_bytes_high_water.load() == 321, "bank high-water transfer");
+    require_zero_metrics(bank);
+    require(capsid::client_ipc_metrics_drain(&bank, &output), "read drained atomic bank");
+    require_zero_metrics(output);
+    output.queued_frames.store(71);
+    require(!capsid::client_ipc_metrics_drain(nullptr, &output), "null source rejected");
+    require(output.queued_frames.load() == 71, "invalid source preserves caller output");
+    std::cout << "PASS: all atomic bank counters transfer once without truncation" << std::endl;
+}
+
+void test_metrics_concurrent_retirement(const std::string& worker_path) {
+    constexpr unsigned kReaders = 4;
+    constexpr unsigned kRounds = 8;
+    for (unsigned round = 0; round < kRounds; ++round) {
+        WorkerExecutor executor;
+        executor.set_metrics_enabled(true);
+        std::string error;
+        require(executor.start(hello_factory(worker_path, 0, true), &error), "concurrent metrics startup: " + error);
+        capsid::ClientIpcMetrics total;
+        std::atomic<bool> done{false};
+        std::atomic<unsigned> successful_reads{0};
+        std::mutex ready_mutex;
+        std::condition_variable ready_cv;
+        unsigned ready = 0;
+        std::vector<std::thread> readers;
+        for (unsigned reader = 0; reader < kReaders; ++reader) {
+            readers.emplace_back([&] {
+                const auto sample = [&] {
+                    capsid::ClientIpcMetrics interval;
+                    if (executor.snapshot_client_metrics(&interval)) {
+                        add_metrics(total, interval);
+                        successful_reads.fetch_add(1);
+                    }
+                };
+                sample();
+                {
+                    std::lock_guard<std::mutex> lock(ready_mutex);
+                    ++ready;
+                }
+                ready_cv.notify_one();
+                while (!done.load()) {
+                    sample();
+                    std::this_thread::yield();
+                }
+            });
+        }
+        bool all_readers_started;
+        {
+            std::unique_lock<std::mutex> lock(ready_mutex);
+            all_readers_started = ready_cv.wait_for(lock, std::chrono::seconds(15), [&] { return ready == kReaders; });
+        }
+        executor.stop_and_join();
+        done.store(true);
+        for (auto& reader : readers) reader.join();
+        capsid::ClientIpcMetrics final;
+        const bool final_present = executor.snapshot_client_metrics(&final);
+        add_metrics(total, final);
+        require(all_readers_started && successful_reads.load() >= kReaders, "every sampler actually ran");
+        require(executor.exit_status().clean(), "concurrent metrics worker actual exit zero");
+        require(executor.exited() && executor.worker() == nullptr && final_present,
+                "concurrent metrics worker reaped and final bank retained");
+        // The factory resets counters after HELLO, then queues one LOAD_BUNDLE;
+        // this idle worker receives exactly one SHUTDOWN. Readers may split
+        // these deltas differently but must neither duplicate nor lose them.
+        require(total.queued_frames.load() == 2, "concurrent deltas preserve both actual queued frames");
+        // READY is the one parsed frame for this idle worker. A clean
+        // SHUTDOWN closes the stream; next_event constructs EXIT from EOF
+        // without parsing an extra frame (client.cc read_size == 0 path).
+        require(total.parsed_frames.load() == 1, "only READY is parsed; EOF supplies the EXIT event");
+        require(total.socket_write_bytes.load() > 0 &&
+                total.socket_read_bytes.load() > 0 && total.queued_bytes_high_water.load() > 0,
+                "concurrent samples contain real transport work");
+        capsid::ClientIpcMetrics empty;
+        require(executor.snapshot_client_metrics(&empty), "drained concurrent bank");
+        require_zero_metrics(empty);
+        std::cout << "METRICS concurrency round=" << round << " pid=" << executor.process_id()
+                  << " readers=" << kReaders << " samples=" << successful_reads.load()
+                  << " frames=" << total.queued_frames.load() << " parsed=" << total.parsed_frames.load()
+                  << " os_exit=0" << std::endl;
+    }
+    std::cout << "PASS: concurrent snapshots and actual reaping across " << kRounds << " workers" << std::endl;
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (argc == 3 && std::string(argv[2]) == "--metrics-retirement") {
+        test_metrics_disabled_and_failed(argv[1]);
+        test_metrics_retirement(argv[1]);
+        test_metrics_retirement(argv[1], true);
+        return 0;
+    }
+    if (argc == 3 && std::string(argv[2]) == "--metrics-bank") {
+        test_metrics_bank();
+        return 0;
+    }
+    if (argc == 3 && std::string(argv[2]) == "--metrics-concurrency") {
+        test_metrics_concurrent_retirement(argv[1]);
+        return 0;
+    }
     if (argc != 2) {
         fail("expected capsid-worker path");
     }

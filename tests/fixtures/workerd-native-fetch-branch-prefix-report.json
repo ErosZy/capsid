@@ -1,0 +1,9 @@
+{
+  "schema": "capsid-native-fetch-branch-prefix-archive-v1",
+  "compressedSHA256": "0d61297e72a713a3fa82408f93396ed1da4894bbf7222ec7c61505bfe0c120dc",
+  "decodedSHA256": "2f2467c6155ab1ffdba7c1091298bafacb1b1a8e96ee0e74c7ca7bfffdd5e759",
+  "platforms": [
+    "win32",
+    "linux"
+  ]
+}

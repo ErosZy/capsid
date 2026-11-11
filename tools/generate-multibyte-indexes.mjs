@@ -2,11 +2,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 
-const [ wptRoot, outputPath ] = process.argv.slice(2);
-if (!wptRoot || !outputPath) {
+const [ wptRoot, outputPath, check ] = process.argv.slice(2);
+if (!wptRoot || !outputPath || (check !== undefined && check !== '--check')) {
     throw new TypeError(
-        'usage: generate-multibyte-indexes.mjs <wpt-root> <output>');
+        'usage: generate-multibyte-indexes.mjs <wpt-root> <output> [--check]');
 }
 
 const sources = {
@@ -45,9 +47,17 @@ const records = Object.entries(sources).map(([ name, source ]) => {
     const index = parseIndex(source);
     return { name, source, length: index.length, data: encodeIndex(index) };
 });
+const gbLock = JSON.parse(fs.readFileSync(new URL('./encoding-data/gb18030.lock.json', import.meta.url)));
+const gbBytes = fs.readFileSync(new URL('./encoding-data/gb18030.u16le', import.meta.url));
+assert.equal(gbLock.pointer_count, 23940);
+assert.equal(gbBytes.length, gbLock.pointer_count * 2);
+assert.equal(createHash('sha256').update(gbBytes).digest('hex'), gbLock.packed_sha256,
+    'GB18030 source index differs from its reviewed lock');
+const gbIndex = Array.from({length: gbLock.pointer_count}, (_, i) => gbBytes.readUInt16LE(i * 2));
+records.unshift({name: 'gb18030', length: gbIndex.length, data: encodeIndex(gbIndex)});
 
 const lines = [
-    '// Generated from the locked WHATWG Encoding indexes in WPT.',
+    '// Generated from the locked WHATWG Encoding indexes in WPT and tools/encoding-data.',
     '// Regenerate with tools/generate-multibyte-indexes.mjs.',
     'const encodedIndexes = Object.freeze({',
 ];
@@ -100,4 +110,6 @@ lines.push(
     '}',
     '');
 
-fs.writeFileSync(outputPath, lines.join('\n'));
+if (check) assert.equal(fs.readFileSync(outputPath, 'utf8'), lines.join('\n'), 'stale multibyte indexes');
+else fs.writeFileSync(outputPath, lines.join('\n'));
+console.log(`${check ? 'Verified' : 'Generated'} ${records.length} locked multibyte indexes`);

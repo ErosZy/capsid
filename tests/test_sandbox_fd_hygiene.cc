@@ -41,7 +41,8 @@ bool worker_environment_is_empty(int64_t pid) {
     std::ifstream environment(
         (std::string("/proc/") + std::to_string(pid) + "/environ").c_str(),
         std::ios::in | std::ios::binary);
-    return environment.peek() == std::ifstream::traits_type::eof();
+    return environment.is_open() &&
+           environment.peek() == std::ifstream::traits_type::eof();
 }
 
 bool kernel_sandbox_is_active(int64_t pid) {
@@ -109,8 +110,17 @@ int main(int argc, char **argv) {
     (void)argv;
     return 77;
 #else
-    if (argc != 2) {
-        fail("expected worker path");
+    if (argc != 2 && !(argc == 3 && std::string(argv[2]) == "--non-strict")) {
+        fail("expected worker path and optional --non-strict");
+    }
+    const bool strict = argc == 2;
+
+    if (worker_environment_is_empty(-1)) {
+        fail("an unreadable process environment must not count as empty");
+    }
+    if (setenv("CAPSID_ENVIRONMENT_CANARY", "test-value", 1) != 0 ||
+        setenv("HOST_ENVIRONMENT_CANARY", "test-value", 1) != 0) {
+        fail("cannot set environment probes");
     }
 
     char inherited_template[] = "/tmp/capsid-inherited-fd-XXXXXX";
@@ -131,7 +141,7 @@ int main(int argc, char **argv) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = argv[1];
-    config.strict_sandbox = 1;
+    config.strict_sandbox = strict ? 1 : 0;
     capsid_resource_limits limits;
     capsid_resource_limits_init(&limits);
     limits.enabled_fields = CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS;
@@ -190,7 +200,8 @@ int main(int argc, char **argv) {
     const std::chrono::steady_clock::time_point sandbox_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (std::chrono::steady_clock::now() < sandbox_deadline &&
-           !kernel_sandbox_is_active(worker_pid)) {
+           ((strict && !kernel_sandbox_is_active(worker_pid)) ||
+            !worker_open_file_limit_is(worker_pid, 48))) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     const bool sandbox_before_ready =
@@ -204,15 +215,15 @@ int main(int argc, char **argv) {
     if (leaked) {
         fail("worker inherited an unrelated host file descriptor");
     }
-    if (stdin_target != "/dev/null" ||
-        stdout_target != "/dev/null" ||
-        stderr_target != "/dev/null") {
+    if (strict && (stdin_target != "/dev/null" ||
+                   stdout_target != "/dev/null" ||
+                   stderr_target != "/dev/null")) {
         fail("strict worker stdio was not isolated through /dev/null");
     }
     if (!environment_empty) {
-        fail("strict worker inherited the host environment");
+        fail("worker inherited the host environment");
     }
-    if (!sandbox_before_ready) {
+    if (strict && !sandbox_before_ready) {
         fail("strict kernel sandbox was not active after bundle bytes/before READY");
     }
     if (!open_file_limit_applied) {

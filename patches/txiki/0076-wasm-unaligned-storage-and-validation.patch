@@ -1,0 +1,599 @@
+--- a/deps/wamr/core/iwasm/common/wasm_runtime_common.h
++++ b/deps/wamr/core/iwasm/common/wasm_runtime_common.h
+@@ -33,65 +33,147 @@
+ 
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+ 
+-#define PUT_I64_TO_ADDR(addr, value)       \
+-    do {                                   \
+-        *(int64 *)(addr) = (int64)(value); \
+-    } while (0)
+-#define PUT_V128_TO_ADDR(addr, value) \
+-    do {                              \
+-        *(V128 *)(addr) = (value);    \
+-    } while (0)
+-#define PUT_F64_TO_ADDR(addr, value)           \
+-    do {                                       \
+-        *(float64 *)(addr) = (float64)(value); \
+-    } while (0)
+-#define PUT_REF_TO_ADDR(addr, value)        \
+-    do {                                    \
+-        *(void **)(addr) = (void *)(value); \
+-    } while (0)
+-
+-#define GET_I64_FROM_ADDR(addr) (*(int64 *)(addr))
+-#define GET_F64_FROM_ADDR(addr) (*(float64 *)(addr))
+-#define GET_REF_FROM_ADDR(addr) (*(void **)(addr))
+-#define GET_V128_FROM_ADDR(addr) (*(V128 *)(addr))
+-
+-/* For STORE opcodes */
++/* Bytecode and linear memory may have byte alignment even when the
++ * CPU accepts wider unaligned accesses. Copy object representations
++ * without creating an incorrectly aligned C lvalue. */
++static inline int16
++wasm_load_i16_unaligned(const void *addr)
++{
++    int16 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_i16_unaligned(void *addr, int16 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline uint16
++wasm_load_u16_unaligned(const void *addr)
++{
++    uint16 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_u16_unaligned(void *addr, uint16 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline int32
++wasm_load_i32_unaligned(const void *addr)
++{
++    int32 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_i32_unaligned(void *addr, int32 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline uint32
++wasm_load_u32_unaligned(const void *addr)
++{
++    uint32 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_u32_unaligned(void *addr, uint32 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline int64
++wasm_load_i64_unaligned(const void *addr)
++{
++    int64 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_i64_unaligned(void *addr, int64 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline float64
++wasm_load_f64_unaligned(const void *addr)
++{
++    float64 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_f64_unaligned(void *addr, float64 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline V128
++wasm_load_v128_unaligned(const void *addr)
++{
++    V128 value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_v128_unaligned(void *addr, V128 value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++static inline void *
++wasm_load_ptr_unaligned(const void *addr)
++{
++    void * value;
++    memcpy(&value, addr, sizeof(value));
++    return value;
++}
++
++static inline void
++wasm_store_ptr_unaligned(void *addr, void * value)
++{
++    memcpy(addr, &value, sizeof(value));
++}
++
++#define GET_I64_FROM_ADDR wasm_load_i64_unaligned
++#define GET_F64_FROM_ADDR wasm_load_f64_unaligned
++#define GET_REF_FROM_ADDR wasm_load_ptr_unaligned
++#define GET_V128_FROM_ADDR wasm_load_v128_unaligned
++#define LOAD_I64 wasm_load_i64_unaligned
++#define LOAD_F64 wasm_load_f64_unaligned
++#define LOAD_I32 wasm_load_i32_unaligned
++#define LOAD_U32 wasm_load_u32_unaligned
++#define LOAD_I16 wasm_load_i16_unaligned
++#define LOAD_U16 wasm_load_u16_unaligned
++#define LOAD_V128 wasm_load_v128_unaligned
++#define STORE_U32 wasm_store_u32_unaligned
++#define STORE_U16 wasm_store_u16_unaligned
++#define STORE_V128 wasm_store_v128_unaligned
++#define PUT_I64_TO_ADDR(addr, value) wasm_store_i64_unaligned((addr), (int64)(value))
++#define PUT_F64_TO_ADDR(addr, value) wasm_store_f64_unaligned((addr), (float64)(value))
++#define PUT_REF_TO_ADDR(addr, value) wasm_store_ptr_unaligned((addr), (void *)(value))
++#define PUT_V128_TO_ADDR(addr, value) wasm_store_v128_unaligned((addr), (value))
+ #define STORE_I64 PUT_I64_TO_ADDR
+-static inline void
+-STORE_U32(void *addr, uint32_t value)
+-{
+-    *(uint32_t *)(addr) = (uint32_t)(value);
+-}
+-static inline void
+-STORE_U16(void *addr, uint16_t value)
+-{
+-    *(uint16_t *)(addr) = (uint16_t)(value);
+-}
++#define STORE_PTR(addr, value) wasm_store_ptr_unaligned((addr), (void *)(value))
++
+ static inline void
+ STORE_U8(void *addr, uint8_t value)
+ {
+     *(uint8 *)addr = value;
+ }
+-
+-static inline void
+-STORE_V128(void *addr, V128 value)
+-{
+-    *(V128 *)addr = value;
+-}
+-
+-/* For LOAD opcodes */
+-#define LOAD_I64(addr) (*(int64 *)(addr))
+-#define LOAD_F64(addr) (*(float64 *)(addr))
+-#define LOAD_I32(addr) (*(int32 *)(addr))
+-#define LOAD_U32(addr) (*(uint32 *)(addr))
+-#define LOAD_I16(addr) (*(int16 *)(addr))
+-#define LOAD_U16(addr) (*(uint16 *)(addr))
+-#define LOAD_V128(addr) (*(V128 *)(addr))
+-
+-#define STORE_PTR(addr, ptr)          \
+-    do {                              \
+-        *(void **)addr = (void *)ptr; \
+-    } while (0)
+ 
+ #else /* WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0 */
+ 
+--- a/deps/wamr/core/iwasm/interpreter/wasm_interp_fast.c
++++ b/deps/wamr/core/iwasm/interpreter/wasm_interp_fast.c
+@@ -281,8 +281,8 @@
+ }
+ 
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+-#define LOAD_U32_WITH_2U16S(addr) (*(uint32 *)(addr))
+-#define LOAD_PTR(addr) (*(void **)(addr))
++#define LOAD_U32_WITH_2U16S(addr) LOAD_U32(addr)
++#define LOAD_PTR(addr) GET_REF_FROM_ADDR(addr)
+ #else /* else of WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS */
+ static inline uint32
+ LOAD_U32_WITH_2U16S(void *addr)
+@@ -416,30 +416,30 @@
+             local_type = cur_func->local_types[local_idx - param_count]; \
+     } while (0)
+ 
+-#define GET_OFFSET() (frame_ip += 2, *(int16 *)(frame_ip - 2))
++#define GET_OFFSET() (frame_ip += 2, LOAD_I16(frame_ip - 2))
+ 
+ #define SET_OPERAND_I32(off, value)                                 \
+     do {                                                            \
+-        *(uint32 *)(frame_lp + *(int16 *)(frame_ip + off)) = value; \
++        *(uint32 *)(frame_lp + LOAD_I16(frame_ip + off)) = value; \
+     } while (0)
+ #define SET_OPERAND_F32(off, value)                                  \
+     do {                                                             \
+-        *(float32 *)(frame_lp + *(int16 *)(frame_ip + off)) = value; \
++        *(float32 *)(frame_lp + LOAD_I16(frame_ip + off)) = value; \
+     } while (0)
+ #define SET_OPERAND_I64(off, value)                               \
+     do {                                                          \
+-        uint32 *addr_tmp = frame_lp + *(int16 *)(frame_ip + off); \
++        uint32 *addr_tmp = frame_lp + LOAD_I16(frame_ip + off); \
+         PUT_I64_TO_ADDR(addr_tmp, value);                         \
+     } while (0)
+ #define SET_OPERAND_F64(off, value)                               \
+     do {                                                          \
+-        uint32 *addr_tmp = frame_lp + *(int16 *)(frame_ip + off); \
++        uint32 *addr_tmp = frame_lp + LOAD_I16(frame_ip + off); \
+         PUT_F64_TO_ADDR(addr_tmp, value);                         \
+     } while (0)
+ #define SET_OPERAND_REF(off, value)            \
+     do {                                       \
+         uint32 *addr_tmp;                      \
+-        opnd_off = *(int16 *)(frame_ip + off); \
++        opnd_off = LOAD_I16(frame_ip + off); \
+         addr_tmp = frame_lp + opnd_off;        \
+         PUT_REF_TO_ADDR(addr_tmp, value);      \
+         SET_FRAME_REF(ond_off);                \
+@@ -448,17 +448,17 @@
+ #define SET_OPERAND(op_type, off, value) SET_OPERAND_##op_type(off, value)
+ 
+ #define GET_OPERAND_I32(type, off) \
+-    *(type *)(frame_lp + *(int16 *)(frame_ip + off))
++    *(type *)(frame_lp + LOAD_I16(frame_ip + off))
+ #define GET_OPERAND_F32(type, off) \
+-    *(type *)(frame_lp + *(int16 *)(frame_ip + off))
++    *(type *)(frame_lp + LOAD_I16(frame_ip + off))
+ #define GET_OPERAND_I64(type, off) \
+-    (type) GET_I64_FROM_ADDR(frame_lp + *(int16 *)(frame_ip + off))
++    (type) GET_I64_FROM_ADDR(frame_lp + LOAD_I16(frame_ip + off))
+ #define GET_OPERAND_F64(type, off) \
+-    (type) GET_F64_FROM_ADDR(frame_lp + *(int16 *)(frame_ip + off))
++    (type) GET_F64_FROM_ADDR(frame_lp + LOAD_I16(frame_ip + off))
+ #define GET_OPERAND_V128(off) \
+-    GET_V128_FROM_ADDR(frame_lp + *(int16 *)(frame_ip + off))
++    GET_V128_FROM_ADDR(frame_lp + LOAD_I16(frame_ip + off))
+ #define GET_OPERAND_REF(type, off) \
+-    (type) GET_REF_FROM_ADDR(frame_lp + *(int16 *)(frame_ip + off))
++    (type) GET_REF_FROM_ADDR(frame_lp + LOAD_I16(frame_ip + off))
+ 
+ #define GET_OPERAND(type, op_type, off) GET_OPERAND_##op_type(type, off)
+ 
+@@ -908,7 +908,7 @@
+     /* 1) Copy values from src to tmp buf */
+     for (i = 0; i < arity; i++) {
+         cell = cells[i * CELL_SIZE];
+-        src = src_offsets[i];
++        src = LOAD_I16(src_offsets + (i));
+         if (cell == 1) {
+             tmp_buf[buf_index] = frame_lp[src];
+ #if WASM_ENABLE_GC != 0
+@@ -933,7 +933,7 @@
+     buf_index = 0;
+     for (i = 0; i < arity; i++) {
+         cell = cells[i * CELL_SIZE];
+-        dst = dst_offsets[i];
++        dst = LOAD_U16(dst_offsets + (i));
+         if (cell == 1) {
+             frame_lp[dst] = tmp_buf[buf_index];
+ #if WASM_ENABLE_GC != 0
+@@ -991,39 +991,39 @@
+             frame_ip += arity * sizeof(uint16);                            \
+             if (arity == 1) {                                              \
+                 if (cells[0] == 1) {                                       \
+-                    frame_lp[dst_offsets[0]] = frame_lp[src_offsets[0]];   \
++                    frame_lp[LOAD_U16(dst_offsets + (0))] = frame_lp[LOAD_I16(src_offsets + (0))];   \
+                     /* Ignore constants because they are not reference */  \
+-                    if (src_offsets[0] >= 0) {                             \
+-                        CLEAR_FRAME_REF((unsigned)(src_offsets[0]));       \
+-                        SET_FRAME_REF(dst_offsets[0]);                     \
++                    if (LOAD_I16(src_offsets + (0)) >= 0) {                             \
++                        CLEAR_FRAME_REF((unsigned)(LOAD_I16(src_offsets + (0))));       \
++                        SET_FRAME_REF(LOAD_U16(dst_offsets + (0)));                     \
+                     }                                                      \
+                 }                                                          \
+                 else if (cells[0] == 2) {                                  \
+                     PUT_I64_TO_ADDR(                                       \
+-                        frame_lp + dst_offsets[0],                         \
+-                        GET_I64_FROM_ADDR(frame_lp + src_offsets[0]));     \
++                        frame_lp + LOAD_U16(dst_offsets + (0)),                         \
++                        GET_I64_FROM_ADDR(frame_lp + LOAD_I16(src_offsets + (0))));     \
+                     /* Ignore constants because they are not reference */  \
+-                    if (src_offsets[0] >= 0) {                             \
+-                        CLEAR_FRAME_REF((unsigned)src_offsets[0]);         \
+-                        CLEAR_FRAME_REF((unsigned)(src_offsets[0] + 1));   \
+-                        SET_FRAME_REF((unsigned)dst_offsets[0]);           \
+-                        SET_FRAME_REF((unsigned)(dst_offsets[0] + 1));     \
++                    if (LOAD_I16(src_offsets + (0)) >= 0) {                             \
++                        CLEAR_FRAME_REF((unsigned)LOAD_I16(src_offsets + (0)));         \
++                        CLEAR_FRAME_REF((unsigned)(LOAD_I16(src_offsets + (0)) + 1));   \
++                        SET_FRAME_REF((unsigned)LOAD_U16(dst_offsets + (0)));           \
++                        SET_FRAME_REF((unsigned)(LOAD_U16(dst_offsets + (0)) + 1));     \
+                     }                                                      \
+                 }                                                          \
+                 else if (cells[0] == 4) {                                  \
+                     PUT_V128_TO_ADDR(                                      \
+-                        frame_lp + dst_offsets[0],                         \
+-                        GET_V128_FROM_ADDR(frame_lp + src_offsets[0]));    \
++                        frame_lp + LOAD_U16(dst_offsets + (0)),                         \
++                        GET_V128_FROM_ADDR(frame_lp + LOAD_I16(src_offsets + (0))));    \
+                     /* Ignore constants because they are not reference */  \
+-                    if (src_offsets[0] >= 0) {                             \
+-                        CLEAR_FRAME_REF((unsigned)src_offsets[0]);         \
+-                        CLEAR_FRAME_REF((unsigned)(src_offsets[0] + 1));   \
+-                        CLEAR_FRAME_REF((unsigned)(src_offsets[0] + 2));   \
+-                        CLEAR_FRAME_REF((unsigned)(src_offsets[0] + 3));   \
+-                        SET_FRAME_REF((unsigned)dst_offsets[0]);           \
+-                        SET_FRAME_REF((unsigned)(dst_offsets[0] + 1));     \
+-                        SET_FRAME_REF((unsigned)(dst_offsets[0] + 2));     \
+-                        SET_FRAME_REF((unsigned)(dst_offsets[0] + 3));     \
++                    if (LOAD_I16(src_offsets + (0)) >= 0) {                             \
++                        CLEAR_FRAME_REF((unsigned)LOAD_I16(src_offsets + (0)));         \
++                        CLEAR_FRAME_REF((unsigned)(LOAD_I16(src_offsets + (0)) + 1));   \
++                        CLEAR_FRAME_REF((unsigned)(LOAD_I16(src_offsets + (0)) + 2));   \
++                        CLEAR_FRAME_REF((unsigned)(LOAD_I16(src_offsets + (0)) + 3));   \
++                        SET_FRAME_REF((unsigned)LOAD_U16(dst_offsets + (0)));           \
++                        SET_FRAME_REF((unsigned)(LOAD_U16(dst_offsets + (0)) + 1));     \
++                        SET_FRAME_REF((unsigned)(LOAD_U16(dst_offsets + (0)) + 2));     \
++                        SET_FRAME_REF((unsigned)(LOAD_U16(dst_offsets + (0)) + 3));     \
+                     }                                                      \
+                 }                                                          \
+             }                                                              \
+@@ -1060,16 +1060,16 @@
+             frame_ip += arity * sizeof(uint16);                             \
+             if (arity == 1) {                                               \
+                 if (cells[0] == 1)                                          \
+-                    frame_lp[dst_offsets[0]] = frame_lp[src_offsets[0]];    \
++                    frame_lp[LOAD_U16(dst_offsets + (0))] = frame_lp[LOAD_I16(src_offsets + (0))];    \
+                 else if (cells[0] == 2) {                                   \
+                     PUT_I64_TO_ADDR(                                        \
+-                        frame_lp + dst_offsets[0],                          \
+-                        GET_I64_FROM_ADDR(frame_lp + src_offsets[0]));      \
++                        frame_lp + LOAD_U16(dst_offsets + (0)),                          \
++                        GET_I64_FROM_ADDR(frame_lp + LOAD_I16(src_offsets + (0))));      \
+                 }                                                           \
+                 else if (cells[0] == 4) {                                   \
+                     PUT_V128_TO_ADDR(                                       \
+-                        frame_lp + dst_offsets[0],                          \
+-                        GET_V128_FROM_ADDR(frame_lp + src_offsets[0]));     \
++                        frame_lp + LOAD_U16(dst_offsets + (0)),                          \
++                        GET_V128_FROM_ADDR(frame_lp + LOAD_I16(src_offsets + (0))));     \
+                 }                                                           \
+             }                                                               \
+             else {                                                          \
+@@ -1436,7 +1436,7 @@
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+ #define FETCH_OPCODE_AND_DISPATCH()                    \
+     do {                                               \
+-        const void *p_label_addr = *(void **)frame_ip; \
++        const void *p_label_addr = LOAD_PTR(frame_ip); \
+         frame_ip += sizeof(void *);                    \
+         CHECK_INSTRUCTION_LIMIT();                     \
+         goto *p_label_addr;                            \
+@@ -7630,8 +7630,7 @@
+                     GET_OPERAND(void *, REF,
+                                 2 * (cur_func->param_count - i - 1)));
+                 CLEAR_FRAME_REF(
+-                    *(uint16 *)(frame_ip
+-                                + (2 * (cur_func->param_count - i - 1))));
++                    LOAD_U16(frame_ip + (2 * (cur_func->param_count - i - 1))));
+                 outs_area->lp += REF_CELL_NUM;
+             }
+ #endif
+--- a/deps/wamr/core/iwasm/interpreter/wasm_loader.c
++++ b/deps/wamr/core/iwasm/interpreter/wasm_loader.c
+@@ -153,7 +153,7 @@
+ #endif
+ 
+ #define read_uint8(p) TEMPLATE_READ_VALUE(uint8, p)
+-#define read_uint32(p) TEMPLATE_READ_VALUE(uint32, p)
++#define read_uint32(p) (p += sizeof(uint32), LOAD_U32(p - sizeof(uint32)))
+ 
+ #define read_leb_int64(p, p_end, res)                                   \
+     do {                                                                \
+@@ -13153,22 +13153,20 @@
+                                 uint8 opcode_tmp = WASM_OP_SELECT_64;
+ #if WASM_ENABLE_LABELS_AS_VALUES != 0
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+-                                *(void **)(p_code_compiled_tmp
+-                                           - sizeof(void *)) =
+-                                    handle_table[opcode_tmp];
++                                STORE_PTR(p_code_compiled_tmp
++                                           - sizeof(void *), handle_table[opcode_tmp]);
+ #elif UINTPTR_MAX == UINT64_MAX
+                                 /* emit int32 relative offset in 64-bit target
+                                  */
+                                 int32 offset =
+                                     (int32)((uint8 *)handle_table[opcode_tmp]
+                                             - (uint8 *)handle_table[0]);
+-                                *(int32 *)(p_code_compiled_tmp
+-                                           - sizeof(int32)) = offset;
++                                STORE_U32(p_code_compiled_tmp
++                                           - sizeof(int32), offset);
+ #else
+                                 /* emit uint32 label address in 32-bit target */
+-                                *(uint32 *)(p_code_compiled_tmp
+-                                            - sizeof(uint32)) =
+-                                    (uint32)(uintptr_t)handle_table[opcode_tmp];
++                                STORE_U32(p_code_compiled_tmp
++                                            - sizeof(uint32), (uint32)(uintptr_t)handle_table[opcode_tmp]);
+ #endif /* end of WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS */
+ #else  /* else of WASM_ENABLE_LABELS_AS_VALUES */
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+@@ -13189,22 +13187,20 @@
+                                 uint8 opcode_tmp = WASM_OP_SELECT_128;
+ #if WASM_ENABLE_LABELS_AS_VALUES != 0
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+-                                *(void **)(p_code_compiled_tmp
+-                                           - sizeof(void *)) =
+-                                    handle_table[opcode_tmp];
++                                STORE_PTR(p_code_compiled_tmp
++                                           - sizeof(void *), handle_table[opcode_tmp]);
+ #elif UINTPTR_MAX == UINT64_MAX
+                                 /* emit int32 relative offset in 64-bit target
+                                  */
+                                 int32 offset =
+                                     (int32)((uint8 *)handle_table[opcode_tmp]
+                                             - (uint8 *)handle_table[0]);
+-                                *(int32 *)(p_code_compiled_tmp
+-                                           - sizeof(int32)) = offset;
++                                STORE_U32(p_code_compiled_tmp
++                                           - sizeof(int32), offset);
+ #else
+                                 /* emit uint32 label address in 32-bit target */
+-                                *(uint32 *)(p_code_compiled_tmp
+-                                            - sizeof(uint32)) =
+-                                    (uint32)(uintptr_t)handle_table[opcode_tmp];
++                                STORE_U32(p_code_compiled_tmp
++                                            - sizeof(uint32), (uint32)(uintptr_t)handle_table[opcode_tmp]);
+ #endif /* end of WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS */
+ #else  /* else of WASM_ENABLE_LABELS_AS_VALUES */
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+@@ -13328,19 +13324,16 @@
+ #endif
+ #if WASM_ENABLE_LABELS_AS_VALUES != 0
+ #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
+-                        *(void **)(p_code_compiled_tmp - sizeof(void *)) =
+-                            handle_table[opcode_tmp];
++                        STORE_PTR(p_code_compiled_tmp - sizeof(void *), handle_table[opcode_tmp]);
+ #else
+ #if UINTPTR_MAX == UINT64_MAX
+                         /* emit int32 relative offset in 64-bit target */
+                         int32 offset = (int32)((uint8 *)handle_table[opcode_tmp]
+                                                - (uint8 *)handle_table[0]);
+-                        *(int32 *)(p_code_compiled_tmp - sizeof(int32)) =
+-                            offset;
++                        STORE_U32(p_code_compiled_tmp - sizeof(int32), offset);
+ #else
+                         /* emit uint32 label address in 32-bit target */
+-                        *(uint32 *)(p_code_compiled_tmp - sizeof(uint32)) =
+-                            (uint32)(uintptr_t)handle_table[opcode_tmp];
++                        STORE_U32(p_code_compiled_tmp - sizeof(uint32), (uint32)(uintptr_t)handle_table[opcode_tmp]);
+ #endif
+ #endif /* end of WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS */
+ #else  /* else of WASM_ENABLE_LABELS_AS_VALUES */
+--- a/deps/wamr/core/iwasm/interpreter/wasm_runtime.c
++++ b/deps/wamr/core/iwasm/interpreter/wasm_runtime.c
+@@ -668,6 +668,7 @@
+             total_size += (uint64)sizeof(table_elem_type_t) * max_size_fixed;
+         }
+ 
++        total_size = (total_size + 7ULL) & ~7ULL;
+         tables[table_index++] = table;
+ 
+ #if WASM_ENABLE_GC == 0
+@@ -729,6 +730,7 @@
+         total_size += sizeof(uintptr_t) * (uint64)max_size_fixed;
+ #endif
+ 
++        total_size = (total_size + 7ULL) & ~7ULL;
+         tables[table_index++] = table;
+ 
+ #if WASM_ENABLE_GC == 0
+@@ -2434,7 +2436,7 @@
+     uint32 module_inst_struct_size =
+         offsetof(WASMModuleInstance, global_table_data.bytes);
+     uint64 module_inst_mem_inst_size;
+-    uint64 total_size, table_size = 0;
++    uint64 total_size, table_size = 0, first_table_offset;
+     uint8 *global_data, *global_data_end;
+ #if WASM_ENABLE_MULTI_MODULE != 0
+     bool ret = false;
+@@ -2463,6 +2465,11 @@
+     /* Size of module inst, memory instances and global data */
+     total_size = (uint64)module_inst_struct_size + module_inst_mem_inst_size
+                  + module->global_data_size;
++
++    /* Tables require 8-byte alignment even when the preceding global
++       data ends in a 32-bit value. */
++    total_size = (total_size + 7ULL) & ~7ULL;
++    first_table_offset = total_size;
+ 
+     /* Calculate the size of table data */
+     for (i = 0; i < module->import_table_count; i++) {
+@@ -2477,6 +2484,7 @@
+                              ? import_table->table_type.max_size
+                              : import_table->table_type.init_size);
+ #endif
++        table_size = (table_size + 7ULL) & ~7ULL;
+     }
+     for (i = 0; i < module->table_count; i++) {
+         WASMTable *table = module->tables + i;
+@@ -2490,6 +2498,7 @@
+             * (table->table_type.possible_grow ? table->table_type.max_size
+                                                : table->table_type.init_size);
+ #endif
++        table_size = (table_size + 7ULL) & ~7ULL;
+     }
+     total_size += table_size;
+ 
+@@ -2596,8 +2605,7 @@
+     module_inst->global_data = (uint8 *)module_inst + module_inst_struct_size
+                                + module_inst_mem_inst_size;
+     module_inst->global_data_size = module->global_data_size;
+-    first_table = (WASMTableInstance *)(module_inst->global_data
+-                                        + module->global_data_size);
++    first_table = (WASMTableInstance *)((uint8 *)module_inst + first_table_offset);
+ 
+     module_inst->memory_count =
+         module->import_memory_count + module->memory_count;
+--- a/deps/wamr/core/iwasm/common/wasm_exec_env.h
++++ b/deps/wamr/core/iwasm/common/wasm_exec_env.h
+@@ -220,14 +220,20 @@
+ 
+     bh_assert(!(size & 3));
+ 
++    /* A frame contains native pointers. Keep the next frame and its
++       outgoing argument area aligned without overflowing the size. */
++    if (size > UINT32_MAX - 7U)
++        return NULL;
++    size = (size + 7U) & ~7U;
++
+     /* For classic interpreter, the outs area doesn't contain the const cells,
+        its size cannot be larger than the frame size, so here checking stack
+        overflow with multiplying by 2 is enough. For fast interpreter, since
+        the outs area contains const cells, its size may be larger than current
+        frame size, we should check again before putting the function arguments
+        into the outs area. */
+-    if (size * 2
+-        > (uint32)(uintptr_t)(exec_env->wasm_stack.top_boundary - addr)) {
++    if (size
++        > (uint32)(uintptr_t)(exec_env->wasm_stack.top_boundary - addr) / 2) {
+         /* WASM stack overflow. */
+         return NULL;
+     }
+--- a/src/wasm.c
++++ b/src/wasm.c
+@@ -2638,7 +2638,7 @@
+ 
+     char error_buf[TJS__WASM_ERROR_BUF_SIZE];
+ 
+-    /* Make a copy using WAMR's allocator since wasm_runtime_load takes ownership on success */
++    /* WAMR may retain pointers into the copied bytes until unload. */
+     uint8_t *copy = wasm_runtime_malloc(buf_len);
+     if (!copy) {
+         return JS_FALSE;
+@@ -2648,6 +2648,7 @@
+     wasm_module_t module = wasm_runtime_load(copy, (uint32_t) buf_len, error_buf, sizeof(error_buf));
+     if (module) {
+         wasm_runtime_unload(module);
++        wasm_runtime_free(copy);
+         return JS_TRUE;
+     }
+ 

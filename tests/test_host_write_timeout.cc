@@ -1,452 +1,441 @@
-// M2 E-3 slow-client write deadline RED/GREEN (design §9.2):
-//   - a socket write that does not complete within write_timeout_ms (the
-//     client stopped reading) cancels the request and closes the
-//     connection; the server keeps serving afterwards;
-//   - the write deadline is a Host-side socket view, independent from the
-//     worker-side request timeout (§8.3 separate timers): a hung write is
-//     torn down by the write deadline even when the worker deadline is
-//     much longer;
-//   - the worker deadline still fires independently when the client reads
-//     normally but the worker is slow;
-//   - a fast response is never touched by the write deadline.
-//
-// Frozen assertions: hung write → connection closed within a bounded time
-// (well below the worker deadline); server healthy afterwards; worker
-// deadline still maps to 504; fast responses unaffected.
-
-#if __has_include("host/single_worker_server.h")
+// Real TCP backpressure through the public API. Peeking never consumes bytes;
+// admission must recover before the stalled client starts reading its body.
+#if defined(_WIN32) && !defined(_WIN32_WINNT)
+#define _WIN32_WINNT 0x0A00
+#endif
 #include "host/single_worker_server.h"
-#define CAPSID_HAS_SINGLE_WORKER_SERVER 1
-#else
-#define CAPSID_HAS_SINGLE_WORKER_SERVER 0
-#endif
-
+#include "host/static_pool_server.h"
 #include "win32_compat.h"
-#if defined(_WIN32)
-#else
-#include <arpa/inet.h>
-#endif
-#include "win32_compat.h"
-#include "win32_compat.h"
-#if defined(_WIN32)
-#else
-#include <sys/socket.h>
-#endif
-
-// macOS does not define SOCK_CLOEXEC; these IPC pairs do not cross exec
-// on the test paths, so a plain socket type is the portable fallback.
-#ifndef SOCK_CLOEXEC
-#define SOCK_CLOEXEC 0
-#endif
-#include "win32_compat.h"
-#if defined(_WIN32)
-#else
-#include <sys/time.h>
-#endif
-#include "win32_compat.h"
-#if defined(_WIN32)
-#else
-#include <unistd.h>
-#endif
+#include "worker_exit_assertions.h"
+#include <boost/asio.hpp>
+#include <boost/beast/http.hpp>
 
 #include <chrono>
-#include <cstdint>
-#include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <set>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
-
-[[noreturn]] void fail(const std::string& message) {
-    std::cerr << "FAIL: " << message << std::endl;
-    std::exit(1);
+namespace asio = boost::asio;
+namespace http = boost::beast::http;
+using tcp = asio::ip::tcp;
+using Clock = std::chrono::steady_clock;
+constexpr std::size_t body_size = 8U * 1024U * 1024U;
+void require(bool value, const char *message) {
+  if (!value)
+    throw std::runtime_error(message);
 }
-
-void require(bool condition, const std::string& message) {
-    if (!condition) {
-        fail(message);
+long elapsed(Clock::time_point start) {
+  return static_cast<long>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() -
+                                                            start)
+          .count());
+}
+std::string quote(const std::string &value) {
+  std::string result = "\"";
+  for (const char ch : value) {
+    if (ch == '"' || ch == '\\')
+      result += '\\';
+    result += ch >= 32 ? ch : '?';
+  }
+  return result + '"';
+}
+struct Report {
+  std::string scenario;
+  std::size_t workers = 1, busy = 0, recovered = 0;
+  long action_ms = 0;
+  bool cleanup = false, unread_until_action = false;
+  std::vector<std::size_t> wire_bytes, body_bytes;
+  std::vector<int> receive_buffers;
+  std::vector<capsid::WorkerExitStatus> worker_exits;
+  capsid::host::SingleWorkerServer::DrainMetrics drain;
+  void print(bool complete, const std::string &error) const {
+    std::cout << "{\"complete\":" << (complete ? "true" : "false")
+              << ",\"scenario\":" << quote(scenario)
+              << ",\"workers\":" << workers << ",\"busyResponses\":" << busy
+              << ",\"recoveredInstances\":" << recovered
+              << ",\"actionMs\":" << action_ms
+              << ",\"normalCleanup\":" << (cleanup ? "true" : "false")
+              << ",\"unreadUntilAction\":"
+              << (unread_until_action ? "true" : "false")
+              << ",\"declaredBodyBytes\":" << body_size;
+    const auto array = [](const auto &values) {
+      std::cout << '[';
+      for (std::size_t i = 0; i < values.size(); ++i)
+        std::cout << (i ? "," : "") << values[i];
+      std::cout << ']';
+    };
+    std::cout << ",\"wireBytes\":";
+    array(wire_bytes);
+    std::cout << ",\"bodyBytes\":";
+    array(body_bytes);
+    std::cout << ",\"receiveBuffers\":";
+    array(receive_buffers);
+    std::cout << ",\"workerExits\":[";
+    for (std::size_t i = 0; i < worker_exits.size(); ++i) {
+      if (i) std::cout << ',';
+      capsid_test::print_worker_exit(worker_exits[i]);
     }
-}
-
-#if CAPSID_HAS_SINGLE_WORKER_SERVER
-
-std::string read_one_ready_line(int fd) {
-    std::string line;
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (line.empty() || line.back() != '\n') {
-        require(std::chrono::steady_clock::now() < deadline,
-                "server did not publish READY after start returned");
-        capsid_pollfd descriptor = {};
-        descriptor.fd = fd;
-        descriptor.events = POLLIN;
-        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
-        require(polled >= 0, "cannot poll server READY pipe");
-        if (polled == 0) {
-            continue;
-        }
-        char byte = 0;
-#if defined(_WIN32)
-        require(capsid::win32::read_fd(fd, &byte, 1) == 1,
-#else
-        require(read(fd, &byte, 1) == 1,
-#endif
-                "server READY pipe closed without a complete record");
-        line.push_back(byte);
-        require(line.size() <= 1024, "server READY record is unbounded");
-    }
-    return line;
-}
-
-std::uint16_t ready_port(const std::string& line) {
-    const std::string marker = "\"port\":";
-    const std::string::size_type begin = line.find(marker);
-    require(begin != std::string::npos, "server READY record has no port");
-    const char* digits = line.c_str() + begin + marker.size();
-    char* end = nullptr;
-    const unsigned long port = std::strtoul(digits, &end, 10);
-    require(end != digits && port > 0 && port <= 65535,
-            "server READY record has an invalid port");
-    return static_cast<std::uint16_t>(port);
-}
-
-// A body much larger than any kernel socket buffer: the Host write blocks
-// as soon as the client stops reading.
-const std::vector<std::uint8_t>& big_body_bundle() {
-    static const std::string source =
-        "export default { fetch: () => { "
-        "  return new Response(new TextEncoder().encode('x'.repeat(4 * 1024 * 1024)), "
-        "    { headers: { 'content-type': 'application/octet-stream' } }); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
-    return bundle;
-}
-
-// The worker stalls for 500ms before answering: a worker-deadline fixture.
-const std::vector<std::uint8_t>& slow_bundle() {
-    static const std::string source =
-        "export default { fetch: () => { "
-        "  return new Promise(resolve => setTimeout(() => { "
-        "    resolve(new Response('slow-ok')); }, 500)); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
-    return bundle;
-}
-
-// An immediate small response.
-const std::vector<std::uint8_t>& fast_bundle() {
-    static const std::string source =
-        "export default { fetch: () => new Response('fast-ok') };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
-    return bundle;
-}
-
-int connect_to(std::uint16_t port) {
-    const int fd = capsid::win32::create_tcp_socket_fd();
-    require(fd >= 0, "cannot create write-timeout HTTP socket");
-    require(capsid::win32::setsockopt_recv_timeout_fd(fd, 3000) == 0,
-            "cannot set write-timeout HTTP receive timeout");
-    struct sockaddr_in address = {};
-    address.sin_family = AF_INET;
-    address.sin_port = htons(port);
-    require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
-            "cannot encode write-timeout loopback address");
-    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
-                    sizeof(address)) == 0,
-            "cannot connect to write-timeout server");
-    return fd;
-}
-
-void send_request(int fd, const std::string& target, bool keep_alive) {
-    const std::string connection = keep_alive ? "keep-alive" : "close";
-    const std::string request =
-        "GET " + target + " HTTP/1.1\r\n"
-        "Host: public.example\r\n"
-        "Connection: " + connection + "\r\n\r\n";
-    std::size_t sent = 0;
-    while (sent < request.size()) {
-        const ssize_t count =
-            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
-        require(count > 0, "cannot write HTTP request");
-        sent += static_cast<std::size_t>(count);
-    }
-}
-
-// The client never reads after sending the request; the server must close
-// the connection (the write deadline cancels and tears down) within the
-// deadline bound. Returns the elapsed time in ms. Data that reached the
-// client before the teardown is drained in bulk (a byte-at-a-time drain
-// would not finish within the bound).
-long require_connection_closed_after_ignoring(int fd) {
-    const auto start = std::chrono::steady_clock::now();
-    const auto deadline = start + std::chrono::seconds(3);
-    char scratch[65536];
-    for (;;) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "server did not close the hung-write connection");
-        capsid_pollfd descriptor = {};
-        descriptor.fd = fd;
-        descriptor.events = POLLIN;
-        const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
-        require(polled >= 0, "cannot poll hung-write connection");
-        if (polled == 0) {
-            continue;
-        }
-        // Drain whatever is pending; EOF or a read error ends the wait.
-        // Consuming data here is fine — the teardown already happened or
-        // is about to fire.
-        for (;;) {
-            const ssize_t count = capsid::win32::recv_fd(fd, scratch, sizeof(scratch), 0);
-            if (count == 0) {
-                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - start);
-                return static_cast<long>(elapsed.count());
-            }
-            if (count < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;  // drained for now; poll again
-                }
-                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - start);
-                return static_cast<long>(elapsed.count());
-            }
-        }
-    }
-}
-
-struct RawHttpResponse {
-    unsigned status = 0;
-    std::string body;
+    std::cout << ']';
+    std::cout << ",\"drain\":{\"draining\":"
+              << (drain.draining ? "true" : "false")
+              << ",\"finished\":" << (drain.finished ? "true" : "false")
+              << ",\"forcedCancellations\":" << drain.forced_cancellations
+              << "},\"error\":" << quote(error) << "}" << std::endl;
+  }
 };
-
-std::string read_line(int fd, std::string& buffer, char* scratch,
-                      std::size_t scratch_size,
-                      const std::chrono::steady_clock::time_point& deadline) {
-    for (;;) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "response line timed out");
-        const std::string::size_type end = buffer.find("\r\n");
-        if (end != std::string::npos) {
-            const std::string line = buffer.substr(0, end);
-            buffer.erase(0, end + 2);
-            return line;
-        }
-        const ssize_t count = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
-        require(count > 0, "response recv failed");
-        buffer.append(scratch, static_cast<std::size_t>(count));
-    }
-}
-
-void require_bytes(int fd, std::string& buffer, std::size_t count,
-                   char* scratch, std::size_t scratch_size,
-                   const std::chrono::steady_clock::time_point& deadline) {
-    while (buffer.size() < count) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "response body timed out");
-        const ssize_t received = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
-        require(received > 0, "response body recv failed");
-        buffer.append(scratch, static_cast<std::size_t>(received));
-    }
-}
-
-// One complete response (Content-Length or chunked body).
-RawHttpResponse read_response(int fd) {
-    char scratch[2048];
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    std::string buffer;
-    const std::string status_line =
-        read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-    const std::string::size_type sp1 = status_line.find(' ');
-    require(sp1 != std::string::npos, "malformed status line");
-    RawHttpResponse response;
-    response.status = static_cast<unsigned>(
-        std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
-    require(response.status >= 100, "invalid response status");
-    std::size_t body_length = 0;
-    bool chunked = false;
-    bool saw_content_length = false;
-    std::string header_line;
-    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch),
-                                     deadline)).empty()) {
-        if (header_line.size() > 15 &&
-            header_line.compare(0, 15, "Content-Length:") == 0) {
-            body_length = static_cast<std::size_t>(
-                std::strtoul(header_line.c_str() + 15, nullptr, 10));
-            saw_content_length = true;
-        } else if (header_line.size() > 18 &&
-                   header_line.compare(0, 18, "Transfer-Encoding:") == 0 &&
-                   header_line.find("chunked") != std::string::npos) {
-            chunked = true;
-        }
-    }
-    if (chunked) {
-        for (;;) {
-            const std::string size_line =
-                read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-            const std::size_t chunk_size = static_cast<std::size_t>(
-                std::strtoul(size_line.c_str(), nullptr, 16));
-            if (chunk_size == 0) {
-                for (;;) {
-                    const std::string trailer =
-                        read_line(fd, buffer, scratch, sizeof(scratch),
-                                  deadline);
-                    if (trailer.empty()) {
-                        break;
-                    }
-                }
-                break;
-            }
-            require_bytes(fd, buffer, chunk_size, scratch, sizeof(scratch),
-                          deadline);
-            response.body.append(buffer.substr(0, chunk_size));
-            buffer.erase(0, chunk_size);
-            const std::string terminator =
-                read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-            require(terminator.empty(),
-                    "chunked response had a non-empty chunk terminator");
-        }
-    } else {
-        require(saw_content_length,
-                "response has neither Content-Length nor chunked");
-        require_bytes(fd, buffer, body_length, scratch, sizeof(scratch),
-                      deadline);
-        response.body = buffer.substr(0, body_length);
-    }
-    return response;
-}
-
-capsid::host::SingleWorkerServerOptions make_options(
-    const char* worker_path, int ready_fd) {
+class Server {
+public:
+  Server(const char *worker, bool pool, std::uint64_t write_ms,
+         std::uint64_t request_ms, Report &report)
+      : report_(report) {
+    require(capsid::win32::create_socket_pair(ready_), "private READY pair");
     capsid::host::SingleWorkerServerOptions options;
-    options.worker_path = worker_path;
+    options.worker_path = worker;
     options.source_bundle_path = "write-timeout-inline";
     options.source_name = "file://write-timeout/v1/bundle.mjs";
     options.application = "orders";
     options.listen_address = "127.0.0.1";
-    options.listen_port = 0;
     options.public_scheme = "http";
     options.public_authority = "public.example";
-    options.request_timeout_ms = 5000;
+    options.request_timeout_ms = request_ms;
+    options.write_timeout_ms = write_ms;
     options.initial_stream_window = 64U * 1024U;
-    options.strict_sandbox = false;
-    options.ready_fd = ready_fd;
-    return options;
-}
-
-// A client that stops reading must be torn down by the write deadline
-// (bounded, far below the worker deadline), and the server must keep
-// serving afterwards. With no write deadline implemented the connection
-// would hang until the 5s worker timeout (or forever) and this test would
-// fail its 3s bound.
-void test_write_timeout_cancels(const char* worker_path) {
-    int ready[2];
-    require(capsid::win32::create_socket_pair(ready), "cannot create write-timeout READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
-    options.write_timeout_ms = 250;  // well below the worker deadline
-    capsid::host::SingleWorkerServer server(std::move(options));
-    std::string error;
-    require(server.start(big_body_bundle(), &error),
-            "cannot start write-timeout server: " + error);
-    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
-
-    const int connection = connect_to(port);
-    send_request(connection, "/@capsid/orders/big", false);
-    const long elapsed = require_connection_closed_after_ignoring(connection);
-    close(connection);
-    // The write deadline (250ms) must fire, not the worker deadline (5s).
-    require(elapsed < 2000,
-            "hung write was not torn down by the write deadline: " +
-                std::to_string(elapsed) + "ms");
-
-    // The server and its worker are still healthy: a fast request succeeds.
-    const int next = connect_to(port);
-    send_request(next, "/@capsid/orders/check", true);
-    const RawHttpResponse check = read_response(next);
-    require(check.status == 200, "server unhealthy after write timeout: " +
-                                     std::to_string(check.status));
-    close(next);
-
-    server.request_stop();
-    require(server.wait(&error), "write-timeout server wait failed: " + error);
-}
-
-// The worker-side request timeout still fires independently when the
-// client reads normally: 504 well below the write deadline (§8.3 separate
-// timers — neither deadline replaces the other).
-void test_worker_deadline_independent(const char* worker_path) {
-    int ready[2];
-    require(capsid::win32::create_socket_pair(ready), "cannot create write-timeout READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
-    options.write_timeout_ms = 5000;   // long: must NOT be the trigger
-    options.request_timeout_ms = 200;  // the worker deadline is the trigger
-    capsid::host::SingleWorkerServer server(std::move(options));
-    std::string error;
-    require(server.start(slow_bundle(), &error),
-            "cannot start write-timeout server: " + error);
-    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
-
-    const int connection = connect_to(port);
-    send_request(connection, "/@capsid/orders/slow", false);
-    const RawHttpResponse response = read_response(connection);
-    require(response.status == 504,
-            "worker deadline must map to 504, got " +
-                std::to_string(response.status));
-    close(connection);
-
-    server.request_stop();
-    require(server.wait(&error), "write-timeout server wait failed: " + error);
-}
-
-// A fast response is never touched by a short write deadline.
-void test_fast_response_untouched(const char* worker_path) {
-    int ready[2];
-    require(capsid::win32::create_socket_pair(ready), "cannot create write-timeout READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
-    options.write_timeout_ms = 250;
-    capsid::host::SingleWorkerServer server(std::move(options));
-    std::string error;
-    require(server.start(fast_bundle(), &error),
-            "cannot start write-timeout server: " + error);
-    const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
-
-    const int connection = connect_to(port);
-    send_request(connection, "/@capsid/orders/fast", false);
-    const RawHttpResponse response = read_response(connection);
-    require(response.status == 200 && response.body == "fast-ok",
-            "fast response was disturbed by the write deadline");
-    close(connection);
-
-    server.request_stop();
-    require(server.wait(&error), "write-timeout server wait failed: " + error);
-}
-
-#endif  // CAPSID_HAS_SINGLE_WORKER_SERVER
-
-}  // namespace
-
-int main(int argc, char** argv) {
-    require(argc == 3, "expected mode and capsid-worker path");
-#if !CAPSID_HAS_SINGLE_WORKER_SERVER
-    (void)argv;
-    fail("SingleWorkerServer is not implemented");
-#else
-    const std::string mode = argv[1];
-    if (mode == "write-timeout-cancels") {
-        test_write_timeout_cancels(argv[2]);
-    } else if (mode == "worker-deadline-independent") {
-        test_worker_deadline_independent(argv[2]);
-    } else if (mode == "fast-response-untouched") {
-        test_fast_response_untouched(argv[2]);
-    } else {
-        fail("unknown write-timeout mode");
+    options.max_inflight_per_worker = 1;
+    options.max_streaming_inflight_per_worker = 1;
+    options.install_process_signals = false;
+    options.ready_fd = ready_[1];
+    const std::string source = std::string("const cooperative = ") +
+        (report.scenario == "worker-deadline-cooperative" ? "true;\n" : "false;\n") + R"js(
+const instance = crypto.randomUUID();
+export default {async fetch(request) {
+    const url = new URL(request.url);
+    const headers = {'x-worker-instance': instance};
+    if (url.pathname.endsWith('/big')) {
+        const body = new Uint8Array(8 * 1024 * 1024); body.fill(97);
+        headers['content-length'] = String(body.byteLength);
+        return new Response(body, {headers});
     }
-    std::cout << "PASS" << std::endl;
+    if (url.pathname.endsWith('/slow')) await new Promise(resolve => {
+        const timer = setTimeout(resolve, 600000);
+        if (cooperative) request.signal.addEventListener('abort', () => {
+            clearTimeout(timer); resolve();
+        }, {once: true});
+    });
+    return new Response('healthy:' + url.searchParams.get('challenge'), {headers});
+}};
+)js";
+    bundle_.assign(source.begin(), source.end());
+    if (pool) {
+      capsid::host::StaticPoolServerOptions all;
+      all.worker_options = std::move(options);
+      all.workers = 2;
+      pool_ = std::make_unique<capsid::host::StaticPoolServer>(std::move(all));
+    } else
+      single_ = std::make_unique<capsid::host::SingleWorkerServer>(
+          std::move(options));
+  }
+  ~Server() {
+    if (!joined_) {
+      stop();
+      std::string error;
+      report_.cleanup = pool_ ? pool_->wait(&error) : single_->wait(&error);
+    }
+    close(ready_[0]);
+    close(ready_[1]);
+  }
+  void start() {
+    std::string error;
+    require(pool_ ? pool_->start(bundle_, &error)
+                  : single_->start(bundle_, &error),
+            "start actual server");
+    std::string line;
+    const auto start = Clock::now();
+    while (line.find('\n') == std::string::npos) {
+      require(elapsed(start) < 6000, "actual READY deadline");
+      capsid_pollfd descriptor{};
+      descriptor.fd = ready_[0];
+      descriptor.events = POLLIN;
+      const int polled = capsid::win32::capsid_poll(&descriptor, 1, 50);
+      require(polled >= 0, "poll READY");
+      if (!polled)
+        continue;
+      char data[1024];
+      const auto count = capsid::win32::read_fd(ready_[0], data, sizeof(data));
+      require(count > 0, "read READY");
+      line.append(data, static_cast<std::size_t>(count));
+      require(line.size() <= 1024, "bounded READY record");
+    }
+    const auto begin = line.find("\"port\":");
+    require(begin != std::string::npos, "READY port");
+    const auto value = std::stoul(line.substr(begin + 7));
+    require(value > 0 && value <= 65535, "actual bound port");
+    port = static_cast<std::uint16_t>(value);
+    if (pool_)
+      require(pool_->active_workers() == 2, "two actual Workers READY");
+  }
+  void stop() {
+    if (pool_)
+      pool_->request_stop();
+    else
+      single_->request_stop();
+  }
+  void begin_drain() { pool_->begin_drain(5000); }
+  void join() {
+    std::string error;
+    report_.cleanup = pool_ ? pool_->wait(&error) : single_->wait(&error);
+    joined_ = true;
+    require(report_.cleanup, "normal server wait");
+    if (pool_)
+      require(pool_->active_workers() == 0, "all pool Workers stopped");
+    report_.drain = pool_ ? pool_->drain_metrics() : single_->drain_metrics();
+    report_.worker_exits = pool_ ? pool_->worker_exit_statuses()
+                                : std::vector{single_->worker_exit_status()};
+    require(report_.worker_exits.size() == report_.workers,
+            "one actual OS exit per Worker");
+    for (const auto &status : report_.worker_exits) {
+      require(report_.scenario == "worker-deadline-independent"
+                  ? capsid_test::natural_exit(status, 1) : status.clean(),
+              "actual Worker exit disagrees with cancellation/drain contract");
+    }
+  }
+  std::uint16_t port = 0;
+
+private:
+  Report &report_;
+  int ready_[2] = {-1, -1};
+  std::vector<std::uint8_t> bundle_;
+  std::unique_ptr<capsid::host::SingleWorkerServer> single_;
+  std::unique_ptr<capsid::host::StaticPoolServer> pool_;
+  bool joined_ = false;
+};
+bool retry(boost::system::error_code ec) {
+  return ec == asio::error::would_block || ec == asio::error::try_again;
+}
+tcp::socket connect(asio::io_context &io, std::uint16_t port, bool small) {
+  tcp::socket socket(io);
+  socket.open(tcp::v4());
+  if (small)
+    socket.set_option(asio::socket_base::receive_buffer_size(1024));
+  socket.connect({asio::ip::address_v4::loopback(), port});
+  return socket;
+}
+void send(tcp::socket &socket, const std::string &path) {
+  const std::string bytes =
+      "GET /@capsid/orders/" + path +
+      " HTTP/1.1\r\nHost: public.example\r\nConnection: close\r\n\r\n";
+  asio::write(socket, asio::buffer(bytes));
+  socket.non_blocking(true);
+}
+std::string receive(tcp::socket &socket) {
+  // This opens the receive window only after the no-read assertion.
+  socket.set_option(asio::socket_base::receive_buffer_size(256 * 1024));
+  std::string wire;
+  const auto start = Clock::now();
+  for (;;) {
+    boost::system::error_code ec;
+    char data[65536];
+    const auto count = socket.read_some(asio::buffer(data), ec);
+    wire.append(data, count);
+    require(wire.size() <= body_size + 8192, "bounded actual response");
+    if (ec == asio::error::eof || ec == asio::error::connection_reset)
+      return wire;
+    require(!ec || retry(ec), "client TCP read");
+    require(elapsed(start) < 4000, "client response deadline");
+    if (!count)
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+}
+http::response<http::string_body> parse(const std::string &wire,
+                                        bool complete) {
+  http::response_parser<http::string_body> parser;
+  parser.body_limit(body_size);
+  parser.eager(true);
+  boost::system::error_code ec;
+  const auto consumed = parser.put(asio::buffer(wire), ec);
+  require(!ec && consumed == wire.size() && parser.is_header_done(),
+          "actual HTTP response framing");
+  require(parser.is_done() == complete,
+          "expected complete or truncated actual response");
+  if (!complete) {
+    parser.put_eof(ec);
+    require(ec == http::error::partial_message, "truncated HTTP body at EOF");
+  }
+  return parser.release();
+}
+std::string instance(const http::response<http::string_body> &response) {
+  const std::string value(response["x-worker-instance"]);
+  require(value.size() == 36, "actual Worker instance identity");
+  return value;
+}
+http::response<http::string_body> health(asio::io_context &io, Server &server,
+                                         std::size_t challenge) {
+  auto socket = connect(io, server.port, false);
+  send(socket, "check?challenge=" + std::to_string(challenge));
+  auto response = parse(receive(socket), true);
+  if (response.result_int() == 200)
+    require(response.body() == "healthy:" + std::to_string(challenge),
+            "dynamic healthy Worker response");
+  return response;
+}
+void exercise(const char *worker, Report &report) {
+  const auto &scenario = report.scenario;
+  const bool pool = scenario.starts_with("pool-");
+  const bool stop = scenario == "pool-stop-pending-write";
+  const bool drain = scenario == "pool-drain-write-deadline";
+  const bool disabled = scenario == "write-timeout-disabled";
+  const bool independent = scenario == "worker-deadline-independent" ||
+                           scenario == "worker-deadline-cooperative";
+  const bool fast = scenario == "fast-response-untouched";
+  report.workers = pool ? 2 : 1;
+  Server server(worker, pool,
+                disabled              ? 0
+                : stop || independent ? 5000
+                                      : 500,
+                independent ? 200 : 10000, report);
+  server.start();
+  asio::io_context io;
+  std::size_t challenge = 1;
+  std::set<std::string> warm;
+  for (std::size_t i = 0; i < report.workers; ++i) {
+    const auto response = health(io, server, challenge++);
+    require(response.result_int() == 200, "warm actual Worker");
+    warm.insert(instance(response));
+  }
+  require(warm.size() == report.workers, "distinct actual Worker instances");
+  if (independent || fast) {
+    auto socket = connect(io, server.port, false);
+    send(socket, independent ? "slow?challenge=99" : "check?challenge=99");
+    const auto response = parse(receive(socket), true);
+    require(response.result_int() == (independent ? 504U : 200U),
+            "independent worker deadline or fast response status");
+    if (fast)
+      require(response.body() == "healthy:99", "fast response body");
+  } else {
+    std::vector<tcp::socket> stalled;
+    std::set<std::string> writing;
+    for (std::size_t i = 0; i < report.workers; ++i) {
+      auto socket = connect(io, server.port, true);
+      asio::socket_base::receive_buffer_size size;
+      socket.get_option(size);
+      require(size.value() > 0 && size.value() <= 65536,
+              "bounded client receive buffer");
+      report.receive_buffers.push_back(size.value());
+      send(socket, "big");
+      const auto start = Clock::now();
+      for (;;) {
+        char data[8192];
+        boost::system::error_code ec;
+        const auto count = socket.receive(asio::buffer(data),
+                                          asio::socket_base::message_peek, ec);
+        require(!ec || retry(ec), "peek actual pending response");
+        const std::string peek(data, count);
+        const auto end = peek.find("\r\n\r\n");
+        if (end != std::string::npos && peek.size() > end + 4) {
+          const auto response = parse(peek, false);
+          require(response.result_int() == 200 &&
+                      response[http::field::content_length] == "8388608",
+                  "large response head and initial body before pause");
+          writing.insert(instance(response));
+          break;
+        }
+        require(elapsed(start) < 3000, "actual response start deadline");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+      stalled.push_back(std::move(socket));
+    }
+    require(writing == warm, "every actual Worker has a started response");
+    for (std::size_t i = 0; i < report.workers; ++i) {
+      require(health(io, server, challenge++).result_int() == 429,
+              "started unread responses occupy all admission slots");
+      ++report.busy;
+    }
+    const auto action = Clock::now();
+    if (stop || drain) {
+      for (int i = 0; i < 3; ++i) {
+        if (stop)
+          server.stop();
+        else
+          server.begin_drain();
+      }
+      server.join();
+      report.action_ms = elapsed(action);
+      require(report.action_ms < 2500, "pending write shutdown deadline");
+      require(report.drain.forced_cancellations == 0,
+              "write deadline completes drain without forced cancellation");
+      if (drain)
+        require(report.drain.draining && report.drain.finished,
+                "active pool drain completes");
+    } else if (disabled) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(800));
+      require(health(io, server, challenge++).result_int() == 429,
+              "disabled write deadline preserves unread pending request");
+      report.action_ms = elapsed(action);
+    } else {
+      std::set<std::string> recovered;
+      while (recovered != warm && elapsed(action) < 2500) {
+        const auto response = health(io, server, challenge++);
+        require(response.result_int() == 429 || response.result_int() == 200,
+                "healthy or occupied admission response");
+        if (response.result_int() == 200)
+          recovered.insert(instance(response));
+        if (recovered != warm)
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+      report.recovered = recovered.size();
+      report.action_ms = elapsed(action);
+      require(recovered == warm,
+              "write deadline must release admission before client reads");
+    }
+    report.unread_until_action = true;
+    for (auto &socket : stalled) {
+      const auto wire = receive(socket);
+      const auto response = parse(wire, disabled);
+      require(response.result_int() == 200 &&
+                  response[http::field::content_length] == "8388608",
+              "original 200 response remains on wire");
+      require(!response.body().empty() &&
+                  response.body().find_first_not_of('a') == std::string::npos,
+              "actual original body prefix");
+      require(disabled ? response.body().size() == body_size
+                       : response.body().size() < body_size,
+              "completed disabled control or truncated cancelled body");
+      report.wire_bytes.push_back(wire.size());
+      report.body_bytes.push_back(response.body().size());
+    }
+    if (!stop && !drain) {
+      const auto response = health(io, server, challenge++);
+      require(response.result_int() == 200 && warm.contains(instance(response)),
+              "healthy after actual socket cleanup");
+    }
+  }
+  if (report.cleanup)
+    return;
+  server.stop();
+  server.join();
+}
+} // namespace
+int main(int argc, char **argv) {
+  Report report;
+  try {
+    require(argc == 3, "expected scenario and actual Worker path");
+    report.scenario = argv[1];
+    const std::set<std::string> known{
+        "write-timeout-cancels",      "worker-deadline-independent",
+        "worker-deadline-cooperative",
+        "fast-response-untouched",    "write-timeout-disabled",
+        "pool-write-timeout-cancels", "pool-drain-write-deadline",
+        "pool-stop-pending-write"};
+    require(known.contains(report.scenario), "known write deadline scenario");
+    exercise(argv[2], report);
+    report.print(true, "");
     return 0;
-#endif
+  } catch (const std::exception &error) {
+    report.print(false, error.what());
+    return 1;
+  }
 }

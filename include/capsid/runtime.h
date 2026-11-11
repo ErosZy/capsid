@@ -352,28 +352,78 @@ typedef struct capsid_worker_config {
      */
     int32_t sandbox_network_namespace_fd;
     uint32_t egress_reserved;
-    /*
-     * FetchRPC wire negotiation (additive, guarded by struct_size).
-     * protocol_version defaults to 3 via capsid_worker_config_init;
-     * 4 selects the v4 Hello (startup config + capability tail) and a
-     * v4-pinned frame stream. protocol_capabilities is the host-side
-     * capability bitset (CAPSID_PROTOCOL_CAP_*); unknown bits are
-     * rejected locally at spawn. Reserved fields must be zero. Callers
-     * built against older headers pass a smaller struct_size and get
-     * v3 unchanged.
-     */
-    uint16_t protocol_version;
-    uint16_t protocol_reserved;
-    uint32_t protocol_capabilities;
 } capsid_worker_config;
 
 /*
  * FetchRPC v4 capability bits (docs/fetchrpc-v4.md §1.2). Effective
  * capabilities are the conjunction with the worker's READY reply.
+ * Requested through capsid_protocol_options (spawn_ex); the published
+ * capsid_worker_config layout is frozen at the ABI v7 shape.
  */
 #define CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL (1u << 0)
 #define CAPSID_PROTOCOL_CAP_UPGRADE (1u << 1)
 #define CAPSID_PROTOCOL_CAP_HALF_CLOSE (1u << 2)
+#define CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2 (1u << 3)
+#define CAPSID_PROTOCOL_CAP_CHANNEL_CONFIRM (1u << 4)
+/* Atomic final WebSocket Close; requires CHANNEL_CONFIRM. */
+#define CAPSID_PROTOCOL_CAP_CHANNEL_CLOSE_FINAL (1u << 5)
+/* Optional outbound Upgrade fetch metadata; requires UPGRADE, CHANNEL_CONFIRM
+ * and CHANNEL_CLOSE_FINAL. A peer must announce actual metadata/body support. */
+#define CAPSID_PROTOCOL_CAP_FETCH_UPGRADE (1u << 6)
+/* Retained incoming I/O ownership after transport EOF. Requires UPGRADE
+ * and CHANNEL_CONFIRM. Produces CONNECTION_LIFETIME events only when
+ * explicitly negotiated; existing descriptors and event layout are unchanged. */
+#define CAPSID_PROTOCOL_CAP_CONNECTION_LIFETIME (1u << 7)
+
+/*
+ * Protocol options descriptor for capsid_worker_spawn_ex. This is a
+ * new, separately versioned descriptor: it never extends the frozen
+ * capsid_worker_config layout. Two-way size negotiation: the caller
+ * states its buffer size to ..._init and again at spawn; the library
+ * reads only fields the caller's size covers, and unknown descriptor
+ * versions are rejected instead of guessed.
+ */
+typedef struct capsid_protocol_options {
+    uint32_t struct_size;
+    /* Descriptor layout version, independent of CAPSID_ABI_VERSION. */
+    uint32_t descriptor_version;
+    /* Wire version: 3 (default) or 4. */
+    uint16_t wire_version;
+    uint16_t reserved16;
+    /* CAPSID_PROTOCOL_CAP_* bitset; unknown bits are rejected. */
+    uint32_t capabilities;
+    /*
+     * Optional channel limits (zero selects the deployment default).
+     * Enforced from v4 connections that announce the A2 layout; ignored
+     * (must be zero-validated only for sanity) on pure v4 carriage.
+     */
+    uint32_t max_channels;
+    uint32_t reserved32;
+    uint64_t max_message_bytes;
+    uint64_t reassembly_budget_bytes;
+    uint64_t send_budget_bytes;
+    uint32_t close_timeout_ms;
+    uint32_t dial_timeout_ms;
+    uint32_t idle_timeout_ms;
+    uint32_t per_channel_queue_bytes;
+} capsid_protocol_options;
+
+/* First descriptor layout version. */
+#define CAPSID_PROTOCOL_DESCRIPTOR_VERSION 1u
+
+/*
+ * Negotiated protocol state of a spawned worker, via
+ * capsid_worker_get_protocol_info. Same two-way size rules.
+ */
+typedef struct capsid_protocol_info {
+    uint32_t struct_size;
+    uint32_t descriptor_version;
+    uint16_t wire_version;
+    uint16_t reserved16;
+    uint32_t host_capabilities;
+    uint32_t worker_capabilities;
+    uint32_t effective_capabilities;
+} capsid_protocol_info;
 
 typedef struct capsid_bytes {
     const uint8_t *data;
@@ -453,10 +503,30 @@ typedef enum capsid_event_type {
     CAPSID_EVENT_RESPONSE_END = 5,
     CAPSID_EVENT_LOG = 6,
     CAPSID_EVENT_ERROR = 7,
+    /* IPC peer closed. Unused fields, including status, are zero; this
+     * event does not carry the operating system process exit status. */
     CAPSID_EVENT_EXIT = 8,
     CAPSID_EVENT_REQUEST_TIMEOUT = 9,
     CAPSID_EVENT_AUDIT = 10,
-    CAPSID_EVENT_MEMORY_METRICS = 11
+    CAPSID_EVENT_MEMORY_METRICS = 11,
+    /*
+     * FetchRPC v4 A2 channel events (T07). Delivered only on workers
+     * spawned with capsid_worker_spawn_ex at wire version 4 and the
+     * A2/DUPLEX capabilities; a v3 worker can never produce them.
+     * event.payload carries the raw A2 frame payload; decode it with
+     * capsid_channel_event_decode. capsid_event itself is NOT extended.
+     */
+    CAPSID_EVENT_CHANNEL_DIAL = 12,       /* worker requests an outbound dial */
+    CAPSID_EVENT_CHANNEL_DATA = 13,       /* worker->host message fragment */
+    CAPSID_EVENT_CHANNEL_CREDIT = 14,     /* worker granted host credit */
+    CAPSID_EVENT_CHANNEL_HALF_CLOSE = 15, /* worker closed its send side */
+    CAPSID_EVENT_CHANNEL_CLOSE = 16,      /* worker closed the channel */
+    CAPSID_EVENT_CHANNEL_CANCEL = 17,     /* worker cancelled the channel */
+    CAPSID_EVENT_CHANNEL_ACK = 18,        /* result committed or terminal confirmed */
+    /* credit is the validated total number of retained local incoming I/O
+     * owners. payload is the 8-byte v4 lifetime record. Network reservations
+     * are accounted separately; request_id and flags are zero. */
+    CAPSID_EVENT_CONNECTION_LIFETIME = 19
 } capsid_event_type;
 
 /*
@@ -467,6 +537,10 @@ typedef enum capsid_event_type {
  * the flag clear.
  */
 #define CAPSID_RESPONSE_HEAD_FLAG_FIXED_BODY 1u
+/* A 101 Upgrade is an implicit HTTP terminal. credit carries the assigned
+ * channel id; payload remains the original borrowed header block. No
+ * RESPONSE_END follows. The channel lives independently of request_id. */
+#define CAPSID_RESPONSE_HEAD_FLAG_UPGRADE 32u
 
 typedef struct capsid_event {
     uint32_t struct_size;
@@ -481,6 +555,189 @@ typedef struct capsid_event {
     uint32_t credit;
     capsid_bytes payload;
 } capsid_event;
+
+/* ------------------------------------------------------------------ */
+/* FetchRPC v4 A2 channel ABI (frozen 2026-10-12, GLM plan T07).       */
+/* All channel entry points: require capsid_worker_spawn_ex with wire  */
+/* version 4 and the negotiated CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL |   */
+/* ..._CHANNEL_LAYOUT_A2 bits; return CAPSID_PROTOCOL_ERROR when the   */
+/* connection did not negotiate them, and CAPSID_WOULD_BLOCK only      */
+/* where documented. Inputs are copied synchronously: no entry point   */
+/* borrows caller memory past its return.                              */
+
+/* capsid_worker_channel_send flags (frame flags on the wire). */
+#define CAPSID_CHANNEL_FLAG_START 1u
+#define CAPSID_CHANNEL_FLAG_END 2u
+#define CAPSID_CHANNEL_FLAG_TEXT 4u
+
+/* capsid_worker_channel_cancel reasons (contract 3.2 cancel table). */
+#define CAPSID_CANCEL_REASON_LOCAL 0u
+#define CAPSID_CANCEL_REASON_DISCONNECT 1u
+#define CAPSID_CANCEL_REASON_TIMEOUT 2u
+#define CAPSID_CANCEL_REASON_SHUTDOWN 3u
+#define CAPSID_CANCEL_REASON_RESOURCE_LIMITS 4u
+#define CAPSID_CANCEL_REASON_PROTOCOL_VIOLATION 5u
+
+#define CAPSID_CHANNEL_ACK_DIAL_RESULT 0u
+#define CAPSID_CHANNEL_ACK_CANCEL 1u
+#define CAPSID_CHANNEL_ACK_TRANSPORT_CLOSE 2u
+
+/* First capsid_channel_event layout version. */
+#define CAPSID_CHANNEL_EVENT_VERSION 1u
+
+/*
+ * Typed view over a CAPSID_EVENT_CHANNEL_* event. `message`, `url`,
+ * and `diagnostic` point INTO the capsid_event payload: they are
+ * borrowed and valid until the next capsid_worker_next_event call on
+ * the same worker. channel_id/dial_id/credit/close_kind/code are
+ * decoded copies. Initialize with capsid_channel_event_init; decode
+ * with capsid_channel_event_decode. The caller passes its buffer size;
+ * the decoder writes only that prefix and stamps the output version.
+ */
+typedef struct capsid_channel_event {
+    uint32_t struct_size;
+    uint32_t version;
+    /* One of CAPSID_EVENT_CHANNEL_DIAL..ACK (mirrors the event). */
+    uint32_t kind;
+    uint32_t channel_id;
+    uint64_t dial_id;
+    /* capsid_protocol owner kind (open/dial events; else 0). */
+    uint32_t owner_kind;
+    /* Close events: contract close kind + code (0 when absent). */
+    uint32_t close_kind;
+    uint16_t code;
+    uint16_t reserved16;
+    /* Credit events: the granted amount. */
+    uint64_t credit;
+    /* DATA events: borrowed fragment bytes (after the id prefix). */
+    capsid_bytes message;
+    /* DIAL events: borrowed target URL. */
+    capsid_bytes url;
+    /* CLOSE events: borrowed reason bytes. */
+    capsid_bytes diagnostic;
+} capsid_channel_event;
+
+capsid_result capsid_channel_event_init_sized(capsid_channel_event *event,
+                                              uint32_t caller_size);
+/* The initializer's size is evaluated in the caller's translation unit. */
+static inline void capsid_channel_event_init(capsid_channel_event *event) {
+    (void)capsid_channel_event_init_sized(event, (uint32_t)sizeof(*event));
+}
+capsid_result capsid_channel_event_decode(const capsid_event *event,
+                                          capsid_channel_event *out,
+                                          uint32_t caller_size);
+/* CANCEL reason is a scalar getter; the v1 typed view keeps its layout. */
+capsid_result capsid_channel_cancel_reason(const capsid_event *event,
+                                            uint32_t *out_reason);
+capsid_result capsid_channel_ack_kind(const capsid_event *event,
+                                       uint32_t *out_kind);
+/* CONFIRM capability: stop the channel's producer and drain/cancel its IO
+ * before acknowledging CANCEL/transport close. Use channel_id=0 and a
+ * nonzero dial_id for pending-dial cancellation; assigned identities use
+ * a nonzero channel_id and dial_id=0. WOULD_BLOCK consumes no state; retry
+ * with control priority. A dial ACCEPT remains provisional until the pump
+ * delivers ACK_DIAL_RESULT, so no channel DATA may be sent before it.
+ * The event and typed-view layouts remain unchanged. */
+capsid_result capsid_worker_channel_confirm(capsid_worker *worker,
+                                              uint32_t channel_id,
+                                              uint64_t dial_id,
+                                              uint32_t kind);
+
+/*
+ * Sends one DATA fragment (flags: CAPSID_CHANNEL_FLAG_*). The message
+ * must fit the negotiated per-message cap; fragments are credit-bound
+ * per direction. The bytes are copied before returning.
+ */
+capsid_result capsid_worker_channel_send(capsid_worker *worker,
+                                         uint32_t channel_id,
+                                         const uint8_t *data,
+                                         size_t size,
+                                         uint32_t flags);
+/* Grants the worker `credit` additional send bytes on the channel. */
+capsid_result capsid_worker_channel_grant(capsid_worker *worker,
+                                          uint32_t channel_id,
+                                          uint64_t credit);
+/* Half-closes the host's send side (requires the HALF_CLOSE bit). */
+capsid_result capsid_worker_channel_half_close(capsid_worker *worker,
+                                               uint32_t channel_id);
+/* Close handshake; code/reason follow the contract close matrix.
+ * code == 0 with an empty reason encodes an empty Close body. */
+capsid_result capsid_worker_channel_close(capsid_worker *worker,
+                                          uint32_t channel_id,
+                                          uint16_t code,
+                                          const char *reason);
+/* Explicit close kind: 0 initiated, 1 observed network Close, 2 transport,
+ * 3 final (send Close then stop transport, requires CHANNEL_CLOSE_FINAL).
+ * Transport codes are synthetic diagnostics and must not go on the network. */
+capsid_result capsid_worker_channel_close_ex(capsid_worker *worker,
+                                             uint32_t channel_id,
+                                             uint32_t kind,
+                                             uint16_t code,
+                                             const char *reason);
+/* Counted UTF-8 reason; preserves embedded NUL bytes permitted by RFC 6455.
+ * Input is copied synchronously. The original C-string APIs remain valid. */
+capsid_result capsid_worker_channel_close_bytes(capsid_worker *worker,
+                                                uint32_t channel_id,
+                                                uint32_t kind,
+                                                uint16_t code,
+                                                const uint8_t *reason,
+                                                size_t reason_size);
+/* Terminal cancel (reason: CAPSID_CANCEL_REASON_*). */
+capsid_result capsid_worker_channel_cancel(capsid_worker *worker,
+                                           uint32_t channel_id,
+                                           uint32_t reason);
+/*
+ * Reserves an inbound Upgrade for the next begin_request (or
+ * begin_bodyless_request) using request_id. That call sends its normal
+ * head with the upgrade flag and A2 tail. A queue refusal preserves the
+ * reservation for retry. The worker's 101 commits an independent channel;
+ * Both begin variants mark an upgrade bodyless and ended; callers must not
+ * write a request body or issue end_request again for this handshake.
+ * a non-101 response releases it. Cancel channel_id to abort a reservation.
+ * Host-assigned ids must be announced in increasing order on the IPC stream.
+ */
+capsid_result capsid_worker_upgrade_begin(capsid_worker *worker,
+                                          uint64_t request_id,
+                                          uint32_t channel_id,
+                                          uint64_t max_message_bytes);
+/* Accepts a worker dial: assigns channel_id at the accepted cap. */
+capsid_result capsid_worker_dial_accept(capsid_worker *worker,
+                                        uint64_t dial_id,
+                                        uint32_t channel_id,
+                                        uint64_t max_message_bytes,
+                                        const char *selected_protocol);
+/* Additive ABI-v7 descriptor for a negotiated FETCH_UPGRADE result.
+ * Initialize every field (including struct_size and version) before use.
+ * Names/values are counted HTTP ByteString octets, with duplicate headers
+ * preserved in order. All input bytes are copied before the call returns.
+ * A non-101 response uses the channel for Host-to-Worker binary body chunks;
+ * end its body with CLOSE_FINAL without a WebSocket code or reason. */
+#define CAPSID_FETCH_UPGRADE_RESPONSE_VERSION 1u
+typedef struct capsid_fetch_upgrade_response {
+    uint32_t struct_size;
+    uint32_t version;
+    uint32_t status;
+    uint32_t redirected;  /* 0 or 1 */
+    capsid_bytes status_text;
+    capsid_bytes url;
+    const capsid_header *headers;
+    size_t header_count;
+} capsid_fetch_upgrade_response;
+
+/* Requires the negotiated FETCH_UPGRADE capability and matching fetch OPEN.
+ * Ordinary dial_accept remains the constructor-WebSocket operation.
+ * Queue refusal preserves the pending dial and assigned id for retry. */
+capsid_result capsid_worker_dial_accept_http(capsid_worker *worker,
+                                             uint64_t dial_id,
+                                             uint32_t channel_id,
+                                             uint64_t max_message_bytes,
+                                             const capsid_fetch_upgrade_response *response);
+/* Rejects a worker dial (contract REJECT reason codes 0..9). */
+capsid_result capsid_worker_dial_reject(capsid_worker *worker,
+                                        uint64_t dial_id,
+                                        uint32_t reason_code,
+                                        const char *diagnostic);
+
 
 void capsid_resource_limits_init(capsid_resource_limits *limits);
 void capsid_egress_rule_init(capsid_egress_rule *rule);
@@ -557,6 +814,48 @@ const char *capsid_result_string(capsid_result result);
 capsid_result capsid_runtime_build_info(capsid_build_info *out_info);
 
 capsid_result capsid_worker_spawn(const capsid_worker_config *config, capsid_worker **out_worker);
+
+/*
+ * Protocol-selected spawn. options == NULL is exactly the published v3
+ * behavior of capsid_worker_spawn. With options the wire version,
+ * requested capabilities, and (for the A2 layout) channel limits are
+ * negotiated: every option field is validated BEFORE any process,
+ * socketpair, cgroup, or handle is created, so a rejected spawn leaves
+ * no resources behind and sets *out_worker to NULL.
+ *
+ * The options descriptor is copied synchronously; callers may free it
+ * immediately. Two-way size negotiation: capsid_protocol_options_init
+ * records the caller's buffer size, and this entry point reads only the
+ * fields that size covers. Unknown descriptor versions, nonzero
+ * reserved fields, unknown capability bits, and unsatisfiable
+ * dependency combinations are CAPSID_INVALID_ARGUMENT.
+ */
+capsid_result capsid_worker_spawn_ex(const capsid_worker_config *config,
+                                     const capsid_protocol_options *options,
+                                     capsid_worker **out_worker);
+
+/*
+ * Initializes a protocol options descriptor in the caller's buffer.
+ * caller_size is the size of the caller's allocation; the function
+ * writes at most min(caller_size, library-known size) bytes and
+ * records caller_size in struct_size. A caller_size smaller than the
+ * fixed prefix (through per_channel_queue_bytes) is
+ * CAPSID_INVALID_ARGUMENT and writes nothing. Defaults: descriptor
+ * version 1, wire version 3, no capabilities, zero limits (deployment
+ * defaults).
+ */
+capsid_result capsid_protocol_options_init(capsid_protocol_options *options,
+                                           uint32_t caller_size);
+
+/*
+ * Negotiated protocol state after the worker's READY. Fills the
+ * caller's capsid_protocol_info buffer (same two-way size rules;
+ * caller_size is the caller's allocation size). Returns
+ * CAPSID_WOULD_BLOCK until READY has been observed on this worker.
+ */
+capsid_result capsid_worker_get_protocol_info(const capsid_worker *worker,
+                                              capsid_protocol_info *out_info,
+                                              uint32_t caller_size);
 /*
  * Abortive cleanup (spec §13.3): closes the IPC channel and terminates the
  * worker process immediately — in-flight requests are dropped without

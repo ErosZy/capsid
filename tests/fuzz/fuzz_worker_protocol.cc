@@ -10,10 +10,10 @@
 
 namespace {
 
-capsid::protocol::Frame valid_hello() {
+capsid::protocol::Frame valid_hello(uint16_t version, uint32_t capabilities) {
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kHello;
-    frame.version = capsid::protocol::kVersion;
+    frame.version = version;
     frame.flags = 0;
     frame.request_id = 0;
     capsid::protocol::append_u32(&frame.payload, CAPSID_ABI_VERSION);
@@ -45,12 +45,23 @@ capsid::protocol::Frame valid_hello() {
     capsid::protocol::append_u32(
         &frame.payload, CAPSID_EGRESS_DENY);
     capsid::protocol::append_u32(&frame.payload, 0);
+    if (version == capsid::protocol::kVersionV4) {
+        // The optional legacy environment section must end before the v4 tail.
+        capsid::protocol::append_u16(&frame.payload, 0);
+        if ((capabilities & capsid::protocol::kCapChannelLayoutA2) != 0 &&
+                !capsid::protocol::append_hello_a2_extension(&frame.payload,
+                    capsid::protocol::ChannelLimits())) {
+            std::abort();
+        }
+        capsid::protocol::append_u32(&frame.payload, capabilities);
+        capsid::protocol::append_u32(&frame.payload, 0);
+    }
     return frame;
 }
 
-void initialize(capsid::WorkerStartupState *state) {
+void initialize(capsid::WorkerStartupState *state, uint16_t version, uint32_t capabilities) {
     std::string error;
-    if (!state->consume(valid_hello(), &error)) {
+    if (!state->consume(valid_hello(version, capabilities), &error)) {
         std::abort();
     }
 }
@@ -63,10 +74,10 @@ void assign_payload(capsid::protocol::Frame *frame,
     }
 }
 
-void exercise_startup(const uint8_t *data, size_t size) {
+void exercise_startup(const uint8_t *data, size_t size, uint16_t version, uint32_t capabilities) {
     std::string error;
 
-    capsid::protocol::Frame mutated_hello = valid_hello();
+    capsid::protocol::Frame mutated_hello = valid_hello(version, capabilities);
     for (size_t index = 0;
          index < size && index < mutated_hello.payload.size();
          ++index) {
@@ -76,6 +87,7 @@ void exercise_startup(const uint8_t *data, size_t size) {
     hello_state.consume(mutated_hello, &error);
 
     capsid::protocol::Frame raw_hello;
+    raw_hello.version = version;
     raw_hello.type = capsid::protocol::kHello;
     raw_hello.flags = size == 0 ? 0 : data[0];
     raw_hello.request_id = size < 2 ? 0 : data[1];
@@ -84,6 +96,7 @@ void exercise_startup(const uint8_t *data, size_t size) {
     raw_hello_state.consume(raw_hello, &error);
 
     capsid::protocol::Frame bundle;
+    bundle.version = version;
     bundle.type = capsid::protocol::kLoadBundle;
     bundle.flags = size == 0
         ? 0
@@ -95,7 +108,7 @@ void exercise_startup(const uint8_t *data, size_t size) {
     bundle.request_id = size < 2 ? 0 : data[1];
     assign_payload(&bundle, data, size);
     capsid::WorkerStartupState bundle_state;
-    initialize(&bundle_state);
+    initialize(&bundle_state, version, capabilities);
     bundle_state.consume(bundle, &error);
 
     bundle.flags =
@@ -104,14 +117,14 @@ void exercise_startup(const uint8_t *data, size_t size) {
         capsid::protocol::kFlagBundleName;
     bundle.request_id = 0;
     capsid::WorkerStartupState named_state;
-    initialize(&named_state);
+    initialize(&named_state, version, capabilities);
     named_state.consume(bundle, &error);
 
     bundle.flags =
         capsid::protocol::kFlagStart |
         capsid::protocol::kFlagEnd;
     capsid::WorkerStartupState raw_state;
-    initialize(&raw_state);
+    initialize(&raw_state, version, capabilities);
     if (!raw_state.consume(bundle, &error) ||
         !raw_state.bundle_complete() ||
         raw_state.bundle().size() != size) {
@@ -170,8 +183,8 @@ void exercise_request(const uint8_t *data, size_t size) {
     }
 }
 
-void exercise_framing(const uint8_t *data, size_t size) {
-    capsid::protocol::Parser parser;
+void exercise_framing(const uint8_t *data, size_t size, uint16_t version) {
+    capsid::protocol::Parser parser(version);
     capsid::WorkerStartupState startup;
     size_t offset = 0;
     while (offset < size) {
@@ -213,8 +226,12 @@ void exercise_framing(const uint8_t *data, size_t size) {
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    exercise_startup(data, size);
+    exercise_startup(data, size, capsid::protocol::kVersion, 0);
+    exercise_startup(data, size, capsid::protocol::kVersionV4, 0);
+    exercise_startup(data, size, capsid::protocol::kVersionV4,
+                     capsid::protocol::kCapabilitiesKnownMask);
     exercise_request(data, size);
-    exercise_framing(data, size);
+    exercise_framing(data, size, capsid::protocol::kVersion);
+    exercise_framing(data, size, capsid::protocol::kVersionV4);
     return 0;
 }

@@ -29,6 +29,35 @@ A typical host flow is:
 After creation, the bundle must be sent first, then the host waits for
 `CAPSID_EVENT_READY`; no requests may be sent before READY.
 
+### Protocol selection (`capsid_worker_spawn_ex`)
+
+`capsid_worker_spawn()` is frozen at the published ABI v7 wire behavior
+(FetchRPC v3). Hosts that need FetchRPC v4 negotiate it through a
+separate, independently versioned descriptor instead of growing the
+frozen config struct:
+
+```c
+capsid_protocol_options options;
+capsid_protocol_options_init(&options, sizeof(options));
+options.wire_version = 4;              /* v4 carriage */
+capsid_worker *worker = NULL;
+capsid_result r = capsid_worker_spawn_ex(&config, &options, &worker);
+/* after READY: */
+capsid_protocol_info info;
+capsid_worker_get_protocol_info(worker, &info, sizeof(info));
+```
+
+`options == NULL` is exactly the legacy v3 entry. Every option field is
+validated **before** any process, socketpair, or handle is created, so
+a rejected spawn (unknown descriptor version, unknown capability bit,
+nonzero reserved word, unsupported limit) leaves no resources behind
+and sets `*out_worker` to NULL. The descriptor uses two-way size
+negotiation: `capsid_protocol_options_init` records the caller's buffer
+size and writes at most that many bytes, and `spawn_ex` reads only the
+fields that size covers. `capsid_worker_get_protocol_info` returns
+`CAPSID_WOULD_BLOCK` until READY, then reports the wire version, both
+sides' capability bitsets, and their conjunction.
+
 ### Trusted bytecode
 
 `capsid_worker_load_trusted_bytecode_named()` can skip source parsing and load module
@@ -178,6 +207,14 @@ not happen in an async callback that still holds a payload view.
 - After the QuickJS interrupt breaks a synchronous CPU dead loop, the worker is
   considered disposable.
 
+The host watchdog runs when `capsid_worker_next_event()` reads an empty IPC channel.
+When the caller keeps polling across the request deadline, the existing deadline
+plus 250 ms remains the hard backstop. If the first overdue empty read occurs
+after that backstop, one 250 ms interval lets queued timeout terminals drain.
+Later calls retain that same interval. An unresponsive process is terminated at
+the next empty-read check after the interval ends. Keep flushing and reading so
+request cancellation and cleanup can complete.
+
 `capsid_worker_destroy()` is a bounded reclamation path that escalates from graceful
 shutdown to SIGTERM and SIGKILL. The host should not rely on the application bundle
 exiting on its own.
@@ -229,6 +266,43 @@ When upgrading a host, first deploy a gateway that recognizes the new events, th
 enable the feature that produces them. Diagnostic-class new events appear only when the
 host explicitly requests them, so they do not affect v7 hosts that have not called the
 new functions.
+
+## Channel ABI (FetchRPC v4 A2, frozen 2026-10-12)
+
+Channel operations require `capsid_worker_spawn_ex` at wire version 4
+with the negotiated `CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL |
+CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2` bits; on connections without
+them every entry point answers `CAPSID_PROTOCOL_ERROR` (a plain
+`capsid_worker_spawn` worker can never produce a channel event).
+
+| entry point | direction | notes |
+| --- | --- | --- |
+| `capsid_worker_upgrade_begin(w, request_id, channel_id, max_message_bytes)` | host->worker | reserves the pending channel through the registry; the head composition rides the ordinary request path (host wiring: T09) |
+| `capsid_worker_dial_accept(w, dial_id, channel_id, max_message_bytes, selected_protocol)` | host->worker | assigns the id; wire-validated through the registry before queueing |
+| `capsid_worker_dial_reject(w, dial_id, reason_code, diagnostic)` | host->worker | reason codes 0..9 (contract 3.2 table) |
+| `capsid_worker_channel_send(w, channel_id, data, size, flags)` | host->worker | fragment flags `CAPSID_CHANNEL_FLAG_{START,END,TEXT}`; bytes are copied before return |
+| `capsid_worker_channel_grant(w, channel_id, credit)` | host->worker | additive credit for the worker's send direction |
+| `capsid_worker_channel_half_close(w, channel_id)` | host->worker | requires the `CAP_HALF_CLOSE` bit |
+| `capsid_worker_channel_close(w, channel_id, code, reason)` | host->worker | code/reason follow the contract close matrix (reason <= 123 bytes) |
+| `capsid_worker_channel_cancel(w, channel_id, reason)` | host->worker | terminal; reason `CAPSID_CANCEL_REASON_*` |
+
+Events arrive on the ordinary pump as `CAPSID_EVENT_CHANNEL_DIAL`,
+`_DATA`, `_CREDIT`, `_HALF_CLOSE`, `_CLOSE`, `_CANCEL`; the
+`capsid_event` layout itself is unchanged. Decode with
+`capsid_channel_event_decode(event, &out, caller_size)` (two-way size
+negotiation, `CAPSID_CHANNEL_EVENT_VERSION 1`): `message`/`url`/
+`diagnostic` point INTO the event payload — borrowed, valid until the
+next `capsid_worker_next_event` on the same worker; ids, credit, and
+close codes are decoded copies.
+
+READY adaptation: the client splits and strips the v4 capability tail
+itself, so `CAPSID_EVENT_READY.payload` is exactly the v3-shaped
+compatibility/proof bytes; the negotiated state (wire version, both
+bitsets, effective intersection) is read from
+`capsid_worker_get_protocol_info`, never by parsing the tail by hand.
+
+Queued frames are NOT auto-flushed: call `capsid_worker_flush` after
+queueing (or in the pump loop) as the existing API contract requires.
 
 ## Launch checklist
 

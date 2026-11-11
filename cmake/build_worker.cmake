@@ -125,8 +125,10 @@ if(CAPSID_BUILD_WORKER)
     # colliding with the worker's address-space limit (std::bad_alloc in
     # static builds) and leaves libuv/libstdc++ on the system malloc.
     set(MI_OVERRIDE OFF CACHE BOOL "" FORCE)
-    set(BUILD_WITH_ASAN OFF CACHE BOOL "" FORCE)
-    set(BUILD_WITH_UBSAN OFF CACHE BOOL "" FORCE)
+    # Instrument the runtime dependencies too. MSVC's STL annotations must
+    # agree between Ada and Worker; txiki also enables WAMR fake-stack support.
+    set(BUILD_WITH_ASAN ${CAPSID_ENABLE_ASAN} CACHE BOOL "" FORCE)
+    set(BUILD_WITH_UBSAN ${CAPSID_ENABLE_UBSAN} CACHE BOOL "" FORCE)
     set(BUILD_WITH_WASM ON CACHE BOOL "" FORCE)
     set(BUILD_WITH_LTO ${CAPSID_ENABLE_LTO} CACHE BOOL "" FORCE)
     set(BUILD_WITH_GC_SECTIONS ON CACHE BOOL "" FORCE)
@@ -134,7 +136,52 @@ if(CAPSID_BUILD_WORKER)
     set(BUILD_TJS_TEST_LIBS OFF CACHE BOOL "" FORCE)
     set(BUILD_TJS_RESTRICTED_CORE ON CACHE BOOL "" FORCE)
     set(BUILD_TJS_BENCHMARK_SQLITE OFF CACHE BOOL "" FORCE)
+    # Linking sanitizer requirements to tjs does not instrument the libraries
+    # it consumes. Initialize every nested dependency and code-generator target
+    # with the same compile/link requirements. txiki has no TSan switch, and
+    # its UBSan switch alone omits the fatal-recovery policy.
+    if(CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
+        get_directory_property(CAPSID_SAVED_COMPILE_OPTIONS COMPILE_OPTIONS)
+        get_directory_property(CAPSID_SAVED_LINK_OPTIONS LINK_OPTIONS)
+        get_target_property(CAPSID_DEPENDENCY_COMPILE_OPTIONS
+            capsid_sanitizers INTERFACE_COMPILE_OPTIONS)
+        get_target_property(CAPSID_DEPENDENCY_LINK_OPTIONS
+            capsid_sanitizers INTERFACE_LINK_OPTIONS)
+        add_compile_options(${CAPSID_DEPENDENCY_COMPILE_OPTIONS})
+        add_link_options(${CAPSID_DEPENDENCY_LINK_OPTIONS})
+    endif()
     add_subdirectory("${CAPSID_TXIKI_OVERLAY}" "${CMAKE_CURRENT_BINARY_DIR}/txiki-build" EXCLUDE_FROM_ALL)
+    # Nested runtimes replace the parent Debug optimization with -O0.
+    # Restore -O1 after configuring them for instrumented Debug builds,
+    # retaining debug symbols and every sanitizer and recovery option.
+    if((CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
+            AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        foreach(CAPSID_INSTRUMENTED_RUNTIME_TARGET tjs qjs mbedcrypto mbedx509 mbedtls)
+            if(TARGET ${CAPSID_INSTRUMENTED_RUNTIME_TARGET})
+                target_compile_options(${CAPSID_INSTRUMENTED_RUNTIME_TARGET} PRIVATE
+                    "$<$<CONFIG:Debug>:-O1>")
+            endif()
+        endforeach()
+        unset(CAPSID_INSTRUMENTED_RUNTIME_TARGET)
+    endif()
+    if(CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
+        # Later targets include an intentionally uninstrumented fake peer.
+        # Restore the parent properties instead of leaking dependency flags.
+        set_property(DIRECTORY PROPERTY COMPILE_OPTIONS
+            "${CAPSID_SAVED_COMPILE_OPTIONS}")
+        set_property(DIRECTORY PROPERTY LINK_OPTIONS
+            "${CAPSID_SAVED_LINK_OPTIONS}")
+        unset(CAPSID_SAVED_COMPILE_OPTIONS)
+        unset(CAPSID_SAVED_LINK_OPTIONS)
+        unset(CAPSID_DEPENDENCY_COMPILE_OPTIONS)
+        unset(CAPSID_DEPENDENCY_LINK_OPTIONS)
+    endif()
+    if(MSVC)
+        # Match txiki's own CLI reserve for every executable embedding TJS.
+        # The 1 MiB JS limit needs native headroom to construct/catch its
+        # RangeError; MSVC's default 1 MiB reserve can overflow first with ASan.
+        target_link_options(tjs INTERFACE "/STACK:8388608")
+    endif()
     if(WIN32)
         # Windows has no system iconv; the vendored win-iconv (public
         # domain, MultiByteToWideChar-backed) provides the same API the
@@ -142,6 +189,7 @@ if(CAPSID_BUILD_WORKER)
         if(NOT TARGET Iconv::Iconv)
             add_library(capsid_winiconv STATIC
                 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/win-iconv/win_iconv.c")
+            target_link_libraries(capsid_winiconv PRIVATE capsid_sanitizers)
             target_include_directories(capsid_winiconv PUBLIC
                 "${CMAKE_CURRENT_SOURCE_DIR}/vendor/win-iconv")
             add_library(Iconv::Iconv ALIAS capsid_winiconv)
@@ -152,7 +200,29 @@ if(CAPSID_BUILD_WORKER)
     target_sources(tjs PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/txiki_restricted_core.c"
     )
-    target_link_libraries(tjs PUBLIC Iconv::Iconv)
+    set(CAPSID_RESTRICTED_RETAINED_TU_MARKERS OFF)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
+            CMAKE_C_COMPILER_ID MATCHES "Clang" AND
+            CAPSID_ENABLE_LTO AND CAPSID_IPO_SUPPORTED)
+        set(CAPSID_RESTRICTED_RETAINED_TU_MARKERS ON)
+        get_target_property(CAPSID_RESTRICTED_TU_SOURCES tjs SOURCES)
+        get_target_property(CAPSID_RESTRICTED_TU_SOURCE_DIR tjs SOURCE_DIR)
+        foreach(CAPSID_RESTRICTED_TU_SOURCE IN LISTS CAPSID_RESTRICTED_TU_SOURCES)
+            if(CAPSID_RESTRICTED_TU_SOURCE MATCHES "\\.c$")
+                get_filename_component(CAPSID_RESTRICTED_TU_PATH
+                    "${CAPSID_RESTRICTED_TU_SOURCE}" ABSOLUTE
+                    BASE_DIR "${CAPSID_RESTRICTED_TU_SOURCE_DIR}")
+                set_property(SOURCE "${CAPSID_RESTRICTED_TU_PATH}"
+                    TARGET_DIRECTORY tjs APPEND PROPERTY COMPILE_DEFINITIONS
+                    "CAPSID_RESTRICTED_TU_NAME=\"${CAPSID_RESTRICTED_TU_PATH}\"")
+            endif()
+        endforeach()
+        target_compile_options(tjs PRIVATE
+            "$<$<COMPILE_LANGUAGE:C>:-include${CMAKE_CURRENT_SOURCE_DIR}/src/restricted_worker_tu_marker.h>")
+    endif()
+    # Consumers compile C++ against this runtime too (including the shared-loop
+    # and Binding tests), so carry the same sanitizer usage requirements.
+    target_link_libraries(tjs PUBLIC Iconv::Iconv capsid_sanitizers)
     # The vendored txiki build compiles with its own -Werror. glibc marks
     # write() as warn_unused_result, and the vendor's fatal-path writes are
     # intentionally fire-and-forget (abort() follows immediately). Suppress
@@ -229,6 +299,8 @@ if(CAPSID_BUILD_WORKER)
     add_executable(capsid-worker
         src/binding_rpc.cc
         src/capability_policy.cc
+        src/channel_io.cc
+        src/channel_registry.cc
         src/egress_policy.cc
         src/ipc_validation.cc
         src/protocol.cc

@@ -1,0 +1,3219 @@
+{
+  "schema": "capsid-cross-context-v1",
+  "complete": true,
+  "mode": "reference",
+  "runId": "be01d9ea-8399-4600-938c-dee84bb9eb48",
+  "referenceLock": {
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "binary": "workerd-windows-64",
+    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary_version_string": "workerd 2026-10-10",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": [],
+    "client": {
+      "runtime": "node",
+      "websocket": "native (undici) - no external dependency",
+      "node_version": "v24.14.0",
+      "undici_version": "7.21.0"
+    },
+    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
+    "release_asset": "workerd-windows-64.gz",
+    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
+    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+  },
+  "client": {
+    "node": "v24.14.0",
+    "undici": "7.21.0"
+  },
+  "inputs": {
+    "runner": "421853fb3ee2773756fcb587d178956e6d51501f3aa5a47edad2e71140751e53",
+    "fixture": "d207dbf87695c2bbd5565a4beafeed8753b830c7c6a234bd4e575241e3f69f31",
+    "contract": "59644ab9eca48dfb2d2f01c08e67af19ae85cf735e3b9efb4a8ad7a2688f1185",
+    "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+  },
+  "binaries": {
+    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "worker": null
+  },
+  "cases": [
+    {
+      "id": "reaction-a-settle-b",
+      "challenge": "29da60ed-8f0e-49ca-b881-0bec79b204d9",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "attach",
+          "seen": [
+            "ack/a/attach"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"105eeab5-f68b-453a-9c84-5384ac040255\",\"challenge\":\"29da60ed-8f0e-49ca-b881-0bec79b204d9\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: UN6reTxq7VeBuaaFr0MpBbC6Feo=",
+        "requestKey": "8Jj+GnNsLDWwX6+r6/q8aw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zSKuP2pAHUCoSL5pbfZ2ZriC6TI=",
+        "requestKey": "KnhhIRfXHdPMTV9AhDf7xg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"105eeab5-f68b-453a-9c84-5384ac040255\",\"challenge\":\"29da60ed-8f0e-49ca-b881-0bec79b204d9\",\"trace\":[\"a/create\",\"a/attach\",\"b/resolve\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: UN6reTxq7VeBuaaFr0MpBbC6Feo=",
+        "requestKey": "8Jj+GnNsLDWwX6+r6/q8aw==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2F0dGFjaIEKcmVhY3Rpb24vYYEMYWNrL2EvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zSKuP2pAHUCoSL5pbfZ2ZriC6TI=",
+        "requestKey": "KnhhIRfXHdPMTV9AhDf7xg==",
+        "rawTail": "gQ1hY2svYi9yZXNvbHZlgQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"105eeab5-f68b-453a-9c84-5384ac040255\",\"challenge\":\"29da60ed-8f0e-49ca-b881-0bec79b204d9\",\"trace\":[\"a/create\",\"a/attach\",\"b/resolve\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reaction-b-settle-a",
+      "challenge": "eb686efd-c028-45a3-bebe-853e0123f75e",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve",
+          "seen": [
+            "ack/a/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"d673c94d-5f2a-4eb2-ad6d-eea9bfcfc2d6\",\"challenge\":\"eb686efd-c028-45a3-bebe-853e0123f75e\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ICMGXv0xvp2/HyaY7m9EANMChnU=",
+        "requestKey": "Uf2GjE9AKkIYKzZxS1DGOQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: slV/ldGu1SIqSrUye8WZlQhkQSA=",
+        "requestKey": "2EjDutaRxlJU/xpYFTXryg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"d673c94d-5f2a-4eb2-ad6d-eea9bfcfc2d6\",\"challenge\":\"eb686efd-c028-45a3-bebe-853e0123f75e\",\"trace\":[\"a/create\",\"b/attach\",\"a/resolve\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ICMGXv0xvp2/HyaY7m9EANMChnU=",
+        "requestKey": "Uf2GjE9AKkIYKzZxS1DGOQ==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDWFjay9hL3Jlc29sdmWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: slV/ldGu1SIqSrUye8WZlQhkQSA=",
+        "requestKey": "2EjDutaRxlJU/xpYFTXryg==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBCnJlYWN0aW9uL2KBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"d673c94d-5f2a-4eb2-ad6d-eea9bfcfc2d6\",\"challenge\":\"eb686efd-c028-45a3-bebe-853e0123f75e\",\"trace\":[\"a/create\",\"b/attach\",\"a/resolve\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reaction-b-settle-http",
+      "challenge": "eafaaafd-6a41-4223-a9bf-3dedf0d87e40",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "http",
+          "command": "resolve",
+          "status": 200,
+          "text": "{\"realm\":\"7e5e2126-186c-4ac1-8a24-d11605a08a50\",\"challenge\":\"eafaaafd-6a41-4223-a9bf-3dedf0d87e40\"}"
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"7e5e2126-186c-4ac1-8a24-d11605a08a50\",\"challenge\":\"eafaaafd-6a41-4223-a9bf-3dedf0d87e40\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9wwuu26EIBodzuHZRcK/4HRPWgk=",
+        "requestKey": "sX+ntWpRNYyWjA9BXyiWQQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: w6oRfau2ZEDRd2werherxhPYL2Y=",
+        "requestKey": "lG1mHTmsGb4sAROa8ij8LA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"7e5e2126-186c-4ac1-8a24-d11605a08a50\",\"challenge\":\"eafaaafd-6a41-4223-a9bf-3dedf0d87e40\",\"trace\":[\"a/create\",\"b/attach\",\"http/resolve\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9wwuu26EIBodzuHZRcK/4HRPWgk=",
+        "requestKey": "sX+ntWpRNYyWjA9BXyiWQQ==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: w6oRfau2ZEDRd2werherxhPYL2Y=",
+        "requestKey": "lG1mHTmsGb4sAROa8ij8LA==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBCnJlYWN0aW9uL2KBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"7e5e2126-186c-4ac1-8a24-d11605a08a50\",\"challenge\":\"eafaaafd-6a41-4223-a9bf-3dedf0d87e40\",\"trace\":[\"a/create\",\"b/attach\",\"http/resolve\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reaction-http-created",
+      "challenge": "6c354896-a893-4e0f-bc14-11827c1b9e5f",
+      "commands": [
+        {
+          "role": "http",
+          "command": "create",
+          "status": 200,
+          "text": "{\"realm\":\"5f9c6f9d-9fb2-43c0-9299-33ba7308ed9b\",\"challenge\":\"6c354896-a893-4e0f-bc14-11827c1b9e5f\"}"
+        },
+        {
+          "role": "a",
+          "command": "attach",
+          "seen": [
+            "ack/a/attach"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"5f9c6f9d-9fb2-43c0-9299-33ba7308ed9b\",\"challenge\":\"6c354896-a893-4e0f-bc14-11827c1b9e5f\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: C5gqD0J+6XU5QrGXJsMwwNzd2FU=",
+        "requestKey": "qEcrcmfSR5z/Jfmt4KSISw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ibIcZoZJYyg4nZmodtffTpPTwtE=",
+        "requestKey": "YhkfYamYZVlSHJjlrQT4jw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"5f9c6f9d-9fb2-43c0-9299-33ba7308ed9b\",\"challenge\":\"6c354896-a893-4e0f-bc14-11827c1b9e5f\",\"trace\":[\"http/create\",\"a/attach\",\"b/resolve\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: C5gqD0J+6XU5QrGXJsMwwNzd2FU=",
+        "requestKey": "qEcrcmfSR5z/Jfmt4KSISw==",
+        "rawTail": "gQxhY2svYS9hdHRhY2iBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ibIcZoZJYyg4nZmodtffTpPTwtE=",
+        "requestKey": "YhkfYamYZVlSHJjlrQT4jw==",
+        "rawTail": "gQ1hY2svYi9yZXNvbHZlgQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"5f9c6f9d-9fb2-43c0-9299-33ba7308ed9b\",\"challenge\":\"6c354896-a893-4e0f-bc14-11827c1b9e5f\",\"trace\":[\"http/create\",\"a/attach\",\"b/resolve\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at action (main:42:37)\n    at WebSocket.<anonymous> (main:60:9)\n"
+    },
+    {
+      "id": "reject-a-settle-b",
+      "challenge": "57be350d-e7ff-4a42-9569-6385f0794b99",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "reject",
+          "seen": [
+            "ack/b/reject"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e7908264-7298-46f1-a700-8799773c3c67\",\"challenge\":\"57be350d-e7ff-4a42-9569-6385f0794b99\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: c5bKAQllhncZ7DloS7Sg4D9pTqg=",
+        "requestKey": "7VXT1YN4ZgwSA7+RtRn7Zg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CItbjnrp4RuSAvsgbxa6k5pcZQg=",
+        "requestKey": "QMEyMl+1Ay0xP6s7S9d6nw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"e7908264-7298-46f1-a700-8799773c3c67\",\"challenge\":\"57be350d-e7ff-4a42-9569-6385f0794b99\",\"trace\":[\"a/create\",\"b/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: c5bKAQllhncZ7DloS7Sg4D9pTqg=",
+        "requestKey": "7VXT1YN4ZgwSA7+RtRn7Zg==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBFHVuaGFuZGxlZHJlamVjdGlvbi9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "dW5oYW5kbGVkcmVqZWN0aW9uL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CItbjnrp4RuSAvsgbxa6k5pcZQg=",
+        "requestKey": "QMEyMl+1Ay0xP6s7S9d6nw==",
+        "rawTail": "gQxhY2svYi9yZWplY3SBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVqZWN0"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"e7908264-7298-46f1-a700-8799773c3c67\",\"challenge\":\"57be350d-e7ff-4a42-9569-6385f0794b99\",\"trace\":[\"a/create\",\"b/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reject-a-settle-http",
+      "challenge": "ba057cdd-e6b2-4796-9259-d18cf671b9cd",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "http",
+          "command": "reject",
+          "status": 200,
+          "text": "{\"realm\":\"6ae50be9-c458-4d6e-867f-4fc26843fa03\",\"challenge\":\"ba057cdd-e6b2-4796-9259-d18cf671b9cd\"}"
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"6ae50be9-c458-4d6e-867f-4fc26843fa03\",\"challenge\":\"ba057cdd-e6b2-4796-9259-d18cf671b9cd\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: n72J7AubMnlamqaslN2Tny43J5g=",
+        "requestKey": "wo4G2Zks7sr+17g7+Z2ZGg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: OQ7sqqZvC6JTLiHeM8RW3Oy+gkQ=",
+        "requestKey": "J3ChFfU/jNxroCLPzB6E0A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"6ae50be9-c458-4d6e-867f-4fc26843fa03\",\"challenge\":\"ba057cdd-e6b2-4796-9259-d18cf671b9cd\",\"trace\":[\"a/create\",\"http/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: n72J7AubMnlamqaslN2Tny43J5g=",
+        "requestKey": "wo4G2Zks7sr+17g7+Z2ZGg==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBFHVuaGFuZGxlZHJlamVjdGlvbi9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "dW5oYW5kbGVkcmVqZWN0aW9uL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: OQ7sqqZvC6JTLiHeM8RW3Oy+gkQ=",
+        "requestKey": "J3ChFfU/jNxroCLPzB6E0A==",
+        "rawTail": "gQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"6ae50be9-c458-4d6e-867f-4fc26843fa03\",\"challenge\":\"ba057cdd-e6b2-4796-9259-d18cf671b9cd\",\"trace\":[\"a/create\",\"http/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reject-a-late-catch-b",
+      "challenge": "c5bde903-a6e2-4971-9f96-840b2e7dcd69",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "reject",
+          "seen": [
+            "ack/a/reject"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "catch",
+          "seen": [
+            "rejectionhandled/b",
+            "ack/b/catch"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"b68ca7ac-e279-4366-9882-ed211e1e9583\",\"challenge\":\"c5bde903-a6e2-4971-9f96-840b2e7dcd69\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: J9jFdtzBbjfhWAPRnrQUayFDIh8=",
+        "requestKey": "Bzp4IYquKu2LFYGQlZAPlw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jhX/guWdP45BnQrUslXsUeWW+R0=",
+        "requestKey": "7AtjZ77RocheDC3gosqdWw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"b68ca7ac-e279-4366-9882-ed211e1e9583\",\"challenge\":\"c5bde903-a6e2-4971-9f96-840b2e7dcd69\",\"trace\":[\"a/create\",\"a/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"b/catch\",\"catch/before\",\"event/rejectionhandled\",\"rejectionhandled/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"rejectionhandled/b/ok\",\"catch/after\",\"catch/b/true\",\"catch/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"catch/b/ok\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false},{\"type\":\"rejectionhandled\",\"samePromise\":true,\"sameReason\":false,\"reasonType\":\"undefined\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: J9jFdtzBbjfhWAPRnrQUayFDIh8=",
+        "requestKey": "Bzp4IYquKu2LFYGQlZAPlw==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL3JlamVjdIEUdW5oYW5kbGVkcmVqZWN0aW9uL2GBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVqZWN0"
+          },
+          {
+            "opcode": 1,
+            "payload": "dW5oYW5kbGVkcmVqZWN0aW9uL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jhX/guWdP45BnQrUslXsUeWW+R0=",
+        "requestKey": "7AtjZ77RocheDC3gosqdWw==",
+        "rawTail": "gRJyZWplY3Rpb25oYW5kbGVkL2KBC2Fjay9iL2NhdGNogQdjYXRjaC9igQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cmVqZWN0aW9uaGFuZGxlZC9i"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvY2F0Y2g="
+          },
+          {
+            "opcode": 1,
+            "payload": "Y2F0Y2gvYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"b68ca7ac-e279-4366-9882-ed211e1e9583\",\"challenge\":\"c5bde903-a6e2-4971-9f96-840b2e7dcd69\",\"trace\":[\"a/create\",\"a/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"b/catch\",\"catch/before\",\"event/rejectionhandled\",\"rejectionhandled/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"rejectionhandled/b/ok\",\"catch/after\",\"catch/b/true\",\"catch/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"catch/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false},{\"type\":\"rejectionhandled\",\"samePromise\":true,\"sameReason\":false,\"reasonType\":\"undefined\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reject-a-late-catch-http",
+      "challenge": "d34ea0df-f612-4211-b632-a9d8ed1de69f",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "reject",
+          "seen": [
+            "ack/a/reject"
+          ]
+        },
+        {
+          "role": "http",
+          "command": "catch",
+          "status": 200,
+          "text": "{\"realm\":\"a5871d66-2fd2-4264-ad3b-0f75fedab915\",\"challenge\":\"d34ea0df-f612-4211-b632-a9d8ed1de69f\"}"
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"a5871d66-2fd2-4264-ad3b-0f75fedab915\",\"challenge\":\"d34ea0df-f612-4211-b632-a9d8ed1de69f\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kzrv9NPA6sJ8GoMV9ySv+5D61iU=",
+        "requestKey": "zk7nXx0GDOICz9iFIDzaaQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: K2fr3KLHNxFKKFEUY6Q1aC6jBcE=",
+        "requestKey": "i2p16GuU5Xmk6dDG47KSaA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"a5871d66-2fd2-4264-ad3b-0f75fedab915\",\"challenge\":\"d34ea0df-f612-4211-b632-a9d8ed1de69f\",\"trace\":[\"a/create\",\"a/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"http/catch\",\"catch/before\",\"event/rejectionhandled\",\"rejectionhandled/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"rejectionhandled/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"catch/after\",\"catch/http/true\",\"catch/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"catch/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false},{\"type\":\"rejectionhandled\",\"samePromise\":true,\"sameReason\":false,\"reasonType\":\"undefined\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kzrv9NPA6sJ8GoMV9ySv+5D61iU=",
+        "requestKey": "zk7nXx0GDOICz9iFIDzaaQ==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL3JlamVjdIEUdW5oYW5kbGVkcmVqZWN0aW9uL2GBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVqZWN0"
+          },
+          {
+            "opcode": 1,
+            "payload": "dW5oYW5kbGVkcmVqZWN0aW9uL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: K2fr3KLHNxFKKFEUY6Q1aC6jBcE=",
+        "requestKey": "i2p16GuU5Xmk6dDG47KSaA==",
+        "rawTail": "gQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"a5871d66-2fd2-4264-ad3b-0f75fedab915\",\"challenge\":\"d34ea0df-f612-4211-b632-a9d8ed1de69f\",\"trace\":[\"a/create\",\"a/reject\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"http/catch\",\"catch/before\",\"event/rejectionhandled\",\"rejectionhandled/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"rejectionhandled/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"catch/after\",\"catch/http/true\",\"catch/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"catch/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false},{\"type\":\"rejectionhandled\",\"samePromise\":true,\"sameReason\":false,\"reasonType\":\"undefined\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reaction-a-throw-settle-b",
+      "challenge": "c78f5c68-09bc-4b10-9d01-141a0d357eb1",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "attach-throw",
+          "seen": [
+            "ack/a/attach-throw"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"8eabf502-5f9e-45c4-85a2-1722041ff4d9\",\"challenge\":\"c78f5c68-09bc-4b10-9d01-141a0d357eb1\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rjLz62YTICn9dQZAAYBjQfCNYXg=",
+        "requestKey": "DWQXTWQ4Nu6xN/XZeK1A1Q==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Crt/tOWixFTe3/4Xy+xuvWuMqtw=",
+        "requestKey": "p9hqnHxfBJxJvjLOcwNF6A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"8eabf502-5f9e-45c4-85a2-1722041ff4d9\",\"challenge\":\"c78f5c68-09bc-4b10-9d01-141a0d357eb1\",\"trace\":[\"a/create\",\"a/attach-throw\",\"b/resolve\",\"reaction/a\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":false,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rjLz62YTICn9dQZAAYBjQfCNYXg=",
+        "requestKey": "DWQXTWQ4Nu6xN/XZeK1A1Q==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBEmFjay9hL2F0dGFjaC10aHJvd4EUdW5oYW5kbGVkcmVqZWN0aW9uL2GBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXR0YWNoLXRocm93"
+          },
+          {
+            "opcode": 1,
+            "payload": "dW5oYW5kbGVkcmVqZWN0aW9uL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Crt/tOWixFTe3/4Xy+xuvWuMqtw=",
+        "requestKey": "p9hqnHxfBJxJvjLOcwNF6A==",
+        "rawTail": "gQ1hY2svYi9yZXNvbHZlgQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"8eabf502-5f9e-45c4-85a2-1722041ff4d9\",\"challenge\":\"c78f5c68-09bc-4b10-9d01-141a0d357eb1\",\"trace\":[\"a/create\",\"a/attach-throw\",\"b/resolve\",\"reaction/a\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":false,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "thenable-a-settle-b",
+      "challenge": "ed2f682b-dc9a-4168-85e9-761c0c3cb94c",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "attach",
+          "seen": [
+            "ack/a/attach"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve-thenable",
+          "seen": [
+            "getter/b",
+            "ack/b/resolve-thenable"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"127850f4-14ad-4a56-bb80-b1aca21466e9\",\"challenge\":\"ed2f682b-dc9a-4168-85e9-761c0c3cb94c\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Dmn7zkL3EL2EaKxEHG9ckHn9fls=",
+        "requestKey": "kPiE4p2AHanVFaZYJYnNPg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: lsW3E+GJ4jA+nq95JjFLmaAcv5o=",
+        "requestKey": "odCqjM8K7Sq29yfRR2pArg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"127850f4-14ad-4a56-bb80-b1aca21466e9\",\"challenge\":\"ed2f682b-dc9a-4168-85e9-761c0c3cb94c\",\"trace\":[\"a/create\",\"a/attach\",\"b/resolve-thenable\",\"getter/b\",\"getter/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"getter/b/ok\",\"thenable/b\",\"thenable/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"thenable/b/ok\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Dmn7zkL3EL2EaKxEHG9ckHn9fls=",
+        "requestKey": "kPiE4p2AHanVFaZYJYnNPg==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2F0dGFjaIEKcmVhY3Rpb24vYYEMYWNrL2EvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: lsW3E+GJ4jA+nq95JjFLmaAcv5o=",
+        "requestKey": "odCqjM8K7Sq29yfRR2pArg==",
+        "rawTail": "gQhnZXR0ZXIvYoEWYWNrL2IvcmVzb2x2ZS10aGVuYWJsZYEKdGhlbmFibGUvYoEMYWNrL2IvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "Z2V0dGVyL2I="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZS10aGVuYWJsZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "dGhlbmFibGUvYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"127850f4-14ad-4a56-bb80-b1aca21466e9\",\"challenge\":\"ed2f682b-dc9a-4168-85e9-761c0c3cb94c\",\"trace\":[\"a/create\",\"a/attach\",\"b/resolve-thenable\",\"getter/b\",\"getter/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"getter/b/ok\",\"thenable/b\",\"thenable/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"thenable/b/ok\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "thenable-b-settle-a",
+      "challenge": "7fcf8dfc-2165-45e6-9467-6d4ab741c25d",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve-thenable",
+          "seen": [
+            "getter/a",
+            "ack/a/resolve-thenable"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"e3ce72dc-9d3f-447b-ab64-22b75a0d423d\",\"challenge\":\"7fcf8dfc-2165-45e6-9467-6d4ab741c25d\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 3f99s+ItxIxxjyomNJcNR/U5CGQ=",
+        "requestKey": "fIX7Ca1Ag3NaG1l0VdU5XA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xgd4kItZQ5Kt6WV9jB1LzHKiKm4=",
+        "requestKey": "343mY22PwasWU6C6Psu1Mg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"e3ce72dc-9d3f-447b-ab64-22b75a0d423d\",\"challenge\":\"7fcf8dfc-2165-45e6-9467-6d4ab741c25d\",\"trace\":[\"a/create\",\"b/attach\",\"a/resolve-thenable\",\"getter/a\",\"getter/a/ok\",\"getter/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"thenable/a\",\"thenable/a/ok\",\"thenable/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 3f99s+ItxIxxjyomNJcNR/U5CGQ=",
+        "requestKey": "fIX7Ca1Ag3NaG1l0VdU5XA==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBCGdldHRlci9hgRZhY2svYS9yZXNvbHZlLXRoZW5hYmxlgQp0aGVuYWJsZS9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "Z2V0dGVyL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZS10aGVuYWJsZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "dGhlbmFibGUvYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xgd4kItZQ5Kt6WV9jB1LzHKiKm4=",
+        "requestKey": "343mY22PwasWU6C6Psu1Mg==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBCnJlYWN0aW9uL2KBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"e3ce72dc-9d3f-447b-ab64-22b75a0d423d\",\"challenge\":\"7fcf8dfc-2165-45e6-9467-6d4ab741c25d\",\"trace\":[\"a/create\",\"b/attach\",\"a/resolve-thenable\",\"getter/a\",\"getter/a/ok\",\"getter/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"thenable/a\",\"thenable/a/ok\",\"thenable/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "origin-closed-b-reaction",
+      "challenge": "5b5e7ec5-06b7-4c67-b52f-ee4d83433a02",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "finish",
+          "seen": [
+            "ack/a/finish"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"48fad56f-5207-4e77-8a18-cacfebcaf1f4\",\"challenge\":\"5b5e7ec5-06b7-4c67-b52f-ee4d83433a02\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CIpelo+QK8E0vesPiJeqchdG/ms=",
+        "requestKey": "roQyhlmkgM5SBE7cBuWoKg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: C7uQS+h7DCRZhUh9r7cB2bjjnto=",
+        "requestKey": "UxsfVlCCEw5++mHdoFH3FA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CIpelo+QK8E0vesPiJeqchdG/ms=",
+        "requestKey": "roQyhlmkgM5SBE7cBuWoKg==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"48fad56f-5207-4e77-8a18-cacfebcaf1f4\",\"challenge\":\"5b5e7ec5-06b7-4c67-b52f-ee4d83433a02\",\"trace\":[\"a/create\",\"b/attach\",\"a/finish\",\"close/a\",\"b/resolve\"],\"events\":[]}"
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: C7uQS+h7DCRZhUh9r7cB2bjjnto=",
+        "requestKey": "UxsfVlCCEw5++mHdoFH3FA==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBDWFjay9iL3Jlc29sdmWBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"48fad56f-5207-4e77-8a18-cacfebcaf1f4\",\"challenge\":\"5b5e7ec5-06b7-4c67-b52f-ee4d83433a02\",\"trace\":[\"a/create\",\"b/attach\",\"a/finish\",\"close/a\",\"b/resolve\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at action (main:42:37)\n    at WebSocket.<anonymous> (main:60:9)\n"
+    },
+    {
+      "id": "origin-closed-b-thenable",
+      "challenge": "838aa70a-dec8-4edf-ac3a-bf530fe29772",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "finish",
+          "seen": [
+            "ack/a/finish"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve-thenable",
+          "seen": [
+            "getter/b",
+            "ack/b/resolve-thenable"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"43fd2455-7956-47b5-ac03-ea2e871fe2e2\",\"challenge\":\"838aa70a-dec8-4edf-ac3a-bf530fe29772\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kNzfPc1tuKHAe429UZw+TPEpEiM=",
+        "requestKey": "p3oTQlXNIQ5r37Zbzm53Tg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: m6G5cqP6VixtDTrbCngX7jgs1xY=",
+        "requestKey": "4AakkdO3NoZ8s2sPmud4vw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kNzfPc1tuKHAe429UZw+TPEpEiM=",
+        "requestKey": "p3oTQlXNIQ5r37Zbzm53Tg==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"43fd2455-7956-47b5-ac03-ea2e871fe2e2\",\"challenge\":\"838aa70a-dec8-4edf-ac3a-bf530fe29772\",\"trace\":[\"a/create\",\"b/attach\",\"a/finish\",\"close/a\",\"b/resolve-thenable\",\"getter/b\",\"getter/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"getter/b/ok\",\"thenable/b\",\"thenable/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"thenable/b/ok\"],\"events\":[]}"
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: m6G5cqP6VixtDTrbCngX7jgs1xY=",
+        "requestKey": "4AakkdO3NoZ8s2sPmud4vw==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBCGdldHRlci9igRZhY2svYi9yZXNvbHZlLXRoZW5hYmxlgQp0aGVuYWJsZS9igQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "Z2V0dGVyL2I="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZS10aGVuYWJsZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "dGhlbmFibGUvYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"43fd2455-7956-47b5-ac03-ea2e871fe2e2\",\"challenge\":\"838aa70a-dec8-4edf-ac3a-bf530fe29772\",\"trace\":[\"a/create\",\"b/attach\",\"a/finish\",\"close/a\",\"b/resolve-thenable\",\"getter/b\",\"getter/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"getter/b/ok\",\"thenable/b\",\"thenable/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"thenable/b/ok\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at Object.<anonymous> (main:40:75)\n"
+    },
+    {
+      "id": "origin-closed-b-reject",
+      "challenge": "5dd86d93-7357-43bf-b601-37cf4f7906f6",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "finish",
+          "seen": [
+            "ack/a/finish"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "reject",
+          "seen": [
+            "ack/b/reject"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"d9547ad2-9a16-4ebf-8577-20cc45968941\",\"challenge\":\"5dd86d93-7357-43bf-b601-37cf4f7906f6\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tFJgv7MS9FNEaygHahB6BzB11bk=",
+        "requestKey": "tsrQy74D1mlHSrdblWMLhQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1Qov0zyvb6Xhtz7LZILcHZvPFYk=",
+        "requestKey": "Z+FSHdIKWIwbrdC6H7a6AQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tFJgv7MS9FNEaygHahB6BzB11bk=",
+        "requestKey": "tsrQy74D1mlHSrdblWMLhQ==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"d9547ad2-9a16-4ebf-8577-20cc45968941\",\"challenge\":\"5dd86d93-7357-43bf-b601-37cf4f7906f6\",\"trace\":[\"a/create\",\"a/finish\",\"close/a\",\"b/reject\"],\"events\":[]}"
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1Qov0zyvb6Xhtz7LZILcHZvPFYk=",
+        "requestKey": "Z+FSHdIKWIwbrdC6H7a6AQ==",
+        "rawTail": "gQxhY2svYi9yZWplY3SBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVqZWN0"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"d9547ad2-9a16-4ebf-8577-20cc45968941\",\"challenge\":\"5dd86d93-7357-43bf-b601-37cf4f7906f6\",\"trace\":[\"a/create\",\"a/finish\",\"close/a\",\"b/reject\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at action (main:43:36)\n    at WebSocket.<anonymous> (main:60:9)\n"
+    },
+    {
+      "id": "origin-closed-settled",
+      "challenge": "9d16506b-b8de-41bc-b832-0daa20a045d9",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve",
+          "seen": [
+            "ack/a/resolve"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "finish",
+          "seen": [
+            "ack/a/finish"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"b45ba657-5096-4773-8402-11379a6110f9\",\"challenge\":\"9d16506b-b8de-41bc-b832-0daa20a045d9\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YcgPJ6TVMCFD4KZxCpEojtHNrjU=",
+        "requestKey": "2lzgslTOlJ/Py7M6RxaXFA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tvxhmxQ6XX7/+c2Fvw+RiLYf2w4=",
+        "requestKey": "ia3eWsjZ41VvJP1SkDUypQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YcgPJ6TVMCFD4KZxCpEojtHNrjU=",
+        "requestKey": "2lzgslTOlJ/Py7M6RxaXFA==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDWFjay9hL3Jlc29sdmWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"b45ba657-5096-4773-8402-11379a6110f9\",\"challenge\":\"9d16506b-b8de-41bc-b832-0daa20a045d9\",\"trace\":[\"a/create\",\"a/resolve\",\"a/finish\",\"close/a\",\"b/attach\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\"],\"events\":[]}"
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tvxhmxQ6XX7/+c2Fvw+RiLYf2w4=",
+        "requestKey": "ia3eWsjZ41VvJP1SkDUypQ==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBCnJlYWN0aW9uL2KBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"b45ba657-5096-4773-8402-11379a6110f9\",\"challenge\":\"9d16506b-b8de-41bc-b832-0daa20a045d9\",\"trace\":[\"a/create\",\"a/resolve\",\"a/finish\",\"close/a\",\"b/attach\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "module-origin-reaction-b",
+      "challenge": "d345e535-5bd2-4b86-bac8-8db2204d0b7c",
+      "commands": [
+        {
+          "role": "a",
+          "command": "use-module",
+          "seen": [
+            "ack/a/use-module"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve",
+          "seen": [
+            "ack/a/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"9623b19b-11ba-448a-a922-78f936aec0c4\",\"challenge\":\"d345e535-5bd2-4b86-bac8-8db2204d0b7c\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tEcphE4qO8MyrVcBSVQqGnMg1b0=",
+        "requestKey": "Szae/G64o5bbjpVWv3y0DA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: n6x2xJKGEGHq8TJ2CYaRhFOOahc=",
+        "requestKey": "jQVuQKti6Ac4hl2HRBdBHQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"9623b19b-11ba-448a-a922-78f936aec0c4\",\"challenge\":\"d345e535-5bd2-4b86-bac8-8db2204d0b7c\",\"trace\":[\"a/use-module\",\"b/attach\",\"a/resolve\",\"reaction/b\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tEcphE4qO8MyrVcBSVQqGnMg1b0=",
+        "requestKey": "Szae/G64o5bbjpVWv3y0DA==",
+        "rawTail": "gRBhY2svYS91c2UtbW9kdWxlgQ1hY2svYS9yZXNvbHZlgQpyZWFjdGlvbi9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvdXNlLW1vZHVsZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: n6x2xJKGEGHq8TJ2CYaRhFOOahc=",
+        "requestKey": "jQVuQKti6Ac4hl2HRBdBHQ==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"9623b19b-11ba-448a-a922-78f936aec0c4\",\"challenge\":\"d345e535-5bd2-4b86-bac8-8db2204d0b7c\",\"trace\":[\"a/use-module\",\"b/attach\",\"a/resolve\",\"reaction/b\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "origin-closed-resolve-then-attach",
+      "challenge": "363a0b4e-8303-467a-b28b-baa2cd5ec6c3",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "finish",
+          "seen": [
+            "ack/a/finish"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"07daca9a-c9e6-4a8e-8efa-4e05995553a8\",\"challenge\":\"363a0b4e-8303-467a-b28b-baa2cd5ec6c3\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: f5N1ZIiYCBTatgt0m/VDmjqDxBI=",
+        "requestKey": "YcEXC7L2BHGajSAptwhmDA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 6t63wkuMlaRMUU40JgBFnWjxs4U=",
+        "requestKey": "rus9BPQeTiFwCAASy/p0eg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: f5N1ZIiYCBTatgt0m/VDmjqDxBI=",
+        "requestKey": "YcEXC7L2BHGajSAptwhmDA==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"07daca9a-c9e6-4a8e-8efa-4e05995553a8\",\"challenge\":\"363a0b4e-8303-467a-b28b-baa2cd5ec6c3\",\"trace\":[\"a/create\",\"a/finish\",\"close/a\",\"b/resolve\",\"b/attach\"],\"events\":[]}"
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 6t63wkuMlaRMUU40JgBFnWjxs4U=",
+        "requestKey": "rus9BPQeTiFwCAASy/p0eg==",
+        "rawTail": "gQ1hY2svYi9yZXNvbHZlgQxhY2svYi9hdHRhY2iBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"07daca9a-c9e6-4a8e-8efa-4e05995553a8\",\"challenge\":\"363a0b4e-8303-467a-b28b-baa2cd5ec6c3\",\"trace\":[\"a/create\",\"a/finish\",\"close/a\",\"b/resolve\",\"b/attach\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at action (main:42:37)\n    at WebSocket.<anonymous> (main:60:9)\n"
+    },
+    {
+      "id": "origin-http-resolve-then-attach",
+      "challenge": "7c395142-424e-4771-bcb3-58a4bf50689f",
+      "commands": [
+        {
+          "role": "http",
+          "command": "create",
+          "status": 200,
+          "text": "{\"realm\":\"1d7bb66b-eea7-4fca-8458-c394728a0318\",\"challenge\":\"7c395142-424e-4771-bcb3-58a4bf50689f\"}"
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"1d7bb66b-eea7-4fca-8458-c394728a0318\",\"challenge\":\"7c395142-424e-4771-bcb3-58a4bf50689f\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: O9eXRZJOBIOnpom5r1HCSP0tJDw=",
+        "requestKey": "l01YZ0MX5cHlmHYFBveqRg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SOahZLe9Pq7bcOGhR82q6P7Zzck=",
+        "requestKey": "4OZX34huEEpz9iryWG4HzQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"1d7bb66b-eea7-4fca-8458-c394728a0318\",\"challenge\":\"7c395142-424e-4771-bcb3-58a4bf50689f\",\"trace\":[\"http/create\",\"b/resolve\",\"b/attach\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: O9eXRZJOBIOnpom5r1HCSP0tJDw=",
+        "requestKey": "l01YZ0MX5cHlmHYFBveqRg==",
+        "rawTail": "gQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SOahZLe9Pq7bcOGhR82q6P7Zzck=",
+        "requestKey": "4OZX34huEEpz9iryWG4HzQ==",
+        "rawTail": "gQ1hY2svYi9yZXNvbHZlgQxhY2svYi9hdHRhY2iBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"1d7bb66b-eea7-4fca-8458-c394728a0318\",\"challenge\":\"7c395142-424e-4771-bcb3-58a4bf50689f\",\"trace\":[\"http/create\",\"b/resolve\",\"b/attach\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at action (main:42:37)\n    at WebSocket.<anonymous> (main:60:9)\n"
+    },
+    {
+      "id": "reaction-a-order-b",
+      "challenge": "66c0b931-83b2-40ff-8b06-c3a2c1c8755a",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "attach",
+          "seen": [
+            "ack/a/attach"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve-order",
+          "seen": [
+            "ack/b/resolve-order"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"be8e4dee-8459-43bf-9083-b499cde0c98c\",\"challenge\":\"66c0b931-83b2-40ff-8b06-c3a2c1c8755a\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: lSEHdR63hmJSN9pJVUlbAIRAMDc=",
+        "requestKey": "P89Yznd0OA4Erbr/u9L0FQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fc0sRjNPUclmQ9fkn02xrWZOaUc=",
+        "requestKey": "0CJeairPvriFiWn2ytS+qQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"be8e4dee-8459-43bf-9083-b499cde0c98c\",\"challenge\":\"66c0b931-83b2-40ff-8b06-c3a2c1c8755a\",\"trace\":[\"a/create\",\"a/attach\",\"b/resolve-order\",\"settle/after\",\"micro/before\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: lSEHdR63hmJSN9pJVUlbAIRAMDc=",
+        "requestKey": "P89Yznd0OA4Erbr/u9L0FQ==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2F0dGFjaIEKcmVhY3Rpb24vYYEMYWNrL2EvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fc0sRjNPUclmQ9fkn02xrWZOaUc=",
+        "requestKey": "0CJeairPvriFiWn2ytS+qQ==",
+        "rawTail": "gRNhY2svYi9yZXNvbHZlLW9yZGVygQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZS1vcmRlcg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"be8e4dee-8459-43bf-9083-b499cde0c98c\",\"challenge\":\"66c0b931-83b2-40ff-8b06-c3a2c1c8755a\",\"trace\":[\"a/create\",\"a/attach\",\"b/resolve-order\",\"settle/after\",\"micro/before\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reaction-b-order-a",
+      "challenge": "58305490-2de6-4dc7-8cde-f5c01bcaf0f8",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "attach",
+          "seen": [
+            "ack/b/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve-order",
+          "seen": [
+            "ack/a/resolve-order"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"eb7d3b46-8d62-4fce-810d-3ed302bef549\",\"challenge\":\"58305490-2de6-4dc7-8cde-f5c01bcaf0f8\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 98rLAGRdHVJnsdFtfoMPwDjy0Xk=",
+        "requestKey": "mXnfQHFcnKU2AIJ21GHM/w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: DFYN4qXuLe9eCzRUgPn4tyTuLVk=",
+        "requestKey": "nW0ypNRMGsV58xaMCMg1Cg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"eb7d3b46-8d62-4fce-810d-3ed302bef549\",\"challenge\":\"58305490-2de6-4dc7-8cde-f5c01bcaf0f8\",\"trace\":[\"a/create\",\"b/attach\",\"a/resolve-order\",\"settle/after\",\"micro/before\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 98rLAGRdHVJnsdFtfoMPwDjy0Xk=",
+        "requestKey": "mXnfQHFcnKU2AIJ21GHM/w==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBE2Fjay9hL3Jlc29sdmUtb3JkZXKBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZS1vcmRlcg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: DFYN4qXuLe9eCzRUgPn4tyTuLVk=",
+        "requestKey": "nW0ypNRMGsV58xaMCMg1Cg==",
+        "rawTail": "gQxhY2svYi9hdHRhY2iBCnJlYWN0aW9uL2KBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"eb7d3b46-8d62-4fce-810d-3ed302bef549\",\"challenge\":\"58305490-2de6-4dc7-8cde-f5c01bcaf0f8\",\"trace\":[\"a/create\",\"b/attach\",\"a/resolve-order\",\"settle/after\",\"micro/before\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"reaction/b\",\"reaction/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"reaction/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reaction-a-order-a",
+      "challenge": "f7033a5a-b138-4118-920c-3db941703feb",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "attach",
+          "seen": [
+            "ack/a/attach"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve-order",
+          "seen": [
+            "ack/a/resolve-order"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"6bfa2c66-8779-4d88-9120-3ed84f769976\",\"challenge\":\"f7033a5a-b138-4118-920c-3db941703feb\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dy/8HsfwSkGasT1BsioATN1v+6E=",
+        "requestKey": "Kz/5ggqaNXzka6/GYY8XOA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: e4ore6EFzYOSCk7nPtGS97iTogI=",
+        "requestKey": "A27AlSTGGovX2trSebbvAQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"6bfa2c66-8779-4d88-9120-3ed84f769976\",\"challenge\":\"f7033a5a-b138-4118-920c-3db941703feb\",\"trace\":[\"a/create\",\"a/attach\",\"a/resolve-order\",\"settle/after\",\"micro/before\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dy/8HsfwSkGasT1BsioATN1v+6E=",
+        "requestKey": "Kz/5ggqaNXzka6/GYY8XOA==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDGFjay9hL2F0dGFjaIETYWNrL2EvcmVzb2x2ZS1vcmRlcoEKcmVhY3Rpb24vYYEMYWNrL2EvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXR0YWNo"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZS1vcmRlcg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "cmVhY3Rpb24vYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: e4ore6EFzYOSCk7nPtGS97iTogI=",
+        "requestKey": "A27AlSTGGovX2trSebbvAQ==",
+        "rawTail": "gQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"6bfa2c66-8779-4d88-9120-3ed84f769976\",\"challenge\":\"f7033a5a-b138-4118-920c-3db941703feb\",\"trace\":[\"a/create\",\"a/attach\",\"a/resolve-order\",\"settle/after\",\"micro/before\",\"reaction/a\",\"reaction/a/ok\",\"reaction/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "reject-a-order-b",
+      "challenge": "51b1cd80-ea4d-4151-bded-99451baab9e4",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "reject-order",
+          "seen": [
+            "ack/b/reject-order"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"38248788-fa70-42d9-aacc-89cb80840af1\",\"challenge\":\"51b1cd80-ea4d-4151-bded-99451baab9e4\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: p2qJ3+hm/fdcQMWymE6OzN9rIIM=",
+        "requestKey": "1eDnbYyXR54RAgC940uSkA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iWIKrgmh0yOZlcWx2aU2rJOCZ5c=",
+        "requestKey": "j//Brr0zhHVX8jV/DtgZDg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"38248788-fa70-42d9-aacc-89cb80840af1\",\"challenge\":\"51b1cd80-ea4d-4151-bded-99451baab9e4\",\"trace\":[\"a/create\",\"b/reject-order\",\"settle/after\",\"micro/before\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: p2qJ3+hm/fdcQMWymE6OzN9rIIM=",
+        "requestKey": "1eDnbYyXR54RAgC940uSkA==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBFHVuaGFuZGxlZHJlamVjdGlvbi9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "dW5oYW5kbGVkcmVqZWN0aW9uL2E="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iWIKrgmh0yOZlcWx2aU2rJOCZ5c=",
+        "requestKey": "j//Brr0zhHVX8jV/DtgZDg==",
+        "rawTail": "gRJhY2svYi9yZWplY3Qtb3JkZXKBDGFjay9iL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVqZWN0LW9yZGVy"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"38248788-fa70-42d9-aacc-89cb80840af1\",\"challenge\":\"51b1cd80-ea4d-4151-bded-99451baab9e4\",\"trace\":[\"a/create\",\"b/reject-order\",\"settle/after\",\"micro/before\",\"micro/after\",\"micro/nested-before\",\"micro/nested-after\",\"timer/settler\",\"event/unhandledrejection\",\"unhandledrejection/a/ok\",\"unhandledrejection/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[{\"type\":\"unhandledrejection\",\"samePromise\":true,\"sameReason\":true,\"reasonType\":\"object\",\"trusted\":true,\"cancelable\":false,\"bubbles\":false,\"defaultPrevented\":false}]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "await-a-settle-b",
+      "challenge": "99070169-e728-49c1-9be9-5e58f157f7bc",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "await",
+          "seen": [
+            "ack/a/await"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "resolve",
+          "seen": [
+            "ack/b/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"efd63332-2d91-41d8-bf82-dc5926fb586f\",\"challenge\":\"99070169-e728-49c1-9be9-5e58f157f7bc\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rmy5JH1eJUPQBfOe0Ez0LBnOPCw=",
+        "requestKey": "J0AheAWiMlyBqPdxP0wlCg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KesuOe5VkZnUYdMoNn+uQpTVQNc=",
+        "requestKey": "WTwAGpg/LW2AzTT8KFaePQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"efd63332-2d91-41d8-bf82-dc5926fb586f\",\"challenge\":\"99070169-e728-49c1-9be9-5e58f157f7bc\",\"trace\":[\"a/create\",\"a/await\",\"b/resolve\",\"await/a\",\"await/a/ok\",\"await/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rmy5JH1eJUPQBfOe0Ez0LBnOPCw=",
+        "requestKey": "J0AheAWiMlyBqPdxP0wlCg==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBC2Fjay9hL2F3YWl0gQdhd2FpdC9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvYXdhaXQ="
+          },
+          {
+            "opcode": 1,
+            "payload": "YXdhaXQvYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KesuOe5VkZnUYdMoNn+uQpTVQNc=",
+        "requestKey": "WTwAGpg/LW2AzTT8KFaePQ==",
+        "rawTail": "gQ1hY2svYi9yZXNvbHZlgQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"efd63332-2d91-41d8-bf82-dc5926fb586f\",\"challenge\":\"99070169-e728-49c1-9be9-5e58f157f7bc\",\"trace\":[\"a/create\",\"a/await\",\"b/resolve\",\"await/a\",\"await/a/ok\",\"await/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "await-b-settle-a",
+      "challenge": "165952d7-02b3-44c2-9b25-09a83f685874",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "await",
+          "seen": [
+            "ack/b/await"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve",
+          "seen": [
+            "ack/a/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"c78cbcc9-9cf7-49bc-abae-65c382d6a567\",\"challenge\":\"165952d7-02b3-44c2-9b25-09a83f685874\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: aK+fVvftZoqUJKCIiJqcOGFE054=",
+        "requestKey": "kDzcfj/71QFuubUgy6Wf9w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: BdqUAEA545qCro/gn1iwlpCQsD4=",
+        "requestKey": "qfXJLcBorvXUXJx5y9BelQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"c78cbcc9-9cf7-49bc-abae-65c382d6a567\",\"challenge\":\"165952d7-02b3-44c2-9b25-09a83f685874\",\"trace\":[\"a/create\",\"b/await\",\"a/resolve\",\"await/b\",\"await/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"await/b/ok\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: aK+fVvftZoqUJKCIiJqcOGFE054=",
+        "requestKey": "kDzcfj/71QFuubUgy6Wf9w==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDWFjay9hL3Jlc29sdmWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: BdqUAEA545qCro/gn1iwlpCQsD4=",
+        "requestKey": "qfXJLcBorvXUXJx5y9BelQ==",
+        "rawTail": "gQthY2svYi9hd2FpdIEHYXdhaXQvYoEMYWNrL2IvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXdhaXQ="
+          },
+          {
+            "opcode": 1,
+            "payload": "YXdhaXQvYg=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"c78cbcc9-9cf7-49bc-abae-65c382d6a567\",\"challenge\":\"165952d7-02b3-44c2-9b25-09a83f685874\",\"trace\":[\"a/create\",\"b/await\",\"a/resolve\",\"await/b\",\"await/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"await/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "all-b-settle-a",
+      "challenge": "3b866809-3f52-4009-aef1-e7a9ee4c987c",
+      "commands": [
+        {
+          "role": "a",
+          "command": "create",
+          "seen": [
+            "ack/a/create"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "all",
+          "seen": [
+            "ack/b/all"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve",
+          "seen": [
+            "ack/a/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"71b4a581-3d48-4540-bb3d-ffb84dbb1c9a\",\"challenge\":\"3b866809-3f52-4009-aef1-e7a9ee4c987c\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZIOLguXBxCeX0oX+cZYQ4q0dao0=",
+        "requestKey": "dygDvMc8NKbWeWnkYl8nrQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iW+2KmR9IkRvcAmX5k6nBXXUU7Q=",
+        "requestKey": "9kUdaeJcYq0g/Q/YtZodjQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"71b4a581-3d48-4540-bb3d-ffb84dbb1c9a\",\"challenge\":\"3b866809-3f52-4009-aef1-e7a9ee4c987c\",\"trace\":[\"a/create\",\"b/all\",\"a/resolve\",\"all/b\",\"all/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"all/b/ok\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZIOLguXBxCeX0oX+cZYQ4q0dao0=",
+        "requestKey": "dygDvMc8NKbWeWnkYl8nrQ==",
+        "rawTail": "gQxhY2svYS9jcmVhdGWBDWFjay9hL3Jlc29sdmWBDGFjay9hL2ZpbmlzaIgGA+hkb25l",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvY3JlYXRl"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iW+2KmR9IkRvcAmX5k6nBXXUU7Q=",
+        "requestKey": "9kUdaeJcYq0g/Q/YtZodjQ==",
+        "rawTail": "gQlhY2svYi9hbGyBBWFsbC9igQxhY2svYi9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYWxs"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWxsL2I="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"71b4a581-3d48-4540-bb3d-ffb84dbb1c9a\",\"challenge\":\"3b866809-3f52-4009-aef1-e7a9ee4c987c\",\"trace\":[\"a/create\",\"b/all\",\"a/resolve\",\"all/b\",\"all/a/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"all/b/ok\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "module-origin-await-b",
+      "challenge": "75aa7a59-0456-4d06-956b-fec588f4aaf5",
+      "commands": [
+        {
+          "role": "a",
+          "command": "use-module",
+          "seen": [
+            "ack/a/use-module"
+          ]
+        },
+        {
+          "role": "b",
+          "command": "await",
+          "seen": [
+            "ack/b/await"
+          ]
+        },
+        {
+          "role": "a",
+          "command": "resolve",
+          "seen": [
+            "ack/a/resolve"
+          ]
+        }
+      ],
+      "initial": {
+        "status": 200,
+        "text": "{\"realm\":\"eb2b8729-0581-4080-9401-f84fd4b7dc77\",\"challenge\":\"75aa7a59-0456-4d06-956b-fec588f4aaf5\",\"trace\":[],\"events\":[]}"
+      },
+      "upgradea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: AgrDbQ+VK8U9K3WDIfMDCisGOFU=",
+        "requestKey": "0FBPzp65eDf1UYs6uyma5w==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "upgradeb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EwDYC13zSTztM7OKlz5XGrNq6Dk=",
+        "requestKey": "fQacq9MRKI1p7OkMLjWmkw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "state": {
+        "status": 200,
+        "text": "{\"realm\":\"eb2b8729-0581-4080-9401-f84fd4b7dc77\",\"challenge\":\"75aa7a59-0456-4d06-956b-fec588f4aaf5\",\"trace\":[\"a/use-module\",\"b/await\",\"a/resolve\",\"await/b\",\"await/a/ok\",\"await/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\"],\"events\":[]}"
+      },
+      "wirea": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: AgrDbQ+VK8U9K3WDIfMDCisGOFU=",
+        "requestKey": "0FBPzp65eDf1UYs6uyma5w==",
+        "rawTail": "gRBhY2svYS91c2UtbW9kdWxlgQ1hY2svYS9yZXNvbHZlgQdhd2FpdC9hgQxhY2svYS9maW5pc2iIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvdXNlLW1vZHVsZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvcmVzb2x2ZQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YXdhaXQvYQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2EvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "wireb": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EwDYC13zSTztM7OKlz5XGrNq6Dk=",
+        "requestKey": "fQacq9MRKI1p7OkMLjWmkw==",
+        "rawTail": "gQthY2svYi9hd2FpdIEMYWNrL2IvZmluaXNoiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvYXdhaXQ="
+          },
+          {
+            "opcode": 1,
+            "payload": "YWNrL2IvZmluaXNo"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "finalState": {
+        "status": 200,
+        "text": "{\"realm\":\"eb2b8729-0581-4080-9401-f84fd4b7dc77\",\"challenge\":\"75aa7a59-0456-4d06-956b-fec588f4aaf5\",\"trace\":[\"a/use-module\",\"b/await\",\"a/resolve\",\"await/b\",\"await/a/ok\",\"await/b/Error: Cannot perform I/O on behalf of a different request. I/O objects (such as streams, request/response bodies, and others) created in the context of one request handler cannot be accessed from a different request's handler. This is a limitation of Cloudflare Workers which allows us to improve overall performance. (I/O type: Native)\",\"a/finish\",\"close/a\",\"b/finish\",\"close/b\"],\"events\":[]}"
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "capsid-binding-fetch-arguments-reference-metadata-v1",
+  "rawBytes": 108447339,
+  "rawSHA256": "699264b58e9a0e1791fa2e1f53be7150bc26b04331e29e1efbbf70c52ec6f9ba",
+  "gzipSHA256": "c25d2cef9eb6c62b7d32a77dfabae52f9d50ed062e0432d563bd280ab7549b95",
+  "captureRunnerSHA256": "1a9299d432285977df9ecf88e8e1907b83f47107265aaa459ed1762c73cf915e",
+  "reports": [
+    {
+      "platform": "native",
+      "sourceReportSHA256": "c97c59e77273e751f08bb01240db894f546ab5955586f3a4aa5b9341edfae6e4",
+      "rawBytes": 50280855
+    },
+    {
+      "platform": "linux",
+      "sourceReportSHA256": "365f51054bf63192f5376805c85a952382422c6605207a17e0e4e7d530f7a142",
+      "rawBytes": 50280786
+    }
+  ]
+}

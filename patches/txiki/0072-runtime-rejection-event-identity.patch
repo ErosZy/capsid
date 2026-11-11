@@ -1,0 +1,144 @@
+--- a/src/js/polyfills/event-target.js
++++ b/src/js/polyfills/event-target.js
+@@ -1,4 +1,6 @@
+ const eventWeakGet = Function.prototype.call.bind(WeakMap.prototype.get);
++const eventWeakSet = Function.prototype.call.bind(WeakMap.prototype.set);
++const eventWeakDelete = Function.prototype.call.bind(WeakMap.prototype.delete);
+ /**
+  * Modified from the original:
+  *
+@@ -96,7 +98,7 @@
+         const options = eventInit ?? {};
+         const snapshot = { bubbles: !!options.bubbles, cancelable: !!options.cancelable,
+             composed: !!options.composed };
+-        privateData.set(this, {
++        eventWeakSet(privateData, this, {
+             eventInit: snapshot,
+             eventPhase: 0,
+             eventType: type,
+@@ -357,7 +359,7 @@
+ const applyCallback = Reflect.apply;
+ 
+ function registerAbortSignal(signal) {
+-    abortSignals.set(signal, { aborted: false, algorithms: new Set() });
++    eventWeakSet(abortSignals, signal, { aborted: false, algorithms: new Set() });
+ }
+ 
+ function runAbortAlgorithms(signal) {
+@@ -499,8 +501,8 @@
+     }
+ 
+     __init() {
+-        listenersMap.set(this, new Map());
+-        eventHandlerAttributes.set(this, new Map());
++        eventWeakSet(listenersMap, this, new Map());
++        eventWeakSet(eventHandlerAttributes, this, new Map());
+     }
+ 
+     /**
+@@ -524,7 +526,8 @@
+         const signal = dictionary ? options.signal : undefined;
+         const signalState = signal === undefined ? null : eventWeakGet(abortSignals, signal);
+         if (signal !== undefined && !signalState) throw new TypeError('Invalid AbortSignal');
+-        if (capture || passive) throw new TypeError('capture and passive must be false');
++        if (capture) throw new TypeError(dictionary ? 'addEventListener(): options.capture must be false.' : 'addEventListener(): useCapture must be false.');
++        if (passive) throw new TypeError('addEventListener(): options.passive must be false.');
+         if (signalState?.aborted) return;
+         if (findListener(listeners, type, listener, BUBBLE)) return;
+         const node = { listener, callback, listenerType: BUBBLE, once, passive: false,
+@@ -557,7 +560,7 @@
+         const type = toEventString(eventName);
+         const dictionary = options !== null && (typeof options === 'object' || typeof options === 'function');
+         const capture = dictionary ? !!options.capture : !!options;
+-        if (capture) throw new TypeError('capture must be false');
++        if (capture) throw new TypeError(dictionary ? 'removeEventListener(): options.capture must be false.' : 'removeEventListener(): useCapture must be false.');
+         const listeners = getListeners(this ?? globalThis);
+         if (listener === null || listener === undefined) return;
+         const node = findListener(listeners, type, listener, BUBBLE);
+@@ -574,7 +577,7 @@
+             throw new TypeError('Argument 1 of EventTarget.dispatchEvent is not an object.');
+         }
+ 
+-        if (!(event instanceof Event)) {
++        if (!eventWeakGet(privateData, event)) {
+             throw new TypeError('Argument 1 of EventTarget.dispatchEvent does not implement interface Event.');
+         }
+ 
+@@ -630,9 +633,9 @@
+ const nativeDispatch = EventTarget.prototype.dispatchEvent;
+ function dispatchTrustedEvent(target, event, observeResult) {
+     pd(event).isTrusted = true;
+-    if (observeResult) callbackObservers.set(event, observeResult);
++    if (observeResult) eventWeakSet(callbackObservers, event, observeResult);
+     try { return nativeDispatch.call(target, event); }
+-    finally { callbackObservers.delete(event); }
++    finally { eventWeakDelete(callbackObservers, event); }
+ }
+ Object.defineProperty(Event.prototype, 'isTrusted', { enumerable: true });
+ 
+--- a/src/js/polyfills/event-target-polyfill.js
++++ b/src/js/polyfills/event-target-polyfill.js
+@@ -99,6 +99,36 @@
+     }
+ }
+ 
++// Capsid follows the pinned default workerd public constructor policy.
++// Keep the runtime factory on internal core; applications cannot import core.
++let publicPromiseRejectionEvent = PromiseRejectionEvent;
++if (typeof core.capsidFetchRequestBodyLimit === 'function') {
++    const construct = Reflect.construct;
++    const defineProperties = Object.defineProperties;
++    const hasOwn = Object.hasOwn;
++    const runtimeEventInit = Object.freeze({__proto__: null,
++        bubbles: false, cancelable: false, composed: false});
++    const PublicConstructor = function PromiseRejectionEvent() {
++        throw new TypeError('Illegal constructor');
++    };
++    Object.setPrototypeOf(PublicConstructor.prototype, Event.prototype);
++    Object.defineProperty(PublicConstructor.prototype, Symbol.toStringTag, {
++        value: 'PromiseRejectionEvent', writable: true, configurable: true
++    });
++    // The runtime keeps the original constructor while following its writable
++    // prototype property, matching the pinned workerd primary observations.
++    core.capsidPromiseRejectionEventConstructor = function(eventType, init) {
++        const event = construct(Event, [eventType, runtimeEventInit], PublicConstructor);
++        defineProperties(event, {__proto__: null,
++            promise: {__proto__: null, value: init.promise, writable: false, enumerable: true, configurable: true},
++            reason: {__proto__: null, value: hasOwn(init, 'reason') ? init.reason : undefined,
++                writable: false, enumerable: true, configurable: true}
++        });
++        return event;
++    };
++    publicPromiseRejectionEvent = PublicConstructor;
++}
++
+ class ProgressEvent extends Event {
+     #lengthComputable;
+     #loaded;
+@@ -160,7 +190,7 @@
+         enumerable: true,
+         configurable: true,
+         writable: true,
+-        value: PromiseRejectionEvent
++        value: publicPromiseRejectionEvent
+     },
+     ProgressEvent: {
+         enumerable: true,
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -603,7 +603,14 @@
+         qrt->builtins.dispatch_event_func = JS_GetPropertyStr(ctx, global_obj, "dispatchEvent");
+     }
+     CHECK_EQ(JS_IsUndefined(qrt->builtins.dispatch_event_func), 0);
+-    qrt->builtins.promise_event_ctor = JS_GetPropertyStr(qrt->ctx, global_obj, "PromiseRejectionEvent");
++#ifdef TJS_RESTRICTED_CORE
++    qrt->builtins.promise_event_ctor = JS_GetPropertyStr(ctx, core, "capsidPromiseRejectionEventConstructor");
++    if (JS_IsUndefined(qrt->builtins.promise_event_ctor)) {
++        qrt->builtins.promise_event_ctor = JS_GetPropertyStr(ctx, global_obj, "PromiseRejectionEvent");
++    }
++#else
++    qrt->builtins.promise_event_ctor = JS_GetPropertyStr(ctx, global_obj, "PromiseRejectionEvent");
++#endif
+     CHECK_EQ(JS_IsUndefined(qrt->builtins.promise_event_ctor), 0);
+ 
+     /* end bootstrap */

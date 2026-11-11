@@ -1,0 +1,12 @@
+{
+  "schema": "capsid-fetch-proxy-reference-capture-v1",
+  "platform": "linux",
+  "sourceReport": "build-v030-dev/evidence/native-asan-qualification-20261018/upgrade37ag-linux-reference.json",
+  "sourceReportSHA256": "aa15a7579aff26733edf46041a155f10d7196465a1a5ee38417cc892274e4301",
+  "gzipSHA256": "a3d7e6658a9edb66bcefea596c13cd9d4bcb5b811fc3b54ab968eaaa23f41c16",
+  "rawBytes": 19956597,
+  "cases": 22,
+  "referenceBinarySHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "purpose": "Immutable actual reference observations for validator control tests. Synthetic backend/platform copies in unit tests are not product or foreign-platform execution evidence."
+}

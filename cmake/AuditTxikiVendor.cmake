@@ -3,7 +3,7 @@
 # This audit verifies:
 #   1. Vendor checkout is clean (no untracked or modified files).
 #   2. Vendor HEAD matches the expected tag (if configured).
-#   3. All 36 patches apply in sequence to a fresh vendor copy, using the
+#   3. All 78 patches apply in sequence to a fresh vendor copy, using the
 #      same tool and flags as the build (git apply -p1 --ignore-whitespace
 #      — PrepareTxiki.cmake).
 #   4. The overlay stamp matches the key computed from the shared function.
@@ -154,11 +154,51 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # queued fetch requests fail closed with their user_space intact;
 # 0033 gate pooling on a proven keepalive peer; 0034 per-token pending-job
 # probe for per-token reclaim decisions; 0035 fixes libwebsockets cookie
-# attribute indices so Secure/HttpOnly cannot overwrite the name/value.
+# attribute indices so Secure/HttpOnly cannot overwrite the name/value;
+# 0036 ports async/generator closure-frame cycle GC from Bellard 7414e5f;
+# 0037 aligns public event state and trusted dispatch with the pinned workerd.
+# 0038/0039 align dispatch checkpoints and listener lifetime; 0040 separates
+# reflected event properties from positioned IDL handler registrations.
+# 0041 keeps fetch abort closure independent of pending handshake timeouts.
+# 0043 releases fetch roots/listeners after synchronous open failure.
+# 0044 keeps native dispatch out of the VM frame and uses local small captures.
 # Arbitrary parked Promise reactions are deliberately not a completion signal.
-if(NOT CAPSID_PATCH_COUNT EQUAL 36)
+# 0045 captures event string conversion and private event-map reads during dispatch.
+# 0046 separates connection resource lifetime from callback completion.
+# 0047 reports scoped microtask failures and keeps timer errors in their owner.
+# 0048 retains native Error source positions and runtime-event flags.
+# 0049 carries and releases the owner of each deferred rejection event.
+# 0050 tracks inert Promise creation scopes and cross-request delivery turns.
+# 0051 releases connection-owned HTTP resources without application callbacks.
+# 0052 preserves AbortSignal reasons and native exception reconstruction.
+# 0053 avoids nested microtask drains and premature owner retirement in abort().
+# 0054 treats an empty cookie path as disabled persistent state.
+# 0055 keeps Binding owners, async owners and the HTTP caller context distinct.
+# 0056 aligns digest/HMAC execution, argument validation and Promise boundaries.
+# 0057 captures crypto state intrinsics; 0058 aligns HTTP authority/default headers.
+# 0059 shares immutable interpreter literals to reduce unoptimized native frames.
+# 0060 backports the upstream BigInt unsigned-width/sign-extension fix.
+# 0061 owns ordinary ArrayBuffer aliases and external transfer callbacks.
+# 0062 retains pending stream observer identity without an active job lease.
+# 0063 keeps bytecode value operations out of recursive aggregate slots.
+# 0064 preserves ordinary fetch metadata and registers the native byte source.
+# 0065 preserves the header-buffered body tail with a 4 KiB service read budget.
+# 0066 adds HTTP gzip member/CRC/EOF decoding and demand-based body reads.
+# 0067 bounds gzip expansion by demand and preserves accepted data on signal abort.
+# 0068 uses per-call Windows platform digest handles with whole-input fallback.
+# 0069 keeps synchronous gzip abort callbacks from draining promise jobs.
+# 0070 adds independent gzip branch decoding and keeps buffered transport windows.
+# 0071 completes bodyless HTTP responses at headers and skips absent-content decoding.
+# 0072 aligns runtime rejection-event construction, own fields and event-private intrinsics.
+# 0073 retains subscriber identity through native stream Promise dependencies and late observation.
+# 0074 keeps array/string iterator state with its object and allocates own properties lazily.
+# 0075 exposes the existing CPU-only gzip decoder for credit-controlled HTTP fallback bodies.
+# 0076 keeps WebAssembly bytecode, table and frame accesses aligned and releases validation buffers.
+# 0077 avoids pointer arithmetic on null storage when transfer detaches an empty typed-array view.
+# 0078 keeps compiler-probe cache keys valid identifiers across repeated configuration.
+if(NOT CAPSID_PATCH_COUNT EQUAL 78)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 36 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 78 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------
@@ -262,7 +302,7 @@ endif()
 #
 # Sparse probe: git apply only ever reads the files named in its own
 # +++ b/ headers, so the probe copies exactly those pristine files
-# (derived from the patches themselves) and applies all 36 in order —
+# (derived from the patches themselves) and applies all 78 in order —
 # the same result as probing the full 402MB vendor tree in under a
 # second. Every touched path is a real file (never a symlink), so
 # patch writes stay inside the probe. Runs after stamp verification so

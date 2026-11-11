@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -1094,7 +1095,15 @@ bool run_concurrent(capsid_worker *worker,
             } else if (
                 event.type == CAPSID_EVENT_ERROR ||
                 event.type == CAPSID_EVENT_REQUEST_TIMEOUT) {
-                *fatal = "concurrent framework request failed";
+                // Keep the actual event identity and error payload. A generic
+                // FATAL hides application exceptions and Worker deadlines
+                // behind the same failure in every framework lifecycle test.
+                *fatal = "concurrent framework request failed: request_id=" +
+                    std::to_string(event.request_id) + " event=" +
+                    (event.type == CAPSID_EVENT_REQUEST_TIMEOUT
+                        ? "REQUEST_TIMEOUT" : "ERROR") +
+                    " flags=" + std::to_string(event.flags) +
+                    " payload=" + bytes(event.payload);
                 return false;
             } else if (event.type == CAPSID_EVENT_EXIT) {
                 *fatal = "worker exited during concurrent requests";
@@ -1150,15 +1159,20 @@ int main(int argc, char **argv) {
     capsid_egress_policy_init(&egress_policy);
     for (int index = 3; index < argc; index += 2) {
         char *end = NULL;
-        const unsigned long parsed =
-            std::strtoul(argv[index + 1], &end, 10);
-        if (!end || *end != '\0') {
+        errno = 0;
+        const unsigned long long parsed =
+            std::strtoull(argv[index + 1], &end, 10);
+        if (!end || end == argv[index + 1] || *end != '\0' ||
+            argv[index + 1][0] == '-' || errno == ERANGE) {
             emit_fatal("invalid framework driver option value");
             return 1;
         }
         const std::string option(argv[index]);
         if (option == "--timeout-ms" && parsed != 0) {
             config.request_timeout_ms = parsed;
+        } else if (option == "--js-stack-bytes" &&
+                   parsed != 0 && parsed <= UINT32_MAX) {
+            config.js_stack_size = static_cast<uint32_t>(parsed);
         } else if (option == "--collect-events") {
             collect_events = parsed != 0;
         } else if (
@@ -1180,6 +1194,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    std::cerr << "framework Worker jsStackBytes=" << config.js_stack_size
+              << std::endl;
     capsid_worker *worker = NULL;
     capsid_result result = capsid_worker_spawn(&config, &worker);
     if (result != CAPSID_OK) {

@@ -116,6 +116,43 @@ async function runBodyLimits(primary, limit) {
     return [ 'request-body-limit', 'response-body-limit' ];
 }
 
+async function runBodylessMatrix(primary, secondary) {
+    const cases = [
+        {name: '304-no-length', status: 304, method: 'GET', length: 'none'},
+        {name: '304-zero-length', status: 304, method: 'GET', length: '0'},
+        {name: '304-representation-length', status: 304, method: 'GET', length: '1234'},
+        {name: 'head-no-length', status: 200, method: 'HEAD', length: 'none'},
+        {name: 'head-representation-length', status: 200, method: 'HEAD', length: '1234'},
+        {name: '304-gzip-metadata', status: 304, method: 'GET', length: '1234', encoding: 'gzip'},
+        {name: 'head-gzip-metadata', status: 200, method: 'HEAD', length: '1234', encoding: 'gzip'},
+        {name: '204-gzip-metadata', status: 204, method: 'GET', length: 'none', encoding: 'gzip'},
+        {name: '205-gzip-metadata', status: 205, method: 'GET', length: '0', encoding: 'gzip'},
+    ];
+    const acceptsBefore = Number(await (await fetch(`${primary}/accept-count`)).text());
+    const completed = ['bodyless-reuse'];
+    for (const entry of cases) {
+        setMatrixStage(`bodyless:${entry.name}`);
+        const query = new URLSearchParams({status: String(entry.status), length: entry.length,
+            encoding: entry.encoding ?? ''});
+        const response = await fetch(`${primary}/bodyless?${query}`, {method: entry.method});
+        assert(response.status === entry.status, `${entry.name}: response status`);
+        assert(response.body === null, `${entry.name}: no response body`);
+        assert(response.headers.get('content-length') === (entry.length === 'none' ? null : entry.length),
+            `${entry.name}: representation Content-Length remains available`);
+        assert(response.headers.get('content-encoding') === (entry.encoding ?? null),
+            `${entry.name}: representation Content-Encoding remains available`);
+        assert(await response.text() === '', `${entry.name}: empty body consumption`);
+        const acceptsAfter = Number(await (await fetch(`${primary}/accept-count`)).text());
+        assert(acceptsAfter === acceptsBefore,
+            `${entry.name}: completed header-only response must release its reusable connection: ${acceptsBefore} -> ${acceptsAfter}`);
+        completed.push(entry.name);
+    }
+    const crossOrigin = await fetch(`${primary}/redirect?code=302&to=${encodeURIComponent(`${secondary}/inspect`)}`,
+        {headers: {authorization: 'Bearer secret', 'x-preserved': 'yes'}});
+    assert(await crossOrigin.text() === 'GET||yes||', 'bodyless continuation: cross-origin Authorization stripped');
+    return completed;
+}
+
 async function runMatrix(primary, secondary, closedPort) {
     const completed = [];
 
@@ -242,6 +279,7 @@ async function runMatrix(primary, secondary, closedPort) {
     setMatrixStage('status-304');
     const notModified = await fetch(`${primary}/not-modified`);
     assert(notModified.status === 304, `304 response status ${notModified.status}`);
+    completed.push(...await runBodylessMatrix(primary, secondary));
 
     setMatrixStage('redirect-loop');
     await expectNetworkError(fetch(`${primary}/redirect-loop`), 'redirect loop');
@@ -399,7 +437,9 @@ export default {
                     url.searchParams.get('target'));
                 return Response.json({ passed: true, ...probe });
             }
-            const completed = url.pathname.endsWith('/body-limits')
+            const completed = url.pathname.endsWith('/bodyless')
+                ? await runBodylessMatrix(primary, secondary)
+                : url.pathname.endsWith('/body-limits')
                 ? await runBodyLimits(
                     primary,
                     Number(url.searchParams.get('limit')))

@@ -1,0 +1,58 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 6148,
+  "oldFullRecordSHA256": "04295eb41150f54593cd96116b6d6f7215dec1a2d0b47cada4356dc12abceb03",
+  "oldFullRawCounts": {
+    "executed": 842,
+    "passed": 829,
+    "failed": 5,
+    "skipped": 8
+  },
+  "originalGuardFailureRetained": true,
+  "originalFullFrozenBinaryQualificationNotClaimed": true,
+  "executableCodeAndAllNonDebugFieldsIdenticalAcrossObservedRelink": true,
+  "changedPeMetadataBytes": 9,
+  "frozenInputSHA256": {
+    "D:\\capsid-verification-20261108\\r8-qualified-windows-asan-r3\\providers\\lib\\cares.lib": "36e402b9a49255085beaf41a025bf9b830abc22efacffb5ca193d5aee63a6254",
+    "D:\\capsid-verification-20261108\\r8-qualified-windows-asan-r3\\providers\\lib\\libcrypto.lib": "766b536fd30ba520432ce475179ed8a19d4b8baaeb9c97e8f0b3c5450109bdc3",
+    "D:\\capsid-verification-20261108\\r8-qualified-windows-asan-r3\\providers\\lib\\libssl.lib": "3715c678c95217487a5f3e8b7c17e4538da4d9553dd744fc29b74a4a2dbc28b4",
+    "E:\\capsid\\build-v030-native\\node-24.14.0-d35efba0525442d4965d66d55c035b6c\\node-v24.14.0-win-x64\\node.exe": "63c259c81e5d472b5f11c8d506070130cb04a1ecf84b80377a34ed6ec9048088",
+    "E:\\capsid\\build-v030-native\\reference-windows-v1.20261010.1\\workerd.exe": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "D:\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe": "5b0741ee910ac72235cc0b6cef1b1d0e79aeedf4fe761fa439a7d3b157747cd7",
+    "D:\\capsid-verification-20261108\\c78a\\clang_rt.asan_dynamic-x86_64.dll": "c6dd9859b1f23b22f522c1fe87c3cde715641e51425430bbb4eabae03eb404a8",
+    "D:\\capsid-verification-20261108\\c78a\\vcruntime140.dll": "9f473f22b9fc1fd3d47b55fce6f780942ab09c992e3723718414db53d5b6972e",
+    "D:\\capsid-verification-20261108\\c78a\\vcruntime140_1.dll": "86c365d21ff124932327985e7789692d9acb8a60b52064ccfec18cad533e7d2e",
+    "D:\\capsid-verification-20261108\\c78a\\capsid-host.exe": "37ac922e0573ddd6b5d2e8acfe984632fe38d724ff4cc9d2ca8e7581d9b8c643",
+    "D:\\capsid-verification-20261108\\c78a\\capsid-worker.exe": "365efc6d2658e093b4522d127f847cd7d6274fe9100cd1468839377b210bf540",
+    "D:\\capsid-verification-20261108\\c78a\\CMakeCache.txt": "c08706841f12b2db6040fb9b6620eeecda41b9b44a4c10eff5c3f670e0c36a5b",
+    "D:\\capsid-verification-20261108\\c78a\\CMakeFiles\\capsid-msvc-prefix\\dependency-migration.txt": "7c0a0f18e4985b1cfd39fd39d729b1a81f13a6d9774a546eabb4c0ff3f418b59"
+  },
+  "originalRawArtifactSHA256": {
+    "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\run.json": "04295eb41150f54593cd96116b6d6f7215dec1a2d0b47cada4356dc12abceb03",
+    "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\junit.xml": "3036de2619848b5e11297533526df283bdf61fea368b18d8e82071878f360071",
+    "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\LastTest.log": "081c215efa69d9b079e6870e4246210dd4f2c3a7058979981b008339f5ab8ed4",
+    "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\stdout.log": "0f86a6a53db008cbd9a7b1f40cd0c8381c248db6f709640fd7d1893acc40bdc2",
+    "D:\\capsid-verification-20261108\\evidence\\sdk78-wpt-soak-msvc-asan-unfiltered-r1\\stderr.log": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+  },
+  "sourceCount": 5068,
+  "fullV030GoalComplete": false,
+  "scope": "Check package target stability under the exact full-test native environment before a future frozen final run; no rerun or reclassification of the original842 cases.",
+  "command": [
+    "D:/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe",
+    "--build",
+    "D:\\capsid-verification-20261108\\c78a",
+    "--target",
+    "package"
+  ],
+  "activeCommandPid": 21080,
+  "exitCode": 0,
+  "seconds": 9.39000000001397,
+  "stdoutSHA256": "0a7b92ffe36f0e9da78c2b7362b5ed30d81ead6107182bb86c0c2e91f68f500f",
+  "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "packageTargetStableWithoutWorkerHostProviderCacheOrMigrationStampChanges": true,
+  "all842OriginalDefinitionsStillMatch": true,
+  "sourceUnchanged": true,
+  "allOriginalFailureAndSkipStatusesRetained": true,
+  "finalCandidateStillRequiresFrozenCombinedAcceptance": true
+}

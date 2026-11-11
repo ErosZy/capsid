@@ -19,7 +19,9 @@
 // verifier (verify_bytecode_attestation) re-derives the same bytes.
 //
 // Output contract:
-//   - the three outputs are all-or-none (no partial official files);
+//   - normal failures roll back this invocation's partial outputs, and a
+//     failed cleanup is reported; crash-atomic deployment needs a staging
+//     generation directory around the three independent output paths;
 //   - existing outputs are never overwritten;
 //   - identical inputs produce identical bytecode, attestation and message.
 
@@ -28,6 +30,7 @@
 #include <quickjs.h>
 
 #include <cstdint>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -47,6 +50,7 @@
 #endif
 
 #include "build_identity.h"
+#include "bytecode_publish.h"
 
 namespace {
 
@@ -268,13 +272,14 @@ bool build_signing_message(const std::string& application,
 //     O_NOFOLLOW|O_CLOEXEC — a pre-placed temp symlink or concurrent
 //     creation cannot be followed or truncated;
 //   - the final publish is no-replace (renameat2 RENAME_NOREPLACE on
-//     Linux, linkat+unlinkat elsewhere): an existing target is never
-//     overwritten, even by a concurrent creator;
-//   - rollback unlinks only the targets THIS invocation actually renamed;
+//     Linux, with a linkat+unlinkat fallback for unsupported filesystems):
+//     an existing target is never overwritten, even by a concurrent creator;
+//   - rollback unlinks only the targets THIS invocation actually created;
 //     pre-existing or concurrently created files are never removed;
 //   - three independent output paths cannot be power-loss atomic; that
 //     atomicity belongs to the deploy pipeline's staging generation
-//     directory. This tool guarantees process-level all-or-none only.
+//     directory. Normal failures remove this invocation's partial outputs;
+//     a failed rollback is reported explicitly instead of claiming success.
 struct OutputTarget {
     std::string dir;   // directory of the output path
     std::string name;  // final basename
@@ -299,6 +304,9 @@ bool split_output_path(const std::string& path, OutputTarget* target,
 }
 
 #if defined(_WIN32)
+std::string output_error(const char* operation, DWORD code) {
+    return std::string(operation) + " (win32=" + std::to_string(code) + ")";
+}
 // Windows output pipeline. CREATE_NEW is the O_CREAT|O_EXCL equivalent;
 // FILE_FLAG_OPEN_REPARSE_POINT rejects symlink temps; FlushFileBuffers is
 // fsync; MoveFileEx without MOVEFILE_REPLACE_EXISTING is the
@@ -324,7 +332,8 @@ std::wstring output_path(const OutputTarget& target,
         target.dir + (target.dir.empty() ? "" : "\\") + name);
 }
 
-bool write_temp_file(const OutputTarget& target, std::string* error) {
+bool write_temp_file(const OutputTarget& target, std::string* error, bool* created) {
+    *created = false;
     const std::wstring temp_path = output_path(target, target.temp);
     const HANDLE handle = CreateFileW(
         temp_path.c_str(),
@@ -335,42 +344,41 @@ bool write_temp_file(const OutputTarget& target, std::string* error) {
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
         nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
-        *error = "cannot create temporary output";
+        *error = output_error("cannot create temporary output", GetLastError());
         return false;
     }
+    *created = true;
     FILE_ATTRIBUTE_TAG_INFO attributes = {};
     if (GetFileInformationByHandleEx(
             handle, FileAttributeTagInfo, &attributes,
             sizeof(attributes)) != 0 &&
         (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
         CloseHandle(handle);
-        (void)DeleteFileW(temp_path.c_str());
-        *error = "cannot create temporary output";
+        *error = output_error("temporary output is a reparse point", ERROR_REPARSE_TAG_INVALID);
         return false;
     }
     const std::uint8_t* data =
         static_cast<const std::uint8_t*>(target.data);
     std::size_t offset = 0;
-    bool ok = true;
+    DWORD failure = ERROR_SUCCESS;
     while (offset < target.size) {
         DWORD written = 0;
         const DWORD chunk = target.size - offset > MAXDWORD
             ? MAXDWORD
             : static_cast<DWORD>(target.size - offset);
-        if (!WriteFile(handle, data + offset, chunk, &written, nullptr) ||
-            written == 0) {
-            ok = false;
+        const BOOL succeeded = WriteFile(handle, data + offset, chunk, &written, nullptr);
+        if (!succeeded || written == 0) {
+            failure = succeeded ? ERROR_WRITE_FAULT : GetLastError();
             break;
         }
         offset += static_cast<std::size_t>(written);
     }
-    if (ok) {
-        ok = FlushFileBuffers(handle) != 0;
+    if (failure == ERROR_SUCCESS && !FlushFileBuffers(handle)) {
+        failure = GetLastError();
     }
     CloseHandle(handle);
-    if (!ok) {
-        (void)DeleteFileW(temp_path.c_str());
-        *error = "cannot write temporary output";
+    if (failure != ERROR_SUCCESS) {
+        *error = output_error("cannot write/flush temporary output", failure);
         return false;
     }
     return true;
@@ -378,31 +386,43 @@ bool write_temp_file(const OutputTarget& target, std::string* error) {
 
 // No-replace publish: MoveFileEx refuses to replace an existing final
 // name (MOVEFILE_REPLACE_EXISTING is intentionally absent).
-bool publish_no_replace(const OutputTarget& target, std::string* error) {
+bool publish_no_replace(const OutputTarget& target, std::string* error, bool* created) {
+    *created = false;
     const std::wstring temp_path = output_path(target, target.temp);
     const std::wstring final_path = output_path(target, target.name);
     if (MoveFileExW(temp_path.c_str(), final_path.c_str(),
                     MOVEFILE_WRITE_THROUGH)) {
+        *created = true;
         return true;
     }
     const DWORD saved = GetLastError();
     if (saved == ERROR_ALREADY_EXISTS || saved == ERROR_FILE_EXISTS) {
-        *error = "output already exists";
+        *error = output_error("output already exists", saved);
+    } else {
+        *error = output_error("cannot publish output with MoveFileExW", saved);
     }
     return false;
 }
 
 bool remove_output_file(const OutputTarget& target,
-                        const std::string& name) {
+                        const std::string& name, std::string* error) {
     const std::wstring path = output_path(target, name);
-    return DeleteFileW(path.c_str()) != 0;
+    if (DeleteFileW(path.c_str())) return true;
+    const DWORD code = GetLastError();
+    if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) return true;
+    *error = output_error("cannot remove invocation output", code);
+    return false;
 }
 #else
-bool write_temp_file(const OutputTarget& target, std::string* error) {
+std::string output_error(const char* operation, int code) {
+    return std::string(operation) + " (errno=" + std::to_string(code) + ": " + std::strerror(code) + ")";
+}
+bool write_temp_file(const OutputTarget& target, std::string* error, bool* created) {
+    *created = false;
     const int dir_fd = open(target.dir.c_str(),
                             O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dir_fd < 0) {
-        *error = "cannot open output directory";
+        *error = output_error("cannot open output directory", errno);
         return false;
     }
     // O_EXCL + O_NOFOLLOW: the temp must not pre-exist and must not be a
@@ -412,84 +432,86 @@ bool write_temp_file(const OutputTarget& target, std::string* error) {
                               O_CLOEXEC,
                           0600);
     if (fd < 0) {
+        const int code = errno;
         close(dir_fd);
-        *error = "cannot create temporary output";
+        *error = output_error("cannot create temporary output", code);
         return false;
     }
+    *created = true;
     const std::uint8_t* data =
         static_cast<const std::uint8_t*>(target.data);
     std::size_t offset = 0;
-    bool ok = true;
+    int failure = 0;
     while (offset < target.size) {
         const ssize_t written =
             write(fd, data + offset, target.size - offset);
-        if (written < 0) {
-            if (errno == EINTR) {
+        if (written <= 0) {
+            if (written < 0 && errno == EINTR) {
                 continue;
             }
-            ok = false;
+            failure = written == 0 ? EIO : errno;
             break;
         }
         offset += static_cast<std::size_t>(written);
     }
-    if (ok && fsync(fd) != 0) {
-        ok = false;
+    if (!failure && fsync(fd) != 0) {
+        failure = errno;
     }
     close(fd);
-    if (!ok) {
-        unlinkat(dir_fd, target.temp.c_str(), 0);
+    if (failure) {
         close(dir_fd);
-        *error = "cannot write temporary output";
+        *error = output_error("cannot write/flush temporary output", failure);
         return false;
     }
     close(dir_fd);
     return true;
 }
 
-// No-replace publish. Linux uses renameat2(RENAME_NOREPLACE); other
-// platforms use linkat + unlinkat (the link fails with EEXIST when the
-// target exists, so the final name is never overwritten).
-bool publish_no_replace(const OutputTarget& target, std::string* error) {
+// Linux prefers RENAME_NOREPLACE. Unsupported kernels/filesystems use an
+// atomic link instead; neither path can replace an existing final name.
+bool publish_no_replace(const OutputTarget& target, std::string* error, bool* created) {
+    *created = false;
     const int dir_fd = open(target.dir.c_str(),
                             O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dir_fd < 0) {
-        *error = "cannot open output directory";
+        *error = output_error("cannot open output directory", errno);
         return false;
     }
-    bool published = false;
-#if defined(__linux__)
-    // glibc >= 2.28 provides renameat2 directly; fall back to the syscall
-    // on older libcs (RENAME_NOREPLACE is not exposed by <stdio.h>).
-    if (renameat2(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(),
-                  RENAME_NOREPLACE) == 0) {
-        published = true;
-    }
+    const auto result = capsid::tools::publish_no_replace([&]() {
+#if defined(__linux__) && defined(SYS_renameat2)
+        return syscall(SYS_renameat2, dir_fd, target.temp.c_str(), dir_fd,
+                       target.name.c_str(), 1U /* RENAME_NOREPLACE */) == 0 ? 0 : errno;
 #else
-    if (linkat(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(), 0) ==
-            0) {
-        unlinkat(dir_fd, target.temp.c_str(), 0);
-        published = true;
-    }
+        return ENOSYS;
 #endif
-    if (!published && errno == EEXIST) {
-        *error = "output already exists";
-        close(dir_fd);
-        return false;
+    }, [&]() {
+        return linkat(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(), 0) == 0 ? 0 : errno;
+    }, [&]() {
+        return unlinkat(dir_fd, target.temp.c_str(), 0) == 0 ? 0 : errno;
+    });
+    *created = result.created_final;
+    if (!result.complete) {
+        *error = (result.error == EEXIST ? "output already exists; " : "") + output_error(result.operation, result.error);
     }
     close(dir_fd);
-    return published;
+    return result.complete;
 }
 
 bool remove_output_file(const OutputTarget& target,
-                        const std::string& name) {
+                        const std::string& name, std::string* error) {
     const int dir_fd = open(target.dir.c_str(),
                             O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dir_fd < 0) {
+        if (errno == ENOENT || errno == ENOTDIR) return true;
+        *error = output_error("cannot open invocation output directory for cleanup", errno);
         return false;
     }
     const bool removed = unlinkat(dir_fd, name.c_str(), 0) == 0;
+    const int code = removed ? 0 : errno;
     close(dir_fd);
-    return removed;
+    if (removed || code == ENOENT) return true;
+    *error = output_error("cannot remove invocation output", code);
+    return false;
 }
 #endif
 
@@ -501,55 +523,58 @@ struct AtomicOutputs {
 
 bool commit_outputs(const AtomicOutputs& outputs) {
     std::string error;
+    bool temporary_bytecode = false, temporary_attestation = false, temporary_message = false;
     bool ok =
-        write_temp_file(outputs.bytecode, &error) &&
-        write_temp_file(outputs.attestation, &error) &&
-        write_temp_file(outputs.message, &error);
-    // Publish all three; remember which finals THIS invocation renamed so
+        write_temp_file(outputs.bytecode, &error, &temporary_bytecode) &&
+        write_temp_file(outputs.attestation, &error, &temporary_attestation) &&
+        write_temp_file(outputs.message, &error, &temporary_message);
+    // Publish all three; remember which finals THIS invocation created so
     // rollback never removes a pre-existing or concurrent file.
     bool published_bytecode = false;
     bool published_attestation = false;
     bool published_message = false;
     if (ok) {
-        published_bytecode = publish_no_replace(outputs.bytecode, &error);
-        ok = published_bytecode;
+        ok = publish_no_replace(outputs.bytecode, &error, &published_bytecode);
     }
     if (ok) {
-        published_attestation = publish_no_replace(outputs.attestation, &error);
-        ok = published_attestation;
+        ok = publish_no_replace(outputs.attestation, &error, &published_attestation);
     }
     if (ok) {
-        published_message = publish_no_replace(outputs.message, &error);
-        ok = published_message;
+        ok = publish_no_replace(outputs.message, &error, &published_message);
     }
-    if (!ok) {
-        std::fprintf(stderr,
-                     "capsid-bytecode-compile: output commit failed (%s); "
-                     "rolled back this invocation's files\n",
-                     error.c_str());
-    }
-    // Rollback: temps always; finals only if this invocation renamed them.
-    if (!ok || !published_bytecode) {
-        (void)remove_output_file(outputs.bytecode, outputs.bytecode.temp);
+    bool cleanup_ok = true;
+    const auto remove = [&](const OutputTarget& target, const std::string& name) {
+        std::string detail;
+        if (!remove_output_file(target, name, &detail)) {
+            cleanup_ok = false;
+            std::fprintf(stderr, "capsid-bytecode-compile: output cleanup failed (%s)\n", detail.c_str());
+        }
+    };
+    // Roll back only names this invocation created. Exclusive-creation
+    // failure does not transfer ownership of a pre-existing temporary.
+    if (temporary_bytecode && (!ok || !published_bytecode)) {
+        remove(outputs.bytecode, outputs.bytecode.temp);
     }
     if (published_bytecode && !ok) {
-        (void)remove_output_file(outputs.bytecode, outputs.bytecode.name);
+        remove(outputs.bytecode, outputs.bytecode.name);
     }
-    if (!ok || !published_attestation) {
-        (void)remove_output_file(outputs.attestation,
-                                 outputs.attestation.temp);
+    if (temporary_attestation && (!ok || !published_attestation)) {
+        remove(outputs.attestation, outputs.attestation.temp);
     }
     if (published_attestation && !ok) {
-        (void)remove_output_file(outputs.attestation,
-                                 outputs.attestation.name);
+        remove(outputs.attestation, outputs.attestation.name);
     }
-    if (!ok || !published_message) {
-        (void)remove_output_file(outputs.message, outputs.message.temp);
+    if (temporary_message && (!ok || !published_message)) {
+        remove(outputs.message, outputs.message.temp);
     }
     if (published_message && !ok) {
-        (void)remove_output_file(outputs.message, outputs.message.name);
+        remove(outputs.message, outputs.message.name);
     }
-    return ok;
+    if (!ok) {
+        std::fprintf(stderr, "capsid-bytecode-compile: output commit failed (%s); %s\n", error.c_str(),
+                     cleanup_ok ? "removed this invocation's partial outputs" : "cleanup incomplete; partial outputs may remain");
+    }
+    return ok && cleanup_ok;
 }
 
 // Formal grammar for the attestation claims (M1D audit). Rejects NUL,

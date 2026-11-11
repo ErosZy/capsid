@@ -1,0 +1,65 @@
+{
+  "schema": "capsid-workerd-wpt-profile-v1",
+  "id": "CAPSID-WORKERD-v1.20261010.1-default-v1",
+  "reference": {
+    "release_tag": "v1.20261010.1",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": []
+  },
+  "wpt": {
+    "profile": "CAPSID-MIN-2025-subset-v0",
+    "commit": "1985b47aa8972a970f005957f2bfa036da1787c6",
+    "diagnosticMatch": "first-line-exact",
+    "standardFailuresRetained": true
+  },
+  "conflicts": [
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+      "upstreamSHA256": "3fdb621068d25c4df83a5904255195fac8164c48c119d21888bf4244a011545a",
+      "total": 36,
+      "deviation": "CAPSID-D012",
+      "failures": [
+        {
+          "name": "delayed handling: delaying handling by setTimeout(,10) will cause both events to fire",
+          "status": "FAIL",
+          "errorName": "AssertionError",
+          "phase": "test",
+          "message": "expected {}, got undefined"
+        },
+        {
+          "name": "delayed handling: delaying handling rejected promise created from createImageBitmap will cause both events to fire",
+          "status": "FAIL",
+          "errorName": "TypeError",
+          "phase": "test",
+          "message": "cannot read property 'name' of undefined"
+        }
+      ],
+      "missingExpectedFailures": []
+    },
+    {
+      "path": "webmessaging/MessagePort_initial_disabled.any.js",
+      "upstreamSHA256": "c22d76bc95dbfbb328b0db1ba6cc17d0e6154f5ecdbefb150a972f6c22d27e38",
+      "total": 1,
+      "deviation": "CAPSID-D012",
+      "failures": [
+        {
+          "name": "Untitled test",
+          "status": "FAIL",
+          "errorName": "TypeError",
+          "phase": "test",
+          "message": "capture and passive must be false"
+        }
+      ],
+      "missingExpectedFailures": [
+        {
+          "name": "Untitled test",
+          "deviation": "CAPSID-D010",
+          "errorName": "AssertionError",
+          "message": "reached unreachable code"
+        }
+      ]
+    }
+  ]
+}

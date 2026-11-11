@@ -1,8 +1,97 @@
 # Performance: Evidence Rules and Current State
 
-This document keeps the current conclusion-level samples. The measurement
-protocol itself — lanes, data pipeline, evidence rules, site conventions — is
-specified in [bench/SPEC.md](../bench/SPEC.md). It keeps the evidence rules and the current (2026-10-10) conclusion-level samples, which the `v0.2.2` release adopts as its published performance point (commit `aef6020`, clean `v0.2.2` release build). Historical optimization process and earlier checkpoints (M1P, E1-E14, Host optimization loop, the 2026-08-14 4C runs, the 2026-08-18 runs, and the superseded 2026-08-20 `v0.2.0-rc.07` checkpoint) live in git history and the raw artifacts in `bench/results/`, and are not maintained here.
+<!-- capsid-current-qualification-20261110 -->
+本页后续历轮内容保留原记录身份。当前兼容边界、冻结输入、原始失败和封板开放项见[当前验收与边界](v0.3.0-current-qualification.md)。当前源码版本为 0.3.0 候选，v0.3.0 尚未封板或发布。
+
+部分历史产物已按用户授权清理；[证据索引](evidence/v0.3.0/2026-11-10/index.json)及[可用性审计](evidence/v0.3.0/2026-11-10/historical-evidence-availability.json)说明时点与范围。旧章节的“当前”“仍保留”不表示本轮重新验证了已删除文件。
+<!-- /capsid-current-qualification-20261110 -->
+
+
+<!-- capsid-review-phase-93 -->
+<a id="capsid-review-phase-93"></a>
+
+## 第 93 轮（2026-10-20）：五栈 QPS 控制器与归档已接通
+
+当前 QPS 公开入口已替换旧 shell，默认五轮/managed/strict，覆盖五栈三 workload、独占端口、PHP 双根与 Go 客户端拥有权、先 trickle 后另起 loaded、精确就绪/响应、递归稳定 PSS、清理和封存自校验。正式模式要求干净构建/会话元数据；短 `--observation` 无发布 envelope。下方旧的“QPS 生产器仍未接通”属于历史状态。
+
+最终工具选择集 Windows 普通/ASan **14/14、14/14**（Python 101：70 通过/31 平台跳过），Linux **18/18**（120/120）；没有本轮完整产品重编或 sanitizer 资格。真实五栈 15 单元短观测、2,191 份封存文件与测量中 SIGINT/SIGTERM **10/10** 通过；共享 cold/density 实际小观测也通过。旧验证器 10 个失败及首次 Linux PSS 不稳定失败均保留，最终 Linux 单独复核/顺序回归未放宽协议。
+
+完整 0.3.0 强兼容、T15/T16/T17 仍未整体关闭。干净 Release/LTO/ALL/包与消费者、完整 gate/矩阵、同一安静会话正式三车道/2 GiB 密度/四视口、原生 body/压力/soak、Windows 默认 Debug 编码流根因和其他平台/依赖 sanitizer 仍待完成。历史 **1762/1733/6/23** 未重跑；版本仍 0.2.2、4508 输入，运行时/Host 153 输入未变，无 Root 提交/推送/发布。
+
+实现、真实与合成测试边界、保留的失败、证据入口和接棒任务见[本轮完整交接](v0.3.0-next-ai-handoff.md#capsid-review-phase-93)。最终审计：`upgrade47-final-audit.json`；Linux 最终结果用 `upgrade47q-linux.json`，不能将失败的 `upgrade47m-linux.json` 重标为成功。
+
+<!-- capsid-review-phase-92 -->
+<a id="capsid-review-phase-92"></a>
+
+## 第 92 轮状态（2026-10-20）：QPS 负载正确性/原始证据修复，完整生产器继续
+
+修复真实 Go 负载工具的流正文抽查漏检、错误/超时分类与错误成功 verdict、失败退出码和无效参数；新增完整正文身份及 attempted/checked/completed 计数，正式校验要求 `exact-bytes-v2` 与 30000 ms 截止时间。旧实际工具三组红例和旧验证器 28 个失败断言均保留。最终 CTest 为 Windows **13/13**、Windows ASan **13/13**、Linux **16/16**；新增规则 8 组、Linux 实际 HTTP 8 组、合同增补 2 组。
+
+一次真实工具的 64/64、5+15 秒轮只面对独占正确性夹具；另跑可信字节码 cold 两次启动/102 响应/38 文件小观测。均不作为正式性能点。`src/js/include` 153 份输入未变，版本仍 0.2.2；旧 QPS shell 仍未接通完整五栈生产器。完整强兼容、干净 ALL/全量矩阵、body/stream 压力、正式三车道/2 GiB/四视口及完整依赖 sanitizer/其他平台仍待完成，历史全量结果不更新。
+
+范围、平台边界、二进制/原始失败与下一步见 [第 92 轮交接](v0.3.0-next-ai-handoff.md#capsid-review-phase-92)。最终审计：`build-v030-dev/evidence/native-asan-qualification-20261018/upgrade46-final-audit.json`。没有 Root 提交、推送或发布。
+
+<!-- capsid-review-phase-91 -->
+<a id="capsid-review-phase-91"></a>
+## 第 91 轮状态（2026-10-20）：编译器发布兼容修复，完整目标继续
+
+编译器补齐不支持 `RENAME_NOREPLACE` 的 Linux 文件系统后备路径与明确系统错误诊断；新增归属跟踪，避免在创建失败后删除既有临时文件。新增 8 组真实编译器回归与 7 组 C++ 操作模型，最终 CTest 为 Windows **12/12**、Windows ASan **12/12**、Linux **14/14**；挂载盘另跑 **8/8**。Windows 的符号链接组及原有 Linux 专属组继续明确跳过。源/字节码三尺寸实跑 **12 次启动、612 次响应校验、123 份封存文件**，仅作功能观测。
+
+首轮 C++11 编译失败、Linux 链接缺依赖、旧编译器真实红例均保留。`src/js/include` 153 份实现输入未变；版本仍 0.2.2。完整 0.3.0 强兼容、QPS、干净 ALL/全量矩阵、正式三车道/2 GiB 与四视口复核仍未完成。历史 1762 项全量结果不作更新；没有新性能点、Root 提交、推送或发布。
+
+完整范围、平台跳过、原始证据与下一步见 [第 91 轮交接](v0.3.0-next-ai-handoff.md#capsid-review-phase-91)。审计入口：`build-v030-dev/evidence/native-asan-qualification-20261018/upgrade45-final-audit.json`。
+
+<!-- capsid-review-phase-90 -->
+<a id="capsid-review-phase-90"></a>
+## 第 90 轮状态（2026-10-20）：cold 控制器/归档接通，完整目标继续
+
+冷启动公开入口已统一 C-ABI 源码/字节码、Node/Deno/workerd 的进程与端口拥有权、精确响应、固定成员/稳定递归 PSS、独占夹具/原生临时编译、CPU 绑定恢复、丢弃轮与测量轮归档及真实校验器。旧验证器漏检丢弃/进程/warm 证据的 15 个实际红例已修正，原始失败与修前源码保留。正式模式要求完整协议和实际干净构建/会话元数据；观测模式不能发布。
+
+最终工具 CTest：Windows 普通 8/8、Windows ASan 8/8、Linux 10/10（`upgrade44h-*`）。新增 Python 组 21，Linux 全通过，Windows 新增为 10 通过/11 个 Linux 专属跳过；Windows 全部脚本共 67 组、46 通过/21 跳过。Linux 共 74 Python 组及既有 10 C++ 模型通过。本轮没有产品编译或新增原生 sanitizer/泄漏验收。
+
+最终真实 cold smoke 覆盖五路径/三尺寸、30 次启动和 1530 次响应，318 份文件核验（`upgrade44i-*`）；只有一测量轮，不能代替正式五轮。四类真实 SUT 的 SIGINT/SIGTERM 共 8 次清理通过（`upgrade44j-*`）；密度入口回归 12 探针/4 小池单元、174 文件核验（`upgrade44k-*`）。合成完整档案只在临时仓库测试，未写入 data.js。站点按新 HTTP 协议展示 warm 值，旧点仍是未验证历史观测，视觉四视口复核未完成。
+
+**完整 Linux/Windows 0.3.0 强兼容仍未完成。** QPS 合同、编译器挂载文件系统/错误诊断、实际同会话三车道与 2 GiB 密度、更广 body/资源压力、默认 Windows Debug 栈失败、新 ALL/Release/LTO/包/全量矩阵及平台和动态验证仍需继续。4495 输入、版本 0.2.2、58 补丁，Root HEAD 和 `src/js/include` 153 份实现输入不变；没有提交/推送/发布。
+
+完整实现、证据与后续顺序见 [第 90 轮接棒说明](v0.3.0-next-ai-handoff.md#capsid-review-phase-90)；审计入口 `build-v030-dev/evidence/native-asan-qualification-20261018/upgrade44-final-audit.json`。
+
+<!-- capsid-review-phase-89 -->
+<a id="capsid-review-phase-89"></a>
+## 第 89 轮状态（2026-10-20）：cold 探针已修，整车道与强兼容目标未完成
+
+冷启动 C-ABI 工具已改用公开 worker PID，严格核对状态/请求 ID/完整正文，warm 失败、超时、进程退出/被回收/PID 替换及不可读/零/不稳定 PSS 都失败。worker 子孙树在首次响应后、warm 前固定；冷启动计时在 warm/PSS 之前结束；中断会通过 C-ABI 销毁回收 worker。旧错误成功行和中断遗留的真实红例已保存（`upgrade43d-*`），独立零 tick 解析红例也已修正并纳入最终模型。
+
+最终实际工具 CTest：Windows 普通 6/6、Windows ASan 6/6、Linux 8/8（`upgrade43k-*`）；新增 10 组跨平台 C++ 模型与 7 组 Linux 真实进程回归。另对 10k/100k/1m 的源码/可信字节码实际做 6 次 strict smoke、306 次响应核验并封存，见 `upgrade43p-real-smoke.json`。这些不是正式 cold lane 或新的 workerd 性能比较。新编译测量/模型目标及 Linux bytecode compiler；既有 host/worker、运行时库和 `src/js/include` 153 份实现输入未变，没有新整产品/泄漏/不筛选矩阵验收。
+
+**完整目标仍在进行。** cold shell 控制层尚需统一拥有权/端口/档案契约，QPS 也未接通；真实同会话三车道和 2 GiB 密度、站点视口、更广 body/资源压力兼容、默认 Windows Debug 栈失败、新 ALL/Release/LTO/包与原计划平台和动态验证仍未完成。4489 输入、版本 0.2.2、58 补丁、Root HEAD 不变；没有提交/推送/发布，也没有生成新性能点。旧矩阵与跳过数保持历史性质。
+
+完整修复、证据和下一步见 [第 89 轮接棒说明](v0.3.0-next-ai-handoff.md#capsid-review-phase-89)；审计入口 `build-v030-dev/evidence/native-asan-qualification-20261018/upgrade43-final-audit.json`。
+
+
+This document retains historical samples. The measurement protocol and
+publication rules are specified in [bench/SPEC.md](../bench/SPEC.md) and the
+[archive contract](../bench/perf-evidence.md).
+
+**2026-10-20 review: the old points below are unverified historical
+observations, not qualified 0.3.0 comparisons.** The archived strict cold-start
+directory has no raw samples or correctness records; neither it nor the QPS
+directory has the new lane envelope or isolation record. Historical digest
+lists include absolute labels, and the site point's source identity differs
+from its embedded machine commit. Do not infer a single clean release/session
+from these combined values. Original files and numbers are retained for review.
+
+The collector now rejects incomplete archives, conflicting origins, altered
+digests and raw/summary disagreement. Parser fixtures are separate from
+publication. Site staging replays qualified points and packages their evidence;
+the current checked-in point is displayed as unverified. Density now has an
+owned-process controller and contract producer, with small-pool real smoke and
+synthetic archive checks. Cold-start also has an owned controller and sealed producer with all-stack/all-size observation coverage. **QPS producer integration, actual fill-to-budget
+measurement and new quiet-session measurements remain pending.** No 0.3.0
+performance point has been created from the synthetic contract tests.
+
+Earlier optimization checkpoints remain in git history and `bench/results/`.
+All environment and release descriptions below are historical claims awaiting
+complete provenance, rather than assertions made by the current validator.
 
 ## 1. Evidence Rules
 
@@ -76,7 +165,7 @@ Median QPS over 5 rounds (winner per row in bold):
 | json 16k | 7,109 | **20,189** | 12,599 | 2,878 | 2,008 |
 | stream 1k | 6,523 | **14,192** | 6,671 | 3,987 | 2,032 |
 
-p50/p95 latency (ms, median over rounds, from the same samples):
+p50/p95 latency (ms, historical values; aggregation requires revalidation):
 
 | workload | capsid | workerd | FastAPI | Flask | PHP Slim |
 |---|---:|---:|---:|---:|---:|

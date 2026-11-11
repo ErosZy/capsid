@@ -1,0 +1,40 @@
+--- a/deps/libwebsockets/lib/roles/http/client/client-http.c
++++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
+@@ -1592,15 +1592,17 @@
+ 		 * completed at the end of the header processing...
+ 		 * We also completed it if the request method is HEAD which as
+ 		 * no content leftover.
+-		 * Or if the response status code is 204 : No Content
++		 * Or if the response status code is 204 or 304. A HEAD response
++		 * also ends at the headers, independently of Content-Length.
+ 		 */
+ 		simp = lws_hdr_simple_ptr(wsi, _WSI_TOKEN_CLIENT_METHOD);
+ 		if (!wsi->mux_substream &&
+ 		    !wsi->client_mux_substream &&
+ 			(204 == lws_http_client_http_response(wsi) ||
++			 304 == lws_http_client_http_response(wsi) ||
++			 (simp && !strcmp(simp, "HEAD")) ||
+ 			 (lws_hdr_total_length(wsi, WSI_TOKEN_HTTP_CONTENT_LENGTH) &&
+-				(!wsi->http.rx_content_length ||
+-				(simp && !strcmp(simp,"HEAD"))))))
++				!wsi->http.rx_content_length)))
+ 				return !!lws_http_transaction_completed_client(wsi);
+ 
+ 		/*
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -951,8 +951,12 @@
+                 break;
+             }
+ 
+-            /* Detect Content-Encoding before firing headers. */
+-            const char *encoding = detect_content_encoding(wsi);
++            /* These headers describe a representation, not wire content.
++             * Creating a decoder would invent a truncated gzip stream and
++             * retain an unused client when the response has no body. */
++            const bool bodyless = status == 204 || status == 205 || status == 304 ||
++                                  (h->method && !strcmp(h->method, "HEAD"));
++            const char *encoding = bodyless ? NULL : detect_content_encoding(wsi);
+             if (encoding) {
+                 h->decompressor = http_gzip_create(h->ctx);
+                 if (!h->decompressor) {

@@ -1,0 +1,124 @@
+{
+  "complete": true,
+  "capturedUTC": "2026-11-08T07:24:17.128741+00:00",
+  "scopedProgressOnly": true,
+  "rootIntegrated": false,
+  "fullV030GoalComplete": false,
+  "projectVersion": "0.2.2",
+  "sdkOverlay": 71,
+  "originalMainSourceCount": 4940,
+  "nativeOrdinaryArguments": {
+    "configurations": 3,
+    "groups": 780,
+    "nestedObservations": 32760,
+    "actualTcpResponses": 65520,
+    "independentArtifactCounterexamplesRejected": 4680,
+    "actualChangedNativeReadResultsRejected": 132,
+    "nativeEventSeconds": 5,
+    "gracefulExitMilliseconds": 2500,
+    "exactSameProgramAndDefaultReference": true,
+    "fullR3Complete": false
+  },
+  "nativeInstrumentedWindows": {
+    "buildComplete": true,
+    "nativeTranslationUnits": 693,
+    "buildFile": "r7-r8-combined-instrumented-windows-asan-build-r2/build.json",
+    "snapshotCommit": "013b4a0c559fe7a00cbb80109bac3510cb1cc294",
+    "sourceManifestSHA256": "a2a59a3a576af683e3c8012526e89f672acd2d881eb3bde6acd5c9f68480b901",
+    "focusedPassed": 21,
+    "focusedFailed": 0,
+    "focusedSkipped": 0,
+    "actualNativeGenerationPoolKills": 7
+  },
+  "instrumentedLinux": {
+    "focusedPassed": 21,
+    "focusedFailed": 1,
+    "focusedSkipped": 0,
+    "failure": "worker_strict_sandbox_https_tls12_rsa_pss",
+    "minimalCloneAndPtraceDenialConflictReproduced": true,
+    "leakNotEstablished": true,
+    "noSanitizerChecksDisabled": true,
+    "securityPolicyNotRelaxed": true
+  },
+  "originalRichJsonIdentity": {
+    "file": "r6-original-binary-identity-audit-r2/run.json",
+    "sha256": "04c2daad148ddc3ca776183f2849233e10f6f96dd08a79eb8faa3d652fe8b059",
+    "actualFailedProductBinaries": {
+      "host": "dda6a34250c1d99786f99d4894dbd8cbbdd5950469697d3e73a09381cc3a7303",
+      "worker": "2542afc21659a145086e11e7c257dc28acbf5b5eb76c36de5f64d2b181313aeb"
+    },
+    "exactHostMatches": [
+      "/home/eroszhao/.cache/capsid-verification-20261018/upgrade31i-main-linux/package-repro-work/build/capsid-host"
+    ],
+    "exactWorkerMatches": [],
+    "originalWorkerDigestWasRecorded": true,
+    "priorAuditUsedReferenceReportIncorrectly": true,
+    "priorProductNoMatchConclusionRetracted": true,
+    "scopedWorkerExecutablesInspected": 229,
+    "scopedPackageArchivesInspected": 242,
+    "scopedPackageWorkerMembersInspected": 47,
+    "noGlobalAbsenceClaimed": true,
+    "exactOriginalFailureRootCauseProven": false
+  },
+  "hono": {
+    "original500MillisecondFailureRetained": true,
+    "timestampOnlyDriverReproducesFailure": true,
+    "privateRouterTimestampProgramMinMs": 468,
+    "privateRouterTimestampProgramMaxMs": 494,
+    "routerObservationDidNotReproduceFailure": true,
+    "inference": "First-use route construction consumes most of the original deadline; original failure root cause is not closed.",
+    "optimizedCandidateQualified": false,
+    "optimizationPrototypeRejectedBeforeFirstObject": true,
+    "rejection": "MSVC D8016: /O1 and existing /RTC1 are incompatible.",
+    "existingChecksAndFlagsUnchanged": true,
+    "rootCauseClosed": false
+  },
+  "originalFullSequence": {
+    "file": "sdk71-full-sequence-r1/run.json",
+    "session": 10245,
+    "pid": 7100,
+    "complete": false,
+    "status": "running-unfiltered-windows-release",
+    "activeSuite": {
+      "mode": "windows-release",
+      "pid": 19028,
+      "command": [
+        "C:\\Users\\eros.zhao\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\qualify-sdk71-clean-full-r1.py",
+        "windows-release"
+      ]
+    },
+    "completedRowsObserved": 381,
+    "lastCompletedRows": [
+      "380/757 Test #380: websocket_ordinary_fetch_views_reference ........................................................................................   Passed   67.35 sec",
+      "381/757 Test #381: websocket_ordinary_fetch_bodies_reference .......................................................................................   Passed   54.87 sec"
+    ],
+    "partialObservationOnly": true,
+    "stdoutSnapshotSHA256": "a861b5e91a542d52ea0c95a04689a6510c66d186546ce00aed926f1afe035ff9"
+  },
+  "queuedCombinedFullSequence": {
+    "file": "r7-r8-combined-full-sequence-r1/run.json",
+    "session": 36727,
+    "pid": 19232,
+    "complete": false,
+    "status": "waiting-for-original-sequence-and-combined-builds"
+  },
+  "immutableLocalProofs": {
+    "r7-r8-combined-progress-r4/run.json": "e51a02acde64590629cd644b3f1cd6d0de20fb4c0d18737324e0d932c3b055dd",
+    "r6-original-binary-identity-audit-r2/run.json": "04c2daad148ddc3ca776183f2849233e10f6f96dd08a79eb8faa3d652fe8b059",
+    "r6-exact-original-worker-lookup-r1/run.json": "a30f2c838413b7fdd44e95db787fbe321ba38068a2133e8a163de1be69d72909",
+    "r6-original-worker-package-lookup-r1/run.json": "6eee7974eaa6f244570744abb024c5169188c46edb4b4e573d1594e9ead757e2",
+    "r7-r8-combined-instrumented-windows-asan-build-r2/build.json": "756d30c3e0942f276fe85c2d0849f377ce2cb92d8781bb681b72fc3267159804",
+    "r7-r8-combined-instrumented-focused-windows-r1/run.json": "6fc3e2c48ba368ade97a6267f2aa254ae4d67e483197901d484f41435edc6413",
+    "r7-r8-combined-instrumented-focused-linux-r1/run.json": "98d86f232567c98d9fdce2d62b1ebca4e255d13c22dcf68336233b54917028a3",
+    "r8-lsan-seccomp-minimal-r1/run.json": "6bbb916619346e48c7f09b923da009d986018eae6109487dc8d5fca7fc438341",
+    "r8-native-orphan-soak-windows-asan-r1/run.json": "5c10173acbbbccb145f1a05780a8258cfb157b06aaf4a6439e314e1fb8bd4abb",
+    "r8-instrumented-dependencies-windows-asan-r3/build.json": "14359398ba44ee099759e5700663fae56f63e5e6fe7cf7c42179c954cd5fdba4",
+    "r8-native-crypto-tls-windows-asan-r5/run.json": "5dd16391e3103de49601cbcd0166707b045bfb90f2ba3bd3fb276fd2fcffefd5",
+    "r7-hono-concurrent-windows-asan-diagnostic-r1/run.json": "58f60c67470e9d5bef362a1497e238f7c868412cc5b4623079e44462fbba4357",
+    "r7-hono-router-windows-asan-diagnostic-r1/run.json": "6d2476a7e18fd329119ea245f11294380247f0231f74ec818d5d20aefd4f216d",
+    "r7-qjs-o1-windows-asan-build-r1/build.json": "75cf15f5d1814e615f2d7db63f23863815bf0a3f70330623e2887f872eb85d69"
+  }
+}

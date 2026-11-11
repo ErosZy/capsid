@@ -1,265 +1,243 @@
 #!/usr/bin/env python3
-"""Collect benchmark result directories into one perf-site data point.
+"""Publish complete, sealed performance archives; parse_* helpers are independent.
 
-Reads a cold-start runner output dir (bench/cold-start.sh) and a QPS lane
-output dir (bench/qps-lane.sh), extracts medians, and merges the point into
-perf-site/data.js (schema 1). Existing points with the same version are
-replaced; the file stays append-only across versions.
-
-Usage:
-  python3 bench/collect-perf-point.py \
-      --cold-start <dir> --qps <dir> \
-      --version "0.2.x" --release "v0.2.2" \
-      [--data perf-site/data.js]
+The CLI always applies the publication contract. Simplified parser fixtures
+cannot produce qualified points. See bench/perf-evidence.md for lane.json.
 """
 import argparse
-import datetime
 import json
+import math
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
-SIZES = ["10k", "100k", "1m"]
-STACKS = ["capsid-source", "capsid-bytecode", "node", "deno", "workerd"]
+from perf_evidence import EvidenceError, object_pairs, sha256, timestamp, validate_point
 
 
-def median(values):
-    vs = sorted(v for v in values if v is not None)
-    if not vs:
-        return None
-    return vs[len(vs) // 2]
+def number(value, label):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise EvidenceError(f"{label}: invalid number {value!r}") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise EvidenceError(f"{label}: expected a finite nonnegative number")
+    return parsed
+
+
+def lines(path):
+    file = Path(path) / "cells.txt"
+    for index, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            yield f"{file}:{index}", line
+
+
+def fields(value, label):
+    result = {}
+    rest = value.strip()
+    while rest:
+        match = re.match(r"([a-z0-9_]+)=\s*(\S+)(?:\s+|$)", rest)
+        if not match or match[1] in result:
+            raise EvidenceError(f"{label}: malformed or duplicate field")
+        result[match[1]] = match[2]
+        rest = rest[match.end():]
+    return result
+
+
+def unique(seen, key, label):
+    if key in seen:
+        raise EvidenceError(f"{label}: duplicate cell {key}")
+    seen.add(key)
 
 
 def parse_cold_start(path):
-    point = {"coldStart": {"cells": [], "warm": [], "pssMb": []}}
-    seen = {}
-    with open(os.path.join(path, "cells.txt")) as f:
-        for line in f:
-            m = re.match(
-                r"(\S+)\s+(\S*)\s+(\S+)\s+total_ms=\s*([\d.]+)\s+"
-                r"ready_ms=\s*([\d.]+)(?:\s+warm_ms=\s*([\d.]+))?"
-                r"(?:\s+pss_mb=(\S+))?",
-                line.strip(),
-            )
-            if not m:
-                continue
-            stack, mode, size, total, ready, warm, pss = m.groups()
-            name = stack if stack != "capsid" else "capsid-" + mode
-            key = (name, size)
-            if key in seen:
-                raise SystemExit(
-                    f"{path}/cells.txt: duplicate cold cell {key} "
-                    "(same stack measured twice in one point); keep exactly "
-                    "one same-origin, same-config record per cell")
-            seen[key] = True
-            point["coldStart"]["cells"].append({
-                "stack": name,
-                "size": size,
-                "totalMs": float(total),
-                "readyMs": float(ready),
-                "warmMs": float(warm) if warm else None,
-                "pssMb": float(pss) if pss not in (None, "n/a") else None,
-            })
-    return point["coldStart"]
-
-
-def parse_qps(path):
-    out = {"cells": []}
-    with open(os.path.join(path, "cells.txt")) as f:
-        for line in f:
-            m = re.match(
-                r"(\S+)\s+(\S*)\s+qps_med=\s*([\d.]+)"
-                r"(?:\s+p50_ms=([\d.]+))?(?:\s+p95_ms=([\d.]+))?",
-                line.strip(),
-            )
-            if m:
-                stack, wl, qps, p50, p95 = m.groups()
-                out["cells"].append({
-                    "stack": stack,
-                    "workload": wl,
-                    "qps": float(qps),
-                    "p50Ms": float(p50) if p50 else None,
-                    "p95Ms": float(p95) if p95 else None,
-                })
-                continue
-            m = re.match(r"(\S+)\s+serving_pss_mb=(\S+)", line.strip())
-            if m:
-                out.setdefault("servingPssMb", {})[m.group(1)] = float(m.group(2))
-                continue
-            # serving_pss_detail=<stack> role=mb;role=mb...
-            m = re.match(r"(\S+)\s+serving_pss_detail=(\S+)", line.strip())
-            if m:
-                stack, pairs = m.groups()
-                parts = _parse_pairs(pairs)
-                if parts:
-                    out.setdefault("servingPss", {})[stack] = parts
-                continue
-            m = re.match(r"(\S+)\s+lowqps_pss_mb=(\S+)", line.strip())
-            if m:
-                out.setdefault("lowLoadPssMb", {})[m.group(1)] = float(m.group(2))
-                continue
-            m = re.match(r"(\S+)\s+lowqps_pss_detail=(\S+)", line.strip())
-            if m:
-                parts = _parse_pairs(m.group(2))
-                if parts:
-                    out.setdefault("lowLoadPss", {})[m.group(1)] = parts
+    out, seen = {"cells": [], "warm": [], "pssMb": []}, set()
+    for label, line in lines(path):
+        head, sep, tail = line.partition("total_ms=")
+        words = head.split()
+        if not sep or not (len(words) == 3 and words[0] == "capsid" or
+                           len(words) == 2 and words[0] != "capsid"):
+            raise EvidenceError(f"{label}: malformed cold-start row")
+        if words[0] == "capsid":
+            mode = "source" if words[1] == "src" else words[1]
+            stack, size = "capsid-" + mode, words[2]
+        else:
+            stack, size = words
+        unique(seen, (stack, size), label)
+        values = fields("total_ms=" + tail, label)
+        if not {"total_ms", "ready_ms"} <= values.keys() <= {
+                "total_ms", "ready_ms", "warm_ms", "pss_mb"}:
+            raise EvidenceError(f"{label}: missing or unknown cold-start fields")
+        cell = {"stack": stack, "size": size}
+        for source, target in (("total_ms", "totalMs"), ("ready_ms", "readyMs"),
+                               ("warm_ms", "warmMs"), ("pss_mb", "pssMb")):
+            value = values.get(source)
+            cell[target] = (None if value is None or source == "pss_mb" and value == "n/a"
+                            else number(value, label))
+        out["cells"].append(cell)
     return out
 
 
-def _parse_pairs(pairs):
-    parts = []
+def _parse_pairs(pairs, label="PSS breakdown"):
+    parts, seen = [], set()
     for pair in pairs.split(";"):
-        if "=" in pair:
-            role, _, mb = pair.partition("=")
-            try:
-                parts.append({"role": role, "mb": float(mb)})
-            except ValueError:
-                pass
+        role, sep, value = pair.partition("=")
+        if not sep or not role:
+            raise EvidenceError(f"{label}: malformed PSS breakdown")
+        unique(seen, role, label)
+        parts.append({"role": role, "mb": number(value, label)})
     return parts
 
 
-def machine_fingerprint(paths):
-    fp = {}
-    for path in paths:
-        mf = os.path.join(path, "manifest.txt")
-        if not os.path.exists(mf):
+def parse_qps(path):
+    out, seen = {"cells": []}, set()
+    memory = {"serving_pss_mb": "servingPssMb", "serving_pss_detail": "servingPss",
+              "lowqps_pss_mb": "lowLoadPssMb", "lowqps_pss_detail": "lowLoadPss"}
+    for label, line in lines(path):
+        words = line.split(None, 2)
+        if len(words) == 3 and words[2].startswith("qps_med="):
+            stack, workload, tail = words
+            unique(seen, ("qps", stack, workload), label)
+            values = fields(tail, label)
+            if values.keys() != {"qps_med", "p50_ms", "p95_ms"}:
+                raise EvidenceError(f"{label}: missing or unknown QPS fields")
+            out["cells"].append({"stack": stack, "workload": workload,
+                                  "qps": number(values["qps_med"], label),
+                                  "p50Ms": number(values["p50_ms"], label),
+                                  "p95Ms": number(values["p95_ms"], label)})
             continue
-        with open(mf) as f:
-            for line in f:
-                if ":" not in line:
-                    continue
-                key, _, value = line.partition(":")
-                key = key.strip()
-                value = value.strip()
-                if key in ("cpu", "uname", "nproc", "workerd_version",
-                           "node", "deno", "commit", "rounds", "warm",
-                           "command", "generated_at", "ab",
-                           "php_fpm", "nginx", "python", "python_pkgs",
-                           "php_pool"):
-                    fp.setdefault(key, value)
-    return fp
+        match = re.fullmatch(r"(\S+)\s+(\w+)=(\S+)", line)
+        if not match or match[2] not in memory:
+            raise EvidenceError(f"{label}: malformed QPS or PSS row")
+        stack, key, value = match.groups()
+        unique(seen, (key, stack), label)
+        out.setdefault(memory[key], {})[stack] = (
+            _parse_pairs(value, label) if key.endswith("detail") else number(value, label))
+    return out
 
 
-def evidence_files(paths):
-    files = {}
-    for path in paths:
-        sf = os.path.join(path, "sha256sums.txt")
-        if not os.path.exists(sf):
-            continue
-        with open(sf) as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) == 2:
-                    files[os.path.join(os.path.basename(path),
-                                       os.path.basename(parts[1]))] = parts[0]
-    return files
+def parse_density(path):
+    out, seen = {}, set()
+    if path is None:
+        return out
+    for label, line in lines(path):
+        match = re.fullmatch(r"(\S+)\s+(\S+)\s+(workers|cells)=(\d+)\s+"
+                             r"pss_mb=(\S+)(?:\s+phase=(cold|warm))?(?:\s+note=(.*))?", line)
+        if not match:
+            raise EvidenceError(f"{label}: malformed density row")
+        stack, size, unit, count, pss, phase, _ = match.groups()
+        phase = phase or "warm"  # Parsing old syntax does not qualify publication.
+        unique(seen, (stack, size, phase), label)
+        if int(count) <= 0 or unit != ("workers" if stack == "capsid" else "cells"):
+            raise EvidenceError(f"{label}: invalid density count or unit")
+        out.setdefault(stack, {})[phase + "@" + size] = {
+            "count": int(count), "unit": unit, "pssMb": number(pss, label)}
+    return out
 
 
-def git_info():
+def git_info(repo):
     def run(*args):
         try:
-            return subprocess.check_output(
-                ["git", *args], text=True, stderr=subprocess.DEVNULL).strip()
-        except subprocess.CalledProcessError:
+            return subprocess.check_output(["git", "-C", str(repo), *args], text=True,
+                                           stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
             return ""
     return {"commit": run("rev-parse", "HEAD"),
             "tag": run("describe", "--exact-match", "--tags", "HEAD")}
 
 
 def load_existing(data_path):
-    if not os.path.exists(data_path):
-        return None
-    with open(data_path) as f:
-        content = f.read()
-    m = re.search(r"window\.CAPSID_PERF_DATA\s*=\s*(\{.*\})\s*;?\s*$",
-                  content, re.S)
-    if not m:
-        return None
-    return json.loads(m.group(1))
+    if not data_path.exists():
+        return {"schema": 1, "points": []}
+    content = data_path.read_text(encoding="utf-8")
+    match = re.search(r"window\.CAPSID_PERF_DATA\s*=\s*(\{.*\})\s*;?\s*$", content, re.S)
+    if not match:
+        raise EvidenceError(f"{data_path}: invalid history wrapper; refusing to overwrite")
+    data = json.loads(match[1], object_pairs_hook=object_pairs,
+                      parse_constant=lambda value: (_ for _ in ()).throw(
+                          EvidenceError(f"{data_path}: non-finite JSON {value}")))
+    if not isinstance(data, dict) or data.get("schema") != 1 or not isinstance(data.get("points"), list):
+        raise EvidenceError(f"{data_path}: unsupported history schema")
+    versions = set()
+    for point in data["points"]:
+        if not isinstance(point, dict) or not isinstance(point.get("version"), str) or not isinstance(point.get("date"), str):
+            raise EvidenceError(f"{data_path}: invalid historical point")
+        unique(versions, point["version"], str(data_path))
+    return data
 
 
-def parse_density(path):
-    """cells.txt lines:
-    `capsid 10k workers=17 pss_mb=47.8 [phase=cold|warm] note=...`"""
-    out = {}
-    if not path:
-        return out
-    fp = os.path.join(path, "cells.txt")
-    if not os.path.exists(fp):
-        return out
-    with open(fp) as f:
-        for line in f:
-            m = re.match(r"(\S+)\s+(\S+)\s+(workers|cells)=(\d+)\s+"
-                         r"pss_mb=(\S+)(?:\s+phase=(cold|warm))?", line.strip())
-            if not m:
-                continue
-            stack, size, unit, count, pss, phase = m.groups()
-            try:
-                pss = float(pss)
-            except ValueError:
-                continue
-            out.setdefault(stack, {})[(phase or "warm") + "@" + size] = {
-                "count": int(count), "unit": unit, "pssMb": pss}
-    return out
+def write_data(path, data):
+    # Serialize before touching the destination; failure preserves history.
+    content = ("// Generated by bench/collect-perf-point.py. Do not edit numbers.\n"
+               "window.CAPSID_PERF_DATA = " +
+               json.dumps(data, indent=1, sort_keys=True, allow_nan=False) + ";\n")
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=path.parent, prefix=".perf-data-", delete=False) as stream:
+            temp = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, path)
+    finally:
+        if temp is not None and temp.exists():
+            temp.unlink()
 
 
-def main():
-    ap = argparse.ArgumentParser()
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cold-start", required=True)
     ap.add_argument("--qps", required=True)
     ap.add_argument("--density")
     ap.add_argument("--version", required=True)
     ap.add_argument("--release", required=True)
     ap.add_argument("--data", default="perf-site/data.js")
-    args = ap.parse_args()
-
-    cold = parse_cold_start(args.cold_start)
-    qps = parse_qps(args.qps)
-    machine = machine_fingerprint([args.cold_start, args.qps])
-
-    # Environment cross-checks: a point may not carry results for a stack
-    # whose identity the fingerprint cannot corroborate.
-    cold_stack_names = {c["stack"] for c in cold["cells"]}
-    for stack, fp_key in (("deno", "deno"), ("node", "node"),
-                          ("workerd", "workerd_version")):
-        identity = machine.get(fp_key)
-        if stack in cold_stack_names and (not identity or identity == "absent"):
-            raise SystemExit(
-                f"cold-start cells contain {stack} results but the "
-                f"fingerprint lacks a {fp_key} identity")
-
-    point = {
-        "schema": 1,
-        "version": args.version,
-        "release": args.release,
-        "date": datetime.date.today().isoformat(),
-        "notes": os.environ.get("CAPSID_PERF_NOTES", ""),
-        "git": git_info(),
-        "machine": machine,
-        "coldStart": cold,
-        "qps": qps,
-        "density": parse_density(args.density),
-        "evidence": evidence_files([args.cold_start, args.qps]),
-    }
-
-    existing = load_existing(args.data) or {"schema": 1, "points": []}
-    existing["points"] = [p for p in existing["points"]
-                          if p["version"] != args.version]
+    ap.add_argument("--repo", type=Path, default=Path(__file__).resolve().parent.parent,
+                    help="archive root; lane directories must be under its bench/results")
+    ap.add_argument("--generated-at", required=True, help="explicit generation time with timezone")
+    ap.add_argument("--check", action="store_true", help="validate without writing data.js")
+    args = ap.parse_args(argv)
+    generated = timestamp(args.generated_at, "generated-at")
+    directories = {"cold-start": args.cold_start, "qps": args.qps}
+    if args.density is not None:
+        directories["density"] = args.density
+    summary_hashes = {lane: sha256(Path(path) / "cells.txt") for lane, path in directories.items()}
+    cold, qps, density = parse_cold_start(args.cold_start), parse_qps(args.qps), parse_density(args.density)
+    lanes = {"cold-start": (args.cold_start, cold), "qps": (args.qps, qps)}
+    if args.density is not None:
+        lanes["density"] = args.density, density
+    provenance = validate_point(lanes, args.repo, args.version, args.release)
+    for lane, path in directories.items():
+        prefix = provenance["verification"]["archives"][lane]
+        if summary_hashes[lane] != provenance["evidence"][prefix + "/cells.txt"]:
+            raise EvidenceError(f"{lane}: summary changed during parsing")
+    point = {"schema": 1, "version": args.version, "release": args.release,
+             "notes": os.environ.get("CAPSID_PERF_NOTES", ""), "coldStart": cold,
+             "qps": qps, "density": density, **provenance,
+             "generation": {"at": generated.isoformat().replace("+00:00", "Z"),
+                            "collector": git_info(args.repo),
+                            "implementation": {name: sha256(Path(__file__).parent / name)
+                                               for name in ("collect-perf-point.py", "perf_evidence.py")}}}
+    if args.check:
+        print(json.dumps({"status": "verified", "evidenceFiles": len(point["evidence"]),
+                          "measurementCommit": point["git"]["commit"]}, sort_keys=True))
+        return
+    path = Path(args.data)
+    existing = load_existing(path)
+    existing["points"] = [p for p in existing["points"] if p["version"] != args.version]
     existing["points"].append(point)
-    existing["points"].sort(key=lambda p: p["date"])
-
-    with open(args.data, "w") as f:
-        f.write("// Generated by bench/collect-perf-point.py — append-only "
-                "performance history.\n")
-        f.write("// Each point is tied to its release, git commit, machine "
-                "fingerprint, and\n// evidence SHA-256 digests. Do not edit "
-                "historical points.\n")
-        f.write("window.CAPSID_PERF_DATA = ")
-        json.dump(existing, f, indent=1, sort_keys=True)
-        f.write(";\n")
-    print("wrote %s (%d points)" % (args.data, len(existing["points"])))
+    existing["points"].sort(key=lambda p: (p["date"], p["version"]))
+    write_data(path, existing)
+    print(f"wrote {path} ({len(existing['points'])} points)")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (EvidenceError, OSError, ValueError, TypeError, KeyError) as exc:
+        print(f"performance evidence rejected: {exc}", file=sys.stderr)
+        sys.exit(1)

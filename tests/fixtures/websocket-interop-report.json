@@ -1,0 +1,1357 @@
+{
+  "schema": "capsid-interop-contract-sample-v1",
+  "provenance": {
+    "report": "interop-ws-reference-attempt1-report.json",
+    "sha256": "bb0ffd3dd21410b43f97887b0fa1c1357b2c52f18f3341702fc21c1840ed0eee",
+    "scope": "actual locked reference, 22 Node ws/Python client and server cases; candidate unit copies are synthetic"
+  },
+  "report": {
+    "schema": "capsid-websocket-interop-v1",
+    "complete": true,
+    "runId": "interop-node-ws-python-20261016",
+    "mode": "reference",
+    "referenceLock": {
+      "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "release_tag": "v1.20261010.1",
+      "binary": "workerd-linux-64",
+      "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "binary_version_string": "workerd 2026-10-10",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": [],
+      "client": {
+        "runtime": "node",
+        "websocket": "native (undici) - no external dependency",
+        "node_version": "v24.14.0",
+        "undici_version": "7.21.0"
+      },
+      "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+      "release_asset": "workerd-linux-64.gz",
+      "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+      "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+    },
+    "clientLock": {
+      "schema": "capsid-ws-interop-client-lock-v1",
+      "python": {
+        "implementation": "CPython",
+        "version": "3.12.3"
+      },
+      "websockets": {
+        "version": "15.0.1",
+        "wheel": {
+          "filename": "websockets-15.0.1-py3-none-any.whl",
+          "sha256": "f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f",
+          "url": "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl",
+          "size": 169743
+        },
+        "sourceFiles": 47,
+        "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+      },
+      "node": "workerd-ws/reference-lock.json",
+      "notes": "Pinned pure Python and JavaScript protocol implementations; native optional Node addons are disabled. Runtime and loaded source identities are checked before sockets.",
+      "ws": {
+        "version": "8.22.0",
+        "tarball": {
+          "url": "https://registry.npmjs.org/ws/-/ws-8.22.0.tgz",
+          "integrity": "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==",
+          "size": 35094,
+          "sha256": "ca9b3798b2e11ce8fac6713f50ef0501aa12b09b330623c1dc409dff94e7abc8"
+        },
+        "sourceFiles": 17,
+        "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+      }
+    },
+    "inputs": {
+      "runner": "06582c50a1bc7993035ce034ced26fc20db5299c276e561db018ca30c43a2e80",
+      "pythonProgram": "b890b4830694654a30df4425709f593bc43dfb4fc5d7a9ce8e6a6e919d2dac54",
+      "nodeProgram": "f835d10fa89c77ae054c34ccfaa12b9e75df0903525dcd7fe00ed36fe42144c2",
+      "fixture": "ac4be19b9d418b2db6b6ae52ed90ac3e8d9cdaaa4f698a94374cdc2c00a81b7b",
+      "clientLock": "53b7148598e0a2abebe3e6aa020a0743bbd54bec9a1f314b93b52c35039fc6ac",
+      "contract": "915e0f0832ca94bdb6644ccb6096eec5e2755e316f5415ccaa3537266d76d55a",
+      "hostBackend": "e5efdcef3842ad3ab9fd27c335bea986369eaa720139563b6e22931986ce2bc1",
+      "nodeSDK": "dafba2e5535b84e6dcf10b86e2a4bc01302984d7fcdef2c074be95bc2ff0a35a",
+      "nodePeer": "358404fd392900469dc3a408ed1ca4e46632124607e3573550188a6370e73831"
+    },
+    "binaries": {
+      "host": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "worker": null
+    },
+    "clients": {
+      "node": {
+        "node": "v24.14.0",
+        "undici": "7.21.0",
+        "ws": "8.22.0",
+        "sourceFiles": 17,
+        "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+      },
+      "python": {
+        "implementation": "CPython",
+        "python": "3.12.3",
+        "websockets": "15.0.1",
+        "sourceFiles": 47,
+        "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+      }
+    },
+    "endpoints": {
+      "inbound": {
+        "ws": "ws://127.0.0.1:40673",
+        "wss": "wss://localhost:38187",
+        "untrusted": "wss://localhost:33697",
+        "wrongHost": "wss://127.0.0.1:38187"
+      },
+      "outbound": {
+        "python": {
+          "ws": "ws://127.0.0.1:37683",
+          "wss": "wss://localhost:43201",
+          "untrusted": "wss://localhost:41079",
+          "wrongHost": "wss://127.0.0.1:43201"
+        },
+        "node": {
+          "ws": "ws://127.0.0.1:42177",
+          "wss": "wss://localhost:39987",
+          "untrusted": "wss://localhost:40553",
+          "wrongHost": "wss://127.0.0.1:39987"
+        }
+      }
+    },
+    "cases": [
+      {
+        "name": "node/ws/exchange",
+        "observed": {
+          "identity": {
+            "node": "v24.14.0",
+            "undici": "7.21.0",
+            "ws": "8.22.0",
+            "sourceFiles": 17,
+            "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+          },
+          "uri": "ws://127.0.0.1:40673/@capsid/orders/inbound?case=node%2Fws%2Fexchange",
+          "case": "node/ws/exchange",
+          "messages": [
+            {
+              "type": "text",
+              "length": 58,
+              "sha256": "fe9b126a7eba2455edd7dd3b22b235c5df0595f1c4dafcb436e07243272b4053"
+            },
+            {
+              "type": "text",
+              "length": 13,
+              "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+            },
+            {
+              "type": "binary",
+              "length": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "type": "binary",
+              "length": 180000,
+              "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+            }
+          ],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 1000,
+            "reason": "client\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "node/ws/server-close",
+        "observed": {
+          "identity": {
+            "node": "v24.14.0",
+            "undici": "7.21.0",
+            "ws": "8.22.0",
+            "sourceFiles": 17,
+            "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+          },
+          "uri": "ws://127.0.0.1:40673/@capsid/orders/inbound?case=node%2Fws%2Fserver-close",
+          "case": "node/ws/server-close",
+          "messages": [],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 3001,
+            "reason": "server\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "node/wss/exchange",
+        "observed": {
+          "identity": {
+            "node": "v24.14.0",
+            "undici": "7.21.0",
+            "ws": "8.22.0",
+            "sourceFiles": 17,
+            "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+          },
+          "uri": "wss://localhost:38187/@capsid/orders/inbound?case=node%2Fwss%2Fexchange",
+          "case": "node/wss/exchange",
+          "messages": [
+            {
+              "type": "text",
+              "length": 59,
+              "sha256": "39c9aa2a41879e3f25e7161da534006ea4f3be42a019c9a6ef9dfa596e7f2071"
+            },
+            {
+              "type": "text",
+              "length": 13,
+              "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+            },
+            {
+              "type": "binary",
+              "length": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "type": "binary",
+              "length": 180000,
+              "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+            }
+          ],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 1000,
+            "reason": "client\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "node/wss/server-close",
+        "observed": {
+          "identity": {
+            "node": "v24.14.0",
+            "undici": "7.21.0",
+            "ws": "8.22.0",
+            "sourceFiles": 17,
+            "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+          },
+          "uri": "wss://localhost:38187/@capsid/orders/inbound?case=node%2Fwss%2Fserver-close",
+          "case": "node/wss/server-close",
+          "messages": [],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 3001,
+            "reason": "server\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "python/ws/exchange",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "ws://127.0.0.1:40673/@capsid/orders/inbound?case=python%2Fws%2Fexchange",
+          "case": "python/ws/exchange",
+          "messages": [
+            {
+              "type": "text",
+              "length": 60,
+              "sha256": "fcc773e5ad13abaf189795f862743a139190ca27c1963a3b37297905f10ff55c"
+            },
+            {
+              "type": "text",
+              "length": 13,
+              "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+            },
+            {
+              "type": "binary",
+              "length": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "type": "binary",
+              "length": 180000,
+              "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+            }
+          ],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 1000,
+            "reason": "client\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "python/ws/server-close",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "ws://127.0.0.1:40673/@capsid/orders/inbound?case=python%2Fws%2Fserver-close",
+          "case": "python/ws/server-close",
+          "messages": [],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 3001,
+            "reason": "server\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "python/wss/exchange",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "wss://localhost:38187/@capsid/orders/inbound?case=python%2Fwss%2Fexchange",
+          "case": "python/wss/exchange",
+          "messages": [
+            {
+              "type": "text",
+              "length": 61,
+              "sha256": "2c501f7fd187c4ababf0b4b9523500994f906a58b5b675455b518c4d5e2b4547"
+            },
+            {
+              "type": "text",
+              "length": 13,
+              "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+            },
+            {
+              "type": "binary",
+              "length": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "type": "binary",
+              "length": 180000,
+              "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+            }
+          ],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 1000,
+            "reason": "client\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "python/wss/server-close",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "wss://localhost:38187/@capsid/orders/inbound?case=python%2Fwss%2Fserver-close",
+          "case": "python/wss/server-close",
+          "messages": [],
+          "pingPong": 0,
+          "protocol": "chat",
+          "close": {
+            "code": 3001,
+            "reason": "server\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "python/ws/fragment-ping",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "ws://127.0.0.1:40673/@capsid/orders/inbound?case=python%2Fws%2Ffragment-ping",
+          "case": "python/ws/fragment-ping",
+          "messages": [
+            {
+              "type": "text",
+              "length": 65,
+              "sha256": "ffaeffd005d77969b63c619fa455d8a9176aab9b583b1253a5e5d93340032c97"
+            },
+            {
+              "type": "text",
+              "length": 13,
+              "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+            },
+            {
+              "type": "binary",
+              "length": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "type": "binary",
+              "length": 180000,
+              "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+            },
+            {
+              "type": "text",
+              "length": 11,
+              "sha256": "6a4fc89ec949d739959c84176fea12a1af9a6ca3df2274a37e7546c758ff9e34"
+            },
+            {
+              "type": "binary",
+              "length": 60240,
+              "sha256": "ab1e4a9756ed274cd56a8ce7f139b2f279648b3fb627b62807265f6a8e523e26"
+            }
+          ],
+          "pingPong": 2,
+          "protocol": "chat",
+          "close": {
+            "code": 1000,
+            "reason": "client\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "python/wss/fragment-ping",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "wss://localhost:38187/@capsid/orders/inbound?case=python%2Fwss%2Ffragment-ping",
+          "case": "python/wss/fragment-ping",
+          "messages": [
+            {
+              "type": "text",
+              "length": 66,
+              "sha256": "1e7ccea01a2e4c884d74310ce31e6bd622906e2459c53b52ac815aef958c673d"
+            },
+            {
+              "type": "text",
+              "length": 13,
+              "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+            },
+            {
+              "type": "binary",
+              "length": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "type": "binary",
+              "length": 180000,
+              "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+            },
+            {
+              "type": "text",
+              "length": 11,
+              "sha256": "6a4fc89ec949d739959c84176fea12a1af9a6ca3df2274a37e7546c758ff9e34"
+            },
+            {
+              "type": "binary",
+              "length": 60240,
+              "sha256": "ab1e4a9756ed274cd56a8ce7f139b2f279648b3fb627b62807265f6a8e523e26"
+            }
+          ],
+          "pingPong": 2,
+          "protocol": "chat",
+          "close": {
+            "code": 1000,
+            "reason": "client\u0000\u7ec8",
+            "clean": true
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "node/tls/untrusted",
+        "observed": {
+          "identity": {
+            "node": "v24.14.0",
+            "undici": "7.21.0",
+            "ws": "8.22.0",
+            "sourceFiles": 17,
+            "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+          },
+          "uri": "wss://localhost:33697/@capsid/orders/inbound?case=node%2Ftls%2Funtrusted",
+          "case": "node/tls/untrusted",
+          "messages": [],
+          "pingPong": 0,
+          "failure": {
+            "opened": false,
+            "errors": [
+              {
+                "name": "Error",
+                "message": "self-signed certificate; if the root CA is installed locally, try running Node.js with --use-system-ca",
+                "code": "DEPTH_ZERO_SELF_SIGNED_CERT"
+              }
+            ],
+            "close": {
+              "code": 1006,
+              "reason": "",
+              "clean": false
+            }
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "node/tls/wrongHost",
+        "observed": {
+          "identity": {
+            "node": "v24.14.0",
+            "undici": "7.21.0",
+            "ws": "8.22.0",
+            "sourceFiles": 17,
+            "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+          },
+          "uri": "wss://127.0.0.1:38187/@capsid/orders/inbound?case=node%2Ftls%2FwrongHost",
+          "case": "node/tls/wrongHost",
+          "messages": [],
+          "pingPong": 0,
+          "failure": {
+            "opened": false,
+            "errors": [
+              {
+                "name": "Error",
+                "message": "Hostname/IP does not match certificate's altnames: IP: 127.0.0.1 is not in the cert's list: ",
+                "code": "ERR_TLS_CERT_ALTNAME_INVALID"
+              }
+            ],
+            "close": {
+              "code": 1006,
+              "reason": "",
+              "clean": false
+            }
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "python/tls/untrusted",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "wss://localhost:33697/@capsid/orders/inbound?case=python%2Ftls%2Funtrusted",
+          "case": "python/tls/untrusted",
+          "messages": [],
+          "pingPong": 0,
+          "failure": {
+            "opened": false,
+            "certificateRejected": true,
+            "errorName": "SSLCertVerificationError",
+            "verifyCode": 18,
+            "verifyMessage": "self-signed certificate"
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "python/tls/wrongHost",
+        "observed": {
+          "identity": {
+            "implementation": "CPython",
+            "python": "3.12.3",
+            "websockets": "15.0.1",
+            "sourceFiles": 47,
+            "sourceSHA256": "caaa222b0c93cc64d136e69bed459b57dd3225b4de88621c51abc65324b4e808"
+          },
+          "uri": "wss://127.0.0.1:38187/@capsid/orders/inbound?case=python%2Ftls%2FwrongHost",
+          "case": "python/tls/wrongHost",
+          "messages": [],
+          "pingPong": 0,
+          "failure": {
+            "opened": false,
+            "certificateRejected": true,
+            "errorName": "SSLCertVerificationError",
+            "verifyCode": 64,
+            "verifyMessage": "IP address mismatch, certificate is not valid for '127.0.0.1'."
+          }
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "outbound/node/ws",
+        "observed": {
+          "target": "ws://127.0.0.1:42177/echo?case=outbound%2Fnode%2Fws&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fnode%2Fws",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "challenge:interop-node-ws-python-20261016:outbound/node/ws"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "hello\u0000\u754c\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 0,
+                "first": [],
+                "last": []
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 180000,
+                "first": [
+                  29,
+                  46,
+                  63,
+                  80,
+                  97,
+                  114,
+                  131,
+                  148
+                ],
+                "last": [
+                  203,
+                  220,
+                  237,
+                  3,
+                  20,
+                  37,
+                  54,
+                  71
+                ]
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "\u5206\u7247\u0000\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 60240,
+                "first": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "last": [
+                  243,
+                  244,
+                  245,
+                  246,
+                  247,
+                  248,
+                  249,
+                  250
+                ]
+              }
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          ]
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "outbound/node/wss",
+        "observed": {
+          "target": "wss://localhost:39987/echo?case=outbound%2Fnode%2Fwss&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fnode%2Fwss",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "challenge:interop-node-ws-python-20261016:outbound/node/wss"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "hello\u0000\u754c\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 0,
+                "first": [],
+                "last": []
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 180000,
+                "first": [
+                  29,
+                  46,
+                  63,
+                  80,
+                  97,
+                  114,
+                  131,
+                  148
+                ],
+                "last": [
+                  203,
+                  220,
+                  237,
+                  3,
+                  20,
+                  37,
+                  54,
+                  71
+                ]
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "\u5206\u7247\u0000\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 60240,
+                "first": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "last": [
+                  243,
+                  244,
+                  245,
+                  246,
+                  247,
+                  248,
+                  249,
+                  250
+                ]
+              }
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          ]
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "outbound/node/untrusted",
+        "observed": {
+          "target": "wss://localhost:40553/echo?case=outbound%2Fnode%2Funtrusted&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fnode%2Funtrusted",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "errorName": "Error",
+              "isError": true
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ]
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "outbound/node/wrongHost",
+        "observed": {
+          "target": "wss://127.0.0.1:39987/echo?case=outbound%2Fnode%2FwrongHost&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fnode%2FwrongHost",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "errorName": "Error",
+              "isError": true
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ]
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "outbound/python/ws",
+        "observed": {
+          "target": "ws://127.0.0.1:37683/echo?case=outbound%2Fpython%2Fws&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fpython%2Fws",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "challenge:interop-node-ws-python-20261016:outbound/python/ws"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "hello\u0000\u754c\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 0,
+                "first": [],
+                "last": []
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 180000,
+                "first": [
+                  29,
+                  46,
+                  63,
+                  80,
+                  97,
+                  114,
+                  131,
+                  148
+                ],
+                "last": [
+                  203,
+                  220,
+                  237,
+                  3,
+                  20,
+                  37,
+                  54,
+                  71
+                ]
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "\u5206\u7247\u0000\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 60240,
+                "first": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "last": [
+                  243,
+                  244,
+                  245,
+                  246,
+                  247,
+                  248,
+                  249,
+                  250
+                ]
+              }
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          ]
+        },
+        "tcpAccepted": null
+      },
+      {
+        "name": "outbound/python/wss",
+        "observed": {
+          "target": "wss://localhost:43201/echo?case=outbound%2Fpython%2Fwss&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fpython%2Fwss",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "open",
+              "state": 1,
+              "protocol": "chat"
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "challenge:interop-node-ws-python-20261016:outbound/python/wss"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "hello\u0000\u754c\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 0,
+                "first": [],
+                "last": []
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 180000,
+                "first": [
+                  29,
+                  46,
+                  63,
+                  80,
+                  97,
+                  114,
+                  131,
+                  148
+                ],
+                "last": [
+                  203,
+                  220,
+                  237,
+                  3,
+                  20,
+                  37,
+                  54,
+                  71
+                ]
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "text",
+                "text": "\u5206\u7247\u0000\ud83d\ude00"
+              }
+            },
+            {
+              "type": "message",
+              "data": {
+                "type": "binary",
+                "length": 60240,
+                "first": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "last": [
+                  243,
+                  244,
+                  245,
+                  246,
+                  247,
+                  248,
+                  249,
+                  250
+                ]
+              }
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          ]
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "outbound/python/untrusted",
+        "observed": {
+          "target": "wss://localhost:41079/echo?case=outbound%2Fpython%2Funtrusted&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fpython%2Funtrusted",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "errorName": "Error",
+              "isError": true
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ]
+        },
+        "tcpAccepted": 1
+      },
+      {
+        "name": "outbound/python/wrongHost",
+        "observed": {
+          "target": "wss://127.0.0.1:43201/echo?case=outbound%2Fpython%2FwrongHost&challenge=interop-node-ws-python-20261016%3Aoutbound%2Fpython%2FwrongHost",
+          "events": [
+            {
+              "type": "construct",
+              "state": 0
+            },
+            {
+              "type": "error",
+              "state": 3,
+              "errorName": "Error",
+              "isError": true
+            },
+            {
+              "type": "close",
+              "state": 3,
+              "code": 1006,
+              "reason": "Failed to establish websocket connection",
+              "clean": false
+            }
+          ]
+        },
+        "tcpAccepted": 1
+      }
+    ],
+    "peers": {
+      "python": {
+        "type": "stopped",
+        "active": 0,
+        "records": [
+          {
+            "case": "outbound/python/ws",
+            "protocol": "chat",
+            "extensions": 0,
+            "messages": [
+              {
+                "type": "text",
+                "length": 60,
+                "sha256": "6d4cbb470810f4e40b50af858e961ce25e441401d05f5f7b26006bfd57ff9c06"
+              },
+              {
+                "type": "text",
+                "length": 13,
+                "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+              },
+              {
+                "type": "binary",
+                "length": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "type": "binary",
+                "length": 180000,
+                "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+              },
+              {
+                "type": "text",
+                "length": 11,
+                "sha256": "6a4fc89ec949d739959c84176fea12a1af9a6ca3df2274a37e7546c758ff9e34"
+              },
+              {
+                "type": "binary",
+                "length": 60240,
+                "sha256": "ab1e4a9756ed274cd56a8ce7f139b2f279648b3fb627b62807265f6a8e523e26"
+              }
+            ],
+            "pingPong": 2,
+            "sni": null,
+            "close": {
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          },
+          {
+            "case": "outbound/python/wss",
+            "protocol": "chat",
+            "extensions": 0,
+            "messages": [
+              {
+                "type": "text",
+                "length": 61,
+                "sha256": "3fc1f71a67977e1c5c25220e8866d565d0847131282e0aeb2cd371a71d11e382"
+              },
+              {
+                "type": "text",
+                "length": 13,
+                "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+              },
+              {
+                "type": "binary",
+                "length": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "type": "binary",
+                "length": 180000,
+                "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+              },
+              {
+                "type": "text",
+                "length": 11,
+                "sha256": "6a4fc89ec949d739959c84176fea12a1af9a6ca3df2274a37e7546c758ff9e34"
+              },
+              {
+                "type": "binary",
+                "length": 60240,
+                "sha256": "ab1e4a9756ed274cd56a8ce7f139b2f279648b3fb627b62807265f6a8e523e26"
+              }
+            ],
+            "pingPong": 2,
+            "sni": "localhost",
+            "close": {
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          }
+        ],
+        "exit": 0,
+        "signal": null,
+        "stderr": "opening handshake failed\nTraceback (most recent call last):\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/http11.py\", line 138, in parse\n    request_line = yield from parse_line(read_line)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/http11.py\", line 309, in parse_line\n    line = yield from read_line(MAX_LINE_LENGTH)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/streams.py\", line 46, in read_line\n    raise EOFError(f\"stream ends after {p} bytes, before end of line\")\nEOFError: stream ends after 0 bytes, before end of line\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/server.py\", line 545, in parse\n    request = yield from Request.parse(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/http11.py\", line 140, in parse\n    raise EOFError(\"connection closed while reading HTTP request line\") from exc\nEOFError: connection closed while reading HTTP request line\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/asyncio/server.py\", line 356, in conn_handler\n    await connection.handshake(\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/asyncio/server.py\", line 207, in handshake\n    raise self.protocol.handshake_exc\nwebsockets.exceptions.InvalidMessage: did not receive a valid HTTP request\nopening handshake failed\nTraceback (most recent call last):\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/http11.py\", line 138, in parse\n    request_line = yield from parse_line(read_line)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/http11.py\", line 309, in parse_line\n    line = yield from read_line(MAX_LINE_LENGTH)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/streams.py\", line 46, in read_line\n    raise EOFError(f\"stream ends after {p} bytes, before end of line\")\nEOFError: stream ends after 0 bytes, before end of line\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/server.py\", line 545, in parse\n    request = yield from Request.parse(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/http11.py\", line 140, in parse\n    raise EOFError(\"connection closed while reading HTTP request line\") from exc\nEOFError: connection closed while reading HTTP request line\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/asyncio/server.py\", line 356, in conn_handler\n    await connection.handshake(\n  File \"/tmp/capsid-ws-interop-python-20261016/lib/python3.12/site-packages/websockets/asyncio/server.py\", line 207, in handshake\n    raise self.protocol.handshake_exc\nwebsockets.exceptions.InvalidMessage: did not receive a valid HTTP request\n"
+      },
+      "node": {
+        "identity": {
+          "node": "v24.14.0",
+          "undici": "7.21.0",
+          "ws": "8.22.0",
+          "sourceFiles": 17,
+          "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+        },
+        "active": 0,
+        "records": [
+          {
+            "case": "outbound/node/ws",
+            "protocol": "chat",
+            "extensions": "",
+            "messages": [
+              {
+                "type": "text",
+                "length": 58,
+                "sha256": "1d8e669d853d82c72a8f835a80e12631d83387bb653345a93a3e81b2cae9e7df"
+              },
+              {
+                "type": "text",
+                "length": 13,
+                "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+              },
+              {
+                "type": "binary",
+                "length": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "type": "binary",
+                "length": 180000,
+                "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+              },
+              {
+                "type": "text",
+                "length": 11,
+                "sha256": "6a4fc89ec949d739959c84176fea12a1af9a6ca3df2274a37e7546c758ff9e34"
+              },
+              {
+                "type": "binary",
+                "length": 60240,
+                "sha256": "ab1e4a9756ed274cd56a8ce7f139b2f279648b3fb627b62807265f6a8e523e26"
+              }
+            ],
+            "pingPong": 2,
+            "sni": null,
+            "close": {
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          },
+          {
+            "case": "outbound/node/wss",
+            "protocol": "chat",
+            "extensions": "",
+            "messages": [
+              {
+                "type": "text",
+                "length": 59,
+                "sha256": "56c529c5362ae398374d08670ff7c1b1f9e1766cb4d46888e6183a463a091ed6"
+              },
+              {
+                "type": "text",
+                "length": 13,
+                "sha256": "98beac0e4d0c2f00e2be1393181c39004ca9dc1123772d87f402d6876a66594b"
+              },
+              {
+                "type": "binary",
+                "length": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "type": "binary",
+                "length": 180000,
+                "sha256": "f746a05272efcf03fdeb5d9dd3456ba1d03789820437246c0c76116efdd535f3"
+              },
+              {
+                "type": "text",
+                "length": 11,
+                "sha256": "6a4fc89ec949d739959c84176fea12a1af9a6ca3df2274a37e7546c758ff9e34"
+              },
+              {
+                "type": "binary",
+                "length": 60240,
+                "sha256": "ab1e4a9756ed274cd56a8ce7f139b2f279648b3fb627b62807265f6a8e523e26"
+              }
+            ],
+            "pingPong": 2,
+            "sni": "localhost",
+            "close": {
+              "code": 1000,
+              "reason": "remote\u0000\u7ec8",
+              "clean": true
+            }
+          }
+        ]
+      }
+    },
+    "backendStderr": "workerd/jsg/util.c++:390: error: e = kj/compat/tls.c++:269: failed: TLS peer's certificate is not trusted; reason = self signed certificate\nstack: /tmp/capsid-reference-codex-20261015/workerd@2fb8160 /tmp/capsid-reference-codex-20261015/workerd@2fb86f5 /tmp/capsid-reference-codex-20261015/workerd@5adad28 /tmp/capsid-reference-codex-20261015/workerd@2fc01c0 /tmp/capsid-reference-codex-20261015/workerd@5a75100 /tmp/capsid-reference-codex-20261015/workerd@5a753b0 /tmp/capsid-reference-codex-20261015/workerd@5a77577 /tmp/capsid-reference-codex-20261015/workerd@581a6c7 /tmp/capsid-reference-codex-20261015/workerd@581b3d7 /tmp/capsid-reference-codex-20261015/workerd@581e403 /tmp/capsid-reference-codex-20261015/workerd@57f9fb0 /tmp/capsid-reference-codex-20261015/workerd@5800070 /tmp/capsid-reference-codex-20261015/workerd@58176f0 /tmp/capsid-reference-codex-20261015/workerd@2247470 /tmp/capsid-reference-codex-20261015/workerd@34530ec /tmp/capsid-reference-codex-20261015/workerd@3440050 /tmp/capsid-reference-codex-20261015/workerd@3440830; sentryErrorContext = jsgInternalError; wdErrId = 5dgl7a5j5bv886kjsgmnn2lp\nworkerd/jsg/util.c++:390: error: e = kj/compat/tls.c++:269: failed: TLS peer's certificate is not trusted; reason = IP address mismatch\nstack: /tmp/capsid-reference-codex-20261015/workerd@2fb8160 /tmp/capsid-reference-codex-20261015/workerd@2fb86f5 /tmp/capsid-reference-codex-20261015/workerd@5adad28 /tmp/capsid-reference-codex-20261015/workerd@2fc01c0 /tmp/capsid-reference-codex-20261015/workerd@5a75100 /tmp/capsid-reference-codex-20261015/workerd@5a753b0 /tmp/capsid-reference-codex-20261015/workerd@5a77577 /tmp/capsid-reference-codex-20261015/workerd@581a6c7 /tmp/capsid-reference-codex-20261015/workerd@581b3d7 /tmp/capsid-reference-codex-20261015/workerd@581e403 /tmp/capsid-reference-codex-20261015/workerd@57f9fb0 /tmp/capsid-reference-codex-20261015/workerd@5800070 /tmp/capsid-reference-codex-20261015/workerd@58176f0 /tmp/capsid-reference-codex-20261015/workerd@2247470 /tmp/capsid-reference-codex-20261015/workerd@34530ec /tmp/capsid-reference-codex-20261015/workerd@3440050 /tmp/capsid-reference-codex-20261015/workerd@3440830; sentryErrorContext = jsgInternalError; wdErrId = v70nr8i5mq5qsp0e56tg98hj\nworkerd/jsg/util.c++:390: error: e = kj/compat/tls.c++:269: failed: TLS peer's certificate is not trusted; reason = self signed certificate\nstack: /tmp/capsid-reference-codex-20261015/workerd@2fb8160 /tmp/capsid-reference-codex-20261015/workerd@2fb86f5 /tmp/capsid-reference-codex-20261015/workerd@5adad28 /tmp/capsid-reference-codex-20261015/workerd@2fc01c0 /tmp/capsid-reference-codex-20261015/workerd@5a75100 /tmp/capsid-reference-codex-20261015/workerd@5a753b0 /tmp/capsid-reference-codex-20261015/workerd@5a77577 /tmp/capsid-reference-codex-20261015/workerd@581a6c7 /tmp/capsid-reference-codex-20261015/workerd@581b3d7 /tmp/capsid-reference-codex-20261015/workerd@581e403 /tmp/capsid-reference-codex-20261015/workerd@57f9fb0 /tmp/capsid-reference-codex-20261015/workerd@5800070 /tmp/capsid-reference-codex-20261015/workerd@58176f0 /tmp/capsid-reference-codex-20261015/workerd@2247470 /tmp/capsid-reference-codex-20261015/workerd@34530ec /tmp/capsid-reference-codex-20261015/workerd@3440050 /tmp/capsid-reference-codex-20261015/workerd@3440830; sentryErrorContext = jsgInternalError; wdErrId = rene146sun5lm8u0cng2ge87\nworkerd/jsg/util.c++:390: error: e = kj/compat/tls.c++:269: failed: TLS peer's certificate is not trusted; reason = IP address mismatch\nstack: /tmp/capsid-reference-codex-20261015/workerd@2fb8160 /tmp/capsid-reference-codex-20261015/workerd@2fb86f5 /tmp/capsid-reference-codex-20261015/workerd@5adad28 /tmp/capsid-reference-codex-20261015/workerd@2fc01c0 /tmp/capsid-reference-codex-20261015/workerd@5a75100 /tmp/capsid-reference-codex-20261015/workerd@5a753b0 /tmp/capsid-reference-codex-20261015/workerd@5a77577 /tmp/capsid-reference-codex-20261015/workerd@581a6c7 /tmp/capsid-reference-codex-20261015/workerd@581b3d7 /tmp/capsid-reference-codex-20261015/workerd@581e403 /tmp/capsid-reference-codex-20261015/workerd@57f9fb0 /tmp/capsid-reference-codex-20261015/workerd@5800070 /tmp/capsid-reference-codex-20261015/workerd@58176f0 /tmp/capsid-reference-codex-20261015/workerd@2247470 /tmp/capsid-reference-codex-20261015/workerd@34530ec /tmp/capsid-reference-codex-20261015/workerd@3440050 /tmp/capsid-reference-codex-20261015/workerd@3440830; sentryErrorContext = jsgInternalError; wdErrId = qr1hboiusim0ea4jj9aa8tl8\n",
+    "healthy": {
+      "status": 200,
+      "text": "healthy"
+    },
+    "shutdown": {
+      "code": 0,
+      "signal": null,
+      "forced": false
+    }
+  }
+}

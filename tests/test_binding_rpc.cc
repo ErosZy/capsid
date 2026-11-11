@@ -47,9 +47,6 @@ int noop_bootstrap(TJSRuntime *runtime, JSContext *ctx, void *opaque) {
 class RuntimeFixture {
 public:
     RuntimeFixture() {
-        char arg0[] = "test-binding-rpc";
-        char *argv[] = { arg0 };
-        TJS_Initialize(1, argv);
         TJSRunOptions options;
         TJS_DefaultOptions(&options);
         options.skip_run_main = true;
@@ -351,6 +348,10 @@ void test_object_key_ordering_and_duplicates() {
 }  // namespace
 
 int main() {
+    // libuv argv/process-title setup belongs to the process, not each runtime.
+    static char arg0[] = "test-binding-rpc";
+    static char *argv[] = {arg0, nullptr};
+    TJS_Initialize(1, argv);
     test_allowed_values_round_trip();
     test_rejected_values_fail_closed();
     test_limits_fail_closed();

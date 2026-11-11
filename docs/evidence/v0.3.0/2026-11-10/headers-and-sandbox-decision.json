@@ -1,0 +1,26 @@
+{
+  "status": "user-decisions-recorded",
+  "complete": true,
+  "capturedUTC": "2026-11-10T04:20:14.904338+00:00",
+  "decisionFile": "D:\\capsid-verification-20261108\\evidence\\r7-r8-acceptance-boundary-decision-r2\\decision.md",
+  "decisionSHA256": "8574d97aceb0eb941135126bd40a0c93969785cf2dd52d547a613bbf0bdbb668",
+  "authority": "Explicit user replies in this session on 2026-11-10",
+  "headersDecision": "preserve_locked_workerd_and_document_standard_differences",
+  "linuxDecision": "preserve_production_seccomp_and_qualify_explicit_sanitizer_profile_separately",
+  "userChoicesAreExplicitAndNotInferredFromSilence": true,
+  "headersEvidence": {
+    "file": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r7-public-headers-profile-diagnosis-r2\\run.json",
+    "sha256": "52d9825884c94e0b590ec452b417b3723b9c8b1868477834c2f25f30c7810691"
+  },
+  "sandboxEvidence": {
+    "file": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\r8-lsan-exact-seccomp-boundary-r2\\run.json",
+    "sha256": "cc1ccba1819f364735dbaa9dc6c418ed801ec29c89ac46386563ebe155f8cc42"
+  },
+  "current5051CandidateMatchesBothDiagnosticSourceHashes": true,
+  "sanitizerPolicyImplementedAndQualified": false,
+  "nativePublicHeadersProfileAndDocumentationQualificationStillRequired": true,
+  "allOriginalR1ThroughR9RequirementsAndFailuresRetained": true,
+  "rootIntegrated": false,
+  "fullV030GoalComplete": false,
+  "publishOrTagAuthorized": false
+}

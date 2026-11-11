@@ -6,8 +6,8 @@ name: Release
 #     one portable binary, no libc version matrix to manage;
 #   - darwin-arm64: native macOS build (Apple ships no static libSystem);
 #   - windows-x86_64: MSVC static-CRT ZIP (see docs/windows.md).
-# testing-validity does not run on tags (scoped to main/PR), so the tag
-# must point at a commit whose main-branch checks already passed.
+# The same commit's full validity workflow must pass before packaging
+# or publication. Both validation and packaging use the triggering SHA.
 
 on:
   push:
@@ -25,14 +25,20 @@ env:
   OPENSSL_SHA256: a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8
 
 jobs:
+  validation:
+    uses: ./.github/workflows/testing-validity.yml
+    permissions:
+      contents: read
+
   package:
+    needs: validation
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
           - os: macos-15
-            deps: brew install ninja boost
+            deps: brew install ninja boost c-ares
           - os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -41,16 +47,14 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # The tag name resolves to refs/tags/<name>; no fetch-tags, so
-          # checkout only fetches the triggering ref itself (fetch-tags on
-          # a tag-push event made the first release run fail in checkout).
-          ref: ${{ github.ref_name }}
+          # Pin to the event commit even if the tag moves during validation.
+          ref: ${{ github.sha }}
           submodules: recursive
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24
+          node-version: 24.14.0
 
       # Ninja invokes `cl` via PATH, unlike the MSBuild generator that
       # resolves the toolchain itself; without the VS developer
@@ -90,7 +94,7 @@ jobs:
             alpine:3.24 sh -eux -c '
               echo "== apk add"
               apk add --no-cache build-base cmake ninja linux-headers \
-                nodejs npm git perl boost-dev boost1.84-static
+                nodejs npm git perl boost-dev boost1.84-static c-ares-dev
               # The mounted workspace is owned by the runner user; as root,
               # git refuses it and the overlay-key / identity gates then
               # cannot resolve vendor HEADs. Covers every nested submodule
@@ -198,7 +202,7 @@ jobs:
         shell: pwsh
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl boost-system boost-asio boost-beast --triplet x64-windows-static
+            openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
           cmake -S . -B build -G Ninja `
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_CXX_COMPILER=cl `

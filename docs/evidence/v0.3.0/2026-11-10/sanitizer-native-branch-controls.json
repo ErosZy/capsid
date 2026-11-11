@@ -1,0 +1,755 @@
+{
+  "status": "complete",
+  "complete": true,
+  "pid": 299741,
+  "proposalRecordSHA256": "7570181726d21ca8f1fcd65fecea078d3517e0ed230854cb62e8ca9bbb9c5196",
+  "steps": [
+    {
+      "label": "branch-clang-release",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/clang-release-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.22187291999944136,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-clang-ubsan",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-fsanitize=undefined",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/clang-ubsan-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.037867416998778936,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-clang-asan",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-fsanitize=address",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/clang-asan-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.024014503998841974,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-clang-tsan",
+      "command": [
+        "/usr/bin/clang++-18",
+        "-fsanitize=thread",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/clang-tsan-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.026582906999465195,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-gcc-release",
+      "command": [
+        "/usr/bin/g++",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/gcc-release-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.0701189350002096,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-gcc-ubsan",
+      "command": [
+        "/usr/bin/g++",
+        "-fsanitize=undefined",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/gcc-ubsan-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.009477455998421647,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-gcc-asan",
+      "command": [
+        "/usr/bin/g++",
+        "-fsanitize=address",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/gcc-asan-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.009168395999950008,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "branch-gcc-tsan",
+      "command": [
+        "/usr/bin/g++",
+        "-fsanitize=thread",
+        "-fsyntax-only",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/gcc-tsan-branch.cc"
+      ],
+      "exitCode": 0,
+      "seconds": 0.0087272100008704,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-production-test-host-managed",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-DBOOST_SYSTEM_NO_LIB",
+        "-DCAPSID_HOST_NETWORKING=1",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/include",
+        "-I/root/capsid-verification-20261109/build-production/generated",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/vendor/jansson/src",
+        "-I/root/capsid-verification-20261109/build-production/vendor/jansson/include",
+        "-isystem",
+        "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/include",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Werror",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/production-test-host-managed.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/production-test_host_managed.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 7.491797877000863,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-production-test-host-managed",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-O3",
+        "-DNDEBUG",
+        "-flto",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/production-test-host-managed.o",
+        "CMakeFiles/test-host-managed.dir/src/host/single_worker_server.cc.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/production-test-host-managed",
+        "libcapsid_runtime.a",
+        "libcapsid_host_core.a",
+        "vendor/jansson/libcapsid_jansson.a",
+        "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+        "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+        "libcapsid_runtime.a",
+        "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+        "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+        "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+        "-ldl"
+      ],
+      "exitCode": 0,
+      "seconds": 1.2731071769994742,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-asan-ubsan-test-host-managed",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-DBOOST_SYSTEM_NO_LIB",
+        "-DCAPSID_HOST_NETWORKING=1",
+        "-DCAPSID_SANITIZER_SANDBOX=1",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/include",
+        "-I/root/capsid-verification-20261109/build-sanitizer/generated",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/vendor/jansson/src",
+        "-I/root/capsid-verification-20261109/build-sanitizer/vendor/jansson/include",
+        "-isystem",
+        "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/include",
+        "-g",
+        "-O1",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Werror",
+        "-fsanitize=address",
+        "-fno-omit-frame-pointer",
+        "-fno-sanitize-recover=all",
+        "-fsanitize=undefined",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/asan-ubsan-test-host-managed.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/asan-ubsan-test_host_managed.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 13.009212434000801,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-asan-ubsan-test-host-managed",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-g",
+        "-O1",
+        "-fsanitize=address",
+        "-fsanitize=undefined",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/asan-ubsan-test-host-managed.o",
+        "CMakeFiles/test-host-managed.dir/src/host/single_worker_server.cc.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/asan-ubsan-test-host-managed",
+        "libcapsid_runtime.a",
+        "libcapsid_host_core.a",
+        "vendor/jansson/libcapsid_jansson.a",
+        "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libcrypto.a",
+        "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+        "libcapsid_runtime.a",
+        "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib/libcares.a",
+        "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libssl.a",
+        "/root/capsid-verification-20261109/r8-openssl-asn1-print-controls-r1/r23-prefix/lib64/libcrypto.a",
+        "-ldl"
+      ],
+      "exitCode": 0,
+      "seconds": 1.6245723459996952,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-tsan-test-host-managed",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-DBOOST_SYSTEM_DYN_LINK",
+        "-DBOOST_SYSTEM_NO_LIB",
+        "-DCAPSID_HOST_NETWORKING=1",
+        "-DCAPSID_SANITIZER_SANDBOX=1",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/include",
+        "-I/root/capsid-verification-20261109/build-tsan-current-r2/generated",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/vendor/jansson/src",
+        "-I/root/capsid-verification-20261109/build-tsan-current-r2/vendor/jansson/include",
+        "-isystem",
+        "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/include",
+        "-g",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Werror",
+        "-fsanitize=thread",
+        "-fno-omit-frame-pointer",
+        "-fno-sanitize-recover=all",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test_host_managed.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 3.529864644000554,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-tsan-test-host-managed",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-g",
+        "-fsanitize=thread",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed.o",
+        "CMakeFiles/test-host-managed.dir/src/host/single_worker_server.cc.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed",
+        "libcapsid_runtime.a",
+        "libcapsid_host_core.a",
+        "vendor/jansson/libcapsid_jansson.a",
+        "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libcrypto.a",
+        "/usr/lib/x86_64-linux-gnu/libboost_system.so.1.83.0",
+        "libcapsid_runtime.a",
+        "/root/capsid-verification-20261109/r8-cares-upstream-tsan-build-r3/providers/lib/libcares.a",
+        "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libssl.a",
+        "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libcrypto.a",
+        "-ldl"
+      ],
+      "exitCode": 0,
+      "seconds": 1.725294929001393,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "compile-tsan-test-host-managed-executable",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-DCAPSID_SANITIZER_SANDBOX=1",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/src",
+        "-I/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/vendor/jansson/src",
+        "-I/root/capsid-verification-20261109/build-tsan-current-r2/vendor/jansson/include",
+        "-g",
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Wpedantic",
+        "-Werror",
+        "-fsanitize=thread",
+        "-fno-omit-frame-pointer",
+        "-fno-sanitize-recover=all",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed-executable.o",
+        "-c",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test_host_managed_executable.cc",
+        "-I",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests"
+      ],
+      "exitCode": 0,
+      "seconds": 1.2738622720007697,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "link-tsan-test-host-managed-executable",
+      "command": [
+        "/usr/bin/nice",
+        "-n",
+        "10",
+        "/usr/bin/clang++-18",
+        "-g",
+        "-fsanitize=thread",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed-executable.o",
+        "-o",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed-executable",
+        "vendor/jansson/libcapsid_jansson.a"
+      ],
+      "exitCode": 0,
+      "seconds": 0.22035164599947166,
+      "timeoutSeconds": 600,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "production-host_managed_recovery_rejects_oversized_snapshot",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/production-test-host-managed",
+        "host_managed_recovery_rejects_oversized_snapshot",
+        "/root/capsid-verification-20261109/build-production/capsid-worker",
+        "/root/capsid-verification-20261109/build-production/capsid-bytecode-compile",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/fixtures/ipc-sync-response.js"
+      ],
+      "exitCode": 0,
+      "seconds": 0.07014256900038163,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "asan-ubsan-host_managed_recovery_rejects_oversized_snapshot",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/asan-ubsan-test-host-managed",
+        "host_managed_recovery_rejects_oversized_snapshot",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-worker",
+        "/root/capsid-verification-20261109/build-sanitizer/capsid-bytecode-compile",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/fixtures/ipc-sync-response.js"
+      ],
+      "exitCode": 0,
+      "seconds": 0.12003333299981023,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "tsan-host_managed_recovery_rejects_oversized_snapshot",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed",
+        "host_managed_recovery_rejects_oversized_snapshot",
+        "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker",
+        "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-bytecode-compile",
+        "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/fixtures/ipc-sync-response.js"
+      ],
+      "exitCode": 77,
+      "seconds": 0.02142735300003551,
+      "timeoutSeconds": 120.0,
+      "stdoutSHA256": "9e817aa627d2558745db221a87fc62f860cc71f9df8165f47a3225a367aeb95d",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "tsan-host_managed_http_rejects_multiple_listeners",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed-executable",
+        "host_managed_http_rejects_multiple_listeners",
+        "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host",
+        "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker"
+      ],
+      "exitCode": 0,
+      "seconds": 1.0727802379988134,
+      "timeoutSeconds": 40.0,
+      "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "tsan-host_managed_executable_quarantine_cleared_by_deploy",
+      "command": [
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/tsan-test-host-managed-executable",
+        "host_managed_executable_quarantine_cleared_by_deploy",
+        "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host",
+        "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker"
+      ],
+      "exitCode": 0,
+      "seconds": 24.75466957000026,
+      "timeoutSeconds": 60.0,
+      "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "classification-configure-production",
+      "command": [
+        "cmake",
+        "-S",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification",
+        "-B",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-production",
+        "-DCAPSID_ENABLE_ASAN=OFF",
+        "-DCAPSID_ENABLE_TSAN=OFF"
+      ],
+      "exitCode": 0,
+      "seconds": 0.1715040750004846,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "5790a9eba36b2b717c49aacd2c4fa7e3229c204439c1bfca0724be7aff01f0b7",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "classification-ctest-production",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-production",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-sanitizer-branch-correction-native-r1/classification-production.xml"
+      ],
+      "exitCode": 8,
+      "seconds": 0.0375150499985466,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "ab656fef0132d74f890d4f76250cb1b683faf0157c0313f892586dd6ecca05e9",
+      "stderrSHA256": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+    },
+    {
+      "label": "classification-configure-ubsan",
+      "command": [
+        "cmake",
+        "-S",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification",
+        "-B",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-ubsan",
+        "-DCAPSID_ENABLE_ASAN=OFF",
+        "-DCAPSID_ENABLE_TSAN=OFF"
+      ],
+      "exitCode": 0,
+      "seconds": 0.11974287900011404,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "ff866453765c3ca02a4234500e913f0129672a99c84902c8232058b3390f4139",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "classification-ctest-ubsan",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-ubsan",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-sanitizer-branch-correction-native-r1/classification-ubsan.xml"
+      ],
+      "exitCode": 8,
+      "seconds": 0.037434111998663866,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "806a7b6d42afc17448633ecb82d51510367cda64fc01e506ed93e70e36f8ea81",
+      "stderrSHA256": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+    },
+    {
+      "label": "classification-configure-asan",
+      "command": [
+        "cmake",
+        "-S",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification",
+        "-B",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-asan",
+        "-DCAPSID_ENABLE_ASAN=ON",
+        "-DCAPSID_ENABLE_TSAN=OFF"
+      ],
+      "exitCode": 0,
+      "seconds": 0.11993998799880501,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "c659baf299b353de349404283fb10d9d9d4882f147dd64e49dbde76563848c56",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "classification-ctest-asan",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-asan",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-sanitizer-branch-correction-native-r1/classification-asan.xml"
+      ],
+      "exitCode": 0,
+      "seconds": 0.038285574000838096,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "01e8053a9815fdd074b1cb419ce6af4702f63121e282b8064381d4d86ecbe19b",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "classification-configure-tsan",
+      "command": [
+        "cmake",
+        "-S",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification",
+        "-B",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-tsan",
+        "-DCAPSID_ENABLE_ASAN=OFF",
+        "-DCAPSID_ENABLE_TSAN=ON"
+      ],
+      "exitCode": 0,
+      "seconds": 0.1201218020014494,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "df27d49dc847e3fa77b59410007dadc3e7fd1c1ddbe2b88c65e55dbabb141c8e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "classification-ctest-tsan",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-tsan",
+        "--output-on-failure",
+        "--output-junit",
+        "/mnt/d/capsid-verification-20261108/evidence/sdk78-sanitizer-branch-correction-native-r1/classification-tsan.xml"
+      ],
+      "exitCode": 0,
+      "seconds": 0.03768132900040655,
+      "timeoutSeconds": 300,
+      "stdoutSHA256": "74967d7e9880c8743723cadaedf25eb2c04018482db4c1d5b24970a88c4d8116",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "guardedInputs": {
+    "/root/capsid-verification-20261109/build-production/CMakeCache.txt": "09ee864836c05abe0cd56eaafd2fd997182fabb3bc16f9300ab204c124e64c44",
+    "/root/capsid-verification-20261109/build-production/CTestTestfile.cmake": "85b3383e4d7c6837228a79be46cce702196c58ef54abc77069b83988d499473a",
+    "/root/capsid-verification-20261109/build-production/build.ninja": "bea4e3d2c17410d04367b24e15bf1609ff5b0768d286e4e8bf83aacaf13b0a04",
+    "/root/capsid-verification-20261109/build-production/capsid-host": "0a88b166c6604e7d751a6c4424e1e300bb2e9601a8f271574f84deef4d451429",
+    "/root/capsid-verification-20261109/build-production/capsid-worker": "083fa7614b5fb8a1b6936d75497215f12f339966ab7285925b1a5cdcc55d1348",
+    "/root/capsid-verification-20261109/build-production/test-host-managed": "c6538de56997de65174f2ad3f83dd12027455faf6af63e95ebccd627c39a9fda",
+    "/root/capsid-verification-20261109/build-production/test-host-managed-executable": "7983c48fe157e34f351a608e58a8c75c95459464bf8c6745deb0b5e59e173221",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/test_host_managed.cc": "858cd8482601188ac41933e5550943bd07f195c6a9c9cfcc2c668eaaeab968c3",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/tests/test_host_managed_executable.cc": "b068b5a74cf9b29aa94c56edd4ef469ddbfcb61ef66f241ef6178b5b36843b9e",
+    "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2/cmake/build_tests.cmake": "57afb96f7cfba7f0b64c2943879b15023083e143beb5a492cf41f168cdf8da4e",
+    "/root/capsid-verification-20261109/build-sanitizer/CMakeCache.txt": "04b79591a2e2851cb0cd78ba28890314ae28a3d33208f37b7ce59f90cd754932",
+    "/root/capsid-verification-20261109/build-sanitizer/CTestTestfile.cmake": "c141cb6c930c6050bb8447c092e5ee289a41d5cd5fdba2b8f0cb929539d8293e",
+    "/root/capsid-verification-20261109/build-sanitizer/build.ninja": "401ad692f14bbd2ffc11b9ae4f889f4c22189d916eb67e2f1504ac6bcf907adf",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-host": "33afa1ad5fc3c6004715e5d5dcd2043b7b0769ecf61151eea56af52fc14a5079",
+    "/root/capsid-verification-20261109/build-sanitizer/capsid-worker": "f815d91959b20a5c0dfa0dbf6e6cc58a73d8ca1abfe4b45546d70be90e1e88c9",
+    "/root/capsid-verification-20261109/build-sanitizer/test-host-managed": "a1a2a1ee086b063cdcf1f7d936a38fc692c4a40dc2c918c719cffb784f1a72cf",
+    "/root/capsid-verification-20261109/build-sanitizer/test-host-managed-executable": "e55b6ee59db5680663d61cdb58a11ddb769639b3b6908f4ffe71c1d0453b0bb7",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CMakeCache.txt": "ed4aecbb2676ac8f517e1acf91a90fdef18730bfaf9014a91e38a981a72198d0",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CTestTestfile.cmake": "dd94317475d12100f7f2b3944612526346e825c319748f56c9f49781cb6c0907",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/build.ninja": "9265f78602c4858840a3b8db053fbb9e93c8d8905fbb44ceebd50872ea5f20b2",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host": "27826ad397914bb1aa8d67378daa4550b53bd2b7f2704528e8bfc861f056e4fc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker": "ed828b4021a75ab662f2083709dc40ac6b9e947c586f66b1c9cd82f8fed5f912",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/test-host-managed": "40a5ef0e85190f4f5c8715fb96e429c4147b5d1ca91ed107b0fb78b0cdf04dcc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/test-host-managed-executable": "21db81412173d71bc50b1132bf3979ec71dc41f2687ab3154cca75592c3d7ee5"
+  },
+  "mainAndLiveFrozenSourceAndBuildsUnmodified": true,
+  "originalRawFailuresRetained": true,
+  "privateObjectsAndExecutablesOnly": true,
+  "ctestOuterTimeoutsUnchanged": true,
+  "originalProductionAndAsanUbsanWaitsUnchanged": true,
+  "clangTsanNowUsesExistingIntended8xTestDriverWaits": true,
+  "unsupportedCoverageNeverCountedAsPass": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "ctest",
+    "--test-dir",
+    "/root/capsid-verification-20261109/sdk78-sanitizer-branch-correction-native-r1/classification-tsan",
+    "--output-on-failure",
+    "--output-junit",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-sanitizer-branch-correction-native-r1/classification-tsan.xml"
+  ],
+  "activeCommandPid": 301607,
+  "compilerBranchControls": [
+    {
+      "compiler": "/usr/bin/clang++-18",
+      "mode": "release",
+      "waitScale": 1,
+      "unsupportedRlimitProbe": false
+    },
+    {
+      "compiler": "/usr/bin/clang++-18",
+      "mode": "ubsan",
+      "waitScale": 1,
+      "unsupportedRlimitProbe": false
+    },
+    {
+      "compiler": "/usr/bin/clang++-18",
+      "mode": "asan",
+      "waitScale": 1,
+      "unsupportedRlimitProbe": false
+    },
+    {
+      "compiler": "/usr/bin/clang++-18",
+      "mode": "tsan",
+      "waitScale": 8,
+      "unsupportedRlimitProbe": true
+    },
+    {
+      "compiler": "/usr/bin/g++",
+      "mode": "release",
+      "waitScale": 1,
+      "unsupportedRlimitProbe": false
+    },
+    {
+      "compiler": "/usr/bin/g++",
+      "mode": "ubsan",
+      "waitScale": 1,
+      "unsupportedRlimitProbe": false
+    },
+    {
+      "compiler": "/usr/bin/g++",
+      "mode": "asan",
+      "waitScale": 1,
+      "unsupportedRlimitProbe": true
+    },
+    {
+      "compiler": "/usr/bin/g++",
+      "mode": "tsan",
+      "waitScale": 8,
+      "unsupportedRlimitProbe": true
+    }
+  ],
+  "nativeResults": [
+    {
+      "profile": "production",
+      "name": "host_managed_recovery_rejects_oversized_snapshot",
+      "exitCode": 0,
+      "originalOuterTimeoutSeconds": 120.0,
+      "passed": true,
+      "skipped": false,
+      "realBoundedReadProbeExecuted": true
+    },
+    {
+      "profile": "asan-ubsan",
+      "name": "host_managed_recovery_rejects_oversized_snapshot",
+      "exitCode": 0,
+      "originalOuterTimeoutSeconds": 120.0,
+      "passed": true,
+      "skipped": false,
+      "realBoundedReadProbeExecuted": true
+    },
+    {
+      "profile": "tsan",
+      "name": "host_managed_recovery_rejects_oversized_snapshot",
+      "exitCode": 77,
+      "originalOuterTimeoutSeconds": 120.0,
+      "passed": false,
+      "skipped": true,
+      "realBoundedReadProbeExecuted": false
+    },
+    {
+      "profile": "tsan",
+      "name": "host_managed_http_rejects_multiple_listeners",
+      "exitCode": 0,
+      "originalOuterTimeoutSeconds": 40.0,
+      "passed": true,
+      "skipped": false,
+      "realBoundedReadProbeExecuted": false
+    },
+    {
+      "profile": "tsan",
+      "name": "host_managed_executable_quarantine_cleared_by_deploy",
+      "exitCode": 0,
+      "originalOuterTimeoutSeconds": 60.0,
+      "passed": true,
+      "skipped": false,
+      "realBoundedReadProbeExecuted": false
+    }
+  ],
+  "compilerBranchControlsPassed": 8,
+  "ctestClassificationControls": [
+    {
+      "profile": "production",
+      "exitCode": 8,
+      "classifiedSkipped": false,
+      "controlOnly": true
+    },
+    {
+      "profile": "ubsan",
+      "exitCode": 8,
+      "classifiedSkipped": false,
+      "controlOnly": true
+    },
+    {
+      "profile": "asan",
+      "exitCode": 0,
+      "classifiedSkipped": true,
+      "controlOnly": true
+    },
+    {
+      "profile": "tsan",
+      "exitCode": 0,
+      "classifiedSkipped": true,
+      "controlOnly": true
+    }
+  ],
+  "guardedInputsUnchanged": true,
+  "interpretation": "Clang selects the existing intended TSan test-driver wait scale. Original production and supported Clang ASan bounded-read probes execute. TSan and existing GCC ASan unsupported probes report skip 77 instead of claiming PASS. Original full-suite raw failures remain unchanged; final combined qualification is still required."
+}

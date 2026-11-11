@@ -13,6 +13,7 @@
 // loop reaches EOF) and asserts the EXIT event reports zeros.
 
 #include "capsid/runtime.h"
+#include "graceful_worker_exit.h"
 
 #include "win32_compat.h"
 #include <signal.h>
@@ -179,7 +180,24 @@ int main(int argc, char **argv) {
         fail(std::string("post-kill event: ") + capsid_result_string(result));
     }
 
+    // The all-zero EXIT fields above are an IPC contract, not evidence of
+    // a successful process exit. Observe the actual OS status independently
+    // and require this deliberately terminated Worker to fail clean().
+    const auto exited = capsid_test::wait_for_worker_exit(worker, 2000, false);
     capsid_worker_destroy(worker);
+    if (!exited.reaped || !exited.channel_closed || exited.wait_error != 0 ||
+        exited.event_result != CAPSID_OK || exited.clean()) {
+        fail("abnormal Worker was accepted as a clean exit");
+    }
+#if defined(_WIN32)
+    if (exited.status != 1) fail("lost actual TerminateProcess exit code");
+#else
+    if (!WIFSIGNALED(exited.status) || WTERMSIG(exited.status) != SIGKILL)
+        fail("lost actual SIGKILL termination status");
+#endif
+    std::cout << "WORKER_EXIT_NEGATIVE {\"status\":" << exited.status
+              << ",\"ipcStatus\":" << event.status
+              << ",\"clean\":false,\"observed\":true}" << std::endl;
     std::cout << "PASS" << std::endl;
     return 0;
 }

@@ -1,0 +1,46 @@
+{
+  "status": "installing-reference-frameworks",
+  "complete": false,
+  "pid": 336,
+  "priorNetworkTimeoutRetainedSHA256": "b20ad57889cf9a9c85c79103c579b06b29e3ff873f9820699d04c010293094cb",
+  "recovery": "Original default15s package-download read timeout expired at the uvloop wheel. Reuse the same isolated venv and requested versions; allow explicit120s network reads and3 retries.",
+  "deno": {
+    "path": "/root/capsid-verification-20261109/toolchains/deno-v2.9.7-linux-x64/deno",
+    "sha256": "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a116a3c841f21",
+    "release": "v2.9.7",
+    "archiveSHA256": "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490",
+    "archiveBytes": 41596794
+  },
+  "requestedReferenceVersions": [
+    "fastapi==0.143.0",
+    "starlette==1.7.0",
+    "Flask==3.1.3",
+    "gunicorn==26.2.0",
+    "uvicorn[standard]==0.54.0"
+  ],
+  "publicPypiOnly": true,
+  "globalPythonUnmodified": true,
+  "formalMeasurementNotStarted": true,
+  "fullV030GoalComplete": false,
+  "command": [
+    "/root/capsid-verification-20261109/toolchains/qps-reference-r1/bin/python",
+    "-m",
+    "pip",
+    "install",
+    "--timeout",
+    "120",
+    "--retries",
+    "3",
+    "--progress-bar",
+    "off",
+    "--only-binary=:all:",
+    "--report",
+    "/mnt/d/capsid-verification-20261108/evidence/r8-wsl-python-benchmark-tools-r2/pip-install-report.json",
+    "fastapi==0.143.0",
+    "starlette==1.7.0",
+    "Flask==3.1.3",
+    "gunicorn==26.2.0",
+    "uvicorn[standard]==0.54.0"
+  ],
+  "activeCommandPid": 430
+}

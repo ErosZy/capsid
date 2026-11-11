@@ -1,0 +1,17 @@
+diff --git a/deps/quickjs/CMakeLists.txt b/deps/quickjs/CMakeLists.txt
+--- a/deps/quickjs/CMakeLists.txt
++++ b/deps/quickjs/CMakeLists.txt
+@@ -79,12 +79,13 @@
+ 
+ message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode")
+ message(STATUS "Building with ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION} on ${CMAKE_SYSTEM}")
+ 
+ macro(xcheck_add_c_compiler_flag FLAG)
+     string(REPLACE "-" "" FLAG_NO_HYPHEN ${FLAG})
++    string(MAKE_C_IDENTIFIER "${FLAG_NO_HYPHEN}" FLAG_NO_HYPHEN)
+     check_c_compiler_flag(${FLAG} COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
+     if(COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
+         add_compile_options(${FLAG})
+     endif()
+ endmacro()
+ 

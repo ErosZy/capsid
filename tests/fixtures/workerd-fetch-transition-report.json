@@ -1,0 +1,12 @@
+{
+  "schema": "capsid-fetch-transition-reference-capture-v1",
+  "sourceReport": "upgrade53b-linux-reference.json",
+  "sourceReportSHA256": "47c11e5017194f273a72f855b61eebea767dfab54f091d684f425d131e88519a",
+  "rawBytes": 2800591,
+  "gzipSHA256": "7a896cf8373e433cdb49c509bd95dbc47313c5253205bce74303ccdbd4c00dc5",
+  "cases": 46,
+  "platform": "linux",
+  "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "referenceBinarySHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "scope": "Actual native Linux workerd reference capture. All original 30 transitions and 16 constructor routes/controls executed. Synthetic profile/backend copies in validator tests qualify validators only; actual gates execute every platform and product mode."
+}

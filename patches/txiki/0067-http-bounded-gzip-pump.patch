@@ -1,0 +1,398 @@
+--- a/src/js/polyfills/fetch/fetch.js
++++ b/src/js/polyfills/fetch/fetch.js
+@@ -114,7 +114,7 @@
+         const responseHeaders = new Headers();
+ 
+         function abortClient() {
+-            client.abort();
++            client.abort(true);
+         }
+ 
+         // A synchronous open failure does not deliver oncomplete. Release
+@@ -196,9 +196,11 @@
+         };
+ 
+         // Called for each body chunk
+-        client.ondata = function(chunk, flags) {
++        client.ondata = function(chunk, flags, blockSize) {
+             if (chunk && (chunk.byteLength > 0 || (adapter && flags !== undefined)) && streamController) {
+-                streamController.enqueue(new Uint8Array(chunk), flags);
++                if (adapter && blockSize === 4096 && chunk.byteLength > blockSize) {
++                    streamController.enqueueBatch(new Uint8Array(chunk), flags, blockSize);
++                } else streamController.enqueue(new Uint8Array(chunk), flags);
+             }
+         };
+ 
+@@ -209,7 +211,8 @@
+             }
+ 
+             if (error) {
+-                const isAbort = error === 'ABORTED';
++                const isBufferedAbort = error === 'ABORTED_BUFFERED';
++                const isAbort = error === 'ABORTED' || isBufferedAbort;
+                 const isTimeout = error === 'TIMED_OUT';
+                 const isDecodeFailure = error === 'DECOMPRESSION_ERROR';
+                 // In-flight native I/O crosses an exception boundary. Each
+@@ -250,7 +253,7 @@
+                     }, 0);
+                 } else if (streamController) {
+                     if (isAbort) {
+-                        streamController.error(abortError);
++                        streamController.error(abortError, isBufferedAbort);
+                     } else {
+                         streamController.error(new TypeError(msg), isDecodeFailure);
+                     }
+--- a/src/js/polyfills/http-client.js
++++ b/src/js/polyfills/http-client.js
+@@ -154,10 +154,11 @@
+         }
+     }
+ 
+-    abort() {
+-        if (this.#client) {
+-            this.#client.abort();
+-            this.#client = null;
++    abort(preserveBuffered = false) {
++        const client = this.#client;
++        if (client) {
++            const deferred = client.abort(preserveBuffered);
++            if (!deferred && this.#client === client) this.#client = null;
+         }
+     }
+ 
+@@ -339,11 +340,12 @@
+             this._onheadersend?.();
+         };
+ 
+-        client.ondata = (chunk, flags) => {
+-            this._ondata?.(chunk, flags);
++        client.ondata = (chunk, flags, blockSize) => {
++            this._ondata?.(chunk, flags, blockSize);
+         };
+ 
+         client.oncomplete = (error, reason) => {
++            if (this.#client === client) this.#client = null;
+             this._oncomplete?.(error, reason);
+         };
+ 
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -50,6 +50,13 @@
+     HC_CALLBACK_DRAIN,
+     HC_CALLBACK_MAX,
+ };
++
++/* Preserve each native input opportunity while decoded demand is paused. */
++typedef struct TJSHttpInput {
++    struct TJSHttpInput *next;
++    size_t size;
++    size_t offset;
++} TJSHttpInput;
+ 
+ typedef struct {
+     JSContext *ctx;
+@@ -102,9 +109,24 @@
+     bool connect_ssl;
+     /* Response decompression. */
+     TJSHttpGzip *decompressor;
++    TJSHttpInput *input_head;
++    TJSHttpInput *input_tail;
++    bool decode_pumping;
++    bool wire_complete;
++    bool read_started;
++    bool signal_aborted;
+ } TJSHttpClient;
+ 
+ static JSClassID tjs_httpclient_class_id;
++
++static void tjs_httpclient_clear_input(TJSHttpClient *h, JSRuntime *rt) {
++    while (h->input_head) {
++        TJSHttpInput *input = h->input_head;
++        h->input_head = input->next;
++        js_free_rt(rt, input);
++    }
++    h->input_tail = NULL;
++}
+ 
+ static void tjs_httpclient_finalizer(JSRuntime *rt, JSValue val) {
+     TJSHttpClient *h = JS_GetOpaque(val, tjs_httpclient_class_id);
+@@ -131,6 +153,7 @@
+         if (h->decompressor) {
+             http_gzip_destroy(h->decompressor, rt);
+         }
++        tjs_httpclient_clear_input(h, rt);
+         if (h->dns_results) {
+             uv_freeaddrinfo(h->dns_results);
+         }
+@@ -187,6 +210,7 @@
+ }
+ 
+ static void tjs_httpclient_done(TJSHttpClient *h) {
++    tjs_httpclient_clear_input(h, JS_GetRuntime(h->ctx));
+     if (h->registered) {
+         list_del(&h->link);
+         h->registered = false;
+@@ -693,6 +717,102 @@
+         maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 2, args);
+         tjs_httpclient_done(h);
+     }
++}
++
++/* Wire EOF may precede application consumption. Retire the socket at wire
++ * EOF, but keep the captured owner/context until buffered decoding finishes. */
++static void tjs_httpclient_finish_decoding(TJSHttpClient *h) {
++    if (h->completed || h->input_head || (!h->wire_complete && !h->signal_aborted)) return;
++    if (h->signal_aborted) {
++        h->completed = true;
++        JSValue error = JS_NewString(h->ctx, "ABORTED_BUFFERED");
++        maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++        tjs_httpclient_done(h);
++        return;
++    }
++    if (h->decompressor && h->decompressor->state != HTTP_GZIP_DONE) {
++        tjs_httpclient_gzip_error(h, "Gzip compressed stream ended prematurely.");
++        return;
++    }
++    h->completed = true;
++    JSValue error = JS_NULL;
++    maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
++    tjs_httpclient_done(h);
++}
++
++/* A bounded native delivery batch avoids entering the JS callback once per
++ * 4KiB decoder output. JS still receives each original4KiB policy boundary;
++ * only the last piece carries the actual input/member opportunity flag. */
++static void tjs_httpclient_emit_batch(TJSHttpClient *h, TBuf *batch, int flags) {
++    JSValue args[3] = {JS_NewArrayBufferCopy(h->ctx, batch->buf, batch->size),
++        JS_NewInt32(h->ctx, flags), JS_NewInt32(h->ctx, 4096)};
++    batch->size = 0;
++    maybe_invoke_callback(h, HC_CALLBACK_DATA, 3, args);
++}
++
++static int tjs_httpclient_pump(TJSHttpClient *h) {
++    if (h->decode_pumping || h->completed) return 0;
++    h->decode_pumping = true;
++    TBuf batch;
++    tbuf_init(h->ctx, &batch);
++    size_t capacity = (size_t) h->read_capacity;
++    if (capacity < 4096) capacity = 4096;
++    if (capacity > 65536) capacity = 65536;
++    while (h->input_head && !h->read_paused && !h->completed) {
++        TJSHttpInput *input = h->input_head;
++        TBuf out;
++        size_t consumed = 0;
++        tbuf_init(h->ctx, &out);
++        const uint8_t *bytes = (const uint8_t *) (input + 1);
++        int status = http_gzip_step(h->decompressor, bytes + input->offset,
++                                    input->size - input->offset, &consumed, &out);
++        input->offset += consumed;
++        if (status < 0) {
++            tbuf_free(&out);
++            if (batch.size) tjs_httpclient_emit_batch(h, &batch, 2);
++            tbuf_free(&batch);
++            h->decode_pumping = false;
++            tjs_httpclient_gzip_error(h, "Gzip decompression failed.");
++            return -1;
++        }
++        if (out.size && tbuf_put(&batch, out.buf, out.size) < 0) {
++            tbuf_free(&out);
++            tbuf_free(&batch);
++            h->decode_pumping = false;
++            return -1;
++        }
++        tbuf_free(&out);
++        if (batch.size >= capacity || status != 2) {
++            tjs_httpclient_emit_batch(h, &batch, status == 1 ? 1 : status == 2 ? 2 : 0);
++            // Quota/cancel/context retirement may synchronously free input.
++            if (h->completed) {tbuf_free(&batch); h->decode_pumping = false; return 0;}
++        }
++        if (status != 2 && input->offset == input->size) {
++            h->input_head = input->next;
++            if (!h->input_head) h->input_tail = NULL;
++            js_free(h->ctx, input);
++        }
++    }
++    if (batch.size && !h->completed) tjs_httpclient_emit_batch(h, &batch, 2);
++    tbuf_free(&batch);
++    h->decode_pumping = false;
++    tjs_httpclient_finish_decoding(h);
++    return 0;
++}
++
++static int tjs_httpclient_buffer_input(TJSHttpClient *h, const void *bytes, size_t len) {
++    if (h->completed) return 0;
++    if (len > SIZE_MAX - sizeof(TJSHttpInput)) return -1;
++    TJSHttpInput *input = js_malloc(h->ctx, sizeof(*input) + len);
++    if (!input) return -1;
++    input->next = NULL;
++    input->size = len;
++    input->offset = 0;
++    if (len) memcpy(input + 1, bytes, len);
++    if (h->input_tail) h->input_tail->next = input;
++    else h->input_head = input;
++    h->input_tail = input;
++    return tjs_httpclient_pump(h);
+ }
+ 
+ static int tjs_lws_http_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len) {
+@@ -844,14 +964,16 @@
+         }
+ 
+         case LWS_CALLBACK_RECEIVE_CLIENT_HTTP: {
++            if (h->signal_aborted) break;
+             if (h->read_paused) {
+                 lws_rx_flow_control(wsi, 0);
+                 break;
+             }
+-            /* The gzip input pump has its own 4 KiB minimum. A tiny decoded
+-             * BYOB destination must not split the compressed header/deflate
+-             * input into artificial short-read opportunities. */
+-            int capacity = h->decompressor && h->read_capacity < 4096 ? 4096 : h->read_capacity;
++            /* Compressed input has its own bounded window, independently of
++             * decoded BYOB capacity. The pending pump suspends expansion when
++             * decoded demand is satisfied. Validate this16KiB hypothesis on
++             * both pinned primary assets before considering integration. */
++            int capacity = h->decompressor ? 16384 : h->read_capacity;
+             char *buffer = js_malloc(h->ctx, (size_t) capacity + LWS_PRE);
+             if (!buffer) return -1;
+             char *px = buffer + LWS_PRE;
+@@ -864,42 +986,9 @@
+         }
+ 
+         case LWS_CALLBACK_RECEIVE_CLIENT_HTTP_READ: {
++            if (h->signal_aborted) break;
+             if (h->decompressor) {
+-                size_t offset = 0;
+-                int status;
+-                do {
+-                    TBuf out;
+-                    size_t consumed = 0;
+-                    tbuf_init(h->ctx, &out);
+-                    status = http_gzip_step(h->decompressor, (const uint8_t *) in + offset,
+-                                            len - offset, &consumed, &out);
+-                    offset += consumed;
+-                    if (status < 0) {
+-                        tbuf_free(&out);
+-                        tjs_httpclient_gzip_error(h, "Gzip decompression failed.");
+-                        return -1;
+-                    }
+-                    if (out.size) {
+-                        /* Member boundaries remain separate. Full interior
+-                         * blocks can combine into a larger pending BYOB read;
+-                         * exhausting the current input permits a short read. */
+-                        JSValue args[2] = {JS_NewArrayBufferCopy(h->ctx, out.buf, out.size),
+-                            JS_NewInt32(h->ctx, status == 1 ? 1 : status == 2 ? 2 : 0)};
+-                        tbuf_free(&out);
+-                        maybe_invoke_callback(h, HC_CALLBACK_DATA, 2, args);
+-                        if (h->completed) return 0;
+-                    } else {
+-                        tbuf_free(&out);
+-                        if (status == 0) {
+-                            /* No more encoded input in this callback: release
+-                             * a short pending read even if the last output
+-                             * block happened to end at exactly 4096 bytes. */
+-                            JSValue args[2] = {JS_NewArrayBufferCopy(h->ctx, NULL, 0), JS_NewInt32(h->ctx, 0)};
+-                            maybe_invoke_callback(h, HC_CALLBACK_DATA, 2, args);
+-                            if (h->completed) return 0;
+-                        }
+-                    }
+-                } while (status == 2 || (status == 1 && offset < len));
++                if (tjs_httpclient_buffer_input(h, in, len) < 0) return -1;
+             } else {
+                 JSValue arg = JS_NewArrayBufferCopy(h->ctx, (const uint8_t *) in, len);
+                 maybe_invoke_callback(h, HC_CALLBACK_DATA, 1, &arg);
+@@ -977,7 +1066,13 @@
+         }
+ 
+         case LWS_CALLBACK_COMPLETED_CLIENT_HTTP: {
+-            if (h->decompressor && h->decompressor->state != HTTP_GZIP_DONE) {
++            h->wire_complete = true;
++            if (h->signal_aborted) {
++                tjs_httpclient_finish_decoding(h);
++                tjs_httpclient_teardown(h, wsi);
++                return 0;
++            }
++            if (!h->input_head && h->decompressor && h->decompressor->state != HTTP_GZIP_DONE) {
+                 tjs_httpclient_gzip_error(h, "Gzip compressed stream ended prematurely.");
+                 /* Content-Length: 0 completes inside header processing. A
+                  * nonzero return there is interpreted as a handled handshake,
+@@ -986,12 +1081,7 @@
+                 if (h->wsi) lws_set_timer_usecs(h->wsi, 1);
+                 return 0;
+             }
+-            if (!h->completed) {
+-                h->completed = true;
+-                JSValue error = JS_NULL;
+-                maybe_invoke_callback(h, HC_CALLBACK_COMPLETE, 1, &error);
+-                tjs_httpclient_done(h);
+-            }
++            tjs_httpclient_finish_decoding(h);
+             tjs_httpclient_teardown(h, wsi);
+             /* Always return 0.  Pooled connections stay warm for reuse
+              * (a response that carried "Connection: close" was marked
+@@ -1006,6 +1096,12 @@
+         }
+ 
+         case LWS_CALLBACK_TIMER: {
++            if (h->signal_aborted) {
++                // Close the physical connection without dropping the logical
++                // decoder, its accepted input, or its captured owner/context.
++                tjs_httpclient_teardown(h, wsi);
++                return -1;
++            }
+             if (!h->completed) {
+                 h->completed = true;
+                 JSValue error = JS_NewString(h->ctx, "TIMED_OUT");
+@@ -1050,7 +1146,7 @@
+                  * fall through and report the failure */
+             }
+ 
+-            if (!h->completed) {
++            if (!h->completed && !h->signal_aborted) {
+                 h->completed = true;
+                 if (reason == LWS_CALLBACK_CLIENT_CONNECTION_ERROR) {
+                     JSValue args[2];
+@@ -1465,7 +1561,7 @@
+     struct lws *wsi = h->wsi;
+     /* Preserve abort() on a client which has not been opened. Owner teardown
+      * also retires constructed clients, so they cannot later start new I/O. */
+-    if (notify && !resolving && !wsi) return;
++    if (notify && !resolving && !wsi && !h->wire_complete && !h->input_head) return;
+     h->completed = true;
+     h->context_cancelled = !notify;
+     if (resolving) h->resolve_cancelled = true;
+@@ -1496,8 +1592,17 @@
+ static JSValue tjs_httpclient_abort(JSContext *ctx, JSValue this_val, int argc, JSValue *argv) {
+     TJSHttpClient *h = tjs_httpclient_get(ctx, this_val);
+     if (!h) return JS_EXCEPTION;
++    if (argc && JS_ToBool(ctx, argv[0]) && h->read_started && h->decompressor && !h->completed) {
++        h->signal_aborted = true;
++        if (h->wsi) {
++            lws_rx_flow_control(h->wsi, 0);
++            lws_set_timer_usecs(h->wsi, 1);
++        }
++        tjs_httpclient_finish_decoding(h);
++        return JS_TRUE;
++    }
+     tjs_httpclient_cancel(h, true);
+-    return JS_UNDEFINED;
++    return JS_FALSE;
+ }
+ 
+ /* Called by the native response byte stream with its next read capacity.
+@@ -1513,7 +1618,14 @@
+     if (h->completed) return JS_UNDEFINED;
+     h->read_capacity = (int) capacity;
+     h->read_paused = JS_ToBool(ctx, argv[1]);
+-    if (h->wsi && h->http_established)
++    if (!h->read_paused && h->http_established) h->read_started = true;
++    /* A data callback can update demand inside the pump. Let the outer pump
++     * observe it before applying rxflow; avoid recursive network servicing. */
++    if (h->decode_pumping) return JS_UNDEFINED;
++    if (!h->read_paused && h->input_head) {
++        if (tjs_httpclient_pump(h) < 0 && h->wsi) lws_set_timer_usecs(h->wsi, 1);
++    }
++    if (!h->completed && !h->signal_aborted && h->wsi && h->http_established)
+         lws_rx_flow_control(h->wsi, (h->read_paused ? 0 : 1) | LWS_RXFLOW_REASON_FLAG_PROCESS_NOW);
+     return JS_UNDEFINED;
+ }

@@ -31,9 +31,11 @@
 #define CAPSID_HOST_WORKER_EXECUTOR_H
 
 #include "capsid/runtime.h"
+#include "client_ipc_metrics.h"
 #include "host/request_normalization.h"
 #include "host/worker_event_source.h"
 #include "ipc_validation.h"
+#include "worker_exit_status.h"
 
 #include <atomic>
 #include <chrono>
@@ -42,6 +44,7 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -51,6 +54,8 @@
 #include <vector>
 
 namespace capsid::host {
+class WebSocketDialer;
+class ServiceChannelBudget;
 
 constexpr auto kReadyTimeout = std::chrono::seconds(10);
 constexpr auto kShutdownGrace = std::chrono::seconds(2);
@@ -73,6 +78,13 @@ enum class CommandType {
     // event queue.
     kProbeRequest,
     kProbeCancel,
+    kChannelData,
+    kChannelGrant,
+    kChannelClose,
+    kChannelCancel,
+    kChannelConfirm,
+    kDialAccept,
+    kDialReject,
 };
 
 // Probe request ids are allocated from the top of the uint64 space so a
@@ -103,6 +115,19 @@ struct Command {
     // healthCheck path; the worker thread folds its response events into
     // probe_state() instead of the pool's event queue.
     std::uint64_t probe_id = 0;
+    std::uint32_t channel_id = 0;
+    std::uint64_t dial_id = 0;
+    std::uint32_t channel_flags = 0;
+    std::uint64_t channel_credit = 0;
+    std::uint64_t channel_max_message = 0;
+    std::uint16_t close_code = 0;
+    std::uint32_t close_kind = 0;
+    std::string close_reason;
+    bool fetch_upgrade = false;
+    protocol::FetchUpgradeResponse http_response;
+    bool upgrade_request = false;
+    std::size_t channel_charge = 0;
+    std::shared_ptr<void> channel_reservation;
 };
 
 // M2 item 6 (design §7.4): the active-health probe verdict, written on the
@@ -132,12 +157,33 @@ struct WorkerEvent {
         kExit,
         kRequestTimeout,
         kRequestFailure,
+        kChannelData,
+        kChannelCredit,
+        kChannelClose,
+        kChannelCancel,
+        kChannelAck,
+        kChannelDial,
+        kChannelReady,
     };
     Type type = Type::kLog;
     std::uint64_t request_id = 0;
     std::uint32_t credit = 0;
     std::uint16_t status = 0;
     bool fixed_body = false;
+    bool upgrade = false;
+    std::uint32_t channel_id = 0;
+    std::uint64_t dial_id = 0;
+    std::uint64_t channel_max_message = 0;
+    bool outbound = false, dial_refused = false;
+    std::uint8_t channel_kind = protocol::kChannelKindWebSocket;
+    protocol::FetchUpgradeRequest http_request;
+    std::vector<std::string> protocols;
+    std::uint32_t channel_flags = 0;
+    std::uint64_t channel_credit = 0;
+    std::uint32_t close_kind = 0;
+    std::uint16_t close_code = 0;
+    std::uint32_t ack_kind = 0;
+    std::size_t channel_charge = 0;
     std::uint32_t fixed_body_size = 0;
     std::vector<std::pair<std::string, std::string>> headers;
     std::vector<std::uint8_t> body;
@@ -162,6 +208,14 @@ bool decode_worker_log_event(const capsid_event& event,
 
 class WorkerExecutor {
 public:
+    // GLM T08: the negotiated protocol state after READY. Zero for a
+    // v3 worker (channels never negotiated); listeners gate upgrade
+    // and dial requests on this instead of pretending WebSocket is an
+    // unfinished HTTP response.
+    std::uint32_t effective_channel_caps() const {
+        return effective_channel_caps_;
+    }
+    const capsid::protocol::ChannelLimits &channel_limits() const { return channel_limits_; }
     // Produces a prepared (spawned, bundle loaded and flushed, not yet
     // READY) worker. On failure the factory must destroy the worker it
     // created and return false with *error set: ownership transfers to the
@@ -200,7 +254,7 @@ public:
     // drain. Set once before start()/adopt().
     using EventNotifier = std::function<void()>;
 
-    WorkerExecutor() = default;
+    WorkerExecutor();
     ~WorkerExecutor();  // stop_and_join(); the worker thread owns destroy()
     WorkerExecutor(const WorkerExecutor&) = delete;
     WorkerExecutor& operator=(const WorkerExecutor&) = delete;
@@ -214,6 +268,7 @@ public:
     // Takes ownership of an already-READY worker whose READY handshake was
     // consumed by the adopter (the startup service). Skips the handshake.
     bool adopt(capsid_worker* worker, std::string* error);
+    void set_channel_budget(std::shared_ptr<ServiceChannelBudget> budget);
 
     // Queues the Runtime shutdown frame at most once (idempotent across
     // request_stop, SIGTERM, start-failure and the destructor): a duplicate
@@ -222,10 +277,19 @@ public:
     // request_shutdown() + join the worker thread; idempotent. Blocks until
     // the reaper finished, so callers never leave a joinable thread behind.
     void stop_and_join();
+    // OS status retained by the sole reaper. Unknown until teardown has
+    // completed; read after stop_and_join() for a final result.
+    capsid::WorkerExitStatus exit_status() const;
 
     // ---- command direction (owner thread) ------------------------------
 
     void submit(Command command);
+    bool try_submit_channel(Command command);
+    std::uint64_t channels() const { return channels_.load(std::memory_order_relaxed); }
+    std::uint64_t retained_contexts() const { return retained_contexts_.load(std::memory_order_relaxed); }
+    // Publish physical channels and retained local owners as one liveness
+    // value, so a drain cannot observe a mixed snapshot across an ACK.
+    std::uint64_t connection_owners() const { return connection_owners_.load(std::memory_order_acquire); }
     // M2 item 6: fire one bodyless GET probe against the App's
     // healthCheck.path (the absolute data-plane URL shape). The command
     // carries the probe id; the worker thread executes the Runtime call
@@ -290,12 +354,23 @@ public:
     Metrics& metrics();
     // Set before start()/adopt() by the owner (which owns the env parsing).
     void set_metrics_enabled(bool enabled);
-    // The live worker handle for diagnostics; nullptr once the reaper
-    // destroyed it (or while the destroy is in flight). Ownership always
-    // stays with the executor.
+    // Read-and-zero client deltas under the same lock that unpublishes
+    // the handle before destruction. After that point this consumes the
+    // retained final bank, so teardown cannot lose the last interval.
+    // False means no enabled client metrics were available, or null output.
+    bool snapshot_client_metrics(capsid::ClientIpcMetrics* metrics);
+    // Borrowed handle for callers already synchronized with the reaper.
+    // The returned pointer does not pin the C object after this call;
+    // concurrent process observation must use process_id() instead.
     capsid_worker* worker() const;
+    // Cached before the reaper thread starts. Retained after exit; reading
+    // process identity never borrows the C handle from its sole owner.
+    std::int64_t process_id() const noexcept { return process_id_.load(); }
 
 private:
+    std::uint32_t effective_channel_caps_ = 0;
+    capsid::protocol::ChannelLimits channel_limits_;
+
     void worker_thread_main();
     bool wait_for_ready();
     bool execute_command(Command command);
@@ -312,13 +387,18 @@ private:
     // command path while a concurrent pool stop may be mid-start (TSan gate
     // PR-06: submit() vs set_metrics_enabled() race).
     std::atomic<bool> metrics_enabled_ = false;
+    // Protected by mutex_; captured after the final IPC operation and
+    // before the abortive destroy, which performs no further IPC I/O.
+    capsid::ClientIpcMetrics final_client_metrics_;
+    bool final_client_metrics_valid_ = false;
     EventNotifier notifier_;
     // Exactly-once lifecycle gates.
     std::atomic<bool> started_ = false;
     std::atomic<bool> shutdown_requested_ = false;
-    // Set before the blocking destroy so worker() never returns a pointer
-    // into destroyed memory.
+    capsid::WorkerExitStatus exit_status_;
+    // Publication gate only: a borrowed worker() result is not pinned.
     std::atomic<bool> destroying_ = false;
+    std::atomic<std::int64_t> process_id_{0};
 
     // Bridge between the owner thread and the worker thread. Mutable: the
     // const accessors (available/exited/worker) read the state under the
@@ -327,6 +407,23 @@ private:
     std::condition_variable cv_;
     std::deque<Command> commands_;
     std::deque<WorkerEvent> events_;
+    std::size_t channel_event_bytes_ = 0;
+    std::set<std::uint32_t> live_channel_ids_;
+    std::set<std::uint32_t> outbound_channel_ids_;
+    std::set<std::uint64_t> outbound_dial_ids_;
+#ifdef CAPSID_HOST_NETWORKING
+    std::unique_ptr<WebSocketDialer> outbound_;
+#endif
+    std::set<std::uint32_t> quarantined_channel_ids_;
+    std::atomic<std::uint64_t> channels_{0};
+    std::atomic<std::uint64_t> retained_contexts_{0};
+    std::atomic<std::uint64_t> connection_owners_{0};
+    std::size_t channel_command_bytes_ = 0;
+    std::uint32_t next_channel_id_ = 1;
+    bool command_would_block_ = false;
+    bool ipc_write_pending_ = false;
+    void refresh_channels();
+    void publish_channels(std::uint64_t count);
     // Tombstones for requests the Runtime already erased (worker thread)
     // or the owner cancelled (owner thread): any queued frame for them is
     // dropped before it reaches the IPC channel.
@@ -354,6 +451,7 @@ private:
     bool ready_match_ = false;
     std::string ready_error_;
     capsid::WorkerReadyProof expected_ready_;
+    std::shared_ptr<ServiceChannelBudget> channel_budget_;
     // Binding v1 §4.3: the parsed READY sandbox proof (default-constructed
     // for a baseline payload).
     capsid::WorkerReadyProof ready_proof_;

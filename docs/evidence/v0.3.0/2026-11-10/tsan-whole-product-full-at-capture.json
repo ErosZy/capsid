@@ -1,0 +1,61 @@
+{
+  "status": "unfiltered-full-running",
+  "complete": false,
+  "pid": 171506,
+  "profile": "tsan",
+  "source": "/root/capsid-verification-20261109/source-sdk78-explicit-sanitizer-profile-r2",
+  "build": "/root/capsid-verification-20261109/build-tsan-current-r2",
+  "snapshotCommit": "56d487722e9d207a53225444fc32914f80fba155",
+  "sourceCount": 5068,
+  "registered": 1087,
+  "sourceManifestFile": "/mnt/d/capsid-verification-20261108/evidence/sdk78-wpt-soak-snapshot-r3/source-manifest.json",
+  "sourceManifestSHA256": "36fb6e83b51feae6c5cadd88829b84de6399e475831d2d9e3b820982b7a185a4",
+  "buildRecordSHA256": "1181d050b099bd3aceb9ad0f06cf0d4188dfeb744715f003ca038a71c7dd5d5e",
+  "inputs": {
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host": "27826ad397914bb1aa8d67378daa4550b53bd2b7f2704528e8bfc861f056e4fc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker": "ed828b4021a75ab662f2083709dc40ac6b9e947c586f66b1c9cd82f8fed5f912",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CMakeCache.txt": "ed4aecbb2676ac8f517e1acf91a90fdef18730bfaf9014a91e38a981a72198d0",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CTestTestfile.cmake": "dd94317475d12100f7f2b3944612526346e825c319748f56c9f49781cb6c0907",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-tsan-linux-build-r4/inventory.json": "923a44c0c5487e427e93b0dc553a714df568c159bd2a62e9ed365a53e55abd1c",
+    "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd"
+  },
+  "measuredProviderLibraries": {
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libssl.a": "2d4ec0decaf6a9c9630800e72550b7ecf151fdb984ebbcde386debb3ea468349",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libcrypto.a": "659fb5674ccd19863a007eb54dc7ec7eff51c611ca63893d3824debce46aae07",
+    "/root/capsid-verification-20261109/r8-cares-upstream-tsan-build-r3/providers/lib/libcares.a": "47e39c33bcf291d25fe874e8499a989588ad07fcabf73aadbc0433d993e34b75",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-tsan-allocation-link-proposal-r2/apply-exact-proposed-allocation-link-block.cmake": "d83b86ad6466ae959fc8d4d4bab020e49b2490ff396b19971b462b545d37a24a",
+    "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.tsan-x86_64.so": "dfb5ab5d511f84a08fbb380b04b2d3d30db69ee8817c427e73c131ff7e7c596b"
+  },
+  "noCtestSelectionOrExclusion": true,
+  "originalPerTestCommandsAndBudgetsUnchanged": true,
+  "nativeReferenceRequired": true,
+  "fullLeakDetectionEnabled": false,
+  "dedicatedThreadSanitizerDetectionEnabled": true,
+  "rawWptAndMemoryFailuresRetained": true,
+  "originalCiTimingExceptionsNotSilentlyAppliedToThisUnfilteredDiagnostic": true,
+  "qualificationEnvironment": {
+    "PATH": "/root/capsid-verification-20261109/build-tsan-current-r2:/root/capsid-verification-20261109/toolchains/functional-tools/bin:/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "CAPSID_WORKERD_REF": "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd",
+    "CAPSID_WORKERD_REQUIRED": "1",
+    "CAPSID_WS_INTEROP_NODE_PACKAGE": "/root/capsid-verification-20261109/toolchains/interop-clients-r1/node-package/package",
+    "CAPSID_WS_INTEROP_PYTHON": "/root/capsid-verification-20261109/toolchains/interop-clients-r1/python-venv/bin/python",
+    "CAPSID_WS_REPORT_DIR": "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-tsan-linux-unfiltered-r4/reports",
+    "CAPSID_WS_RUN_ID": "sdk78-current-tsan-linux-unfiltered-r4",
+    "TMPDIR": "/tmp/c78full-r4-tsan",
+    "TSAN_OPTIONS": "halt_on_error=1:exitcode=66",
+    "GOTMPDIR": "/tmp/c78full-r4-tsan",
+    "GOCACHE": "/tmp/c78full-r4-tsan/go-cache"
+  },
+  "fullV030GoalComplete": false,
+  "command": [
+    "ctest",
+    "--test-dir",
+    "/root/capsid-verification-20261109/build-tsan-current-r2",
+    "-j",
+    "1",
+    "--output-on-failure",
+    "--output-junit",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-tsan-linux-unfiltered-r4/full.xml"
+  ],
+  "activeCommandPid": 181362
+}

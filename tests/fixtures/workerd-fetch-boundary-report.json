@@ -1,0 +1,12 @@
+{
+  "schema": "capsid-fetch-boundary-reference-capture-v1",
+  "sourceReport": "upgrade38t-reference-linux.json",
+  "sourceReportSHA256": "b45aa4777416958ead7e56dfc82e64db17c18c350ab00c963c41d8e6a3f095dc",
+  "rawBytes": 2751430,
+  "gzipSHA256": "804d88eea8b407e2b20cf7564a868631395218cd57de61f2559add8548347ed7",
+  "cases": 22,
+  "platform": "linux",
+  "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+  "referenceBinarySHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "scope": "Actual native Linux workerd reference capture. Synthetic profile/backend copies in validator tests do not qualify another platform or product runtime."
+}

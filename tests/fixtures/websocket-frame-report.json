@@ -1,0 +1,665 @@
+{
+  "report": {
+    "schema": "capsid-websocket-frame-boundaries-v2",
+    "mode": "reference",
+    "runId": "interop-node-ws-python-20261016",
+    "referenceLock": {
+      "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
+      "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+      "release_tag": "v1.20261010.1",
+      "binary": "workerd-linux-64",
+      "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "binary_version_string": "workerd 2026-10-10",
+      "compatibility_date": "2026-08-20",
+      "compatibility_flags": [],
+      "client": {
+        "runtime": "node",
+        "websocket": "native (undici) - no external dependency",
+        "node_version": "v24.14.0",
+        "undici_version": "7.21.0"
+      },
+      "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+      "release_asset": "workerd-linux-64.gz",
+      "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+      "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
+    },
+    "inputs": {
+      "runner": "ad653ee21860c7cf7d8fed48bbdc15108e552659e789ea91046862459cd5f768",
+      "fixture": "3db0a9b06c2e9c8209001347b640902123d285078d847466d4c59a2eca0c795a",
+      "contract": "aa2987f974815652966493c8292fbc4d76fdd4c66905d427ae2a24fd733469fd",
+      "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad"
+    },
+    "client": {
+      "node": "v24.14.0",
+      "undici": "7.21.0"
+    },
+    "connections": 4,
+    "observations": [
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+      },
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "9d3574e6bd232f01ae8e208cef73c9fc5c8d0605fb46b7c3db40357007546b69"
+      },
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "9fa1538863eda972452b81c726611388597f0716f05109ffedddd8d45bc810ba"
+      },
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "59a918289fe25ce5a6805a0d5949c176bd99122324e52f10dd615df00aeafffb"
+      },
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ad4a6b84463755b3ef4fc4bef8d87c8c3543c041bad7e75243457babcd5277d4"
+      },
+      {
+        "connection": 0,
+        "opcode": 1,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "7c0c733a6a78dce169e6185d23a81ded1d3bf295182ffdd177ff211a2221a924"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "1f18d650d205d71d934c3646ff5fac1c096ba52eba4cf758b865364f4167d3cd"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "b878edd55b9ed7a3f91ff50c1a4dc0ce13e65c3ebf86c99ee49a0600c158a59d"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "8d40a656f3269fa9cc6683486e2a1b2ae2836007e4b652e8f609148b6388bbfb"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "5c936817f3af3af3027c5539d9db78786de0c3e721a1103605ece1228981d919"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "aefed6da0ff5de49637670a717ece23e5b2f066c8cbdc83a4c41dded790a3ec5"
+      },
+      {
+        "connection": 0,
+        "opcode": 2,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "1bfbe5fdfd98b3f07ce01a85c119d3bcbe78e23d3c98b30dd532a9dd158bbd3c"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "8613cbf1a711d90327e8f744a548ed8ccc7bee0326bc961a63bd0c0c6cd8d967"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "a4e9f01184eb507e0075cf059fd4dec777c67bc6eb0a3d082e853f628dd78b37"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "c2cdf18898de5227b22207c396c8fea5eabe7be9229d7e2296e83621e58cb2c6"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "7b26cb8557195a5b95bd6b36c2ae4b0763a292696b1491d2782c8a7613630c2d"
+      },
+      {
+        "connection": 1,
+        "opcode": 1,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "23ce425a09919e41c12094b686e71a9a3d11405ac910938a23739954c4e354c8"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "9652595f37edd08c51dfa26567e6cd76e6fa2709c3e578478ca398d316837a7a"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "6d03f4bff8cb0f413f2757fd992f3ebd33f5ae39653cf75e88db777ce2f4be8a"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "528763735958411126023cfd498fbf9c0380c15b659e134e86a672ef7cb911ba"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "0ec78c567fc738811adc6764da16e5c994de967dd5ab9a595fa5f94feab81d07"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "6f4048c49841395546d3ef46beb987b23e46af21724254c92561394333787d4e"
+      },
+      {
+        "connection": 1,
+        "opcode": 2,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "75e1806c692d99b2e415ea18201c57ef0c0907f15830bb4bc642294c8f2b2e41"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "4600c39b24b37b759388e760bf2c79ebd8d66c0189d871aa59af668f7d742a21"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "b5678e04fd47195f92520bd35596b033208025e89b27e925a0358317e8840283"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "c93c0e377fa783658119c958ab894413bd1af68986bb65d25b637fcad6b41b93"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ec34d936422cd88b2b330a0f644c0e412d4f7b6708606f4045fa191fb618d855"
+      },
+      {
+        "connection": 2,
+        "opcode": 1,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "6654ae379325ae22848ed422a60899123a074958adc7855eff4ba9d0f22e24b0"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ffe679bb831c95b67dc17819c63c5090d221aac6f4c7bf530f594ab43d21fa1e"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "4d343d0450d6d6c678be3b7b54897dcfe74eac34dc2a9887e030665413e1f5b4"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ae563cf9814177370da28799f0c47f5e2d5c3664b7964996dce41d6e8c417866"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "afab9906e60be3720a138a1f8e2449d5f3743e0565d7d8e0ffb015d6504e08d8"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "546029c2038093a94570f3c4af0bc8dafaf655cd7cf5377a55f5d721f9e22af7"
+      },
+      {
+        "connection": 2,
+        "opcode": 2,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "71cac23c7e084ca009159f2beb48a8d72051957a96d6139105246dc81938adde"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "ba82f76f8a7de9beae7bb9f2496f3203854b1de23483cc4da12a5ad2f4ea6532"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "804e89ea59f73bcf54b5811d12a3b53acb2a8610e1da9c94e1f39086b7b8fc80"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "50ed6541826aa84e9421992b24238e8f696a562b3810fee616c490c8095caccc"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "7eadae7f715e3efaa5e06707b71cdf10eca6e87dd5332ae68c1f0d4d28cfc98c"
+      },
+      {
+        "connection": 3,
+        "opcode": 1,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "c6071d24ff18b287e5b4c5ecfcc266e6806c2800b7f42eb01122d2cc430b92c1"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 0,
+        "lengthTag": 0,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 1,
+        "lengthTag": 1,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 125,
+        "lengthTag": 125,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "7db25b50bdcfad59f60a1426a8c1750abc71634ef4cc628eadd47c4c12347755"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 126,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "2a6d6d710f187ea800c3f79440b3aa9de74f25943d1d357a2548e6daadfa064d"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 65535,
+        "lengthTag": 126,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "99d4596b371db61a5dbf3971560ec3776ac1f07f9b3fd98c91b9d317bde39fb1"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 65536,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "658c0fa34b6ead1230dd942413a049df83129555d786c056f3b08c52c9d59c0e"
+      },
+      {
+        "connection": 3,
+        "opcode": 2,
+        "size": 1048576,
+        "lengthTag": 127,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "sha256": "f9afeb254b742394f45ef4d7285755ad12c8d264543427cf131d9eafe927c65a"
+      }
+    ],
+    "closes": [
+      {
+        "connection": 0,
+        "opcode": 8,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "lengthTag": 2,
+        "payloadHex": "03e8",
+        "tcpClosed": true,
+        "extraBytes": 0
+      },
+      {
+        "connection": 1,
+        "opcode": 8,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "lengthTag": 2,
+        "payloadHex": "03e8",
+        "tcpClosed": true,
+        "extraBytes": 0
+      },
+      {
+        "connection": 2,
+        "opcode": 8,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "lengthTag": 2,
+        "payloadHex": "03e8",
+        "tcpClosed": true,
+        "extraBytes": 0
+      },
+      {
+        "connection": 3,
+        "opcode": 8,
+        "fin": true,
+        "masked": false,
+        "rsv": 0,
+        "lengthTag": 2,
+        "payloadHex": "03e8",
+        "tcpClosed": true,
+        "extraBytes": 0
+      }
+    ],
+    "binaries": {
+      "host": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+      "worker": null
+    },
+    "healthy": {
+      "status": 200,
+      "text": "frame-boundary-healthy"
+    },
+    "shutdown": {
+      "code": 0,
+      "signal": null,
+      "forced": false
+    },
+    "backendStderr": "",
+    "complete": true
+  },
+  "provenance": {
+    "source": "build-v030-dev\\evidence\\raw-frame-reference-tdd-20261016\\reference-sample2-report.json",
+    "kind": "Actual pinned workerd raw TCP observations; candidate copies in unit controls are synthetic"
+  }
+}

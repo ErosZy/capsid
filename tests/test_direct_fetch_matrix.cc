@@ -472,6 +472,24 @@ private:
                 "Connection: keep-alive\r\n\r\n");
             return true;
         }
+        if (path == "/bodyless") {
+            const std::string status = query_value(request.target, "status");
+            const std::string length = query_value(request.target, "length");
+            require(status == "200" || status == "204" || status == "205" || status == "304",
+                    "known bodyless response status");
+            require(request.method == "HEAD" || status == "204" || status == "205" || status == "304",
+                    "fixture response has no message body");
+            require(length == "none" || length == "0" || length == "1234",
+                    "known representation length");
+            std::ostringstream response;
+            response << "HTTP/1.1 " << status << " Bodyless Fixture\r\n";
+            if (length != "none") response << "Content-Length: " << length << "\r\n";
+            if (query_value(request.target, "encoding") == "gzip")
+                response << "Content-Encoding: gzip\r\n";
+            response << "Connection: keep-alive\r\n\r\n";
+            send_all(client, response.str());
+            return true;
+        }
         if (path == "/not-modified") {
             send_all(client,
                 "HTTP/1.1 304 Not Modified\r\n"
@@ -1032,10 +1050,11 @@ Result run_policy_probe(const char *worker_path,
 
 int main(int argc, char **argv) {
     if (argc != 3 && argc != 4) {
-        fail("expected worker path, direct-fetch matrix fixture, and optional --strict");
+        fail("expected worker path, direct-fetch matrix fixture, and optional --strict or --bodyless");
     }
     const bool strict = argc == 4 && std::string(argv[3]) == "--strict";
-    if (argc == 4 && !strict) {
+    const bool bodyless_only = argc == 4 && std::string(argv[3]) == "--bodyless";
+    if (argc == 4 && !strict && !bodyless_only) {
         fail("unknown direct-fetch matrix option");
     }
 
@@ -1070,15 +1089,27 @@ int main(int argc, char **argv) {
     }
 
     const std::string url =
-        "https://example.test/direct-fetch-matrix?primary=" +
+        std::string(bodyless_only ? "https://example.test/bodyless?primary="
+                                  : "https://example.test/direct-fetch-matrix?primary=") +
         primary.base_url() + "&secondary=" + secondary.base_url() +
         "&closed=" + std::to_string(closed_port);
     const Result result = run_request(worker, url);
-    if (strict) {
+    if (strict || bodyless_only) {
         require_clean_worker_shutdown(
-            worker, "strict direct-fetch matrix worker");
+            worker, bodyless_only ? "bodyless direct-fetch matrix worker"
+                                  : "strict direct-fetch matrix worker");
     } else {
         capsid_worker_destroy(worker);
+    }
+
+    if (bodyless_only) {
+        require(result.status == 200 &&
+                    result.body.find("\"passed\":true") != std::string::npos &&
+                    result.body.find("\"bodyless-reuse\"") != std::string::npos,
+                (std::string("bodyless response regression: ") + result.body).c_str());
+        require(primary.requests() == 20 && secondary.requests() == 1,
+                "all nine bodyless cases and the cross-origin continuation executed");
+        return 0;
     }
 
     if (result.status != 200 ||

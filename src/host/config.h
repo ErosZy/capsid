@@ -12,6 +12,13 @@ namespace capsid::host {
 // Defined in policy_compiler.h; declared here so the parse boundary below
 // can reference it without pulling the policy compiler into the schema.
 struct AppRequest;
+struct FetchTarget;
+
+// Shared Host/App fetch authority grammar: host[:port[,port...]] or a
+// bracketed IPv6 literal with the same optional decimal port list. IPv6
+// addresses are stored without brackets in canonical numeric form.
+// Failure leaves the destination unchanged.
+bool parse_fetch_target_text(std::string_view text, FetchTarget* out);
 
 // Raw host.json / capsid.json resource limits. The byte limit is inclusive
 // and applies before parsing. JSON nesting counts the root value as depth 1.

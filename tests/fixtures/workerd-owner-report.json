@@ -1,0 +1,1132 @@
+{
+  "schema": "capsid-websocket-owner-lifecycle-v1",
+  "complete": true,
+  "runId": "1a69469f-0ab3-46fb-8b04-7345851e43c2",
+  "mode": "reference",
+  "referenceLock": {
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
+    "release_tag": "v1.20261010.1",
+    "binary": "workerd-windows-64",
+    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary_version_string": "workerd 2026-10-10",
+    "compatibility_date": "2026-08-20",
+    "compatibility_flags": [],
+    "client": {
+      "runtime": "node",
+      "websocket": "native (undici) - no external dependency",
+      "node_version": "v24.14.0",
+      "undici_version": "7.21.0"
+    },
+    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
+    "release_asset": "workerd-windows-64.gz",
+    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
+    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+  },
+  "client": {
+    "node": "v24.14.0",
+    "undici": "7.21.0"
+  },
+  "inputs": {
+    "runner": "7a0353f9f07d39143e928d8d72dc3d4b281065497561603749d54ac87a34172b",
+    "fixture": "70172f47f9079256b4189ccfd34d8f8232f245a1af36a95e18064699606d6b61",
+    "contract": "cb7100d2f024cfe5734642140d1d2299d8d44618cf50fa2c5e0fa9592da4cdfe",
+    "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+  },
+  "binaries": {
+    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "worker": null
+  },
+  "cases": [
+    {
+      "id": "live-one-shot",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WLXK7KGzCO7C3PpzzgVOxbyBj8c=",
+        "requestKey": "qDRYGPsCw2qRup8h2FmExA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WLXK7KGzCO7C3PpzzgVOxbyBj8c=",
+        "requestKey": "qDRYGPsCw2qRup8h2FmExA==",
+        "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "dGltZXI="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"live-one-shot\",\"timerFired\":1,\"trace\":[\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "live-one-shot",
+          "timerFired": 1,
+          "trace": [
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "live-interval",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vUhP7P1mNc7oOLMjiWAFcLzv0Yg=",
+        "requestKey": "JQzXdZX3uoXP70vfLSSoAg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vUhP7P1mNc7oOLMjiWAFcLzv0Yg=",
+        "requestKey": "JQzXdZX3uoXP70vfLSSoAg==",
+        "rawTail": "gQZxdWV1ZWSBB3RpbWVyLTGBB3RpbWVyLTKIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "dGltZXItMQ=="
+          },
+          {
+            "opcode": 1,
+            "payload": "dGltZXItMg=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"live-interval\",\"timerFired\":2,\"trace\":[\"timer\",\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "live-interval",
+          "timerFired": 2,
+          "trace": [
+            "timer",
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "close-with-ack",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: XGoPs3/6+bQYAWrMqbr06F7xRgE=",
+        "requestKey": "2XHVJBTyAHFbWOlHcsxNVg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: XGoPs3/6+bQYAWrMqbr06F7xRgE=",
+        "requestKey": "2XHVJBTyAHFbWOlHcsxNVg==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"close-with-ack\",\"timerFired\":0,\"trace\":[],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "close-with-ack",
+          "timerFired": 0,
+          "trace": [],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "close-delayed-ack",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mxfvZYjwvIa9c9i3CGmM2KN40W8=",
+        "requestKey": "WVgUahMUHksAIBdPVsrLpA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeManualAck": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mxfvZYjwvIa9c9i3CGmM2KN40W8=",
+        "requestKey": "WVgUahMUHksAIBdPVsrLpA==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "beforeAckHTTP": {
+        "status": 200,
+        "body": "{\"state\":{\"kind\":\"close-delayed-ack\",\"timerFired\":1,\"trace\":[\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1}]}}"
+      },
+      "manualCloseSent": true,
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mxfvZYjwvIa9c9i3CGmM2KN40W8=",
+        "requestKey": "WVgUahMUHksAIBdPVsrLpA==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"close-delayed-ack\",\"timerFired\":1,\"trace\":[\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "close-delayed-ack",
+          "timerFired": 1,
+          "trace": [
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "error-timer-before",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ouPK1PV4IX95jNqnDKDFSsHMqWo=",
+        "requestKey": "LSPtdedS8yrhTIyyW10tIA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ouPK1PV4IX95jNqnDKDFSsHMqWo=",
+        "requestKey": "LSPtdedS8yrhTIyyW10tIA==",
+        "rawTail": "gQZxdWV1ZWSBBGxhdGU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "bGF0ZQ=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"error-timer-before\",\"timerFired\":0,\"trace\":[\"microtask\",\"nested-microtask\",\"late-accepted\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"error\",\"readyState\":3,\"message\":\"Uncaught TypeError: owner-lifecycle/error-timer-before\",\"errorName\":\"TypeError\",\"errorMessage\":\"owner-lifecycle/error-timer-before\",\"trusted\":true}]}}",
+      "state": {
+        "state": {
+          "kind": "error-timer-before",
+          "timerFired": 0,
+          "trace": [
+            "microtask",
+            "nested-microtask",
+            "late-accepted"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "error",
+              "readyState": 3,
+              "message": "Uncaught TypeError: owner-lifecycle/error-timer-before",
+              "errorName": "TypeError",
+              "errorMessage": "owner-lifecycle/error-timer-before",
+              "trusted": true
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "error-listener-timer",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MiMjmRrB7Ne3Z+Ek/d5MBYQRS3k=",
+        "requestKey": "NgphcPrJJSqh6WACf2fxyw==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MiMjmRrB7Ne3Z+Ek/d5MBYQRS3k=",
+        "requestKey": "NgphcPrJJSqh6WACf2fxyw==",
+        "rawTail": "gQZxdWV1ZWSBBGxhdGU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "bGF0ZQ=="
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"error-listener-timer\",\"timerFired\":0,\"trace\":[\"microtask\",\"nested-microtask\",\"late-accepted\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"error\",\"readyState\":3,\"message\":\"Uncaught TypeError: owner-lifecycle/error-listener-timer\",\"errorName\":\"TypeError\",\"errorMessage\":\"owner-lifecycle/error-listener-timer\",\"trusted\":true}]}}",
+      "state": {
+        "state": {
+          "kind": "error-listener-timer",
+          "timerFired": 0,
+          "trace": [
+            "microtask",
+            "nested-microtask",
+            "late-accepted"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "error",
+              "readyState": 3,
+              "message": "Uncaught TypeError: owner-lifecycle/error-listener-timer",
+              "errorName": "TypeError",
+              "errorMessage": "owner-lifecycle/error-listener-timer",
+              "trusted": true
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "error-final-close-timer",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iD5f4pCff7qBxs539sfPfYVGniA=",
+        "requestKey": "ep8ZCGsOPf+P2NtRVSx+xA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iD5f4pCff7qBxs539sfPfYVGniA=",
+        "requestKey": "ep8ZCGsOPf+P2NtRVSx+xA==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": "ECONNRESET",
+        "completion": "peer-reset",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"error-final-close-timer\",\"timerFired\":0,\"trace\":[\"microtask\",\"nested-microtask\",\"late-TypeError\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"error\",\"readyState\":3,\"message\":\"Uncaught TypeError: owner-lifecycle/error-final-close-timer\",\"errorName\":\"TypeError\",\"errorMessage\":\"owner-lifecycle/error-final-close-timer\",\"trusted\":true}]}}",
+      "state": {
+        "state": {
+          "kind": "error-final-close-timer",
+          "timerFired": 0,
+          "trace": [
+            "microtask",
+            "nested-microtask",
+            "late-TypeError"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "error",
+              "readyState": 3,
+              "message": "Uncaught TypeError: owner-lifecycle/error-final-close-timer",
+              "errorName": "TypeError",
+              "errorMessage": "owner-lifecycle/error-final-close-timer",
+              "trusted": true
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "http-await",
+      "initialHTTP": {
+        "status": 200,
+        "body": "{\"accepted\":true,\"state\":{\"kind\":\"http-await\",\"timerFired\":1,\"trace\":[\"timer\"],\"events\":[]}}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"http-await\",\"timerFired\":1,\"trace\":[\"timer\"],\"events\":[]}}",
+      "state": {
+        "state": {
+          "kind": "http-await",
+          "timerFired": 1,
+          "trace": [
+            "timer"
+          ],
+          "events": []
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "live-returned-then",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: NHsFw+gKc5v1IYw5Nviq61a56B4=",
+        "requestKey": "hKfLnWv6Oburw1bwo558nA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: NHsFw+gKc5v1IYw5Nviq61a56B4=",
+        "requestKey": "hKfLnWv6Oburw1bwo558nA==",
+        "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "dGltZXI="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"live-returned-then\",\"timerFired\":1,\"trace\":[\"handler-return\",\"microtask\",\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "live-returned-then",
+          "timerFired": 1,
+          "trace": [
+            "handler-return",
+            "microtask",
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "live-detached-then",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tbclp7kJEcjgqlQXEZ9wvlvku0k=",
+        "requestKey": "L/mUJFqTPLahU2eJy2itlQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tbclp7kJEcjgqlQXEZ9wvlvku0k=",
+        "requestKey": "L/mUJFqTPLahU2eJy2itlQ==",
+        "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "dGltZXI="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"live-detached-then\",\"timerFired\":1,\"trace\":[\"handler-return\",\"microtask\",\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "live-detached-then",
+          "timerFired": 1,
+          "trace": [
+            "handler-return",
+            "microtask",
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "close-returned-await",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kdxQPuTXB+3FrL6gkwYVIuwoKCE=",
+        "requestKey": "cEdJgO09lTXLX7mYC++v7A==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kdxQPuTXB+3FrL6gkwYVIuwoKCE=",
+        "requestKey": "cEdJgO09lTXLX7mYC++v7A==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"close-returned-await\",\"timerFired\":0,\"trace\":[],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "close-returned-await",
+          "timerFired": 0,
+          "trace": [],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "close-detached-await",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vrwkDwo/2KczgLBD8pT+I2/jp1Q=",
+        "requestKey": "7Dx8C6swZnC34S492+Mg6g==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vrwkDwo/2KczgLBD8pT+I2/jp1Q=",
+        "requestKey": "7Dx8C6swZnC34S492+Mg6g==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"close-detached-await\",\"timerFired\":0,\"trace\":[],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "close-detached-await",
+          "timerFired": 0,
+          "trace": [],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "close-external-returned",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jq6riTPHOun5q1pqfXzh7SxTaqc=",
+        "requestKey": "WCNC+y5T4C3uuKZTvUVWDg==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jq6riTPHOun5q1pqfXzh7SxTaqc=",
+        "requestKey": "WCNC+y5T4C3uuKZTvUVWDg==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "resumeResponse": {
+        "status": 200,
+        "text": "{\"resumed\":true}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"close-external-returned\",\"timerFired\":0,\"trace\":[],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "close-external-returned",
+          "timerFired": 0,
+          "trace": [],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at Object.fetch (main:15:62)\n"
+    },
+    {
+      "id": "close-external-detached",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1k8yDRsNOfFb/Wx2JT4jb9OhJXE=",
+        "requestKey": "Nf0Cei5qwuWm5Cy8565aow==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1k8yDRsNOfFb/Wx2JT4jb9OhJXE=",
+        "requestKey": "Nf0Cei5qwuWm5Cy8565aow==",
+        "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "resumeResponse": {
+        "status": 200,
+        "text": "{\"resumed\":true}"
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"close-external-detached\",\"timerFired\":0,\"trace\":[],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "close-external-detached",
+          "timerFired": 0,
+          "trace": [],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at Object.fetch (main:15:62)\n"
+    },
+    {
+      "id": "cross-clear",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jehpxwmih8aeNjC6lGRMQNJn9DY=",
+        "requestKey": "OBPcvcHMdXtrFB0N8Sh1DA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "clearResponse": {
+        "status": 200,
+        "text": "{\"before\":0}"
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jehpxwmih8aeNjC6lGRMQNJn9DY=",
+        "requestKey": "OBPcvcHMdXtrFB0N8Sh1DA==",
+        "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "dGltZXI="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"cross-clear\",\"timerFired\":1,\"trace\":[\"http-clear\",\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "cross-clear",
+          "timerFired": 1,
+          "trace": [
+            "http-clear",
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "same-clear",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 2UdZ2hd2+jN0ZtxkwUzuwa24hB8=",
+        "requestKey": "/LwlQl/75z/m8sZlKPa9QA==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 2UdZ2hd2+jN0ZtxkwUzuwa24hB8=",
+        "requestKey": "/LwlQl/75z/m8sZlKPa9QA==",
+        "rawTail": "gQZxdWV1ZWSBB2NsZWFyZWSIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "Y2xlYXJlZA=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": true
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"same-clear\",\"timerFired\":0,\"trace\":[\"same-clear\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":3}]}}",
+      "state": {
+        "state": {
+          "kind": "same-clear",
+          "timerFired": 0,
+          "trace": [
+            "same-clear"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 3
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    },
+    {
+      "id": "half-open-close-await",
+      "headers": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oqjEPZWs0nJ+ZC0bfDJkGIXuCYI=",
+        "requestKey": "GMIDOp9rwqiU1YKqISY7NQ==",
+        "rawTail": "",
+        "frames": [],
+        "peerTerminated": false,
+        "transportError": null,
+        "completion": null,
+        "closeReplySent": false
+      },
+      "manualCloseSent": true,
+      "wire": {
+        "status": 101,
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oqjEPZWs0nJ+ZC0bfDJkGIXuCYI=",
+        "requestKey": "GMIDOp9rwqiU1YKqISY7NQ==",
+        "rawTail": "gQZxdWV1ZWSBEGFmdGVyLXBlZXItY2xvc2WIBgPoZG9uZQ==",
+        "frames": [
+          {
+            "opcode": 1,
+            "payload": "cXVldWVk"
+          },
+          {
+            "opcode": 1,
+            "payload": "YWZ0ZXItcGVlci1jbG9zZQ=="
+          },
+          {
+            "opcode": 8,
+            "payload": "A+hkb25l"
+          }
+        ],
+        "peerTerminated": true,
+        "transportError": null,
+        "completion": "peer-ended",
+        "closeReplySent": false
+      },
+      "stateStatus": 200,
+      "stateText": "{\"state\":{\"kind\":\"half-open-close-await\",\"timerFired\":1,\"trace\":[\"timer\"],\"events\":[{\"type\":\"message\",\"readyState\":1},{\"type\":\"close\",\"readyState\":2}]}}",
+      "state": {
+        "state": {
+          "kind": "half-open-close-await",
+          "timerFired": 1,
+          "trace": [
+            "timer"
+          ],
+          "events": [
+            {
+              "type": "message",
+              "readyState": 1
+            },
+            {
+              "type": "close",
+              "readyState": 2
+            }
+          ]
+        }
+      },
+      "shutdown": {
+        "forced": false,
+        "code": null,
+        "signal": "SIGTERM"
+      },
+      "stderr": ""
+    }
+  ]
+}

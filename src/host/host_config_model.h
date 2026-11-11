@@ -15,6 +15,7 @@
 #include "host/policy_compiler.h"
 #include "host/trusted_key_store.h"
 #include "host/worker_recovery.h"
+#include "host/channel_ledger.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +32,10 @@ struct ListenerRoutingConfig {
 };
 
 struct ListenerLimitsConfig {
+    // Inbound WS reservations/write buffers, shared across local shards.
+    // Outbound actors belong to the service (not an HTTP listener owner).
+    std::uint64_t channels = 128;
+    std::uint64_t channel_queue_bytes = 16u*1024u*1024u;
     std::uint64_t connections = 0;          // 0 = no ceiling
     std::uint64_t header_bytes = 0;         // 0 = no ceiling
     std::uint64_t header_timeout_ms = 0;    // 0 = no ceiling
@@ -110,6 +115,7 @@ struct TierConfig {
 // fields are carried typed for the PR-10 weighted ledger. startupsConcurrent
 // is the startup-permit limit, NOT the Admin pending-queue ceiling.
 struct CapacityConfig {
+    ChannelBudgetLimits channels;
     std::uint64_t workers_total = 1;
     // §9.4: the extra budget for the new-warming + old-draining overlap
     // of a replacement deploy. v1 default 0 — a zero-downtime replace of
@@ -120,6 +126,22 @@ struct CapacityConfig {
     std::uint64_t queued_requests_total = 0;
     std::uint64_t queued_header_bytes_total = 0;
     std::uint64_t worker_memory_commit_total = 0;
+};
+
+// GLM T08: host-level channel limits (FetchRPC v4 A2). Zero selects
+// the deployment default; nonzero values must satisfy the frozen A2
+// bounds (protocol::validate_channel_limits) at parse time. The
+// section's presence requests channel capabilities on the wire.
+struct ChannelsConfig {
+    bool configured = false;
+    std::uint32_t max_channels = 0;
+    std::uint64_t max_message_bytes = 0;
+    std::uint64_t reassembly_budget_bytes = 0;
+    std::uint64_t send_budget_bytes = 0;
+    std::uint32_t close_timeout_ms = 0;
+    std::uint32_t dial_timeout_ms = 0;
+    std::uint32_t idle_timeout_ms = 0;
+    std::uint32_t per_channel_queue_bytes = 0;
 };
 
 struct CrashBudgetConfig {
@@ -167,6 +189,9 @@ struct ParsedHostConfig {
     TierConfig defaults;
     TierConfig maximums;
     CapacityConfig capacity;
+    // GLM T08: channel limits compiled into the generation snapshot;
+    // presence requests channel capabilities on the worker wire.
+    ChannelsConfig channels;
     RecoveryConfig recovery;
 };
 

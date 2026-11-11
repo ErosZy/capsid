@@ -265,16 +265,22 @@
     </div>
   </noscript>
 
+  <div class="callout" id="verification-note" role="status" style="margin-top:24px">
+    <b>Historical observation — unverified.</b> This point has not passed the
+    current archive, provenance, and protocol checks. Treat the displayed
+    numbers as historical observations; a verified 0.3.0 point is still pending.
+  </div>
+
   <!-- ================= hero ================= -->
   <div class="hero">
     <div class="hero-grid">
       <div>
         <div class="eyebrow">Benchmark Record</div>
         <h1>Isolation that<br><em>outlasts</em> the hype.</h1>
-        <p>Every official Capsid release, re-measured end to end on one
-           dedicated machine under a frozen protocol — throughput, cold
-           start, and process-level memory, against the runtimes you
-           actually deploy.</p>
+        <p>Throughput, cold start, and process-level memory under a frozen
+           protocol. Each point states its verification status; historical
+           observations remain available while complete release evidence
+           is collected.</p>
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
@@ -345,15 +351,13 @@
     </div>
 
     <div class="card chart">
-      <h3>Measured density — fill a pool until it hits 2 GB</h3>
-      <div class="sub">Real runs: grow capsid's static pool (or workerd's cell
-        count in one process) until the process tree's PSS reaches the 2048 MB
-        budget, binary-searching the boundary. <b>Cold</b> rows initialize
-        every worker/cell with one real request; <b>warmed</b> rows drive 100
-        requests through each first. The gap between the two is the runtime's
-        memory behaviour under traffic — capsid barely moves (no JIT, heap
-        flat), while workerd's V8 compiles and grows under load and never
-        returns the memory. Final pool PSS in parentheses.</div>
+      <h3>Observed pool density — 2048 MiB budget</h3>
+      <div class="sub">Final pool counts and process-tree PSS in the sampled
+        window. The cold target is one validated request per worker/cell;
+        the warm target is 100 per worker/cell. Complete archives prove that
+        coverage individually. A probe cap is a lower-bound observation,
+        not a measured maximum. Historical coverage remains unverified.
+        These windows do not establish memory retention under longer traffic.</div>
       <div class="scroll-x" id="budget-table"></div>
     </div>
 
@@ -402,13 +406,14 @@
   </section>
 
   <footer>
-    <p>Points are produced from tagged, clean-tree Release builds by
+    <p>Verified points require clean-tree Release measurements from
        <span class="mono">bench/cold-start.sh</span>,
        <span class="mono">bench/qps-lane.sh</span>, and
        <span class="mono">bench/collect-perf-point.py</span>. Each point
-       carries the machine fingerprint and SHA-256 digests of every binary
-       and fixture used. Historical points are never edited; methodology
-       changes start a new series rather than rewriting history.</p>
+       carries measured source and binary identities, a machine fingerprint,
+       and revalidated archive digests. Historical observations without
+       complete evidence are marked unverified. Evidence files for verified
+       points are included in this site.</p>
   </footer>
 </div>
 
@@ -448,6 +453,8 @@ var WL = { "matrix-json-1k": "JSON 1 KiB", "matrix-json-16k": "JSON 16 KiB", "st
 var DATA = window.CAPSID_PERF_DATA;
 var PTS = (DATA && DATA.points) || [];
 var P = PTS.length ? PTS[PTS.length - 1] : null;
+var VERIFIED = !!(P && P.verification && P.verification.status === "verified" &&
+  P.verification.contract === "capsid-perf-lane-v1");
 
 /* ============ helpers ============ */
 function $(id) { return document.getElementById(id); }
@@ -477,6 +484,9 @@ function stacksOf(cells) {
 
 /* ============ hero ============ */
 function renderHero() {
+  if (VERIFIED) {
+    $("verification-note").textContent = "Archive and protocol checks passed. Source, binary identities, and raw evidence are listed below.";
+  }
   var m = (P && P.machine) || {};
   var cpu = (m.cpu || "").replace(/\(R\)|\(TM\)/g, "").trim();
   cpu = cpu.split(" ").slice(-1)[0] || "—";
@@ -484,8 +494,9 @@ function renderHero() {
   var tags = [
     [P ? P.release + (P.git && P.git.tag ? "" :
         " · commit " + String(P.git && P.git.commit || "").slice(0, 8))
-      : "—", "release point", true],
-    [P ? P.date : "—", "measured on", false],
+      : "—", VERIFIED ? "verified measurement point" : "unverified historical observation", VERIFIED],
+    [P ? P.date : "—", VERIFIED ? "measured on" : "recorded date; unverified", false],
+    [VERIFIED ? "Verified archive" : "Unverified observation", "evidence status", VERIFIED],
     [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", false]
   ];
   $("hero-tags").innerHTML = tags.map(function (t) {
@@ -495,7 +506,7 @@ function renderHero() {
   $("nav-meta").textContent = P ? P.release +
     (P.git && P.git.tag ? "" :
       " · commit " + String(P.git && P.git.commit || "").slice(0, 8)) +
-    " · " + P.date : "";
+    " · " + P.date + (VERIFIED ? "" : " · unverified") : "";
 
   var q = P && P.qps, c = P && P.coldStart;
   var cards = "";
@@ -518,7 +529,7 @@ function renderHero() {
       '<div class="kpi hero-kpi"><div class="k-label">Memory @ 64 conns</div>' +
       '<div class="k-value">' + fmt(a, 1) + '<small>MB PSS</small></div>' +
       '<div class="k-sub"><b>' + fmt(b / a, 0) + '× lighter</b> than workerd\u2019s ' +
-      fmt(b, 1) + ' MB under identical load</div></div>';
+      fmt(b, 1) + ' MB in the loaded sampling window; throughput differs</div></div>';
   }
   if (c && c.cells) {
     var bc = null;
@@ -527,7 +538,7 @@ function renderHero() {
     if (bc) cards +=
       '<div class="kpi"><div class="k-label">Cold start · 1 MiB</div>' +
       '<div class="k-value">' + fmt(bc.totalMs, 1) + '<small>ms</small></div>' +
-      '<div class="k-sub">trusted bytecode — fastest of every measured runtime</div></div>';
+      '<div class="k-sub">trusted bytecode timing in this observation</div></div>';
   }
   $("kpis").innerHTML = cards;
 }
@@ -850,9 +861,9 @@ function renderBudget(sp, spLow) {
   var sizes = ["10k", "100k", "1m"];
   var kinds = [
     ["capsid", "cold", "Capsid workers · initialized", true],
-    ["capsid", "warm", "Capsid workers · warmed (100 req each)", true],
+    ["capsid", "warm", VERIFIED ? "Capsid workers · warmed (100 req each)" : "Capsid workers · warmed (coverage unverified)", true],
     ["workerd", "cold", "workerd cells · initialized", false],
-    ["workerd", "warm", "workerd cells · warmed (100 req each)", false]
+    ["workerd", "warm", VERIFIED ? "workerd cells · warmed (100 req each)" : "workerd cells · warmed (coverage unverified)", false]
   ];
   var head = '<table><thead><tr><th scope="col">Worker kind</th>';
   sizes.forEach(function (z) {
@@ -867,7 +878,8 @@ function renderBudget(sp, spLow) {
       if (cell) {
         measured++;
         row += "<td>" + fmt(cell.count, 0) +
-               ' <span class="dim">(' + fmt(cell.pssMb, 0) + " MB)</span></td>";
+               ' <span class="dim">(' + fmt(cell.pssMb, 0) + " MiB)</span>" +
+               (cell.limit === "cap" ? ' <span class="dim">cap reached</span>' : "") + "</td>";
       } else {
         row += "<td>—</td>";
       }
@@ -875,20 +887,15 @@ function renderBudget(sp, spLow) {
     head += row + "</tr>";
   });
   var cap = measured
-    ? "largest pool whose process-tree PSS stayed under 2048 MB — final PSS " +
-      "in parentheses; every worker/cell answered real requests before sampling"
+    ? "observed final pools under 2048 MiB — final PSS in parentheses; cap-reached entries are lower bounds"
     : "floor((2048 − " + fmt(host, 1) +
       " MB host) ÷ cold worker PSS) — theoretical ceiling";
   el.innerHTML = head + "</tbody></table>" + '<div class="tbl-cap">' + cap + "</div>" +
     (measured ? '<div class="footnote" style="margin-top:12px">' +
-      "Why two rows: initialization alone understates a JIT runtime. " +
-      "workerd loses ~40% of its 10k/100k capacity once each cell has served " +
-      "100 requests (V8 compiles hot paths and the heap grows — no return " +
-      "was observed within any sampling window here); capsid's interpreter " +
-      "stays flat, so cold and warmed read " +
-      "the same. Under sustained heavy traffic the gap widens further — in " +
-      "the throughput lane a single workerd isolate grew from 44 to 581 MB " +
-      "under 64 connections." : "");
+      (VERIFIED ? "Cold and warm rows have separate per-worker coverage records. " :
+      "Historical per-worker coverage and search limits have not been revalidated. ") +
+      "Memory observations apply to these sampling windows. Loaded QPS differs between stacks, " +
+      "so this does not establish equal work or a long-term memory bound.</div>" : "");
 }
 
 function renderMem() {
@@ -1011,6 +1018,8 @@ function renderCold() {
 
   var warms = cells.filter(function (x) { return x.warmMs != null && x.warmMs > 0; });
   if (warms.length) {
+    var coldOrigin = P && P.origins && P.origins["cold-start"];
+    var exactHttp = !!(coldOrigin && coldOrigin.protocol && coldOrigin.protocol.httpClient === "python-http-exact-v1");
     /* collapse per-size samples into one median per stack: sizes differ by
        <0.03 ms, the interesting axis is stack vs measurement floor */
     var per = {};
@@ -1033,7 +1042,8 @@ function renderCold() {
     var W = 780, rowH = 42, top = 44, right = 132;
     var left = gutterFor(vals.map(function (d) { return SHORT[d.st] || d.st; }));
     var H = top + vals.length * rowH + 6;
-    var mx = nice(Math.max(floor * 1.15, 1));
+    var maximumWarm = vals.reduce(function (maximum, d) { return Math.max(maximum, d.v); }, 1);
+    var mx = nice(exactHttp ? maximumWarm * 1.15 : Math.max(floor * 1.15, 1));
     var plot = W - left - right;
     var fx = left + plot * (floor / mx);
     var out = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="warm request latency by runtime">';
@@ -1050,15 +1060,17 @@ function renderCold() {
       out += '<text class="t" x="' + xx + '" y="' + (top - 12) + '" text-anchor="middle">' + fmt(gv, 1) + "</text>";
     }
     /* measurement floor marker */
-    out += '<line class="fl" x1="' + fx + '" y1="' + (top - 4) + '" x2="' + fx + '" y2="' + (H - 6) + '"/>';
-    out += '<text class="ft" x="' + (fx + 8) + '" y="' + (top - 12) + '">curl floor \u2248 ' + fmt(floor, 1) + ' ms</text>';
+    if (!exactHttp) {
+      out += '<line class="fl" x1="' + fx + '" y1="' + (top - 4) + '" x2="' + fx + '" y2="' + (H - 6) + '"/>';
+      out += '<text class="ft" x="' + (fx + 8) + '" y="' + (top - 12) + '">curl floor \u2248 ' + fmt(floor, 1) + ' ms</text>';
+    }
     vals.forEach(function (d, i2) {
       var y0 = top + i2 * rowH;
       var isCap = d.st === "capsid-source" || d.st === "capsid-bytecode";
       var w = Math.max(2, plot * (d.v / mx));
       out += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[d.st] || d.st) + "</text>";
       out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + w + '" height="' + (rowH - 24) + '" rx="4" fill="' + (C[d.st] || "#888") + '"><title>' + esc(NAME[d.st] || d.st) + ": " + fmt(d.v, 2) + " ms</title></rect>";
-      if (isCap) {
+      if (isCap || exactHttp) {
         out += '<text class="v" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(d.v, 2) + " ms</text>";
       } else {
         out += '<text class="vf" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">\u2248 floor (unresolved)</text>';
@@ -1066,7 +1078,10 @@ function renderCold() {
     });
     out += "</svg>";
     $("warm-chart").innerHTML = out;
-    $("warm-note").innerHTML =
+    $("warm-note").innerHTML = exactHttp ?
+      "Warm samples use C-ABI IPC for Capsid and a fresh loopback HTTP connection " +
+      "for Node/Deno/workerd. Every response is validated. The transports differ; " +
+      "these values include their respective client and transport costs." :
       "Only Capsid's in-process IPC driver resolves sub-millisecond warm " +
       "latency. Node/Deno/workerd requests go through " +
       "<span class=\"mono\">curl</span>, whose process startup dominates " +
@@ -1081,6 +1096,15 @@ function renderMethod() {
   var ev = (P && P.evidence) || {};
   var n = 0;
   for (var k in ev) n++;
+  var links = "";
+  if (VERIFIED) {
+    Object.keys(ev).sort().forEach(function (name) {
+      if (name.indexOf("bench/results/") !== 0 || /(^|\/)\.\.(\/|$)/.test(name)) return;
+      var href = name.split("/").map(function (part) { return encodeURIComponent(part); }).join("/");
+      links += '<li><a href="evidence/' + esc(href) + '">' + esc(name) +
+        '</a> <span class="mono">' + esc(ev[name]) + '</span></li>';
+    });
+  }
   /* dl rows: label column fixed, value ellipsized to one line with the
      full text in the title tooltip — no wrapping, no column drift */
   var fp = [
@@ -1123,9 +1147,12 @@ function renderMethod() {
         '<dl class="fp">' + fp + "</dl>" +
       "</div>" +
     "</div>" +
-    (n ? '<div class="footnote" style="margin-top:20px">Evidence for this point: ' + n +
-      " files SHA-256 digested (binaries, fixtures, runner, raw samples), " +
-      'preserved with the release — see <span class="mono">data.js</span>.</div>' : "");
+    (VERIFIED ? '<div class="footnote" style="margin-top:20px">Evidence for this point: ' + n +
+      ' archived files rehashed before staging. Binary identities are recorded in each lane manifest.</div>' +
+      '<details style="margin-top:12px"><summary>Archive files and SHA-256</summary>' +
+      '<div class="scroll-x"><ul>' + links + '</ul></div></details>' :
+      '<div class="footnote" style="margin-top:20px">Historical observation: the current provenance and ' +
+      'archive checks have not passed. Historical digest labels in data.js are not verified archive links.</div>');
 }
 
 /* ============ boot ============ */

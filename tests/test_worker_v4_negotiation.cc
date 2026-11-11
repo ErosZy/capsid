@@ -9,8 +9,11 @@
 // conjunction is zero. A plain request/response round trip proves the
 // v4 stream carries v3 semantics unchanged.
 #include "capsid/runtime.h"
+#include "response_credit_probe.h"
+#include "protocol.h"
 #include "win32_compat.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -52,7 +55,9 @@ struct Pump {
     // Drains events until pred(event) returns true.
     template <typename Pred>
     capsid_event wait(Pred pred, const char *what) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         for (;;) {
+            if (std::chrono::steady_clock::now() >= deadline) fail(std::string(what) + " deadline exceeded");
             const capsid_result flush = capsid_worker_flush(worker);
             if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
                 fail(std::string(what) + " flush: " +
@@ -95,14 +100,19 @@ bool is_ready(const capsid_event &event) {
     return event.type == CAPSID_EVENT_READY;
 }
 
-bool is_response_end(const capsid_event &event) {
-    return event.type == CAPSID_EVENT_RESPONSE_END;
-}
 
-void test_negotiation(capsid_worker_config &config) {
+
+void test_negotiation(capsid_worker_config &config, uint32_t capabilities = 0, bool small_window = false) {
+    if (small_window) config.initial_stream_window = 3;
+    capsid_test::ResponseCreditProbe response_credit(small_window ? 3 : 0, capabilities);
+    capsid_protocol_options v4;
+    require_result(
+        capsid_protocol_options_init(&v4, sizeof(v4)), "v4 options init");
+    v4.wire_version = 4;
+    v4.capabilities = capabilities;
     capsid_worker *worker = nullptr;
     require_result(
-        capsid_worker_spawn(&config, &worker), "v4 spawn");
+        capsid_worker_spawn_ex(&config, &v4, &worker), "v4 spawn");
     Pump pump{worker};
     require_result(
         capsid_worker_load_bundle(
@@ -112,24 +122,30 @@ void test_negotiation(capsid_worker_config &config) {
         "v4 load bundle");
     const capsid_event ready = pump.wait(is_ready, "v4 ready");
 
-    // Amended §1.2: v4 READY appends u32 worker_capabilities + u32
-    // reserved. Carriage-only slice: caps == 0, reserved == 0.
-    if (ready.payload.size < 8) {
-        fail("v4 READY payload missing the capability tail");
+    // Amended §1.2 + T07: the client splits and strips the capability
+    // tail itself, so the event payload is EXACTLY the v3-shaped
+    // compatibility/proof bytes; the negotiated state moves to the
+    // typed getter (embedders never read the tail by hand).
+    // Inbound connections require the v4.2 terminal barrier. Half-close
+    // and outbound constructor support are still absent.
+    capsid_protocol_info info;
+    require_result(
+        capsid_worker_get_protocol_info(worker, &info, sizeof(info)),
+        "protocol info after READY");
+    const uint32_t expected = (capabilities & CAPSID_PROTOCOL_CAP_CHANNEL_CONFIRM)
+        ? 27 | (capabilities & (CAPSID_PROTOCOL_CAP_CHANNEL_CLOSE_FINAL |
+            CAPSID_PROTOCOL_CAP_FETCH_UPGRADE | CAPSID_PROTOCOL_CAP_CONNECTION_LIFETIME)) : 0;
+    if (info.wire_version != 4 || info.host_capabilities != capabilities ||
+        info.worker_capabilities != expected ||
+        info.effective_capabilities != (expected & capabilities)) {
+        fail("v4 negotiated capabilities do not match implemented inbound support");
     }
-    const uint8_t *cursor =
-        ready.payload.data + ready.payload.size - 8;
-    const uint32_t caps = static_cast<uint32_t>(cursor[0]) |
-                          (static_cast<uint32_t>(cursor[1]) << 8) |
-                          (static_cast<uint32_t>(cursor[2]) << 16) |
-                          (static_cast<uint32_t>(cursor[3]) << 24);
-    const uint32_t reserved = static_cast<uint32_t>(cursor[4]) |
-                              (static_cast<uint32_t>(cursor[5]) << 8) |
-                              (static_cast<uint32_t>(cursor[6]) << 16) |
-                              (static_cast<uint32_t>(cursor[7]) << 24);
-    if (caps != 0 || reserved != 0) {
-        fail("v4 READY tail must be (0,0) in the carriage slice");
+    if (ready.payload.size == 0 || ready.payload.size % 8 == 0) {
+        // stripped payload = 71-byte compatibility id + proof stub;
+        // an empty or tail-sized payload means the strip is wrong
+        fail("READY payload must be the original proof-only bytes");
     }
+    (void)ready;
 
     // v3 semantics ride the v4 stream unchanged. Canonical sequence:
     // bodyless GET ends the request side immediately.
@@ -139,7 +155,37 @@ void test_negotiation(capsid_worker_config &config) {
         "v4 begin request");
     require_result(
         capsid_worker_end_request(worker, 1), "v4 end request");
-    pump.wait(is_response_end, "v4 response");
+    const capsid_event head = pump.wait([](const capsid_event &event) {
+        return event.type == CAPSID_EVENT_RESPONSE_HEAD;
+    }, "v4 response head");
+    if (head.status != 200) fail("v4 response status must be 200");
+    std::string body;
+    for (;;) {
+        const capsid_event next = pump.wait([](const capsid_event &event) {
+            return event.type == CAPSID_EVENT_RESPONSE_BODY || event.type == CAPSID_EVENT_RESPONSE_END;
+        }, "v4 response body");
+        if (next.type == CAPSID_EVENT_RESPONSE_END) break;
+        body.append(reinterpret_cast<const char *>(next.payload.data), next.payload.size);
+        response_credit.consume(worker, next);
+    }
+    if (body != "v4-carriage") fail("v4 response bytes mismatch");
+    response_credit.complete(1, body);
+    if (capabilities) {
+        // Bypass the host API's own gate to verify the actual worker guard.
+        // Announcing host features cannot enable an unfinished worker path.
+        capsid::protocol::Frame frame;
+        frame.type = capsid::protocol::kChannelHalfClose;
+        capsid::protocol::append_u32(&frame.payload, 1);
+        std::vector<uint8_t> wire;
+        if (!capsid::protocol::encode_versioned(4, frame, &wire)) fail("guard frame encode");
+        const auto sent = capsid::win32::send_fd(capsid_worker_fd(worker), wire.data(), wire.size(), 0);
+        if (sent < 0 || static_cast<size_t>(sent) != wire.size()) fail("guard frame write");
+        const auto rejected = pump.wait([](const capsid_event &event) {
+            return event.type == CAPSID_EVENT_ERROR;
+        }, "worker channel capability guard");
+        const std::string diagnostic(reinterpret_cast<const char *>(rejected.payload.data), rejected.payload.size);
+        if (diagnostic != "invalid IPC frame") fail("worker rejects unnegotiated channel frame explicitly");
+    }
     capsid_worker_destroy(worker);
 }
 
@@ -147,14 +193,17 @@ void test_rejects_unknown_capability_bits(const char *worker_path) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = worker_path;
-    config.protocol_version = 4;
-    config.protocol_capabilities = 1u << 30;  // unknown bit
-    capsid_worker *worker = nullptr;
+    capsid_protocol_options options;
+    require_result(
+        capsid_protocol_options_init(&options, sizeof(options)),
+        "options init");
+    options.wire_version = 4;
+    options.capabilities = 1u << 30;  // unknown bit
+    capsid_worker *worker = reinterpret_cast<capsid_worker *>(0x1);
     const capsid_result result =
-        capsid_worker_spawn(&config, &worker);
-    if (result == CAPSID_OK) {
-        capsid_worker_destroy(worker);
-        fail("spawn must reject unknown capability bits locally");
+        capsid_worker_spawn_ex(&config, &options, &worker);
+    if (result == CAPSID_OK || worker != nullptr) {
+        fail("spawn must reject unknown capability bits with a null out");
     }
 }
 
@@ -162,10 +211,14 @@ void test_rejects_unknown_version(const char *worker_path) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = worker_path;
-    config.protocol_version = 5;
+    capsid_protocol_options options;
+    require_result(
+        capsid_protocol_options_init(&options, sizeof(options)),
+        "options init");
+    options.wire_version = 5;
     capsid_worker *worker = nullptr;
     const capsid_result result =
-        capsid_worker_spawn(&config, &worker);
+        capsid_worker_spawn_ex(&config, &options, &worker);
     if (result == CAPSID_OK) {
         capsid_worker_destroy(worker);
         fail("spawn must reject unknown protocol versions locally");
@@ -217,19 +270,24 @@ void test_v3_default_unchanged(const char *worker_path) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
+    if (argc != 2 && !(argc == 3 && std::strcmp(argv[2], "--small-response-window") == 0)) {
         std::fprintf(stderr, "usage: %s <capsid-worker>\n", argv[0]);
         return 2;
     }
     const char *worker_path = argv[1];
+    const bool small_window = argc == 3;
 
     {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = worker_path;
-        config.protocol_version = 4;
-        config.protocol_capabilities = 0;
-        test_negotiation(config);
+        test_negotiation(config, 0, small_window);
+        test_negotiation(config, 31, small_window);
+        test_negotiation(config, 63, small_window);
+        test_negotiation(config, 123, small_window);
+        test_negotiation(config, 155, small_window);
+        test_negotiation(config, 251, small_window);
+        test_negotiation(config, 255, small_window);
     }
     test_rejects_unknown_capability_bits(worker_path);
     test_rejects_unknown_version(worker_path);

@@ -1,0 +1,19 @@
+{
+  "status": "clarified-by-user",
+  "complete": true,
+  "capturedUTC": "2026-11-10T16:02:04.570982+00:00",
+  "userClarification": "原来就是这台机器的 WSL 进行 benchmark 的",
+  "formalBenchmarkEnvironment": "same-machine-CapsidV030-WSL",
+  "externalSshHostRequired": false,
+  "previousAssistantNativeOnlyHostRestrictionSuperseded": true,
+  "describeResultsAsWslNotBareMetal": true,
+  "actualQuietSerialSessionStillRequired": true,
+  "allBuildAndQualificationWorkMustFinishBeforeMeasurement": true,
+  "actualEnvironmentAndAffinityAndVersionsAndProcessCleanupMustBeRecorded": true,
+  "finalCandidateIdentityAndAllOriginalMeasurementProtocolsStillRequired": true,
+  "densityBudgetMiB": 2048,
+  "densityMetric": "full descendant-process-tree PSS",
+  "performancePointsCreatedByThisClarification": 0,
+  "originalPreparationRecordSHA256": "bd4656c1cc6eed944496169421e996327f45acae09051366d8b36be8418a009a",
+  "fullV030GoalComplete": false
+}

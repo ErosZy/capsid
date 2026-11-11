@@ -1,0 +1,127 @@
+--- a/src/httpclient.c
++++ b/src/httpclient.c
+@@ -90,7 +90,8 @@
+     struct addrinfo *dns_results_pending; /* set by the resolve callback */
+     struct addrinfo *dns_results;         /* owned list; head kept for free */
+     struct addrinfo *dns_next;            /* current entry (retry cursor) */
+-    char *connect_host; /* original hostname: Host header and SNI */
++    char *connect_host; /* original hostname for resolution and TLS vhost */
++    char *connect_authority; /* serialized URL authority for Host and TLS identity */
+     char *connect_path; /* request path (uri parse result is transient) */
+     int connect_port;
+     bool connect_ssl;
+@@ -129,6 +130,7 @@
+             uv_freeaddrinfo(h->dns_results);
+         }
+         js_free_rt(rt, h->connect_host);
++        js_free_rt(rt, h->connect_authority);
+         js_free_rt(rt, h->connect_path);
+         tbuf_free(&h->req_headers);
+         tbuf_free(&h->send_buf);
+@@ -257,27 +259,6 @@
+     /* Iterate custom headers. */
+     TJSHttpHdrCtx hctx = { .wsi = wsi, .h = h };
+     lws_hdr_custom_value_foreach(wsi, custom_header_foreach_cb, &hctx);
+-}
+-
+-/* Check whether the user already set a given request header (case-insensitive). */
+-static bool has_request_header(const TBuf *headers, const char *name) {
+-    if (headers->size == 0) {
+-        return false;
+-    }
+-    size_t name_len = strlen(name);
+-    const char *p = (const char *) headers->buf;
+-    const char *end = p + headers->size;
+-    while (p < end) {
+-        if (strncasecmp(p, name, name_len) == 0 && p[name_len] == ':') {
+-            return true;
+-        }
+-        const char *eol = strstr(p, "\r\n");
+-        if (!eol) {
+-            break;
+-        }
+-        p = eol + 2;
+-    }
+-    return false;
+ }
+ 
+ /* Detect Content-Encoding from response headers. Returns format string or NULL. */
+@@ -511,8 +492,8 @@
+     cci.address = address;
+     cci.port = h->connect_port;
+     cci.path = h->connect_path;
+-    cci.host = h->connect_host;
+-    cci.origin = h->connect_host;
++    cci.host = h->connect_authority;
++    cci.origin = NULL;
+     /* LCCSCF_PIPELINE opts this connection into lws's client connection
+      * pool: requests to the same endpoint (address+port+tls, per vhost)
+      * reuse a warm connection instead of a fresh TCP+TLS handshake each
+@@ -526,7 +507,7 @@
+      * connection and evict it afterwards, we keep it out of the pool from
+      * the start: no LCCSCF_PIPELINE, so lws gives it its own connection
+      * and sends "Connection: close". */
+-    cci.ssl_connection = (h->connect_ssl ? LCCSCF_USE_SSL : 0) | h->ssl_flags | LCCSCF_HTTP_NO_FOLLOW_REDIRECT |
++    cci.ssl_connection = (h->connect_ssl ? LCCSCF_USE_SSL : 0) | h->ssl_flags | LCCSCF_HTTP_NO_FOLLOW_REDIRECT | LCCSCF_HTTP_NO_CACHE_CONTROL |
+                          (h->streaming ? 0 : LCCSCF_PIPELINE);
+     cci.method = h->method;
+     cci.local_protocol_name = TJS_LWS_HTTP_PROTOCOL_NAME;
+@@ -727,31 +708,6 @@
+ 
+         case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER: {
+             unsigned char **p = (unsigned char **) in, *end = (*p) + len;
+-
+-            /* Add User-Agent header unless the user already set one. */
+-            if (!has_request_header(&h->req_headers, "User-Agent")) {
+-                if (lws_add_http_header_by_name(wsi,
+-                                                (const unsigned char *) "user-agent:",
+-                                                (const unsigned char *) TJS__UA_STRING,
+-                                                (int) strlen(TJS__UA_STRING),
+-                                                p,
+-                                                end)) {
+-                    return -1;
+-                }
+-            }
+-
+-            /* Add Accept-Encoding unless the user already set it. */
+-            if (!has_request_header(&h->req_headers, "Accept-Encoding")) {
+-                static const char ae_val[] = "gzip, deflate";
+-                if (lws_add_http_header_by_name(wsi,
+-                                                (const unsigned char *) "accept-encoding:",
+-                                                (const unsigned char *) ae_val,
+-                                                (int) strlen(ae_val),
+-                                                p,
+-                                                end)) {
+-                    return -1;
+-                }
+-            }
+ 
+             /* Add custom headers stored in req_headers TBuf.
+              * Format: "Name: Value\r\nName2: Value2\r\n" */
+@@ -1263,6 +1219,26 @@
+         return -1;
+     }
+ 
++    /* Host carries the URL authority, independently of the numeric address
++     * selected by the resolver. Preserve brackets around IPv6 literals and
++     * omit only the scheme's default port. Keep the allocation on the client
++     * through all resolver retries and connection callbacks. */
++    TBuf authority;
++    tbuf_init(ctx, &authority);
++    int authority_error = strchr(h->connect_host, ':')
++        ? tbuf_printf(&authority, "[%s]", h->connect_host)
++        : tbuf_putstr(&authority, h->connect_host);
++    if (!authority_error && h->connect_port != (use_ssl ? 443 : 80)) {
++        authority_error = tbuf_printf(&authority, ":%u", (unsigned) h->connect_port);
++    }
++    if (authority_error || tbuf_putc(&authority, '\0')) {
++        tbuf_free(&authority);
++        lws_parse_uri_destroy(&uri);
++        return -1;
++    }
++    js_free(ctx, h->connect_authority);
++    h->connect_authority = (char *) authority.buf;
++
+     lws_sockaddr46 sa46;
+     bool numeric = !lws_sa46_parse_numeric_address(uri->host, &sa46);
+     bool via_proxy = tjs__lws_uses_proxy(ctx, uri->scheme, uri->host, uri->port);

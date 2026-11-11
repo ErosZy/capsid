@@ -1,0 +1,171 @@
+{
+  "status": "complete-with-findings",
+  "complete": true,
+  "pid": 339,
+  "originalFullRecordSHA256": "004047007633f21e36df52258b19ec0562bfd373dad116ad01ffc198345b5372",
+  "guardedInputs": {
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-host": "27826ad397914bb1aa8d67378daa4550b53bd2b7f2704528e8bfc861f056e4fc",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/capsid-worker": "ed828b4021a75ab662f2083709dc40ac6b9e947c586f66b1c9cd82f8fed5f912",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CMakeCache.txt": "ed4aecbb2676ac8f517e1acf91a90fdef18730bfaf9014a91e38a981a72198d0",
+    "/root/capsid-verification-20261109/build-tsan-current-r2/CTestTestfile.cmake": "dd94317475d12100f7f2b3944612526346e825c319748f56c9f49781cb6c0907",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-current-tsan-linux-build-r4/inventory.json": "923a44c0c5487e427e93b0dc553a714df568c159bd2a62e9ed365a53e55abd1c",
+    "/root/capsid-verification-20261109/toolchains/workerd-v1.20261010.1/workerd": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libssl.a": "2d4ec0decaf6a9c9630800e72550b7ecf151fdb984ebbcde386debb3ea468349",
+    "/root/capsid-verification-20261109/r8-openssl-upstream-tsan-r2/providers/lib64/libcrypto.a": "659fb5674ccd19863a007eb54dc7ec7eff51c611ca63893d3824debce46aae07",
+    "/root/capsid-verification-20261109/r8-cares-upstream-tsan-build-r3/providers/lib/libcares.a": "47e39c33bcf291d25fe874e8499a989588ad07fcabf73aadbc0433d993e34b75",
+    "/mnt/d/capsid-verification-20261108/evidence/sdk78-tsan-allocation-link-proposal-r2/apply-exact-proposed-allocation-link-block.cmake": "d83b86ad6466ae959fc8d4d4bab020e49b2490ff396b19971b462b545d37a24a",
+    "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.tsan-x86_64.so": "dfb5ab5d511f84a08fbb380b04b2d3d30db69ee8817c427e73c131ff7e7c596b",
+    "/usr/bin/openssl": "b4f547c0f16272d1cc7f870330a6f2c243710c335e7a99c734ff7a0c6fdb2503"
+  },
+  "steps": [
+    {
+      "name": "benchmark_qps_probe",
+      "exitCode": 0,
+      "seconds": 26.61986919399999,
+      "originalTimeoutSeconds": 90.0,
+      "certificateToolCorrected": false,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "bdfa1dc3dbf7f62a92be3fd62d91adc5757265757c025bfe49321cdfe4c669f3",
+      "relevantLines": []
+    },
+    {
+      "name": "benchmark_cold_tool",
+      "exitCode": 0,
+      "seconds": 7.435198888000002,
+      "originalTimeoutSeconds": 100.0,
+      "certificateToolCorrected": false,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "001b32c5e60c8c04164930623afd3d17c86b55233313b789890cd155ed9ee83b",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_outbound_reference",
+      "exitCode": 0,
+      "seconds": 6.952371943999992,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "b15e31728a21d398cd971a8c348767a2fbf3bb281fb01f40bfdf079a0a004aa3",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_outbound_single-worker",
+      "exitCode": 0,
+      "seconds": 18.216021915,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "756dc2f688ff5f9fe46344d04404284b442d3aff2b74278328e50a27e6542ea7",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_outbound_static-pool",
+      "exitCode": 0,
+      "seconds": 18.360769077000015,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "ae43e3a948a07a0a21fcab9b5a8a2562e295905240de04c9f3fea4cfb463f4dc",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_outbound_managed",
+      "exitCode": 0,
+      "seconds": 18.51471743899998,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "ccb9d2785793a88509fa96c0c8d91b840a14e5554af2010daac843eb15285815",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_interop_reference",
+      "exitCode": 0,
+      "seconds": 3.5318091999999695,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "1e44033b62b1600cee5121221929ef35d82994bb337895c3c7ca531d15963203",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_interop_single-worker",
+      "exitCode": 0,
+      "seconds": 3.380799130000014,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "85edf54e8cd73ce0c5139147db30b34872280704a6cba0cc7654113f79de8cd0",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_interop_static-pool",
+      "exitCode": 0,
+      "seconds": 3.290520947999994,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "e300f08920b7b297d8b3844ffd537a22329bdc4e7dd54387180f44477921440e",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_interop_managed",
+      "exitCode": 0,
+      "seconds": 3.684120027000006,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": true,
+      "stdoutSHA256": "376a49d83c0e97235b56a773106ca8e9c97c50cf69f5067b891a45508f1be879",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_managed_replacement-recursion",
+      "exitCode": 0,
+      "seconds": 4.2523680669999635,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": false,
+      "stdoutSHA256": "a61484e704f3770fe9378624b9acac8d59e16556dad55a2d446c53f9badfa409",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "relevantLines": []
+    },
+    {
+      "name": "websocket_managed_reclamation-idle",
+      "exitCode": 1,
+      "seconds": 7.294792006000023,
+      "originalTimeoutSeconds": 120.0,
+      "certificateToolCorrected": false,
+      "stdoutSHA256": "059537e79b7e7b4253f44d0f975c09ef5a5114739d928ad951846ca2e14238a5",
+      "stderrSHA256": "1098ce4dbf20aec347371a28cb5a1a639927e694d463b7dd6a41feedfaacc157",
+      "relevantLines": [
+        "original scenario failure: AssertionError [ERR_ASSERTION]: last retired large factory returns memory without another admin operation",
+        "managed host stderr: {\"timestamp\":\"1794325748782\",\"level\":\"info\",\"event\":\"deploy_stage\",\"app\":\"orders\",\"generation\":\"sha256:bc3bce767109df9ab360332a25bb91768e4f60ec2aa7c7034d8614a42770a90f\",\"stage\":\"validate\",\"result\":\"ok\",\"duration_ms\":0,\"message\":\"\"}",
+        "AssertionError [ERR_ASSERTION]: last retired large factory returns memory without another admin operation"
+      ]
+    },
+    {
+      "name": "worker_sandbox_namespaces",
+      "exitCode": 77,
+      "seconds": 0.02595087700001386,
+      "originalTimeoutSeconds": 10.0,
+      "certificateToolCorrected": false,
+      "stdoutSHA256": "1fb2cd8fbdcefcde5487877a0d4be4294daf1aabcca0a6eb7dabddf47dbd47de",
+      "stderrSHA256": "05c96ed12b6414cd06ce030e7ef770f8e7568ed522f9a6d00a5ac4572d752b67",
+      "relevantLines": []
+    }
+  ],
+  "originalFullRawFailuresRetained": true,
+  "onlyCertificateFixtureToolAndPrivateFailureLoggingBindingsChanged": true,
+  "managedSourceSHA256": "f531e747cf1dfe435ca98bbe23faba36451a8933d066884e0bd530b703de4634",
+  "managedCompanionSHA256": "20240bbf8710ecc257b0aff923300b40571c73c10a4aae977e2ffe7df38d6480",
+  "managedWorkloadsRssPredicatesAndAllAssertionsUnchanged": true,
+  "tsanMemoryAcceptanceNotWaived": true,
+  "fullV030GoalComplete": false,
+  "activeCommand": [
+    "/root/capsid-verification-20261109/build-tsan-current-r2/test-sandbox",
+    "--namespaces"
+  ],
+  "activeCommandPid": 1461,
+  "allGuardedInputsUnchanged": true,
+  "actualFocusedCasesExecuted": 13,
+  "originalFullFailuresNotRewritten": true
+}

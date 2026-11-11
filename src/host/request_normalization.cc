@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -440,22 +441,49 @@ bool header_equals_token(std::string_view value, std::string_view token) {
 }  // namespace
 
 WebSocketUpgradeCheck check_websocket_upgrade(
-    const std::vector<PublicRequestHeaderView>& views) {
-    const PublicRequestHeaderView* connection = nullptr;
-    const PublicRequestHeaderView* upgrade = nullptr;
+    const std::vector<PublicRequestHeaderView>& views,
+    std::string_view method, unsigned http_version) {
+    bool websocket = false;
+    for (const auto& view : views) {
+        if (name_iequals(view.name, "upgrade") &&
+                header_value_has_token(view.value, "websocket")) websocket = true;
+    }
+    if (!websocket) return WebSocketUpgradeCheck::kNone;
+    if (method != "GET" || http_version < 11) return WebSocketUpgradeCheck::kBadHandshake;
+
+    const auto trim = [](std::string_view value) {
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.remove_prefix(1);
+        while (!value.empty() && (value.back() == ' ' || value.back() == '\t')) value.remove_suffix(1);
+        return value;
+    };
+    const auto tokens = [&](std::string_view value, std::set<std::string_view>* unique,
+                            bool allow_version) {
+        for (;;) {
+            const size_t comma = value.find(',');
+            const std::string_view item = trim(value.substr(0, comma));
+            if (item.empty()) return false;
+            size_t slash = std::string_view::npos;
+            for (size_t i = 0; i < item.size(); ++i) {
+                if (token_char(item[i])) continue;
+                if (!allow_version || item[i] != '/' || slash != std::string_view::npos ||
+                        i == 0 || i + 1 == item.size()) return false;
+                slash = i;
+            }
+            if (unique && !unique->insert(item).second) return false;
+            if (comma == std::string_view::npos) return true;
+            value.remove_prefix(comma + 1);
+        }
+    };
+    bool connection_upgrade = false;
     const PublicRequestHeaderView* key = nullptr;
     const PublicRequestHeaderView* version = nullptr;
+    std::set<std::string_view> protocols;
     for (const PublicRequestHeaderView& view : views) {
         if (name_iequals(view.name, "connection")) {
-            if (connection != nullptr) {
-                return WebSocketUpgradeCheck::kNone;  // malformed upstream
-            }
-            connection = &view;
+            if (!tokens(view.value, nullptr, false)) return WebSocketUpgradeCheck::kBadHandshake;
+            connection_upgrade |= header_value_has_token(view.value, "upgrade");
         } else if (name_iequals(view.name, "upgrade")) {
-            if (upgrade != nullptr) {
-                return WebSocketUpgradeCheck::kNone;
-            }
-            upgrade = &view;
+            if (!tokens(view.value, nullptr, true)) return WebSocketUpgradeCheck::kBadHandshake;
         } else if (name_iequals(view.name, "sec-websocket-key")) {
             if (key != nullptr) {
                 return WebSocketUpgradeCheck::kBadKey;  // duplicated
@@ -466,24 +494,31 @@ WebSocketUpgradeCheck check_websocket_upgrade(
                 return WebSocketUpgradeCheck::kUnsupportedVersion;
             }
             version = &view;
+        } else if (name_iequals(view.name, "sec-websocket-protocol")) {
+            if (!tokens(view.value, &protocols, false)) return WebSocketUpgradeCheck::kBadHandshake;
         }
     }
-    if (connection == nullptr || upgrade == nullptr) {
-        return WebSocketUpgradeCheck::kNone;
-    }
-    if (!header_value_has_token(connection->value, "upgrade") ||
-        !header_equals_token(upgrade->value, "websocket")) {
-        return WebSocketUpgradeCheck::kNone;
-    }
+    if (!connection_upgrade) return WebSocketUpgradeCheck::kBadHandshake;
     if (version == nullptr ||
-        !header_equals_token(version->value, "13")) {
+        !header_equals_token(trim(version->value), "13")) {
         return WebSocketUpgradeCheck::kUnsupportedVersion;
     }
     if (key == nullptr ||
-        !capsid::host::ws::validate_client_key(std::string(key->value))) {
+        !capsid::host::ws::validate_client_key(std::string(trim(key->value)))) {
         return WebSocketUpgradeCheck::kBadKey;
     }
     return WebSocketUpgradeCheck::kValid;
+}
+
+WebSocketUpgradeRejection websocket_upgrade_rejection(WebSocketUpgradeCheck check) {
+    switch (check) {
+    case WebSocketUpgradeCheck::kBadKey: return {400, "invalid Sec-WebSocket-Key"};
+    case WebSocketUpgradeCheck::kBadHandshake: return {400, "invalid WebSocket handshake"};
+    case WebSocketUpgradeCheck::kUnsupportedVersion: return {426, "unsupported Sec-WebSocket-Version"};
+    case WebSocketUpgradeCheck::kValid:
+    case WebSocketUpgradeCheck::kNone: return {};
+    }
+    return {400, "invalid WebSocket handshake"};
 }
 
 RequestNormalizationResult normalize_public_request(

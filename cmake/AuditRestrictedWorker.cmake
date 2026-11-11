@@ -132,6 +132,39 @@ string(REGEX MATCHALL "[A-Za-z0-9_-]+\\.c\\.[0-9a-f]+" CAPSID_TU_MARKERS "${CAPS
 list(REMOVE_DUPLICATES CAPSID_TU_MARKERS)
 list(LENGTH CAPSID_TU_MARKERS CAPSID_TU_MARKER_COUNT)
 
+# The Clang restricted-runtime target emits retained records because Clang
+# does not expose GCC's per-translation-unit symbol spelling. Require the
+# configured channel and prove that both the runtime and bootstrap contributed.
+if(NOT DEFINED CAPSID_EXPECT_RETAINED_TU_MARKERS)
+    set(CAPSID_EXPECT_RETAINED_TU_MARKERS OFF)
+endif()
+file(STRINGS "${CAPSID_WORKER}" CAPSID_RETAINED_TU_MARKERS
+    REGEX "^capsid-restricted-tu:.*\\.c$")
+list(REMOVE_DUPLICATES CAPSID_RETAINED_TU_MARKERS)
+list(LENGTH CAPSID_RETAINED_TU_MARKERS CAPSID_RETAINED_TU_MARKER_COUNT)
+if(CAPSID_EXPECT_RETAINED_TU_MARKERS AND
+        CAPSID_RETAINED_TU_MARKER_COUNT EQUAL 0)
+    message(FATAL_ERROR
+        "restricted worker audit expected retained translation-unit markers, "
+        "but none were found")
+endif()
+if(CAPSID_RETAINED_TU_MARKER_COUNT GREATER 0)
+    foreach(CAPSID_REQUIRED_UNIT vm txiki_restricted_core)
+        set(CAPSID_REQUIRED_UNIT_FOUND OFF)
+        foreach(CAPSID_RETAINED_TU_MARKER IN LISTS CAPSID_RETAINED_TU_MARKERS)
+            if(CAPSID_RETAINED_TU_MARKER MATCHES
+                    "/${CAPSID_REQUIRED_UNIT}\\.c$")
+                set(CAPSID_REQUIRED_UNIT_FOUND ON)
+            endif()
+        endforeach()
+        if(NOT CAPSID_REQUIRED_UNIT_FOUND)
+            message(FATAL_ERROR
+                "restricted worker retained TU audit is not trustworthy: "
+                "required unit ${CAPSID_REQUIRED_UNIT}.c is missing")
+        endif()
+    endforeach()
+endif()
+
 set(CAPSID_FORBIDDEN_UNITS
     mod_ffi
     mod_posix-socket
@@ -141,11 +174,28 @@ set(CAPSID_FORBIDDEN_UNITS
     worker
 )
 
-if(CAPSID_EXPECT_LTO AND CAPSID_TU_MARKER_COUNT EQUAL 0)
+if(CAPSID_EXPECT_LTO AND CAPSID_TU_MARKER_COUNT EQUAL 0 AND
+        CAPSID_RETAINED_TU_MARKER_COUNT EQUAL 0)
     message(FATAL_ERROR
         "restricted worker audit expected an LTO artifact, but no supported "
         "translation-unit markers were found. Treating this as non-LTO would "
         "make the forbidden-unit checks vacuous on an unfamiliar toolchain.")
+endif()
+
+foreach(CAPSID_RETAINED_TU_MARKER IN LISTS CAPSID_RETAINED_TU_MARKERS)
+    string(REGEX REPLACE "^capsid-restricted-tu:" ""
+        CAPSID_RETAINED_SOURCE "${CAPSID_RETAINED_TU_MARKER}")
+    get_filename_component(CAPSID_RETAINED_UNIT "${CAPSID_RETAINED_SOURCE}" NAME_WE)
+    list(FIND CAPSID_FORBIDDEN_UNITS "${CAPSID_RETAINED_UNIT}" CAPSID_FORBIDDEN_UNIT_INDEX)
+    if(NOT CAPSID_FORBIDDEN_UNIT_INDEX EQUAL -1)
+        message(FATAL_ERROR
+            "forbidden translation unit is linked into worker: "
+            "${CAPSID_RETAINED_UNIT}.c (retained compiler record)")
+    endif()
+endforeach()
+if(CAPSID_RETAINED_TU_MARKER_COUNT GREATER 0)
+    message(STATUS
+        "${CAPSID_RETAINED_TU_MARKER_COUNT} retained translation-unit markers checked")
 endif()
 
 if(CAPSID_TU_MARKER_COUNT GREATER 0)

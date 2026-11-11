@@ -41,6 +41,8 @@ struct EgressDecision {
 class EgressPolicy {
 public:
     EgressPolicy();
+    // Field swap allocates nothing during transactional policy replacement.
+    void swap(EgressPolicy &other) noexcept;
 
     bool configure(const capsid_egress_policy *policy, std::string *error);
     EgressDecision decide_host(const std::string &host,

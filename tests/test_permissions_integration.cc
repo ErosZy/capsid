@@ -979,7 +979,9 @@ void test_system_module_contract(
         "JSON.stringify(['system']),\n"
         "    JSON.stringify(Object.keys(system)) === "
         "JSON.stringify(['get']),\n"
-        "    Object.isFrozen(system), version === '0.2.2',\n"
+        "    Object.isFrozen(system), version === '"
+        CAPSID_TEST_RUNTIME_VERSION
+        "',\n"
         "    Object.isFrozen(flags),\n"
         "    JSON.stringify(Object.keys(flags).sort()) === "
         "JSON.stringify(['capabilityPolicyVersion','profile',"

@@ -1,5 +1,5 @@
 // Absolute contract (docs/workerd-websocket-semantics.md §1-3):
-// - 101 response carries the server socket via the webSocket extension
+// - 101 response carries the client socket via the webSocket extension
 // - every text/binary message arrives back unchanged, same type
 // - close(1000, "echo-done") from the client yields a clean close event
 export default {
@@ -21,6 +21,9 @@ export default {
     }
     const [client, server] = Object.values(new WebSocketPair());
     server.accept();
+    // Byte-exact binary contract requires the ArrayBuffer view (the
+    // reference default binaryType is "blob").
+    server.binaryType = "arraybuffer";
     server.addEventListener("message", (event) => {
       server.send(event.data);
     });

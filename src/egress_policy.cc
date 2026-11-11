@@ -233,6 +233,8 @@ bool parse_numeric(const std::string &input,
 
 namespace capsid {
 
+// Empty count/text constructors keep Debug STL proxy allocation throwable
+// so the ABI guard can report allocation failure instead of termination.
 EgressPolicy::Rule::Rule()
     : action(CAPSID_EGRESS_DENY),
       address(false),
@@ -241,12 +243,18 @@ EgressPolicy::Rule::Rule()
       prefix(0),
       port_start(0),
       port_end(0),
-      rule_id(0) {
+      rule_id(0),
+      host("") {
     std::memset(network, 0, sizeof(network));
 }
 
 EgressPolicy::EgressPolicy()
-    : default_action_(CAPSID_EGRESS_DENY) {}
+    : default_action_(CAPSID_EGRESS_DENY), rules_(0) {}
+
+void EgressPolicy::swap(EgressPolicy &other) noexcept {
+    std::swap(default_action_, other.default_action_);
+    rules_.swap(other.rules_);
+}
 
 bool EgressPolicy::configure(const capsid_egress_policy *policy,
                              std::string *error) {
@@ -272,7 +280,7 @@ bool EgressPolicy::configure(const capsid_egress_policy *policy,
         return false;
     }
 
-    std::vector<Rule> compiled;
+    std::vector<Rule> compiled(0);
     compiled.reserve(policy->rule_count);
     std::set<uint32_t> explicit_rule_ids;
     for (uint32_t index = 0; index < policy->rule_count; ++index) {
@@ -386,7 +394,7 @@ EgressDecision EgressPolicy::decide_host(
         return decide_address(bytes, family, port, true, true);
     }
 
-    std::string host;
+    std::string host("");
     bool wildcard = false;
     if (!normalize_hostname(input, false, &host, &wildcard)) {
         return EgressDecision();
@@ -431,7 +439,7 @@ EgressDecision EgressPolicy::decide_host_any_port(
         address_bytes = bytes + 12;
     }
 
-    std::string host;
+    std::string host("");
     bool input_wildcard = false;
     if (!numeric &&
         !normalize_hostname(input, false, &host, &input_wildcard)) {

@@ -1,0 +1,35 @@
+diff --git a/src/js/polyfills/event-target.js b/src/js/polyfills/event-target.js
+--- a/src/js/polyfills/event-target.js
++++ b/src/js/polyfills/event-target.js
+@@ -24,7 +24,6 @@
+  * @type {WeakMap<Event, PrivateData>}
+  * @private
+  */
+-import core from 'tjs:internal/core';
+ const privateData = new WeakMap();
+ 
+ /**
+@@ -654,9 +653,8 @@
+                 }
+             }
+ 
+-            // Microtask checkpoint: drain microtasks after each listener
+-            // so that promises queued by listener N resolve before listener N+1.
+-            core.drainMicrotasks();
++            // Dispatch is synchronous. The outer runtime checkpoint runs jobs
++            // after every listener has returned and eventPhase has been reset.
+ 
+             // Break if `event.stopImmediatePropagation` was called.
+             if (isStopped(event)) {
+diff --git a/src/vm.c b/src/vm.c
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -915,7 +915,7 @@
+         JSValue event_name = JS_NewString(ctx, "rejectionhandled");
+         JSValue init = JS_NewObject(ctx);
+         JS_DefinePropertyValueStr(ctx, init, "promise", JS_DupValue(ctx, pr->promise), JS_PROP_C_W_E);
+-        JS_DefinePropertyValueStr(ctx, init, "reason", JS_DupValue(ctx, pr->reason), JS_PROP_C_W_E);
++        /* The pinned workerd default exposes reason only on unhandledrejection. */
+         JSValue args[2] = { event_name, init };
+         JSValue event = JS_CallConstructor(ctx, qrt->builtins.promise_event_ctor, countof(args), args);
+         CHECK_EQ(JS_IsException(event), 0);
