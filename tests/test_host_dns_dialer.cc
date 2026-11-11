@@ -111,7 +111,9 @@ void resolver_lifecycle() {
         ++callbacks; success = !error && endpoints.size() == 2;
         for (const auto &ep : endpoints) require(ep.port() == 32123, "numeric service port preserved");
     };
-    resolver.resolve("dns.capsid.test", 32123, completed, dns.server());
+    // Controlled DNS questions are absolute. Native search domains must
+    // not change the name whose wire packets this peer asserts.
+    resolver.resolve("dns.capsid.test.", 32123, completed, dns.server());
     require(wait_until([&] { pump(); for (const auto &packet : dns.receive()) dns.answer(packet); return callbacks == 1; }), "A/AAAA resolution completes");
     require(success, "both actual DNS families returned");
 #ifdef CAPSID_TEST_WRAP_CONNECT
@@ -124,7 +126,7 @@ void resolver_lifecycle() {
     callbacks = 0;
     for (int iteration = 0; iteration < 64; ++iteration) {
         const std::string host = "stalled-" + std::to_string(iteration) + ".capsid.test";
-        resolver.resolve(host, 32123, completed, dns.server());
+        resolver.resolve(host + ".", 32123, completed, dns.server());
         std::vector<DnsPeer::Packet> packets;
         require(wait_until([&] {
             pump();
@@ -140,7 +142,7 @@ void resolver_lifecycle() {
     }
     resolver.resolve("127.0.0.1", 32123, completed); // completed inline, notification still queued
     resolver.cancel(); pump(); require(callbacks == 0, "cancel suppresses already queued completion");
-    resolver.resolve("missing.capsid.test", 32123, completed, dns.server());
+    resolver.resolve("missing.capsid.test.", 32123, completed, dns.server());
     require(wait_until([&] { pump(); for (const auto &packet : dns.receive()) dns.answer(packet, true); return callbacks == 1; }), "NXDOMAIN completes exactly once");
     require(!success, "NXDOMAIN reported as failure"); resolver.cancel(); pump();
     const auto before = Clock::now(); io.restart(); io.run();
@@ -198,7 +200,7 @@ void reserved_invalid_lifecycle() {
     for (const auto *host : {"notinvalid.capsid.test", "invalid.capsid.test", "almost-invalid.capsid.test", "missing.capsid.test"}) {
         const bool negative = std::string(host) == "missing.capsid.test";
         bool done = false; unsigned packets = 0;
-        resolver.resolve(host, 32123, [&](auto error, auto endpoints) {
+        resolver.resolve(std::string(host) + ".", 32123, [&](auto error, auto endpoints) {
             require(negative ? error == asio::error::host_not_found && endpoints.empty() : !error && endpoints.size() == 2,
                     "ordinary names keep actual positive and NXDOMAIN resolution");
             done = true;
@@ -224,7 +226,7 @@ void reserved_invalid_lifecycle() {
     WebSocketDialer dialer(authority(), limits, [&](Command command) { return recorder.send(std::move(command)); },
         [](size_t) {}, std::move(options));
     WorkerEvent event; event.type = WorkerEvent::Type::kChannelDial; event.dial_id = 29;
-    event.channel_max_message = 1024 * 1024; event.text = "ws://stalled.capsid.test:32123/";
+    event.channel_max_message = 1024 * 1024; event.text = "ws://stalled.capsid.test.:32123/";
     dialer.post(std::move(event)); unsigned packets = 0; std::vector<Command> commands;
     require(wait_until([&] {
         for (const auto &packet : dns.receive()) {

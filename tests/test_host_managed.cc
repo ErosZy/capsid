@@ -4096,7 +4096,7 @@ int main(int argc, char** argv) {
             const capsid::host::DeployOutcome deployed =
                 capsid::host::managed_deploy(&options, version, &status);
             require(deployed.ok && deployed.worker != nullptr,
-                    "resource identity deploy failed: " + deployed.error);
+                    "resource identity deploy failed for " + version + ": " + deployed.error);
             capsid_worker_destroy(deployed.worker);
             return json_string_field(
                 read_file(fixtures.state_root + "/apps/orders/active.json"),
@@ -4110,16 +4110,20 @@ int main(int argc, char** argv) {
         const std::string heap_generation = deploy_generation("v2");
         require(heap_generation != first_generation,
                 "worker.jsHeap was omitted from generation identity");
+        // This case compares identities after successful real deployments.
+        // Standalone GCC UBSan cannot initialize the full VM at 128MiB.
+        // Keep two distinct finite limits that admit the instrumented VM;
+        // the separate low-limit test still requires Runtime enforcement.
         create_version(
             fixtures, "v3",
-            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","worker":{"jsHeap":"32MiB","processAddressSpace":"128MiB","memoryMax":"256MiB","fileDescriptors":64},"pool":{"minReady":1,"maxWorkers":1}})json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","worker":{"jsHeap":"32MiB","processAddressSpace":"192MiB","memoryMax":"256MiB","fileDescriptors":64},"pool":{"minReady":1,"maxWorkers":1}})json",
             kSourceBundle);
         const std::string address_generation = deploy_generation("v3");
         require(address_generation != heap_generation,
                 "worker.processAddressSpace was omitted from generation identity");
         create_version(
             fixtures, "v4",
-            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","worker":{"jsHeap":"32MiB","processAddressSpace":"128MiB","memoryMax":"256MiB","fileDescriptors":32},"pool":{"minReady":1,"maxWorkers":1}})json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","worker":{"jsHeap":"32MiB","processAddressSpace":"192MiB","memoryMax":"256MiB","fileDescriptors":32},"pool":{"minReady":1,"maxWorkers":1}})json",
             kSourceBundle);
         const std::string descriptor_generation = deploy_generation("v4");
         require(descriptor_generation != address_generation,

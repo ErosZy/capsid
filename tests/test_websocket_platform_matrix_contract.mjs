@@ -92,7 +92,8 @@ function sample(system) {
         ['tjs_fetch_policy_unowned_context', ['--policy-unowned-context']]])
         tests.push({name, command: ['/test/test-tjs-fetch-abort', ...args], properties: [{name: 'TIMEOUT', value: 15}]});
     for (const [name, args] of [['host_dns_dialer_lifecycle', []], ['host_dns_reserved_invalid', ['--reserved-invalid']]])
-        tests.push({name, command: ['/test/test-host-dns-dialer', ...args], properties: [{name: 'TIMEOUT', value: 30}]});
+        tests.push({name, command: ['/test/test-host-dns-dialer', ...args], properties: [{name: 'TIMEOUT', value: 30},
+            {name: 'ENVIRONMENT', value: ['LOCALDOMAIN=search.capsid.test', 'RES_OPTIONS=ndots:5']}]});
     for (const [name, scenario] of writeDeadlines) tests.push({name,
         command: ['/test/test-host-write-timeout', scenario, '/test/capsid-worker'],
         properties: [{name: 'TIMEOUT', value: 30}]});
@@ -247,6 +248,10 @@ for (const name of ['host_dns_dialer_lifecycle', 'host_dns_reserved_invalid']) f
     ['skip allowance', entry => {entry.properties.push({name: 'SKIP_RETURN_CODE', value: 77});}, /cannot skip/],
     ['unbounded timeout', entry => {entry.properties = [];}, /bounded DNS timeout/],
     ['wrong executable', entry => {entry.command[0] = '/test/other';}, /intended DNS executable/],
+    ['missing search environment', entry => {entry.properties = entry.properties.filter(value => value.name !== 'ENVIRONMENT');}, /controlled DNS search environment/],
+    ['missing search domain', entry => {entry.properties.find(value => value.name === 'ENVIRONMENT').value = ['RES_OPTIONS=ndots:5'];}, /exact controlled DNS search setting/],
+    ['weakened search ordering', entry => {entry.properties.find(value => value.name === 'ENVIRONMENT').value[1] = 'RES_OPTIONS=ndots:1';}, /exact controlled DNS search setting/],
+    ['duplicate search override', entry => {entry.properties.find(value => value.name === 'ENVIRONMENT').value.push('LOCALDOMAIN=other.test');}, /exact controlled DNS search setting/],
 ]) test(name + ' rejects ' + kind, () => {
     const inventory = sample('Windows'); mutate(inventory.tests.find(value => value.name === name));
     assert.throws(() => validatePlatformMatrix(inventory, 'Windows', process.execPath), pattern);
@@ -566,9 +571,13 @@ test('real CTest inventory preserves active runner files and nested registration
         for (const entry of registrations.filter(entry => writeDeadlines.some(([name]) => entry.name === name)))
             entry.command[0] = writeDeadline;
         const quote = value => `"${value.replaceAll('\\', '/').replaceAll('"', '\\"')}"`;
-        const render = entries => entries.map(entry =>
+        const render = entries => entries.map(entry => {
+            const environment = entry.properties.find(property => property.name === 'ENVIRONMENT')?.value;
+            return (
             `add_test(${[entry.name, ...entry.command].map(quote).join(' ')})\n` +
-            `set_tests_properties(${quote(entry.name)} PROPERTIES TIMEOUT ${entry.properties.find(property => property.name === 'TIMEOUT').value})\n`).join('');
+            `set_tests_properties(${quote(entry.name)} PROPERTIES TIMEOUT ${entry.properties.find(property => property.name === 'TIMEOUT').value}` +
+            `${environment ? ' ENVIRONMENT ' + quote(environment.join(';')) : ''})\n`);
+        }).join('');
         fs.mkdirSync(path.join(root, 'nested'));
         fs.writeFileSync(path.join(root, 'CTestTestfile.cmake'),
             render(registrations.slice(0, 10)) + 'subdirs("nested")\n');

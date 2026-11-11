@@ -3,16 +3,12 @@
 
 #include <chrono>
 #include <cstdio>
-#include <set>
 
 namespace {
 namespace p = capsid::protocol;
 using Clock = std::chrono::steady_clock;
 
 struct Gate {
-    std::set<uint64_t> first_bodies;
-    size_t remaining = 0;
-    uint64_t current = 0;
     bool armed = false;
     bool stalled = false;
     bool released = false;
@@ -42,29 +38,19 @@ struct Gate {
             }
             gate.released = true;
         }
-        if (!gate.armed && !gate.remaining && size >= p::kHeaderSize &&
+        // Hold the first actual producer output, including its request
+        // credit/head. Nothing is consumed from the pressure queue before
+        // the complete input batch can fill it through the real runtime.
+        if (!gate.armed && size >= p::kHeaderSize &&
                 p::load_u32_at(data) == p::kMagic &&
-                data[6] == p::kResponseBody && data[7] == 0) {
-            const uint64_t id = request_id(data);
-            if (id >= 93 && id < 109) {
-                gate.current = id;
-                gate.remaining = p::kHeaderSize + p::load_u32_at(data + 20);
-                if (gate.remaining != size) gate.invalid = true;
-            }
+                request_id(data) >= 93 && request_id(data) < 109) {
+            gate.armed = true;
+            gate.armed_at = Clock::now();
+            gate.stalled = true;
+            ++gate.stalls;
+            return 0;
         }
-        const ssize_t count = next(data, size, next_state);
-        if (count > 0 && gate.remaining) {
-            if (static_cast<size_t>(count) > gate.remaining) gate.invalid = true;
-            else gate.remaining -= static_cast<size_t>(count);
-            if (!gate.remaining) {
-                gate.first_bodies.insert(gate.current);
-                if (gate.first_bodies.size() == 16) {
-                    gate.armed = true;
-                    gate.armed_at = Clock::now();
-                }
-            }
-        }
-        return count;
+        return next(data, size, next_state);
     }
 
     static void terminal(const p::Frame& frame, size_t queued, size_t limit,

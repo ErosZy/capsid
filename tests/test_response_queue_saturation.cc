@@ -956,14 +956,16 @@ void test_native_string_final_utf8(const char *worker_path,
     capsid_worker_destroy(worker);
 }
 
-// #18: establish sixteen producers before starting the deadline subject.
-// The original 64-request case remains #11. This case isolates the full
-// wire queue from the cost of dispatching 64 ASan-instrumented handlers.
-// Each producer contributes a real 64 KiB pump quantum to the 1 MiB queue.
+// #18: publish sixteen producers and the deadline subject in one batch.
+// The original 64-request case remains #11. The initial response credit
+// permits a real 64 KiB pump quantum per producer, filling the 1 MiB wire
+// queue while the controlled writer holds its first producer output.
+// No parent-side preparation gap can consume a running producer's 300ms
+// deadline before its remaining credit has even been submitted.
 void test_established_timeout_pressure(const char *worker_path,
                                        const std::string &bundle) {
     capsid_worker *worker =
-        spawn_with(worker_path, bundle, 1024u * 1024u, 16u * 1024u, 300);
+        spawn_with(worker_path, bundle, 1024u * 1024u, 128u * 1024u, 300);
 #if defined(_WIN32)
     // The controlled writer cannot piggyback ACKs on body output. Publish
     // this test's small input frames without Nagle batching delays.
@@ -987,29 +989,10 @@ void test_established_timeout_pressure(const char *worker_path,
         require_result(capsid_worker_end_request(worker, id), "end pressure producer");
         ids.push_back(id);
     }
-    const auto first_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    Collector phase_a;
-    std::set<uint64_t> seen_first;
-    while (std::chrono::steady_clock::now() < first_deadline && seen_first.size() != 16) {
-        pump(worker);
-        capsid_event event;
-        while (next_event(worker, &event)) {
-            collect_event(phase_a, event);
-            if (event.type == CAPSID_EVENT_RESPONSE_BODY) seen_first.insert(event.request_id);
-        }
-    }
-    require(seen_first.size() == 16, "all sixteen producers established their first windows");
-    for (uint64_t id = 93; id < 109; ++id) {
-        require(phase_a.outcomes[id].body.size() == 16384 && phase_a.terminal_counts[id] == 0,
-                "producer still live after its original initial window");
-    }
     require_result(capsid_worker_begin_request(
         worker, 92, "GET", "https://example.test/hang", NULL, 0), "begin pressure hang");
     require_result(capsid_worker_end_request(worker, 92), "end pressure hang");
-    for (uint64_t id = 93; id < 109; ++id) {
-        require_result(capsid_worker_grant_response_credit(worker, id, 128u * 1024u),
-                       "grant established producers enough for a full native pump pass");
-    }
+    const auto first_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     bool flushed = false;
     while (std::chrono::steady_clock::now() < first_deadline && !flushed) {
         const capsid_result result = capsid_worker_flush(worker);
@@ -1027,7 +1010,7 @@ void test_established_timeout_pressure(const char *worker_path,
         descriptor.fd = capsid_worker_fd(worker);
         capsid::win32::capsid_poll(&descriptor, 1, 10);
     }
-    Collector collector = drive(worker, ids, GrantMode::kImmediate, 15, phase_a);
+    Collector collector = drive(worker, ids, GrantMode::kImmediate, 15);
     require(!collector.saw_exit && collector.outcomes.size() == ids.size(),
             "all submitted pressure requests survived to a terminal");
     for (uint64_t id : ids) require(collector.terminal_counts[id] == 1,

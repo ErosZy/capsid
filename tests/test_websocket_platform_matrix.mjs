@@ -390,6 +390,12 @@ export function validatePlatformMatrix(inventory, system, node) {
         assert.ok(!properties.DISABLED && !properties.WILL_FAIL, `${name}: cannot weaken DNS test`);
         assert.ok(!Object.hasOwn(properties, 'SKIP_RETURN_CODE'), `${name}: required DNS test cannot skip`);
         assert.ok(Number.isFinite(properties.TIMEOUT) && properties.TIMEOUT > 0 && properties.TIMEOUT <= 30, `${name}: bounded DNS timeout`);
+        assert.ok(Array.isArray(properties.ENVIRONMENT), `${name}: controlled DNS search environment is required`);
+        for (const setting of ['LOCALDOMAIN=search.capsid.test', 'RES_OPTIONS=ndots:5']) {
+            const key = setting.slice(0, setting.indexOf('=') + 1);
+            assert.deepEqual(properties.ENVIRONMENT.filter(value => value.startsWith(key)), [setting],
+                `${name}: exact controlled DNS search setting ${key}`);
+        }
         required.push(name);
     }
     if (system === 'Windows') {

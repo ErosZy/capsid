@@ -5,6 +5,7 @@
 #include "worker_exit_assertions.h"
 
 #if !defined(_WIN32)
+#include <signal.h>
 #include <sys/wait.h>
 #endif
 

@@ -1,4 +1,12 @@
 if(BUILD_TESTING)
+    # The frozen FetchRPC vectors are also exercised in Host/worker-off
+    # builds (including the standalone fuzz job). They need the actual
+    # vendored JSON target, even when neither product target creates it.
+    if(NOT TARGET capsid_jansson)
+        add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/jansson")
+        target_link_libraries(capsid_jansson PRIVATE capsid_sanitizers)
+    endif()
+
     add_executable(test-bytecode-publish tests/test_bytecode_publish.cc)
     target_include_directories(test-bytecode-publish PRIVATE tools)
     target_link_libraries(test-bytecode-publish PRIVATE capsid_sanitizers)
@@ -3909,6 +3917,7 @@ if(BUILD_TESTING)
         COMMAND test-fetchrpc-v4
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/fetchrpc-v4/vectors.json")
 
+    if(TARGET capsid_host_core)
     # GLM T08: channel capacity ledger + protocol identity Red tests
     add_executable(
         test-host-channel-ledger
@@ -3932,6 +3941,7 @@ if(BUILD_TESTING)
     set_target_properties(test-host-channel-budget PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     add_test(NAME host_channel_budget COMMAND test-host-channel-budget)
     set_tests_properties(host_channel_budget PROPERTIES TIMEOUT 30 LABELS "host;websocket;capacity;metrics")
+    endif()
 
     # GLM T07: C11 embedding example, built and executed as a test
     # (real worker, real request, gated channel surface)
@@ -4045,6 +4055,11 @@ if(BUILD_TESTING)
         set_tests_properties(host_dns_dialer_lifecycle PROPERTIES TIMEOUT 30 LABELS "host;websocket;lifecycle")
         add_test(NAME host_dns_reserved_invalid COMMAND test-host-dns-dialer --reserved-invalid)
         set_tests_properties(host_dns_reserved_invalid PROPERTIES TIMEOUT 30 LABELS "host;websocket;lifecycle")
+        # Exercise the controlled absolute DNS names with a real search list.
+        # This process-local configuration also catches accidental dependence
+        # on a runner's ambient resolv.conf without changing native resolution.
+        set_tests_properties(host_dns_dialer_lifecycle host_dns_reserved_invalid
+            PROPERTIES ENVIRONMENT "LOCALDOMAIN=search.capsid.test;RES_OPTIONS=ndots:5")
         if(TARGET capsid-worker)
             add_executable(test-host-channel-lifecycle tests/test_host_channel_lifecycle.cc)
             target_include_directories(test-host-channel-lifecycle PRIVATE include src)
