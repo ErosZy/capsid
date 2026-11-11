@@ -110,6 +110,9 @@ function fault(name, source, diagnostic) {
         assert.ok(result.output.includes(diagnostic), `${name}: wrong failure\n${result.output}`);
     });
 }
+fault('macOS cannot select the retired macos-14 runner image',
+    workflow.replace('runs-on: macos-15', 'runs-on: macos-14'),
+    'testing-validity workflow lost required gate: runs-on: macos-15');
 for (const [index, match] of [...workflow.matchAll(/--no-tests=error/g)].entries()) {
     fault(`CTest command ${index + 1} cannot omit its empty-selection guard`,
         workflow.slice(0, match.index) + workflow.slice(match.index + match[0].length),

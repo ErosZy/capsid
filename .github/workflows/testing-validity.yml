@@ -636,7 +636,7 @@ jobs:
           path: build-fuzz/fuzz-junit.xml
 
   posix-host-library:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
 
     steps:

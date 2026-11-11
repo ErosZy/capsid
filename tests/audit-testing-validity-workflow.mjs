@@ -87,7 +87,7 @@ const requiredFragments = [
   "CAPSID_ENABLE_UBSAN",
   "-DCAPSID_BUILD_FUZZERS=ON",
   "-L fuzz",
-  "runs-on: macos-14",
+  "runs-on: macos-15",
   "-DCAPSID_BUILD_WORKER=OFF",
   "hosted-evidence/run.txt",
   "hosted-evidence/sha256sums.txt",
