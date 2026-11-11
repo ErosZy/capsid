@@ -9,6 +9,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 import {randomUUID, randomBytes, createHash} from 'node:crypto';
 import {loadNodeWS} from './helpers/ws_interop_node_sdk.mjs';
+import {posixWorkerChildren} from './helpers/posix_worker_processes.mjs';
 
 const options = new Map();
 for (let i = 2; i < process.argv.length; i += 2) options.set(process.argv[i], process.argv[i + 1]);
@@ -45,7 +46,7 @@ function getChildren(pid) {
             } catch (error) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return []; throw error; }
         });
     }
-    return execFileSync('ps', ['-o', 'pid=', '-P', String(pid)], {encoding: 'utf8'}).trim().split(/\s+/).filter(Boolean).map(Number);
+    return posixWorkerChildren(pid, worker);
 }
 function exists(pid) {
     try { process.kill(pid, 0); return true; }

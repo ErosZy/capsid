@@ -6,6 +6,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {posixWorkerChildren} from './helpers/posix_worker_processes.mjs';
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -51,14 +52,7 @@ function workersOf(pid) {
             } catch (error) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return []; throw error; }
         });
     }
-    // The fixture starts only Workers. Check each direct child's executable
-    // before sending the one intentional process-failure signal on macOS too.
-    return execFileSync('ps', ['-o', 'pid=', '-P', String(pid)], {encoding: 'utf8'})
-        .trim().split(/\s+/).filter(Boolean).map(Number).filter(child => {
-            const executable = execFileSync('ps', ['-o', 'comm=', '-p', String(child)], {encoding: 'utf8'}).trim();
-            assert.equal(fs.realpathSync(executable), fs.realpathSync(worker));
-            return true;
-        });
+    return posixWorkerChildren(pid, worker);
 }
 function exists(pid) {
     try { process.kill(pid, 0); return true; }

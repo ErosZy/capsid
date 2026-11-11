@@ -10,6 +10,7 @@ import os from 'node:os';
 import {plansForGroup, validateRetiredCase, validateRetiredReport} from '../tools/native-retired-ownership-contract.mjs';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
+import {referenceArchitecture, referenceLockName, referencePlatform} from '../tools/workerd-platform.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const {values: args} = parseArgs({options: {worker: {type: 'string'}, helper: {type: 'string'},
@@ -24,13 +25,15 @@ const program = path.join(root, 'tests/fixtures/worker-native-retired-' + kind +
 const programHash = hash(program), worker = path.resolve(args.worker), helper = path.resolve(args.helper);
 const reference = path.resolve(args.reference ?? process.env.CAPSID_WORKERD_REF ??
     (windows ? path.join(root, 'build-v030-native/reference-windows-v1.20261010.1/workerd.exe') : path.join(root, 'build-v030-native/reference/workerd')));
-const referenceLockFile = path.join(root, 'tests/fixtures/workerd-ws', windows ? 'reference-lock-windows.json' : 'reference-lock.json');
+const referenceLockFile = path.join(root, 'tests/fixtures/workerd-ws', referenceLockName(process.platform, process.arch));
 const referenceLock = read(referenceLockFile);
 assert.equal(hash(reference), referenceLock.binary_sha256);
+assert.equal(referencePlatform(referenceLock), process.platform);
+assert.equal(referenceArchitecture(referenceLock), process.arch);
 const staticPacketFile = path.join(root, 'tests/fixtures/workerd-native-branch-graph-primary-lock.json');
 const staticPackets = read(staticPacketFile).packets;
 const measuredFiles = [program, worker, helper, reference, referenceLockFile, staticPacketFile,
-    fileURLToPath(import.meta.url), path.join(root, 'tools/native-retired-ownership-contract.mjs')];
+    fileURLToPath(import.meta.url), path.join(root, 'tools/native-retired-ownership-contract.mjs'), path.join(root, 'tools/workerd-platform.mjs')];
 const measured = Object.fromEntries(measuredFiles.map(file => [file, hash(file)]));
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-native-retired-ownership-'));
 const reportDir = process.env.CAPSID_WS_REPORT_DIR ?? output; fs.mkdirSync(reportDir, {recursive: true});

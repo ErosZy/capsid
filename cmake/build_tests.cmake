@@ -2693,6 +2693,12 @@ if(BUILD_TESTING)
                 "Installed source of the locked Node ws test package")
 
             # Each stop case executes a real Host and its actual Workers.
+            add_test(NAME posix_worker_process_observation_controls
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_posix_worker_processes.mjs")
+            set_tests_properties(posix_worker_process_observation_controls PROPERTIES
+                LABELS "host;lifecycle;test-driver" TIMEOUT 20)
+
             # Windows uses the explicit parent pipe; POSIX also keeps the
             # process-signal route under the same terminal assertions.
             set(CAPSID_PARENT_STOP_CASES idle parent-eof repeat-stop active-ws

@@ -10,6 +10,7 @@ import {parseArgs,isDeepStrictEqual} from 'node:util';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {assertGatedDefaultReaderState as validate, assertGatedDefaultReaderReport} from '../tools/native-fetch-default-reader-gates-contract.mjs';
+import {referenceArchitecture,referenceLockName,referencePlatform} from '../tools/workerd-platform.mjs';
 
 const {values:args}=parseArgs({options:Object.fromEntries(['source','host','worker','reference','fixture','report','transport'].map(name=>[name,{type:'string'}]))});
 assert.ok(['ordinary','upgrade'].includes(args.transport),'explicit ordinary or Upgrade fallback transport');
@@ -20,13 +21,14 @@ args.report ??= path.resolve(process.env.CAPSID_WS_REPORT_DIR ?? process.cwd(),'
 for(const key of ['source','host','worker','reference','fixture','report']) assert.ok(args[key]&&path.isAbsolute(args[key]),key);
 const {startCapsid,stopCapsid}=await import(pathToFileURL(path.join(args.source,'tests/helpers/ws_host_backend.mjs')));
 const hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-const windows=process.platform==='win32';
-const lockFile=path.join(args.source,'tests/fixtures/workerd-ws',windows?'reference-lock-windows.json':'reference-lock.json');
+const lockFile=path.join(args.source,'tests/fixtures/workerd-ws',referenceLockName(process.platform,process.arch));
 const lock=JSON.parse(fs.readFileSync(lockFile));assert.equal(hash(args.reference),lock.binary_sha256);assert.equal(process.version,'v24.14.0');
+assert.equal(referencePlatform(lock),process.platform);assert.equal(referenceArchitecture(lock),process.arch);
 assert.ok(!fs.existsSync(args.report));fs.mkdirSync(path.dirname(args.report),{recursive:true});
 const artifact=path.join(path.dirname(args.report),path.basename(args.report)+'.runs');fs.mkdirSync(artifact);
 const measured=[args.host,args.worker,args.reference,args.fixture,lockFile,fileURLToPath(import.meta.url),
-    path.join(args.source,'tests/helpers/ws_host_backend.mjs'),fileURLToPath(new URL('../tools/native-fetch-default-reader-gates-contract.mjs',import.meta.url))];
+    path.join(args.source,'tests/helpers/ws_host_backend.mjs'),fileURLToPath(new URL('../tools/native-fetch-default-reader-gates-contract.mjs',import.meta.url)),
+    fileURLToPath(new URL('../tools/workerd-platform.mjs',import.meta.url))];
 const inputs=Object.fromEntries(measured.map(file=>[file,hash(file)]));
 const plan=[7,4089,...Array(66).fill(4096),17],total=plan.reduce((a,b)=>a+b,0);
 const report={schema:'capsid-native-default-reader-gates-v1',complete:false,status:'running',functionalQualification:true,performanceQualification:false,transport:args.transport,

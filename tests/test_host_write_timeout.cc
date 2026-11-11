@@ -51,6 +51,8 @@ struct Report {
   bool cleanup = false, unread_until_action = false;
   std::vector<std::size_t> wire_bytes, body_bytes;
   std::vector<int> receive_buffers;
+  std::vector<int> receive_buffers_before_action, receive_buffers_after_action;
+  std::vector<std::size_t> queued_bytes_before_action, queued_bytes_after_action;
   std::vector<capsid::WorkerExitStatus> worker_exits;
   capsid::host::SingleWorkerServer::DrainMetrics drain;
   void print(bool complete, const std::string &error) const {
@@ -75,6 +77,14 @@ struct Report {
     array(body_bytes);
     std::cout << ",\"receiveBuffers\":";
     array(receive_buffers);
+    std::cout << ",\"receiveBuffersBeforeAction\":";
+    array(receive_buffers_before_action);
+    std::cout << ",\"receiveBuffersAfterAction\":";
+    array(receive_buffers_after_action);
+    std::cout << ",\"queuedBytesBeforeAction\":";
+    array(queued_bytes_before_action);
+    std::cout << ",\"queuedBytesAfterAction\":";
+    array(queued_bytes_after_action);
     std::cout << ",\"workerExits\":[";
     for (std::size_t i = 0; i < worker_exits.size(); ++i) {
       if (i) std::cout << ',';
@@ -322,8 +332,9 @@ void exercise(const char *worker, Report &report) {
       auto socket = connect(io, server.port, true);
       asio::socket_base::receive_buffer_size size;
       socket.get_option(size);
-      require(size.value() > 0 && size.value() <= 65536,
-              "bounded client receive buffer");
+      require(size.value() > 0 &&
+                  static_cast<std::size_t>(size.value()) < body_size,
+              "client receive buffer smaller than original response");
       report.receive_buffers.push_back(size.value());
       send(socket, "big");
       const auto start = Clock::now();
@@ -354,6 +365,28 @@ void exercise(const char *worker, Report &report) {
               "started unread responses occupy all admission slots");
       ++report.busy;
     }
+    const auto observe_unread = [&](std::vector<int> &buffers,
+                                    std::vector<std::size_t> &queued) {
+      for (auto &socket : stalled) {
+        // SO_RCVBUF is a request: Darwin can grow it after connect or data
+        // arrival. Measure the actual window and unread bytes at both ends
+        // of the no-read phase; admission and the disabled control below
+        // must independently prove that the real large response is stalled.
+        asio::socket_base::receive_buffer_size size;
+        socket.get_option(size);
+        asio::socket_base::bytes_readable readable;
+        socket.io_control(readable);
+        buffers.push_back(size.value());
+        queued.push_back(readable.get());
+        require(size.value() > 0 &&
+                    static_cast<std::size_t>(size.value()) < body_size,
+                "actual receive window smaller than original response");
+        require(readable.get() > 0 && readable.get() < body_size,
+                "actual unread prefix smaller than original response");
+      }
+    };
+    observe_unread(report.receive_buffers_before_action,
+                   report.queued_bytes_before_action);
     const auto action = Clock::now();
     if (stop || drain) {
       for (int i = 0; i < 3; ++i) {
@@ -391,6 +424,8 @@ void exercise(const char *worker, Report &report) {
       require(recovered == warm,
               "write deadline must release admission before client reads");
     }
+    observe_unread(report.receive_buffers_after_action,
+                   report.queued_bytes_after_action);
     report.unread_until_action = true;
     for (auto &socket : stalled) {
       const auto wire = receive(socket);
