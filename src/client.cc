@@ -84,9 +84,9 @@ struct capsid_worker {
     uint32_t max_header_bytes;
     uint32_t max_queued_bytes;
     size_t write_offset;
-    // Count plus allocator selects the throwing empty constructor, retaining
-    // value initialization of this aggregate and all Debug iterator checks.
-    std::vector<uint8_t> write_buffer{0, std::allocator<uint8_t>{}};
+    // The C++11 count/value/allocator overload selects a throwing empty
+    // constructor, retaining value initialization and Debug iterator checks.
+    std::vector<uint8_t> write_buffer{0, uint8_t{0}, std::allocator<uint8_t>{}};
     // Pinned from the spawn config; v4 pins the parser and the Hello
     // capability tail. worker_capabilities lands from the READY tail.
     uint16_t protocol_version = capsid::protocol::kVersion;
@@ -102,7 +102,7 @@ struct capsid_worker {
     capsid::protocol::ChannelLimits protocol_limits;
     capsid::EgressPolicy user_egress_snapshot;
     capsid::protocol::Parser parser;
-    std::vector<uint8_t> event_payload{0, std::allocator<uint8_t>{}};
+    std::vector<uint8_t> event_payload{0, uint8_t{0}, std::allocator<uint8_t>{}};
     std::map<uint64_t, RequestState> requests;
     std::map<uint64_t, capsid::protocol::UpgradeTail> staged_upgrades;
     uint32_t announced_channel_id = 0;
@@ -111,7 +111,7 @@ struct capsid_worker {
     // §13.2: ids of requests still inflight when the hard timeout killed
     // the worker. They drain one REQUEST_TIMEOUT event per next_event call
     // (stable map order) before the channel reports CAPSID_CLOSED.
-    std::vector<uint64_t> pending_timeouts{0, std::allocator<uint64_t>{}};
+    std::vector<uint64_t> pending_timeouts{0, uint64_t{0}, std::allocator<uint64_t>{}};
     bool ipc_metrics_enabled;
     capsid::ClientIpcMetrics ipc_metrics;
 };

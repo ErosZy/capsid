@@ -323,9 +323,9 @@ struct Frame {
     // Wire version this frame arrived with (filled by Parser::next;
     // zero from encode-only callers).
     uint16_t version = 0;
-    // Explicit zero count keeps Debug STL allocation throwable and the
-    // frame aggregate empty, including builds without guaranteed elision.
-    std::vector<uint8_t> payload{0, std::allocator<uint8_t>{}};
+    // The C++11 count/value/allocator overload keeps Debug STL allocation
+    // throwable and the frame empty, even without guaranteed elision.
+    std::vector<uint8_t> payload{0, uint8_t{0}, std::allocator<uint8_t>{}};
 };
 
 enum ParseResult {
