@@ -6,7 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {execFile} from 'node:child_process';
+import {execFile,spawnSync} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {validateInteropReport,compareInteropReports} from '../tools/workerd-interop-contract.mjs';
@@ -20,6 +20,45 @@ const expected=r=>({runId:r.runId,lock:structuredClone(r.referenceLock),clientLo
     inputs:structuredClone(r.inputs),host:'a'.repeat(64),worker:'b'.repeat(64)});
 const execute=promisify(execFile);
 const python=process.env.CAPSID_WS_INTEROP_PYTHON??'python3';
+
+for(const autocrlf of ['false','true']) test(`fixture checkout preserves LF and CRLF bytes with core.autocrlf=${autocrlf}`,()=>{
+    const temporaryRoot=fs.realpathSync(os.tmpdir());
+    const directory=fs.mkdtempSync(path.join(temporaryRoot,'capsid-fixture-checkout-'));
+    assert.equal(path.dirname(fs.realpathSync(directory)),temporaryRoot);
+    const git=(args,input)=>{
+        const result=spawnSync('git',['-C',directory,...args],
+            {input,encoding:'utf8',timeout:10000,windowsHide:true});
+        assert.ifError(result.error);
+        assert.equal(result.status,0,result.stderr);
+        return result.stdout.trim();
+    };
+    try {
+        git(['init','--quiet']);
+        const fixtures=['tests/fixtures/workerd-ws/api-compat.mjs','tests/fixtures/workerd-crypto.mjs'];
+        const originals=fixtures.map(file=>fs.readFileSync(path.join(root,file)));
+        assert.ok(!originals[0].includes(Buffer.from('\r\n')),'original LF reference fixture');
+        assert.ok(originals[1].includes(Buffer.from('\r\n')),'original CRLF reference fixture');
+        for(const [index,file] of fixtures.entries()) {
+            const blob=git(['hash-object','--no-filters','-w','--stdin'],originals[index]);
+            git(['update-index','--add','--cacheinfo',`100644,${blob},${file}`]);
+        }
+        const attributes=git(['hash-object','--no-filters','-w','--stdin'],fs.readFileSync(path.join(root,'.gitattributes')));
+        git(['update-index','--add','--cacheinfo',`100644,${attributes},.gitattributes`]);
+        const tree=git(['write-tree']);
+        const commit=git(['-c','user.name=Fixture Control','-c','user.email=fixture@example.invalid','commit-tree',tree],
+            'Preserve original reference fixture blobs\n');
+        git(['update-ref','HEAD',commit]);
+        git(['-c',`core.autocrlf=${autocrlf}`,'checkout','--force','--quiet','HEAD']);
+        for(const [index,file] of fixtures.entries())
+            assert.deepEqual(fs.readFileSync(path.join(directory,file)),originals[index],'exact checkout bytes: '+file);
+        assert.equal(git(['-c',`core.autocrlf=${autocrlf}`,'status','--porcelain']),'',
+            'original fixture checkout must remain clean for Release identity');
+    } finally {
+        assert.equal(path.dirname(directory),temporaryRoot);
+        assert.ok(path.basename(directory).startsWith('capsid-fixture-checkout-'));
+        fs.rmSync(directory,{recursive:true,force:true});
+    }
+});
 
 for (const [platform,arch,asset,filename,binaryHash,assetHash] of [
     ['linux','x64','workerd-linux-64.gz','reference-lock.json',
