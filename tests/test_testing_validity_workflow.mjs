@@ -234,6 +234,13 @@ for (const job of ['release-wpt-and-delegated-sandbox', 'sanitizers', 'fuzz']) {
     ]) fault(`${job} requires ${name}`, nativeJob(job, source => source.replace(before, after)), `${job} ${diagnostic}`);
 }
 const rawMemoryHeading='      - name: Record original ASan RSS results\n';
+for (const job of ['sanitizers', 'windows-host-library']) {
+    const change = source => job === 'windows-host-library' ? windows(source) : nativeJob(job, source);
+    for (const [name, minutes] of [['shorter than the measured matrix', 60], ['unbounded', 0], ['excessive', 720]]) {
+        fault(`${job} rejects a job budget ${name}`, change(source => source.replace('timeout-minutes: 180', `timeout-minutes: ${minutes}`)),
+            `${job} has a bounded job budget sufficient for the measured complete matrix and builds`);
+    }
+}
 const memoryHeading='      - name: Require separate ASan memory acceptance\n';
 const selectedMatrixHeading='      - name: Run ${{ matrix.name }} matrix\n';
 for (const [name,before,after,diagnostic] of [

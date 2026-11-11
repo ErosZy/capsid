@@ -220,6 +220,12 @@ for (const [job, configureName, installName] of [
   assert.ok(install.includes(' openssl ') && install.includes('/usr/bin/openssl version'),
     'native certificate fixture CLI is installed and probed');
 }
+for (const jobName of ['sanitizers', 'windows-host-library']) {
+  const job = workflow.split(`  ${jobName}:`)[1]?.split(/\n  [a-z][a-z-]+:\r?\n/)[0];
+  const budgets = [...job.matchAll(/^    timeout-minutes: (\d+)\r?$/gm)].map(match => Number(match[1]));
+  assert.ok(budgets.length === 1 && budgets[0] >= 180 && budgets[0] <= 360,
+    `${jobName} has a bounded job budget sufficient for the measured complete matrix and builds`);
+}
 for (const [jobName, installName] of [
   ['release-wpt-and-delegated-sandbox', 'Install build dependencies'],
   ['sanitizers', 'Install build and locked JavaScript dependencies'],

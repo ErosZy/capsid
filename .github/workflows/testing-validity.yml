@@ -307,7 +307,9 @@ jobs:
 
   sanitizers:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The measured TSan matrix alone takes over 60 minutes, before provider
+    # and product builds. Keep individual CTest timeouts unchanged.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -727,7 +729,9 @@ jobs:
 
   windows-host-library:
     runs-on: windows-latest
-    timeout-minutes: 90
+    # The measured serial Release matrix alone takes about 104 minutes.
+    # Allow dependency/build time without changing individual test budgets.
+    timeout-minutes: 180
 
     steps:
       - name: Check out recursively pinned sources
