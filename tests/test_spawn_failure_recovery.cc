@@ -9,19 +9,27 @@
 #include "capsid/runtime.h"
 
 #include <cstdio>
+#include <cerrno>
+#include <chrono>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <dirent.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <libproc.h>
+#include <sys/proc_info.h>
+#endif
 
 namespace {
-
-const char *kMarkerPath = "/tmp/capsid-spawn-recovery-marker";
 
 void fail(const std::string &message) {
     std::fprintf(stderr, "FAIL: %s\n", message.c_str());
@@ -39,6 +47,19 @@ void require_result(capsid_result result, capsid_result expected,
 
 // Descriptors currently open in this process.
 size_t fd_count() {
+#if defined(__APPLE__)
+    // proc_pidinfo reports bytes, unlike proc_listchildpids' PID count.
+    // https://github.com/apple-oss-distributions/xnu/tree/main/libsyscall/wrappers/libproc
+    const int needed = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, nullptr, 0);
+    if (needed <= 0 || needed > INT_MAX - 16 * static_cast<int>(sizeof(proc_fdinfo)))
+        fail("native descriptor inventory size");
+    std::vector<proc_fdinfo> entries(static_cast<size_t>(needed) / sizeof(proc_fdinfo) + 16);
+    const int capacity = static_cast<int>(entries.size() * sizeof(proc_fdinfo));
+    const int bytes = proc_pidinfo(getpid(), PROC_PIDLISTFDS, 0, entries.data(), capacity);
+    if (bytes <= 0 || bytes >= capacity || bytes % sizeof(proc_fdinfo) != 0)
+        fail("complete native descriptor inventory");
+    return static_cast<size_t>(bytes) / sizeof(proc_fdinfo);
+#else
     DIR *dir = opendir("/proc/self/fd");
     if (!dir) {
         fail("opendir /proc/self/fd");
@@ -51,14 +72,31 @@ size_t fd_count() {
     // readdir needs a descriptor itself; subtract the two entries "." /
     // ".." plus the directory fd.
     return count > 3 ? count - 3 : 0;
+#endif
 }
 
 // Live or zombie descendants of this process (scoped to children this
 // test owns; no global process scans).
 size_t own_children() {
+#if defined(__APPLE__)
+    errno = 0;
+    const int needed = proc_listpids(PROC_PPID_ONLY, static_cast<uint32_t>(getpid()), nullptr, 0);
+    if (needed < 0 || (needed == 0 && errno != 0) || needed > INT_MAX - 16 * static_cast<int>(sizeof(pid_t)))
+        fail("native child inventory size");
+    std::vector<pid_t> children(static_cast<size_t>(needed) / sizeof(pid_t) + 16);
+    const int capacity = static_cast<int>(children.size() * sizeof(pid_t));
+    errno = 0;
+    const int bytes = proc_listpids(PROC_PPID_ONLY, static_cast<uint32_t>(getpid()), children.data(), capacity);
+    if (bytes < 0 || (bytes == 0 && errno != 0) || bytes >= capacity || bytes % sizeof(pid_t) != 0)
+        fail("complete native child inventory");
+    size_t count = 0;
+    for (int i = 0; i < bytes / static_cast<int>(sizeof(pid_t)); ++i)
+        if (children[static_cast<size_t>(i)] > 0) ++count;
+    return count;
+#else
     DIR *dir = opendir("/proc");
     if (!dir) {
-        return 0;
+        fail("opendir /proc");
     }
     size_t count = 0;
     struct dirent *entry = nullptr;
@@ -86,7 +124,7 @@ size_t own_children() {
         if (!close_paren) {
             continue;
         }
-        int state_c = 0;
+        char state_c = '\0';
         long ppid = 0;
         if (std::sscanf(close_paren + 2, "%c %ld", &state_c, &ppid) != 2) {
             continue;
@@ -97,18 +135,64 @@ size_t own_children() {
     }
     closedir(dir);
     return count;
+#endif
 }
 
-void write_marker_child(const char *path) {
+std::string shell_quote(const std::string &value) {
+    std::string result = "'";
+    for (const char byte : value) result += byte == '\'' ? "'\\''" : std::string(1, byte);
+    return result + "'";
+}
+
+struct TemporaryFixture {
+    std::string directory, helper, marker;
+    TemporaryFixture() {
+        const char *temporary = std::getenv("TMPDIR");
+        const std::string pattern = std::string(temporary && *temporary ? temporary : "/tmp") + "/capsid-spawn-recovery-XXXXXX";
+        std::vector<char> bytes(pattern.begin(), pattern.end()); bytes.push_back('\0');
+        char *created = mkdtemp(bytes.data());
+        if (!created) fail("private marker directory");
+        directory = created; helper = directory + "/child.sh"; marker = directory + "/marker";
+    }
+    ~TemporaryFixture() {unlink(marker.c_str()); unlink(helper.c_str()); rmdir(directory.c_str());}
+};
+
+void write_marker_child(const char *path, const std::string &marker) {
     FILE *script = std::fopen(path, "w");
     if (!script) {
         fail("marker script open");
     }
-    std::fputs("#!/bin/sh\ntouch ", script);
-    std::fputs(kMarkerPath, script);
-    std::fputs("\nsleep 30\n", script);
-    std::fclose(script);
-    chmod(path, 0755);
+    std::fputs("#!/bin/sh\nprintf x >", script);
+    std::fputs(shell_quote(marker).c_str(), script);
+    std::fputs("\nexec /bin/sleep 30\n", script);
+    if (std::fclose(script) != 0 || chmod(path, 0755) != 0) fail("executable marker script");
+}
+
+void validate_observers(const TemporaryFixture &fixture) {
+    const size_t before = fd_count();
+    const int fd = open("/dev/null", O_RDONLY);
+    if (fd < 0) fail("descriptor observation control");
+    const bool observed = fd_count() == before + 1;
+    close(fd);
+    if (!observed || fd_count() != before) fail("descriptor counter must observe real open and close");
+    if (own_children() != 0) fail("private fixture initially has no children");
+    const pid_t child = fork();
+    if (child < 0) fail("marker positive-control fork");
+    if (child == 0) {execl(fixture.helper.c_str(), fixture.helper.c_str(), static_cast<char *>(nullptr)); _exit(127);}
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    bool wrote = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        struct stat marker{};
+        if (stat(fixture.marker.c_str(), &marker) == 0 && marker.st_size == 1) {wrote = true; break;}
+        usleep(1000);
+    }
+    const bool child_observed = own_children() == 1;
+    const int stopped = kill(child, SIGTERM); int status = 0; pid_t reaped;
+    do {reaped = waitpid(child, &status, 0);} while (reaped < 0 && errno == EINTR);
+    if (!wrote || !child_observed || stopped != 0 || reaped != child || !WIFSIGNALED(status) || WTERMSIG(status) != SIGTERM)
+        fail("actual marker child and native child enumeration positive control");
+    if (unlink(fixture.marker.c_str()) != 0 || own_children() != 0 || fd_count() != before)
+        fail("positive controls must leave no descriptor or child residue");
 }
 
 }  // namespace
@@ -119,9 +203,10 @@ int main(int argc, char **argv) {
         return 2;
     }
     const char *worker_path = argv[1];
-    std::string marker_script = "/tmp/capsid-spawn-recovery-child.sh";
-    write_marker_child(marker_script.c_str());
-    unlink(kMarkerPath);
+    TemporaryFixture fixture;
+    const std::string &marker_script = fixture.helper;
+    write_marker_child(marker_script.c_str(), fixture.marker);
+    validate_observers(fixture);
 
     capsid_worker_config config;
     capsid_worker_config_init(&config);
@@ -169,7 +254,8 @@ int main(int argc, char **argv) {
         }
     }
     struct stat marker_stat;
-    if (stat(kMarkerPath, &marker_stat) == 0) {
+    errno = 0;
+    if (stat(fixture.marker.c_str(), &marker_stat) == 0 || errno != ENOENT) {
         fail("marker child executed despite rejected options");
     }
     if (own_children() != 0) {
@@ -180,7 +266,8 @@ int main(int argc, char **argv) {
     }
 
     // 3. Nonexistent worker path: posix_spawn itself fails; no residue.
-    config.worker_path = "/nonexistent/capsid-worker-for-recovery-test";
+    const std::string missing_worker = fixture.directory + "/nonexistent-worker";
+    config.worker_path = missing_worker.c_str();
     for (int i = 0; i < 5; ++i) {
         capsid_worker *worker = nullptr;
         const capsid_result result =
@@ -194,8 +281,6 @@ int main(int argc, char **argv) {
         fail("spawn failure left processes or descriptors behind");
     }
 
-    unlink(kMarkerPath);
-    unlink(marker_script.c_str());
     if (own_children() != 0) {
         fail("children appeared during the final checks");
     }
@@ -556,8 +641,7 @@ int main(int argc, char** argv) {
 #else
 
 int main(void) {
-    std::fprintf(stderr, "SKIP: this recovery fixture requires Linux /proc; "
-                         "native process/handle recovery coverage is pending\n");
+    std::fprintf(stderr, "SKIP: this recovery fixture requires Linux/Darwin process or Windows handle APIs\n");
     return 77;
 }
 

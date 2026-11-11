@@ -1845,6 +1845,9 @@ if(BUILD_TESTING)
                 "${CAPSID_GENERATED_DIR}")
             target_link_libraries(
                 test-spawn-failure-recovery PRIVATE capsid_runtime)
+            if(APPLE)
+                target_link_libraries(test-spawn-failure-recovery PRIVATE proc)
+            endif()
             add_test(
                 NAME spawn_failure_recovery
                 COMMAND test-spawn-failure-recovery
@@ -1853,7 +1856,7 @@ if(BUILD_TESTING)
                 spawn_failure_recovery PROPERTIES
                 LABELS "worker;abi"
                 TIMEOUT 60)
-            if(NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Windows)$")
+            if(NOT CMAKE_SYSTEM_NAME MATCHES "^(Linux|Windows|Darwin)$")
                 set_tests_properties(spawn_failure_recovery PROPERTIES SKIP_RETURN_CODE 77)
             endif()
 
@@ -7445,6 +7448,26 @@ if(BUILD_TESTING)
             TIMEOUT 30 LABELS "worker;crypto;compatibility")
 
         add_executable(test-tjs-fetch-abort tests/test_tjs_fetch_abort.cc)
+        # Exercise real positive short writes through the native LWS client.
+        # --wrap belongs only to the test executable and is a GNU ELF feature.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+            add_executable(test-tjs-http-short-write tests/test_tjs_http_short_write.cc)
+            target_link_libraries(test-tjs-http-short-write PRIVATE tjs capsid_runtime Threads::Threads)
+            target_include_directories(test-tjs-http-short-write PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CAPSID_TXIKI_OVERLAY}/src")
+            target_link_options(test-tjs-http-short-write PRIVATE "LINKER:--wrap=lws_ssl_capable_write")
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(test-tjs-http-short-write PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            foreach(CAPSID_SHORT_WRITE_BYTES IN ITEMS 64 8192)
+                foreach(CAPSID_SHORT_WRITE_MODE IN ITEMS normal short)
+                    add_test(NAME tjs_http_${CAPSID_SHORT_WRITE_MODE}_write_${CAPSID_SHORT_WRITE_BYTES}
+                        COMMAND test-tjs-http-short-write ${CAPSID_SHORT_WRITE_MODE} ${CAPSID_SHORT_WRITE_BYTES})
+                    set_tests_properties(tjs_http_${CAPSID_SHORT_WRITE_MODE}_write_${CAPSID_SHORT_WRITE_BYTES}
+                        PROPERTIES TIMEOUT 15 LABELS "worker;fetch;native;short-write")
+                endforeach()
+            endforeach()
+        endif()
         target_link_libraries(test-tjs-fetch-abort
             PRIVATE tjs capsid_runtime Threads::Threads)
         target_include_directories(test-tjs-fetch-abort

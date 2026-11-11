@@ -243,7 +243,10 @@ class PerformanceEvidenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="capsid-perf-contract-")
-        cls.fixture = Fixture(Path(cls.temp.name))
+        # macOS exposes its temporary directory through /var -> /private/var.
+        # Keep the owned fixture under its canonical root; archive entries
+        # still undergo the collector's complete link/junction validation.
+        cls.fixture = Fixture(Path(cls.temp.name).resolve(strict=True))
 
     @classmethod
     def tearDownClass(cls):

@@ -32,7 +32,8 @@ const source = fs.readFileSync(path.join(sourceDir, 'api-compat.mjs'), 'utf8');
 const runner = prepareMutationRunner(fs.readFileSync(path.join(root, 'tests/test_workerd_ws_fixtures.mjs'), 'utf8'));
 const runnerPath = path.join(directory, 'runner.mjs');
 fs.writeFileSync(runnerPath, runner);
-for (const file of [...fixtureIdentities().map(x => x.fixture), 'reference-lock.json', 'reference-lock-windows.json'])
+for (const file of [...fixtureIdentities().map(x => x.fixture), 'reference-lock.json', 'reference-lock-windows.json',
+    'reference-lock-darwin-x64.json', 'reference-lock-darwin-arm64.json'])
     fs.copyFileSync(path.join(sourceDir, file), path.join(fixtureDir, file));
 const replaceOnce = (from, to) => {
     assert.equal(source.split(from).length, 2, 'mutation anchor is unique');

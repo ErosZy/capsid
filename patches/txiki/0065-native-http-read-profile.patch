@@ -45,10 +45,13 @@ diff --git a/deps/libwebsockets/lib/roles/http/client/client-http.c b/deps/libwe
  			if (wsi->role_ops == &role_ops_raw_skt
  #if defined(LWS_ROLE_RAW_FILE)
  				|| wsi->role_ops == &role_ops_raw_file
-@@ -293,6 +315,7 @@ hs2:
+@@ -293,6 +315,9 @@ hs2:
  			  (unsigned long)wsi->wsistate, wsi->desc.sockfd);
  
- 		n = lws_ssl_capable_write(wsi, (unsigned char *)sb, lws_ptr_diff_size_t(p, sb));
+-		n = lws_ssl_capable_write(wsi, (unsigned char *)sb, lws_ptr_diff_size_t(p, sb));
++		/* The construction buffer is temporary. The raw queue copies any
++		 * unsent suffix, including a TLS retry that consumed no bytes. */
++		n = lws_issue_raw(wsi, (unsigned char *)sb, lws_ptr_diff_size_t(p, sb));
 +		lws_free(handshake_buffer);
  		switch (n) {
  		case LWS_SSL_CAPABLE_ERROR:
