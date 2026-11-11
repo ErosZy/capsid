@@ -54,8 +54,12 @@ jobs:
       - name: Install build dependencies
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv
+          # Use the official archive directly when the runner's first mirror
+          # cannot resolve. Preserve suites, components and Signed-By settings.
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_network[@]}" update --error-on=any
+          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv
           /usr/bin/openssl version
           # The vendor audit's expected tag must match cmake/build_tests.cmake
           # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
@@ -360,11 +364,14 @@ jobs:
       - name: Install build and locked JavaScript dependencies
         run: |
           set -euo pipefail
-          sudo apt-get update
+          # Match the Release dependency transport and reject stale indexes.
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_network[@]}" update --error-on=any
           # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
           # included, arch-suffixed) that the clang-based tsan matrix entry
           # links against.
-          sudo apt-get install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv
+          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv
           /usr/bin/openssl version
           # The vendor audit's expected tag must match cmake/build_tests.cmake
           # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
@@ -602,8 +609,10 @@ jobs:
 
       - name: Install Clang and Ninja
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_network[@]}" update --error-on=any
+          sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
 
       - name: Configure fuzz harnesses
         env:

@@ -189,7 +189,7 @@ for (const [name, replacement, diagnostic] of [
     windows(source => source.replace(exclusion, () => replacement)), diagnostic);
 
 function nativeJob(name, change) {
-    const next = {'release-wpt-and-delegated-sandbox': 'sanitizers', sanitizers: 'fuzz'}[name];
+    const next = {'release-wpt-and-delegated-sandbox': 'sanitizers', sanitizers: 'fuzz', fuzz: 'posix-host-library'}[name];
     const start = workflow.indexOf(`  ${name}:\n`), end = workflow.indexOf(`\n  ${next}:\n`, start);
     assert.ok(start > 0 && end > start);
     const before = workflow.slice(start, end), after = change(before);
@@ -224,6 +224,14 @@ for (const job of ['release-wpt-and-delegated-sandbox', 'sanitizers']) {
     fault(`${job} probes the certificate CLI`, nativeJob(job, source =>
         source.replace('/usr/bin/openssl version', '/usr/bin/openssl --help')),
         'native certificate fixture CLI is installed and probed');
+}
+for (const job of ['release-wpt-and-delegated-sandbox', 'sanitizers', 'fuzz']) {
+    for (const [name, before, after, diagnostic] of [
+        ['official archive', 'https://archive.ubuntu.com/ubuntu/', 'http://azure.archive.ubuntu.com/ubuntu/', 'uses the official Ubuntu archive without changing verification settings'],
+        ['bounded retries', 'Acquire::Retries=3', 'Acquire::Retries=300', 'bounds dependency network retries and timeouts'],
+        ['index failure propagation', 'update --error-on=any', 'update', 'rejects incomplete apt indexes'],
+        ['package network bounds', 'sudo apt-get "${apt_network[@]}" install -y ', 'sudo apt-get install -y ', 'applies network bounds to package downloads'],
+    ]) fault(`${job} requires ${name}`, nativeJob(job, source => source.replace(before, after)), `${job} ${diagnostic}`);
 }
 const rawMemoryHeading='      - name: Record original ASan RSS results\n';
 const memoryHeading='      - name: Require separate ASan memory acceptance\n';
