@@ -208,9 +208,9 @@ class DensityProbe:
 
     def warmup_concurrency(self, count):
         # Density conditioning must reach every worker before PSS is read.
-        # Up to 64 clients per worker leave room for fast completions;
+        # Up to 128 clients per worker leave room for fast completions;
         # this is separate from the QPS lane's fixed 64 in-flight requests.
-        return max(self.parallel, count * 64)
+        return max(self.parallel, count * 128)
 
     def cover(self, tree, counter, stack, ports, count, target, nonce, output):
         deadline = time.monotonic() + self.coverage_timeout

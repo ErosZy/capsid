@@ -71,7 +71,7 @@ including density. There is no mixed-origin publication mode.
 
 Density uses `warmupConcurrencyPolicy: pool-scaled-burst-v1`, base
 `parallelRequests: 64` and `warmupConcurrencyFactor: 64`. Each cell's conditioning
-limit is `max(64, 64 * count)`; its correctness file records that limit and the
+limit is `max(64, 128 * count)`; its correctness file records that limit and the
 largest actual wave. All conditioning completes before settling and PSS reads.
 Cold/warm attempts are bounded by `max(64, 8 * count)` and
 `max(64, 32 * count * 100)` respectively, with a 300-second deadline.

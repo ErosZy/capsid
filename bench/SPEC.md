@@ -171,7 +171,7 @@ work; controller tests and restricted smoke do not qualify a performance point.
   (100 requests through each, then settle). A pool that dies under the
   warm-up is a failed probe, never a small reading.
 - **Conditioning concurrency:** density conditioning uses a recorded limit of
-  `max(64, 64 * pool_count)` and connected request waves, with all requests in a
+  `max(64, 128 * pool_count)` and connected request waves, with all requests in a
   large wave sent before response reads. This user-approved density protocol
   change preserves production least-loaded/lowest-slot scheduling. Cold/warm
   coverage still requires every worker to reach 1/100 requests. Cold permits

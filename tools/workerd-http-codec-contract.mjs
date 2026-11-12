@@ -188,7 +188,14 @@ function wire(value, upgrade, terminal) {
   assert.ok(["peer-ended", "peer-reset"].includes(value.completion));
   assert.equal(value.transportError, value.completion === "peer-reset" ? "ECONNRESET" : null);
 }
-function upstream(entries, value, terminal) {
+export function isHttpCodecPeerTerminal(entry, id) {
+  if (entry.peerEnded === true && entry.peerReset === false) return true;
+  // The pinned Windows reference can reset after receiving the complete bad
+  // CRC response. This is actual remote termination, observed before cleanup.
+  return id === "codec-supp-fragment-crc-late" && entry.peerEnded === false &&
+    entry.peerReset === true && entry.fixtureEnded === true && entry.fixtureDestroyed === false;
+}
+export function assertHttpCodecSourceEntries(entries, value, terminal) {
   assert.equal(entries.length, 1);
   const entry = entries[0], plan = httpCodecPlan(value.id), reply = replyModel(value.id, value.challenge), port = value.targets[0].port;
   fields(entry, ["request", "rawRequest", "bytes", "peerEnded", "peerReset", "fixtureEnded", "fixtureDestroyed", "events", "localAddress", "localPort", "sent", "held", ...plan.fragment ? ["packets"] : []], "codec source");
@@ -207,11 +214,12 @@ function upstream(entries, value, terminal) {
   assert.equal(entry.sent, reply.packet);
   assert.equal(entry.held, false);
   assert.equal(entry.fixtureDestroyed, false);
-  assert.equal(entry.peerReset, false);
+  assert.equal(typeof entry.peerReset, "boolean");
+  if (entry.peerReset) assert.ok(isHttpCodecPeerTerminal(entry, value.id), "only the qualified complete CRC reset is a source terminal");
   assert.equal(typeof entry.peerEnded, "boolean");
   assert.equal(typeof entry.fixtureEnded, "boolean");
   if (terminal) {
-    assert.equal(entry.peerEnded, true);
+    assert.equal(isHttpCodecPeerTerminal(entry, value.id), true);
     assert.equal(entry.fixtureEnded, true);
   }
   const events = ["request"];
@@ -264,12 +272,13 @@ function assertHttpCodecCase(value, mode) {
   }
   wire(value.upgradea, null, false);
   wire(value.wirea, value.upgradea, true);
-  upstream(value.beforeAction, value, false);
-  upstream(value.upstream, value, true);
+  assertHttpCodecSourceEntries(value.beforeAction, value, false);
+  assertHttpCodecSourceEntries(value.upstream, value, true);
   const before = value.beforeAction[0], after = value.upstream[0];
   assert.deepEqual(after.events.slice(0, before.events.length), before.events);
   if (before.packets) assert.deepEqual(after.packets.slice(0, before.packets.length), before.packets);
-  for (const [key, item] of Object.entries(before)) if (!["events", "packets", "peerEnded", "fixtureEnded"].includes(key)) assert.deepEqual(after[key], item, "retained source identity " + key);
+  for (const [key, item] of Object.entries(before)) if (!["events", "packets", "peerEnded", "peerReset", "fixtureEnded"].includes(key)) assert.deepEqual(after[key], item, "retained source identity " + key);
+  if (before.peerReset) assert.equal(after.peerReset, true, "an observed reset cannot disappear");
   assert.equal(typeof value.stderr, "string");
   assert.doesNotMatch(value.stderr, /ERROR: (?:AddressSanitizer|LeakSanitizer)|WARNING: ThreadSanitizer|runtime error:|TOKEN LEAK|POISON EXIT/);
   fields(value.shutdown, ["code", "signal", "forced"], "codec shutdown");

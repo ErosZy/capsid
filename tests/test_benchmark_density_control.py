@@ -145,6 +145,23 @@ class SearchTests(unittest.TestCase):
 
 
 class CoverageTests(unittest.TestCase):
+    def test_actual_208000_correct_responses_do_not_warm_every_worker(self):
+        observed = json.loads((Path(__file__).parent / "fixtures/density65-incomplete-counter-observation.json").read_text())
+        self.assertEqual("capsid-density-incomplete-counter-observation-v1", observed["schema"])
+        self.assertEqual("8d20e2b0bcf6b19b9160b16606c1042ef7b3addcb9b6dc42585d549534096404",
+                         observed["originalArtifact"]["sha256"])
+        coverage = control.Coverage(observed["workerCount"], observed["nonce"])
+        # This negative control replays the retained counter snapshot; it is
+        # not a runtime probe or a replacement for the original counter log.
+        coverage.counts.update(observed["requestsPerWorker"])
+        self.assertEqual(65, len(coverage.counts))
+        self.assertEqual(92, min(coverage.counts.values()))
+        self.assertEqual(208000, sum(coverage.counts.values()))
+        self.assertFalse(coverage.complete(100))
+        with self.assertRaises(ProbeError) as failure:
+            coverage.verify(100, observed["validatedCorrectResponses"])
+        self.assertEqual("coverage-incomplete", failure.exception.code)
+
     def test_numeric_loopback_fixture_does_not_require_reverse_dns(self):
         with patch('socket.getfqdn', side_effect=AssertionError('unexpected reverse DNS')):
             with self.assertRaisesRegex(AssertionError, 'unexpected reverse DNS'):
@@ -244,7 +261,7 @@ class CoverageTests(unittest.TestCase):
         coverage.verify(1,result['responses_checked'])
         self.assertEqual(520,result['responses_checked'])
         self.assertEqual([520],sorted(set(waves)))
-        self.assertEqual(4160,result['warmupConcurrencyLimit'])
+        self.assertEqual(8320,result['warmupConcurrencyLimit'])
         self.assertEqual(520,result['maximumWaveRequests'])
         self.assertEqual(64,probe.parallel)
 

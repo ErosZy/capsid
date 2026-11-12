@@ -9,7 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { startCapsid, stopCapsid } from "./helpers/ws_host_backend.mjs";
 import { responseSession } from "./helpers/ws_response_client.mjs";
 import { root, readLock, verifyBinary, verifyClient, fileDigest } from "../tools/workerd-reference.mjs";
-import { httpCodecCasesForShard, httpCodecInputPaths, validateHttpCodecReport } from "../tools/workerd-http-codec-contract.mjs";
+import { httpCodecCasesForShard, httpCodecInputPaths, validateHttpCodecReport, isHttpCodecPeerTerminal } from "../tools/workerd-http-codec-contract.mjs";
 import { httpCodecPlan, httpCodecReply } from "../tools/workerd-http-codec-input.mjs";
 const args = /* @__PURE__ */ new Map();
 for (let index = 2; index < process.argv.length; index += 2) {
@@ -223,8 +223,8 @@ for (const id of cases) {
     value.beforeAction = source.snapshot();
     value.wirea = await peer.complete;
     assert.ok(
-      await observeUntil(() => source.records.length > 0 && source.records.every((entry) => entry.peerEnded)),
-      "source observes actual client EOF before host shutdown or fixture disposal"
+      await observeUntil(() => source.records.length > 0 && source.records.every((entry) => isHttpCodecPeerTerminal(entry, id))),
+      "source observes actual client transport termination before host shutdown or fixture disposal"
     );
     value.observed = await readState();
     await delay(100);
@@ -233,6 +233,7 @@ for (const id of cases) {
   } catch (error) {
     value.failure = error.stack;
     if (error.observation) value.failureObservation = error.observation;
+    if (source) value.failureUpstream = source.snapshot();
     if (readState) try {
       value.failureState = await readState();
     } catch (nested) {

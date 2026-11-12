@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { test, after } from "node:test";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -7,6 +9,8 @@ import { referenceBackendModes } from "../tools/workerd-platform.mjs";
 import { readHttpCodecSamples } from "./helpers/ws_http_codec_sample.mjs";
 import {
   assertHttpCodecCase,
+  assertHttpCodecSourceEntries,
+  isHttpCodecPeerTerminal,
   expectedHttpCodecState,
   httpCodecShards,
   httpCodecCases,
@@ -198,4 +202,39 @@ test("immutable expected states cannot be poisoned between validations", () => {
   }, TypeError);
   const sample = readHttpCodecSamples(lock).flatMap((report) => report.cases).find((value) => value.id === "codec-supp-raw-byob-65536");
   assertHttpCodecCase(sample, "reference");
+});
+
+const resetObservation = JSON.parse(fs.readFileSync(new URL("./fixtures/workerd-http-codec-reset-observation.json", import.meta.url), "utf8"));
+const resetCase = JSON.parse(resetObservation.originalCaseUTF8);
+test("actual pinned Windows CRC reset retains the full public state and complete source bytes", () => {
+  assert.equal(resetObservation.schema, "capsid-http-codec-reset-observation-v1");
+  assert.equal(createHash("sha256").update(resetObservation.originalCaseUTF8).digest("hex"),
+    "7cd260e9182101b6c589265b266de934dc2335e41dd4d6416d6b06da27c7a18d");
+  assert.equal(resetObservation.originalArtifact.id, 13965900669);
+  assert.equal(resetObservation.originalArtifact.sha256, "ed40da9ecf37a1d67b4f852f4453eea8307160ba25319aaf542b6b50f2171676");
+  assert.equal(resetObservation.referenceLock.source_commit, "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f");
+  assert.equal(resetObservation.binaries.host, "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a");
+  assert.match(resetCase.failure, /source observes actual client EOF/);
+  assert.deepEqual(JSON.parse(resetCase.failureState.text).state,
+    expectedHttpCodecState(resetCase.id, resetCase.challenge, resetCase.targets[0].port));
+  assert.equal(isHttpCodecPeerTerminal(resetCase.failureUpstream[0], resetCase.id), true);
+  assertHttpCodecSourceEntries(resetCase.failureUpstream, resetCase, true);
+});
+for (const [name, mutate] of [
+  ["different codec case", value => {value.id = "ordinary-codec-gzip-small";}],
+  ["missing reset", value => {value.failureUpstream[0].peerReset = false;}],
+  ["ambiguous FIN and reset", value => {value.failureUpstream[0].peerEnded = true;}],
+  ["unfinished encoded response", value => {value.failureUpstream[0].fixtureEnded = false;}],
+  ["fixture disposal", value => {value.failureUpstream[0].fixtureDestroyed = true;}],
+  ["missing final encoded part", value => {value.failureUpstream[0].packets.pop();}],
+  ["changed CRC bytes", value => {value.failureUpstream[0].packets[4] = "AA==";}],
+  ["false peer EOF event", value => {value.failureUpstream[0].events.push("peer-ended");}],
+  ["changed source packet", value => {value.failureUpstream[0].sent = "AA==";}],
+  ["additional connection", value => {value.failureUpstream.push(structuredClone(value.failureUpstream[0]));}],
+  ["different owned port", value => {++value.targets[0].port;}],
+  ["missing source", value => {value.failureUpstream = [];}]
+]) test("actual CRC reset rejects " + name, () => {
+  const value = structuredClone(resetCase);
+  mutate(value);
+  reject(() => assertHttpCodecSourceEntries(value.failureUpstream, value, true));
 });
