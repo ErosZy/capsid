@@ -396,3 +396,21 @@
          lws_rx_flow_control(h->wsi, (h->read_paused ? 0 : 1) | LWS_RXFLOW_REASON_FLAG_PROCESS_NOW);
      return JS_UNDEFINED;
  }
+--- a/deps/libwebsockets/lib/roles/http/client/client-http.c
++++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
+@@ -549,6 +549,15 @@
+ 			   __func__, (unsigned long)lwsi_role(wsi));
+ 		return -1;
+ 	}
++
++	/* A complete, known-length H1 response that rejects keepalive has
++	 * no later transaction to service. Retire its transport now instead
++	 * of waiting for another readability callback after the owner left.
++	 * Header-only completion and H2 keep their existing lifetime paths. */
++	if (!wsi->client_h2_alpn && !wsi->client_mux_substream &&
++	    wsi->http.conn_type == HTTP_CONNECTION_CLOSE &&
++	    wsi->http.rx_content_length)
++		return -1;
+ 
+ 	wsi->http.rx_content_length = 0;
+ 

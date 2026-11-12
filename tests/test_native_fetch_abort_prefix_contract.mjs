@@ -3,14 +3,14 @@ import {test, after} from 'node:test';
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {nativeFetchAbortPrefixPlans as plans, nativeFetchAbortPrefixReply, nativeFetchAbortPrefixInputPaths, expectedNativeFetchAbortPrefixState} from '../tools/native-fetch-abort-prefix-input.mjs';
-import {assertNativeFetchAbortPrefixCase, assertNativeFetchAbortPrefixReferenceArchive, validateNativeFetchAbortPrefixReport} from '../tools/native-fetch-abort-prefix-contract.mjs';
+import {assertNativeFetchAbortPrefixCase, assertNativeFetchAbortPrefixReferenceArchive, assertNativeFetchAbortPrefixDarwinReference, validateNativeFetchAbortPrefixReport} from '../tools/native-fetch-abort-prefix-contract.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 let rejected = 0;
 const output = row => 'LIMIT_PROBE '+JSON.stringify(row.state)+'\nLIMIT_EXIT '+JSON.stringify(row.workerExit)+'\n';
 function sample(plan) {
     const reply = nativeFetchAbortPrefixReply(plan), port = 19000, request = 'GET /hold HTTP/1.1\r\nHost: localhost:'+port;
-    const source = {request, rawRequest: Buffer.from(request+'\r\n\r\n').toString('base64'), peerEnded: false, peerReset: true,
+    const source = {request, rawRequest: Buffer.from(request+'\r\n\r\n').toString('base64'), peerEnded: false, peerReset: true, peerClosed: true,
         fixtureEnded: true, fixtureDestroyed: false, packetSHA256: hash(reply.packet), events: ['request', 'sent-complete']};
     const row = {plan: structuredClone(plan), encodedBytes: reply.payload.length, payloadSHA256: hash(reply.payload), packetSHA256: hash(reply.packet),
         source, port, state: expectedNativeFetchAbortPrefixState(plan), sourceEndedBeforeFinish: false, sourceTerminalBeforeFinish: true,
@@ -66,4 +66,50 @@ test('current mutable report is checked completely on every call', () => {
     report.cases[0].state.closedStable = 1; report.cases[0].stdout = output(report.cases[0]);
     assert.throws(() => validateNativeFetchAbortPrefixReport(report, expected)); rejected++;
 });
-after(() => {assert.equal(rejected, 407); console.log(JSON.stringify({complete: true, uniqueCases: plans.length, rejectedMutations: rejected}));});
+
+let darwinRejected = 0;
+const darwinPlans = plans.filter(p=>!p.gzip && p.bytes===8388608);
+function epipeSample(plan) {
+    const row=sample(plan); row.source.peerReset=false;row.source.error='EPIPE';row.sourceBeforeFinish=structuredClone(row.source);return row;
+}
+function rejectEpipe(row,plan,change,platform='darwin') {
+    const bad=structuredClone(row);change(bad);bad.source=structuredClone(bad.sourceBeforeFinish);bad.stdout=output(bad);
+    assert.throws(()=>assertNativeFetchAbortPrefixCase(bad,plan,platform));darwinRejected++;
+}
+test('Darwin EPIPE requires the exact raw 8MiB plan and actual pre-finish socket closure',()=>{
+    for(const plan of darwinPlans) {
+        const row=epipeSample(plan);assertNativeFetchAbortPrefixCase(row,plan,'darwin');
+        for(const platform of ['win32','linux','freebsd'])rejectEpipe(row,plan,()=>{},platform);
+        for(const error of ['ECONNRESET','ENOTCONN','EACCES','EIO',null])rejectEpipe(row,plan,b=>{b.sourceBeforeFinish.error=error;});
+        for(const change of [b=>{b.sourceBeforeFinish.peerClosed=false;},b=>{b.sourceBeforeFinish.peerClosed=1;},
+            b=>{delete b.sourceBeforeFinish.peerClosed;},b=>{b.sourceBeforeFinish.peerEnded=true;},b=>{b.sourceBeforeFinish.peerReset=true;},
+            b=>{b.sourceBeforeFinish.fixtureDestroyed=true;},b=>{delete b.sourceBeforeFinish.error;},
+            b=>{b.sourceTerminalBeforeFinish=false;},b=>{b.shutdown.code=1;},b=>{b.state.reads.at(-1).inputAfter=1;}])rejectEpipe(row,plan,change);
+        const late=structuredClone(row);late.sourceBeforeFinish.peerClosed=false;
+        assert.throws(()=>assertNativeFetchAbortPrefixCase(late,plan,'darwin'));darwinRejected++;
+    }
+});
+test('other raw and gzip plans cannot use the Darwin EPIPE observation',()=>{
+    for(const plan of plans.filter(p=>p.gzip || p.bytes!==8388608)) {
+        const row=epipeSample(plan);assert.throws(()=>assertNativeFetchAbortPrefixCase(row,plan,'darwin'));darwinRejected++;
+    }
+});
+test('actual Darwin primary is checked semantically beyond its archived digest',()=>{
+    const report=JSON.parse(fs.readFileSync(new URL('./fixtures/workerd-native-fetch-abort-prefix-darwin-report.json',import.meta.url)));
+    const fixture=hash(fs.readFileSync(new URL('./fixtures/native-fetch-abort-prefix.mjs',import.meta.url)));
+    assertNativeFetchAbortPrefixDarwinReference(report,fixture);
+    function sourceChange(report,change) {
+        const row=report.cases[2];change(row.sourceBeforeReferenceStop);row.source=structuredClone(row.sourceBeforeReferenceStop);row.sourceAfterReferenceStop=structuredClone(row.sourceBeforeReferenceStop);
+    }
+    for(const change of [r=>{r.binarySHA256='0'.repeat(64);},r=>{r.referenceLock.compatibility_date='2026-08-21';},
+        r=>{r.collectorSHA256='0'.repeat(64);},r=>{r.sourceModelSHA256='0'.repeat(64);},r=>{r.complete=false;},r=>{r.platform='linux';},
+        r=>{r.architecture='x64';},r=>{r.caseDeadlineMilliseconds=12001;},r=>{r.sourceObservationMilliseconds=3001;},r=>{r.cases.pop();},
+        r=>{r.cases[1]=structuredClone(r.cases[0]);},r=>{r.cases[2].state.total++;},r=>sourceChange(r,s=>{s.peerClosed=false;}),
+        r=>sourceChange(r,s=>{s.errors[0].code='EIO';}),r=>{r.cases[2].sourceClosedBeforeReferenceStop=false;},
+        r=>{r.cases[2].sourceAfterReferenceStop.fixtureDestroyed=true;},r=>sourceChange(r,s=>{s.fixtureDestroyed=true;}),
+        r=>sourceChange(r,s=>{s.request+=' bad';})]) {
+        const bad=structuredClone(report);change(bad);assert.throws(()=>assertNativeFetchAbortPrefixDarwinReference(bad,fixture));darwinRejected++;
+    }
+});
+
+after(() => {assert.equal(darwinRejected, 62); console.log(JSON.stringify({darwinRejected}));assert.equal(rejected, 407); console.log(JSON.stringify({complete: true, uniqueCases: plans.length, rejectedMutations: rejected}));});

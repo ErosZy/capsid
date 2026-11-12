@@ -40,11 +40,11 @@ for (const plan of plans) {
     const reply = nativeFetchAbortPrefixReply(plan);
     const server = net.createServer({allowHalfOpen: true}, socket => {
         sockets.add(socket);
-        record = {request: null, rawRequest: '', peerEnded: false, peerReset: false, fixtureEnded: false,
+        record = {request: null, rawRequest: '', peerEnded: false, peerReset: false, peerClosed: false, fixtureEnded: false,
             fixtureDestroyed: false, events: [], packetSHA256: createHash('sha256').update(reply.packet).digest('hex')};
         row.source = record;
         socket.on('end', () => {record.peerEnded = true; record.events.push('peer-ended');});
-        socket.on('close', () => sockets.delete(socket));
+        socket.on('close', () => {record.peerClosed = true; sockets.delete(socket);});
         socket.on('error', error => {if (error.code === 'ECONNRESET') record.peerReset = true; else record.error = error.code;});
         let request = Buffer.alloc(0);
         socket.on('data', data => {
@@ -78,9 +78,9 @@ for (const plan of plans) {
     try {
         await bounded(Promise.race([stateReady, closed.then(() => {assert.ok(row.state, 'helper produced actual state');})]));
         const end = performance.now()+3000;
-        while (!record?.peerEnded && !record?.peerReset && performance.now() < end) await delay(5);
+        while (!record?.peerClosed && performance.now() < end) await delay(5);
         row.sourceEndedBeforeFinish = record?.peerEnded === true;
-        row.sourceTerminalBeforeFinish = record?.peerEnded === true || record?.peerReset === true;
+        row.sourceTerminalBeforeFinish = record?.peerClosed === true && (record.peerEnded || record.peerReset || record.error === 'EPIPE');
         row.sourceBeforeFinish = record ? structuredClone(record) : null;
         child.stdin.end('finish\n'); acknowledged = true;
         row.shutdown = await bounded(closed);

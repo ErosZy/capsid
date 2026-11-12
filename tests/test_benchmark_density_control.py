@@ -4,6 +4,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import http.server
+import socketserver
 import io
 import json
 from pathlib import Path
@@ -37,6 +38,14 @@ def result_for(call, pss=None):
             "correctness": {"ok": True, "errors_as_success": False, "responses_checked": count * target,
                             "errors": 0, "mismatches": 0, "timeouts": 0},
             "cleanup": {"ownedPidsRemaining": 0}}
+
+
+class LoopbackHTTPServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        # These peers bind an explicit numeric loopback address. Their HTTP
+        # server metadata must not require system reverse DNS to become ready.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 class SearchTests(unittest.TestCase):
@@ -136,6 +145,18 @@ class SearchTests(unittest.TestCase):
 
 
 class CoverageTests(unittest.TestCase):
+    def test_numeric_loopback_fixture_does_not_require_reverse_dns(self):
+        with patch('socket.getfqdn', side_effect=AssertionError('unexpected reverse DNS')):
+            with self.assertRaisesRegex(AssertionError, 'unexpected reverse DNS'):
+                http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+            server = LoopbackHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+            try:
+                self.assertEqual('127.0.0.1', server.server_name)
+                self.assertEqual(server.server_address[1], server.server_port)
+                self.assertGreater(server.server_port, 0)
+            finally:
+                server.server_close()
+
     def test_clients_connect_before_the_synchronized_request_wave(self):
         received=[]
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -144,7 +165,7 @@ class CoverageTests(unittest.TestCase):
                 self.send_response(200);self.send_header('Content-Length',str(len(EXPECTED_BODY)))
                 self.end_headers();self.wfile.write(EXPECTED_BODY)
             def log_message(self,*_):pass
-        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        server=LoopbackHTTPServer(('127.0.0.1',0),Handler)
         thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
         try:
             with ThreadPoolExecutor(max_workers=4) as executor:
@@ -162,7 +183,7 @@ class CoverageTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
 
     def test_broken_connected_client_wave_is_a_failure(self):
-        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),http.server.BaseHTTPRequestHandler)
+        server=LoopbackHTTPServer(('127.0.0.1',0),http.server.BaseHTTPRequestHandler)
         thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
         try:
             with ThreadPoolExecutor(max_workers=1) as executor:
@@ -238,7 +259,7 @@ class CoverageTests(unittest.TestCase):
                 self.send_response(200);self.send_header('Content-Length',str(len(EXPECTED_BODY)))
                 self.end_headers();self.wfile.write(EXPECTED_BODY)
             def log_message(self,*_):pass
-        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        server=LoopbackHTTPServer(('127.0.0.1',0),Handler)
         thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
         try:
             observations=validated_wave([server.server_port]*3,'burst',connect_parallel=2)
@@ -258,7 +279,7 @@ class CoverageTests(unittest.TestCase):
                 self.wfile.write(response[1])
             def log_message(self, *_):
                 pass
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server = LoopbackHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.01))
         thread.start()
         try:

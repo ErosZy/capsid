@@ -12,6 +12,7 @@ export const nativeFetchAbortPrefixInputPaths = Object.freeze({
     runner: 'tests/test_native_fetch_abort_prefix.mjs', fixture: 'tests/fixtures/native-fetch-abort-prefix.mjs',
     helper: 'tests/test_native_fetch_response_limits.cc', contract: 'tools/native-fetch-abort-prefix-contract.mjs',
     sourceModel: 'tools/native-fetch-abort-prefix-input.mjs', referenceArchive: 'tests/fixtures/workerd-native-fetch-abort-prefix-report.json',
+    darwinReferenceArchive: 'tests/fixtures/workerd-native-fetch-abort-prefix-darwin-report.json',
 });
 const replies = new Map(), expectedStates = new Map();
 const reason = () => ({name: 'Error', message: 'prefix probe stop', sameReason: false});

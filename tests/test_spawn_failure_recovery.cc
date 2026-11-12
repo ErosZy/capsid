@@ -9,6 +9,7 @@
 #include "capsid/runtime.h"
 
 #include <cstdio>
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <climits>
@@ -79,29 +80,48 @@ size_t fd_count() {
 // test owns; no global process scans).
 size_t own_children() {
 #if defined(__APPLE__)
-    errno = 0;
-    const int needed = proc_listpids(PROC_PPID_ONLY, static_cast<uint32_t>(getpid()), nullptr, 0);
-    if (needed < 0 || (needed == 0 && errno != 0) || needed > INT_MAX - 16 * static_cast<int>(sizeof(pid_t)))
-        fail("native child inventory size");
-    std::vector<pid_t> children(static_cast<size_t>(needed) / sizeof(pid_t) + 16);
-    const int capacity = static_cast<int>(children.size() * sizeof(pid_t));
-    errno = 0;
-    const int bytes = proc_listpids(PROC_PPID_ONLY, static_cast<uint32_t>(getpid()), children.data(), capacity);
-    if (bytes < 0 || (bytes == 0 && errno != 0) || bytes >= capacity || bytes % sizeof(pid_t) != 0)
-        fail("complete native child inventory");
+    const auto children_now = [] {
+        errno = 0;
+        const int needed = proc_listpids(PROC_PPID_ONLY, static_cast<uint32_t>(getpid()), nullptr, 0);
+        if (needed < 0 || (needed == 0 && errno != 0) || needed > INT_MAX - 16 * static_cast<int>(sizeof(pid_t)))
+            fail("native child inventory size");
+        std::vector<pid_t> children(static_cast<size_t>(needed) / sizeof(pid_t) + 16);
+        const int capacity = static_cast<int>(children.size() * sizeof(pid_t));
+        errno = 0;
+        const int bytes = proc_listpids(PROC_PPID_ONLY, static_cast<uint32_t>(getpid()), children.data(), capacity);
+        if (bytes < 0 || (bytes == 0 && errno != 0) || bytes >= capacity || bytes % sizeof(pid_t) != 0)
+            fail("complete native child inventory");
+        children.resize(static_cast<size_t>(bytes) / sizeof(pid_t));
+        return children;
+    };
     size_t count = 0;
-    for (int i = 0; i < bytes / static_cast<int>(sizeof(pid_t)); ++i) {
-        const pid_t child = children[static_cast<size_t>(i)];
+    for (const pid_t child : children_now()) {
         if (child <= 0) continue;
-        // Failed native spawns can briefly remain in the PID inventory after
-        // they are no longer children. WNOWAIT verifies ownership without
-        // reaping either a live child or an actual zombie.
-        siginfo_t status{};
-        int result;
-        do { result = waitid(P_PID, static_cast<id_t>(child), &status, WEXITED | WNOHANG | WNOWAIT); }
-        while (result < 0 && errno == EINTR);
-        if (result == 0) ++count;
-        else if (errno != ECHILD) fail("native child ownership observation");
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        for (;;) {
+            siginfo_t status{};
+            int result;
+            do { result = waitid(P_PID, static_cast<id_t>(child), &status, WEXITED | WNOHANG | WNOWAIT); }
+            while (result < 0 && errno == EINTR);
+            if (result < 0) {
+                if (errno != ECHILD) fail("native child ownership observation");
+                break;
+            }
+            if (status.si_pid == child) { ++count; break; }
+            proc_bsdinfo info{};
+            const int bytes = proc_pidinfo(child, PROC_PIDTBSDINFO, 0, &info, sizeof(info));
+            if (bytes != 0 && bytes != static_cast<int>(sizeof(info))) fail("complete native child identity");
+            if (bytes == static_cast<int>(sizeof(info)) && info.pbi_ppid == static_cast<uint32_t>(getpid())) {
+                ++count; break;
+            }
+            // A failed native spawn can leave a transient PID entry with no
+            // BSD identity and no waitable exit. Require its disappearance
+            // from a fresh complete parent inventory; never reap as a probe.
+            const auto current = children_now();
+            if (std::find(current.begin(), current.end(), child) == current.end()) break;
+            if (std::chrono::steady_clock::now() >= deadline) fail("native child ownership did not settle");
+            usleep(1000);
+        }
     }
     return count;
 #else
@@ -214,6 +234,54 @@ void validate_observers(const TemporaryFixture &fixture) {
         fail("positive controls must leave no descriptor or child residue");
 }
 
+
+void healthy_cycle(capsid_worker_config &config, bool round_trip = false) {
+    capsid_worker *worker = nullptr;
+    const capsid_result spawned = capsid_worker_spawn_ex(&config, nullptr, &worker);
+    if (spawned != CAPSID_OK || worker == nullptr) fail("valid recovery worker spawn");
+    const auto check = [worker](bool condition, const char *message) {
+        if (!condition) {capsid_worker_destroy(worker); fail(message);}
+    };
+    const char bundle[] = "export default {fetch(){return new Response('healthy')}};";
+    check(capsid_worker_load_bundle(worker, reinterpret_cast<const uint8_t *>(bundle), sizeof(bundle)-1) == CAPSID_OK,
+          "healthy bundle queue failed");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    bool ready = false, ended = false;
+    unsigned heads = 0;
+    std::string body;
+    while (!ready || (round_trip && !ended)) {
+        const auto flush = capsid_worker_flush(worker);
+        check(flush == CAPSID_OK || flush == CAPSID_WOULD_BLOCK, "healthy recovery flush failed");
+        capsid_event event{};event.struct_size = sizeof(event);
+        const auto next = capsid_worker_next_event(worker, &event);
+        check(next == CAPSID_OK || next == CAPSID_WOULD_BLOCK, "healthy recovery IPC failed");
+        if (next == CAPSID_OK) {
+            check(event.type != CAPSID_EVENT_ERROR && event.type != CAPSID_EVENT_EXIT, "healthy recovery worker failed");
+            if (event.type == CAPSID_EVENT_READY) {
+                check(!ready, "duplicate healthy READY");ready = true;
+                if (round_trip) {
+                    check(capsid_worker_begin_request(worker, 1, "GET", "https://recovery.test/", nullptr, 0) == CAPSID_OK,
+                          "post-failure request could not begin");
+                    check(capsid_worker_end_request(worker, 1) == CAPSID_OK, "post-failure request could not end");
+                }
+            } else if (event.type == CAPSID_EVENT_RESPONSE_HEAD) {
+                check(ready && round_trip && event.request_id == 1 && event.status == 200 && ++heads == 1,
+                      "post-failure response head mismatch");
+            } else if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
+                check(ready && round_trip && event.request_id == 1 && heads == 1, "post-failure response body has no head");
+                body.append(reinterpret_cast<const char *>(event.payload.data), event.payload.size);
+            } else if (event.type == CAPSID_EVENT_RESPONSE_END) {
+                check(ready && round_trip && event.request_id == 1 && heads == 1 && body == "healthy",
+                      "post-failure response bytes mismatch");
+                ended = true;
+            }
+        }
+        check(std::chrono::steady_clock::now() < deadline, "healthy recovery response deadline exceeded");
+        if (!ready || (round_trip && !ended)) usleep(1000);
+    }
+    capsid_worker_destroy(worker);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -242,12 +310,7 @@ int main(int argc, char **argv) {
     //    anything racy), and no descriptors or children accumulate.
     const size_t fds_before = fd_count();
     for (int i = 0; i < 25; ++i) {
-        capsid_worker *worker = reinterpret_cast<capsid_worker *>(0x1);
-        require_result(
-            capsid_worker_spawn_ex(&config, nullptr, &worker),
-            CAPSID_OK, "null options must still spawn");
-        // drain READY and destroy: proves the loop leaves no children
-        capsid_worker_destroy(worker);
+        healthy_cycle(config);
     }
     const size_t fds_after_valid = fd_count();
     if (fds_after_valid != fds_before) {
@@ -262,6 +325,22 @@ int main(int argc, char **argv) {
     // 2. Invalid options against the marker child: the child must never
     //    execute, nothing may accumulate.
     config.worker_path = marker_script.c_str();
+    {
+        capsid_worker *worker = nullptr;
+        require_result(capsid_worker_spawn_ex(&config, &options, &worker), CAPSID_OK,
+                       "marker child must start through the actual C ABI");
+        if (!worker) fail("actual C ABI marker child missing");
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        bool wrote = false;
+        while (std::chrono::steady_clock::now() < deadline) {
+            struct stat marker{};
+            if (stat(fixture.marker.c_str(), &marker) == 0 && marker.st_size == 1) {wrote = true; break;}
+            usleep(1000);
+        }
+        capsid_worker_destroy(worker);
+        if (!wrote || unlink(fixture.marker.c_str()) != 0 || own_children() != 0 || fd_count() != fds_before)
+            fail("actual C ABI marker child positive control and cleanup");
+    }
     options.wire_version = 5;
     for (int i = 0; i < 25; ++i) {
         capsid_worker *worker = reinterpret_cast<capsid_worker *>(0x1);
@@ -288,10 +367,10 @@ int main(int argc, char **argv) {
     const std::string missing_worker = fixture.directory + "/nonexistent-worker";
     config.worker_path = missing_worker.c_str();
     for (int i = 0; i < 5; ++i) {
-        capsid_worker *worker = nullptr;
+        capsid_worker *worker = reinterpret_cast<capsid_worker *>(0x1);
         const capsid_result result =
             capsid_worker_spawn(&config, &worker);
-        if (result != CAPSID_CHILD_ERROR) {
+        if (result != CAPSID_CHILD_ERROR || worker != nullptr) {
             fail("nonexistent path must be CHILD_ERROR, got " +
                  std::string(capsid_result_string(result)));
         }
@@ -300,10 +379,12 @@ int main(int argc, char **argv) {
         fail("spawn failure left processes or descriptors behind");
     }
 
-    if (own_children() != 0) {
-        fail("children appeared during the final checks");
+    config.worker_path = worker_path;
+    healthy_cycle(config, true);
+    if (own_children() != 0 || fd_count() != fds_before) {
+        fail("post-failure healthy recovery left processes or descriptors behind");
     }
-    std::printf("spawn failure recovery: PASS\n");
+    std::printf("spawn failure recovery: PASS valid=25 marker=1 rejected=25 missing=5 recovered=1\n");
     return 0;
 }
 
