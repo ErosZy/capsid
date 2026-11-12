@@ -375,6 +375,11 @@ void WebSocketSession::finish() {
         submit(std::move(ack));
     }
     lease_.reset();
+    // Outbound Network callbacks retain their stream independently. Return
+    // its channel reservation at transport teardown even when canceled I/O
+    // or timers still retain this session. Accepted streams use anchor_ to
+    // own the referenced TCP stream and keep that anchor until destruction.
+    if (role_ == ws::kClient) anchor_.reset();
     if (done_) { auto done=std::move(done_); done(); }
 }
 }

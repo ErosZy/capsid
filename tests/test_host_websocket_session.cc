@@ -12,6 +12,14 @@ using capsid::host::WorkerEvent;
 void require(bool ok, const char *message) {
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
 }
+struct Reservation {
+    std::shared_ptr<capsid::host::ServiceChannelBudget> budget;
+    explicit Reservation(std::shared_ptr<capsid::host::ServiceChannelBudget> value) : budget(std::move(value)) {
+        require(budget->try_reserve_channel(), "reserve actual client channel");
+        budget->activate_channel();
+    }
+    ~Reservation() { budget->deactivate_channel(); budget->release_channel(); }
+};
 struct Pump {
     asio::io_context io;
     std::shared_ptr<WebSocketSession::Network> network = std::make_shared<WebSocketSession::Network>();
@@ -34,7 +42,8 @@ struct Pump {
         network->close = [this] { ++closes; };
         capsid::protocol::ChannelLimits limits;
         limits.close_timeout_ms = 100;
-        session = std::make_shared<WebSocketSession>(network, nullptr, 1, limits, write_timeout,
+        auto reservation = std::make_shared<Reservation>(budget);
+        session = std::make_shared<WebSocketSession>(network, reservation, 1, limits, write_timeout,
             [this](Command command) {
                 if (command.type == CommandType::kChannelConfirm) {
                     require(closes == 1, "terminal ACK follows actual socket teardown");
@@ -45,6 +54,8 @@ struct Pump {
                 commands.push_back(std::move(command)); return true;
             }, [this] { ++completions; }, budget);
         session->start_client({});
+        require(budget->channels() == 1 && budget->snapshot().active == 1,
+                "live client retains its channel reservation");
     }
     void data(const std::string &text = "a-before") {
         WorkerEvent event; event.type = WorkerEvent::Type::kChannelData;
@@ -67,6 +78,8 @@ struct Pump {
         require(closes == 1 && completions == 1 && confirms == 1,
                 "one socket close, one completion and one transport ACK");
         require(budget->queued_bytes() == 0, "finished write queue releases service reservation");
+        require(budget->channels() == 0 && budget->snapshot().active == 0,
+                "closed client returns channel capacity while session and read completion remain retained");
         close();
         if (read_done) { auto done = std::move(read_done); done(asio::error::operation_aborted, 0); }
         io.restart(); io.poll();
@@ -113,9 +126,13 @@ void ordinary_close_still_waits() {
     Pump pump; pump.close(0); pump.wrote(); pump.io.poll();
     require(pump.closes == 0 && pump.confirms == 0 && pump.completions == 0,
             "ordinary Close retains the peer handshake");
+    require(pump.budget->channels() == 1 && pump.budget->snapshot().active == 1,
+            "ordinary handshake still retains live client capacity");
     pump.session->abort(false);
     require(pump.closes == 1 && pump.confirms == 0 && pump.completions == 1,
             "ordinary teardown does not invent a terminal ACK");
+    require(pump.budget->channels() == 0 && pump.budget->snapshot().active == 0,
+            "ordinary completed transport returns client capacity before callback destruction");
 }
 void transport_close_drains_accepted_text() {
     Pump pump; pump.data("queued"); pump.data("late"); pump.close(2,1006);
@@ -134,8 +151,44 @@ void transport_close_empty_and_failed_write() {
     Pump failed; failed.data("queued"); failed.close(2,1006);
     failed.wrote(asio::error::connection_reset); failed.terminal();
 }
+void abort_with_retained_write() {
+    Pump pump; pump.data("still-owned-by-the-write");
+    require(pump.budget->channels() == 1 && pump.budget->snapshot().active == 1,
+            "a retained live client still owns its channel before teardown");
+    pump.session->abort(false);
+    require(pump.closes == 1 && pump.completions == 1 && pump.read_done && pump.write_done,
+            "transport teardown completes with both I/O completions still retained");
+    require(pump.budget->channels() == 0 && pump.budget->snapshot().active == 0,
+            "closed client capacity does not follow the retained I/O callback lifetime");
+    require(pump.budget->queued_bytes() > 0,
+            "in-flight write retains its byte buffer reservation until its completion");
+    pump.wrote(asio::error::operation_aborted);
+    require(pump.budget->queued_bytes() == 0, "canceled write returns its actual byte reservation");
+    auto done = std::move(pump.read_done); pump.read_done = {};
+    done(asio::error::operation_aborted, 0);
+    pump.io.restart(); pump.io.poll();
+    require(pump.closes == 1 && pump.completions == 1 && pump.confirms == 0,
+            "late canceled I/O never duplicates close or invents an ACK");
+}
+void inbound_anchor_lifetime() {
+    asio::io_context io;
+    struct Owner {
+        boost::beast::tcp_stream stream;
+        explicit Owner(asio::io_context &loop) : stream(loop) {}
+    };
+    auto owner = std::make_shared<Owner>(io);
+    std::weak_ptr<Owner> observed = owner;
+    capsid::protocol::ChannelLimits limits;
+    auto session = std::make_shared<WebSocketSession>(owner->stream, owner, nullptr, 1, limits, 1000,
+        [](Command) { return true; }, [] {});
+    owner.reset(); session->abort(false);
+    require(!observed.expired(), "accepted stream anchor survives transport close until session destruction");
+    session.reset();
+    require(observed.expired(), "accepted stream anchor is released when no session or I/O can refer to it");
+}
 }
 int main() {
+    abort_with_retained_write(); inbound_anchor_lifetime();
     flush_then_finish(); empty_close(); write_failure(false); write_failure(true);
     write_timeout(); ordinary_close_still_waits();
     transport_close_drains_accepted_text();
