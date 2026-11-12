@@ -10,7 +10,6 @@ import { validateGateRun, requiredTestsFor } from '../tools/run-workerd-ws-gate.
 import {referencePlatform, referenceBackendModes, referenceLockName} from '../tools/workerd-platform.mjs';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { serialize, deserialize } from 'node:v8';
 import {prepareMutationRunner, mutationHandlerCase} from '../tools/workerd-mutation-contract.mjs';
 import {readFetchProxySample} from './helpers/ws_fetch_proxy_sample.mjs';
 import {readFetchBoundarySample} from './helpers/ws_fetch_boundary_sample.mjs';
@@ -25,8 +24,8 @@ import {readHttpCodecSamples} from './helpers/ws_http_codec_sample.mjs';
 
 // Every group independently checks the complete frozen registration list.
 const inventory=JSON.parse(fs.readFileSync(new URL('./fixtures/workerd-gate-control-inventory.json',import.meta.url),'utf8'));
-assert.equal(inventory.schema,'capsid-workerd-gate-control-inventory-v1');assert.equal(inventory.cases.length,296);
-assert.equal(new Set(inventory.cases).size,296);
+assert.equal(inventory.schema,'capsid-workerd-gate-control-inventory-v1');assert.equal(inventory.cases.length,297);
+assert.equal(new Set(inventory.cases).size,297);
 const controlShard=process.env.CAPSID_WS_GATE_CONTROL_SHARD??'all';
 assert.ok(['all','primary','archives','extensions'].includes(controlShard),'known gate control shard');
 const declaredControls=[];let registeredControls=0;
@@ -39,7 +38,32 @@ function test(name,...args){
 // Reuse immutable construction templates; every mutant receives a fresh
 // deep clone. The complete validators and archive I/O still run per case.
 const matrixTemplates = new Map(), archiveTemplates = new Map();
-const constructionTemplateBytes=new WeakMap();
+// Copy internal construction graphs while sharing only immutable primitives.
+// Large captured JSON strings need no new allocation; every mutable object,
+// array, shared edge and cycle remains independent. No verdict is cached.
+const verifiedConstructionTemplates = new WeakSet();
+const nativeCloneRequired = Symbol('construction requires structuredClone');
+function copyConstructionGraph(value, copies = new Map()) {
+    if (value === null || typeof value !== 'object') {
+        if (typeof value === 'function' || typeof value === 'symbol') throw nativeCloneRequired;
+        return value;
+    }
+    if (copies.has(value)) return copies.get(value);
+    const array = Array.isArray(value), prototype = Object.getPrototypeOf(value);
+    if (!array && prototype !== Object.prototype && prototype !== null) throw nativeCloneRequired;
+    const result = array ? new Array(value.length) : {};
+    copies.set(value, result);
+    for (const key of Object.keys(value)) {
+        const child = copyConstructionGraph(value[key], copies);
+        if (key === '__proto__') Object.defineProperty(result, key, {value: child, enumerable: true, writable: true, configurable: true});
+        else result[key] = child;
+    }
+    return result;
+}
+function mutableConstructionClone(value) {
+    try { return copyConstructionGraph(value); }
+    catch (error) { if (error === nativeCloneRequired) return structuredClone(value); throw error; }
+}
 function assertTemplateCloneGraph(source,clone,forward=new Map(),reverse=new Map()){
     if(source===null||typeof source!=='object')return;
     assert.notEqual(source,clone,'cloned objects are independent');
@@ -49,20 +73,17 @@ function assertTemplateCloneGraph(source,clone,forward=new Map(),reverse=new Map
     assert.deepEqual(Reflect.ownKeys(source),Reflect.ownKeys(clone),'all template property keys survive');
     for(const key of Reflect.ownKeys(source))assertTemplateCloneGraph(source[key],clone[key],forward,reverse);
 }
-function cloneConstructionTemplate(value){
-    let bytes=constructionTemplateBytes.get(value);
-    if(bytes===undefined){
-        bytes=serialize(value);
-        const decoded=deserialize(bytes);
-        assert.deepEqual(decoded,structuredClone(value),'template clone retains every current value');
-        assertTemplateCloneGraph(value,decoded);
-        const independent=deserialize(bytes);
-        assert.deepEqual(independent,decoded,'repeated clones retain every current value');
-        assertTemplateCloneGraph(decoded,independent);
-        constructionTemplateBytes.set(value,bytes);
-        return decoded;
+function cloneConstructionTemplate(value) {
+    const decoded = mutableConstructionClone(value);
+    if (!verifiedConstructionTemplates.has(value)) {
+        assert.deepEqual(decoded, structuredClone(value), 'template clone retains every current value');
+        assertTemplateCloneGraph(value, decoded);
+        const independent = mutableConstructionClone(value);
+        assert.deepEqual(independent, decoded, 'repeated clones retain every current value');
+        assertTemplateCloneGraph(decoded, independent);
+        verifiedConstructionTemplates.add(value);
     }
-    return deserialize(bytes);
+    return decoded;
 }
 
 function matrix(platform = 'linux') {
@@ -1391,5 +1412,35 @@ for (const [name, mutate] of [
     const m = archiveMatrix(); mutate(m); assert.throws(() => verifyArchive(m));
 });
 
+test('construction clones preserve current values and independent complete graph ownership', () => {
+    const current = {nested: {value: 0}};
+    const old = cloneConstructionTemplate(current);
+    current.nested.value = 99;
+    assert.equal(cloneConstructionTemplate(current).nested.value, 99, 'every call reads the current construction input');
+    assert.equal(old.nested.value, 0, 'earlier copies retain independent values');
+    const shared = {values: [0, -0, NaN, Infinity, undefined, 1n]};
+    const input = {left: shared, right: shared, sparse: new Array(3)};
+    input.self = input; input.sparse[1] = shared; input.sparse.note = 'preserved';
+    Object.defineProperty(input, '__proto__', {value: {data: true}, enumerable: true, writable: true});
+    const first = cloneConstructionTemplate(input), second = cloneConstructionTemplate(input);
+    assert.deepEqual(first, structuredClone(input)); assert.deepEqual(second, structuredClone(input));
+    assertTemplateCloneGraph(input, first); assertTemplateCloneGraph(first, second);
+    assert.equal(first.self, first); assert.equal(first.left, first.right); assert.equal(first.sparse[1], first.left);
+    assert.equal(Object.hasOwn(first.sparse, 0), false); assert.equal(first.sparse.note, 'preserved');
+    assert.equal(Object.getPrototypeOf(first), Object.prototype); assert.deepEqual(first.__proto__, {data: true});
+    first.left.values[0] = 41;
+    assert.equal(second.left.values[0], 0); assert.equal(shared.values[0], 0);
+    shared.values[0] = 99;
+    assert.equal(cloneConstructionTemplate(input).left.values[0], 99, 'every call reads the current construction input');
+    const buffer = Uint8Array.of(1, 2).buffer;
+    const exotic = {shared, buffer, view: new Uint8Array(buffer), map: new Map(), date: new Date(0)};
+    exotic.map.set(shared, exotic); exotic.self = exotic;
+    const left = cloneConstructionTemplate(exotic), right = cloneConstructionTemplate(exotic);
+    assert.deepEqual(left, structuredClone(exotic)); assert.deepEqual(right, structuredClone(exotic));
+    assert.equal(left.map.get(left.shared), left); assert.equal(left.view.buffer, left.buffer);
+    left.view[0] = 9; assert.equal(right.view[0], 1); assert.equal(new Uint8Array(buffer)[0], 1);
+    assert.throws(() => cloneConstructionTemplate({uncopyable: () => {}}));
+});
+
 assert.deepEqual(declaredControls,inventory.cases,'all original and supplemental controls remain declared exactly once');
-assert.equal(registeredControls,controlShard==='all'?296:controlShard==='primary'?114:controlShard==='archives'?117:65,'all selected controls are registered, never skipped');
+assert.equal(registeredControls,controlShard==='all'?297:controlShard==='primary'?114:controlShard==='archives'?117:66,'all selected controls are registered, never skipped');

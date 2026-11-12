@@ -1248,11 +1248,10 @@ void kill_and_reap(HANDLE process) {
     if (!process) {
         return;
     }
-    // TerminateProcess is not async-signal-like; unlike POSIX SIGKILL the
-    // target cannot defer its death past the termination call itself, so
-    // the bounded wait below always reaps a terminated process.
+    // TerminateProcess requests asynchronous completion. Failed spawn must
+    // retain its owned handle until the kernel confirms the process exit.
     TerminateProcess(process, 1);
-    WaitForSingleObject(process, 250);
+    WaitForSingleObject(process, INFINITE);
     CloseHandle(process);
 }
 #else
@@ -1295,7 +1294,8 @@ bool terminate_process(pid_t pid) {
 
 void kill_and_reap(pid_t pid) {
     kill(pid, SIGKILL);
-    waitpid(pid, NULL, 0);
+    pid_t result;
+    do { result = waitpid(pid, NULL, 0); } while (result < 0 && errno == EINTR);
 }
 #endif
 
