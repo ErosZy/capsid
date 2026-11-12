@@ -142,3 +142,21 @@ test('stored capture reads are independent and immutable across test mutations',
     const a=readFetchBoundarySample();a.cases.pop();a.certificateInputs.serverSHA256='invalid';
     const b=readFetchBoundarySample();assert.equal(b.cases.length,22);assert.match(b.certificateInputs.serverSHA256,/^[a-f0-9]{64}$/);
 });
+
+for(const address of ['127.0.0.1','127.0.0.2'])test('cross-address target permits actual loopback source '+address,()=>{
+    const value=sample('redirect-cross');
+    snapshots(value,s=>{for(const row of [...s.tcpRecords,...s.records])if(row.role==='target')row.remoteAddress=address;});
+    assertFetchBoundaryCase(value,'reference');
+});
+for(const kind of fetchBoundaryCases.filter(kind=>sample(kind).upstreamBeforeStop.tcpRecords.length))
+test(kind+' rejects the target alias on an unrelated source connection',()=>{
+    const value=sample(kind);
+    snapshots(value,s=>{const first=s.tcpRecords[0];first.remoteAddress='127.0.0.2';
+        for(const row of s.records)if(row.role===first.role&&row.remotePort===first.remotePort)row.remoteAddress='127.0.0.2';});
+    assert.throws(()=>assertFetchBoundaryCase(value,'reference'));
+});
+for(const address of ['127.0.0.3','198.51.100.2','0.0.0.0'])test('cross-address target rejects unrelated source '+address,()=>{
+    const value=sample('redirect-cross');
+    snapshots(value,s=>{for(const row of [...s.tcpRecords,...s.records])if(row.role==='target')row.remoteAddress=address;});
+    assert.throws(()=>assertFetchBoundaryCase(value,'reference'));
+});

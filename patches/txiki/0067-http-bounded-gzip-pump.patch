@@ -398,7 +398,7 @@
  }
 --- a/deps/libwebsockets/lib/roles/http/client/client-http.c
 +++ b/deps/libwebsockets/lib/roles/http/client/client-http.c
-@@ -549,6 +549,15 @@
+@@ -549,6 +549,17 @@
  			   __func__, (unsigned long)lwsi_role(wsi));
  		return -1;
  	}
@@ -407,7 +407,9 @@
 +	 * no later transaction to service. Retire its transport now instead
 +	 * of waiting for another readability callback after the owner left.
 +	 * Header-only completion and H2 keep their existing lifetime paths. */
++	const char *completed_method = lws_hdr_simple_ptr(wsi, _WSI_TOKEN_CLIENT_METHOD);
 +	if (!wsi->client_h2_alpn && !wsi->client_mux_substream &&
++	    (!completed_method || strcmp(completed_method, "HEAD")) &&
 +	    wsi->http.conn_type == HTTP_CONNECTION_CLOSE &&
 +	    wsi->http.rx_content_length)
 +		return -1;

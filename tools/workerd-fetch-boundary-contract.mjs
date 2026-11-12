@@ -128,7 +128,12 @@ function upstream(value,seen){
         assert.equal(item.role,index===1&&kind!=='redirect-loop'?'target':'source');port(item.localPort);port(item.remotePort);
         assert.equal(item.localPort,item.role==='source'?value.sourcePort:value.targetPort);
         const address=kind==='ipv6-upgrade'?'::1':item.role==='target'&&kind==='redirect-cross'?'127.0.0.2':item.localAddress==='::1'&&kind.startsWith('tls-')?'::1':'127.0.0.1';
-        assert.equal(item.localAddress,address);assert.ok(['127.0.0.1','::1'].includes(item.remoteAddress));assert.equal(item.closed,true);assert.equal(typeof item.ended,'boolean');assert.equal(item.error,null);
+        assert.equal(item.localAddress,address);
+        // Darwin can select the destination's loopback alias as its local
+        // source address. The alias belongs only to this cross-address target.
+        const remoteAddresses=kind==='redirect-cross'&&item.role==='target'&&address==='127.0.0.2'
+            ?['127.0.0.1','127.0.0.2','::1']:['127.0.0.1','::1'];
+        assert.ok(remoteAddresses.includes(item.remoteAddress));assert.equal(item.closed,true);assert.equal(typeof item.ended,'boolean');assert.equal(item.error,null);
         const identity=[item.role,item.localAddress,item.localPort,item.remotePort].join('/');assert.ok(!tcpIds.has(identity));tcpIds.add(identity);
         if(item.tlsError)assert.ok(snapshot.tlsErrors.some(error=>JSON.stringify(error)===JSON.stringify(item.tlsError)));
     });
