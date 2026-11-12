@@ -1,20 +1,8 @@
-name: Testing validity
-
+name: Complete current startup and archive candidate validation
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-  workflow_call:
-
 permissions:
   contents: read
-
-concurrency:
-  group: testing-validity-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   release-wpt-and-delegated-sandbox:
     runs-on: ubuntu-24.04
@@ -24,6 +12,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: adc0303e0f72058751259989be8adde45c72d219
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -58,6 +47,7 @@ jobs:
           # domains failed DNS. Preserve suites, components and Signed-By.
           sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv
           /usr/bin/openssl version
@@ -370,6 +360,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: adc0303e0f72058751259989be8adde45c72d219
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -391,6 +382,7 @@ jobs:
           # Match the Release dependency transport and reject stale indexes.
           sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_network[@]}" update --error-on=any
           # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
           # included, arch-suffixed) that the clang-based tsan matrix entry
@@ -626,6 +618,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: adc0303e0f72058751259989be8adde45c72d219
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -635,6 +628,7 @@ jobs:
         run: |
           sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
 
@@ -676,6 +670,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: adc0303e0f72058751259989be8adde45c72d219
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -794,6 +789,17 @@ jobs:
             --output-junit macos-junit.xml \
             -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
 
+      - name: Stage complete native evidence without renaming original members
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p native-raw-archive
+          if test -d build-macos; then
+            tar -czf native-raw-archive/macos-build-evidence.tar.gz \
+              --exclude='*.o' --exclude='*.a' --exclude='*.dylib' \
+              --exclude='capsid-worker' --exclude='capsid-host' \
+              build-macos
+          fi
       - name: Save macOS evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -803,6 +809,7 @@ jobs:
           path: |
             build-macos/macos-junit.xml
             build-macos/Testing/Temporary/LastTest.log
+            native-raw-archive/macos-build-evidence.tar.gz
             build-macos/CMakeCache.txt
 
   windows-host-library:
@@ -815,6 +822,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: adc0303e0f72058751259989be8adde45c72d219
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
