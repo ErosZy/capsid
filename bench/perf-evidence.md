@@ -70,7 +70,7 @@ including density. There is no mixed-origin publication mode.
 | Density | capsid/workerd × 10k/100k/1m × cold/warm | 2048 MiB; 100 requests per worker/cell in warm phase; two stable reads; two verification retries |
 
 Density uses `warmupConcurrencyPolicy: pool-scaled-burst-v1`, base
-`parallelRequests: 64` and `warmupConcurrencyFactor: 64`. Each cell's conditioning
+`parallelRequests: 64` and `warmupConcurrencyFactor: 128`. Each cell's conditioning
 limit is `max(64, 128 * count)`; its correctness file records that limit and the
 largest actual wave. All conditioning completes before settling and PSS reads.
 Cold/warm attempts are bounded by `max(64, 8 * count)` and

@@ -36,7 +36,7 @@ PROTOCOL = {
             "pssStableReads": 2, "pssMaxReads": 8, "pssIntervalSeconds": 1, "pssSettleSeconds": 1},
     "density": {"budgetMb": 2048, "warmRequests": 100, "stableReads": 2,
                 "verificationRetries": 2, "parallelRequests": 64,
-                "warmupConcurrencyPolicy": "pool-scaled-burst-v1", "warmupConcurrencyFactor": 64,
+                "warmupConcurrencyPolicy": "pool-scaled-burst-v1", "warmupConcurrencyFactor": 128,
                 "coldRequestFactor": 8, "warmRequestFactor": 32, "coverageTimeoutSeconds": 300},
 }
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")

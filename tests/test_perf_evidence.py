@@ -130,7 +130,7 @@ class Fixture:
                              "requestsPerWorker": {"worker-1": count, "worker-2": count}, "limit": "cap"}]
                     self.raw(path, record, f"raw.{index}.jsonl", rows)
                     self.verdict(path, record, f"correctness.{index}.json", count * 2,
-                                 {"warmupConcurrencyLimit": 128, "maximumWaveRequests": 2,
+                                 {"warmupConcurrencyLimit": 256, "maximumWaveRequests": 2,
                                   "maximumRequestsAllowed": 6400 if key[2] == "warm" else 64,
                                   "coverageTimeoutSeconds": 300})
                 m["records"].append(record)
@@ -389,7 +389,8 @@ class PerformanceEvidenceTests(unittest.TestCase):
     def test_density_warmup_policy_and_actual_wave_must_agree(self):
         f = self.fixture
         for field, value in (("warmupConcurrencyLimit", 63), ("warmupConcurrencyLimit", True),
-                             ("maximumWaveRequests", 129), ("maximumWaveRequests", 0),
+                             ("warmupConcurrencyLimit", 128),
+                             ("maximumWaveRequests", 257), ("maximumWaveRequests", 0),
                              ("maximumRequestsAllowed", 999999), ("coverageTimeoutSeconds", 301)):
             with self.subTest(field=field, value=value), f.transaction():
                 name = f.manifests["density"]["records"][0]["correctness"][0]
@@ -402,6 +403,25 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 f.manifest("density")
                 with self.assertRaisesRegex(contract.EvidenceError, "protocol"):
                     self.collect()
+        with f.transaction():
+            f.manifests["density"]["protocol"]["warmupConcurrencyFactor"] = 64
+            f.manifest("density")
+            with self.assertRaisesRegex(contract.EvidenceError, "protocol"):
+                self.collect()
+
+    def test_density_producer_and_publication_conditioning_limits_agree(self):
+        from density_probe import DensityProbe
+        protocol = contract.PROTOCOL["density"]
+        self.assertEqual(128, protocol["warmupConcurrencyFactor"])
+        probe = DensityProbe(host="unused", worker="unused", workerd="unused",
+                             apps=self.fixture.root, out=self.fixture.root, cpuset="0-3")
+        self.assertEqual(64, protocol["parallelRequests"])
+        self.assertEqual(64, probe.parallel)
+        for count, expected in ((1, 128), (2, 256), (65, 8320)):
+            with self.subTest(count=count):
+                self.assertEqual(expected, probe.warmup_concurrency(count))
+                self.assertEqual(expected, max(protocol["parallelRequests"],
+                                              count * protocol["warmupConcurrencyFactor"]))
 
     def test_qps_payload_claims_cannot_be_omitted_or_swapped(self):
         f = self.fixture
