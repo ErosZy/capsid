@@ -296,6 +296,7 @@
     "full archived gate rejects missing MessagePort report",
     "full archived gate rejects MessagePort ordering mismatch",
     "full archived gate rejects stale MessagePort input",
-    "full archived gate rejects forced MessagePort native shutdown"
+    "full archived gate rejects forced MessagePort native shutdown",
+    "construction clones preserve current values and independent complete graph ownership"
   ]
 }
