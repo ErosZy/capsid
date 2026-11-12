@@ -74,15 +74,29 @@ void accepted_cancel(Gate& gate) {
 
 void valid_order(bool ack_before_write) {
     Gate gate = delivered();
+    unsigned notices = 0;
+    gate.pressure_ready = [](const Gate& current, void* state) {
+        require(current.ack_blocked && current.stalled && current.dial == 1 &&
+                current.peak_queue == 4096 && !current.accepted_acks,
+                "notification follows the actual blocked ACK and stalled writer");
+        ++*static_cast<unsigned*>(state);
+        return true;
+    };
+    gate.pressure_state = &notices;
     if (ack_before_write) {
         blocked(gate);
         require(!gate.invalid && !gate.stalled, "full queue can block ACK before the first write attempt");
+        require(!notices, "blocked ACK alone cannot publish the receipt");
         stall(gate);
     } else {
         stall(gate);
+        require(!notices, "stalled writer alone cannot publish the receipt");
         blocked(gate);
         require(!gate.invalid, "write can stall before the first blocked ACK");
     }
+    require(notices == 1, "both observations publish exactly one barrier");
+    blocked(gate);
+    require(notices == 1, "repeated pressure observations cannot publish another receipt");
     queued_cancel(gate);
     accepted_ack(gate);
     accepted_cancel(gate);
@@ -93,6 +107,13 @@ void valid_order(bool ack_before_write) {
 int main() {
     valid_order(false);
     valid_order(true);
+    {
+        Gate gate = delivered();
+        gate.pressure_ready = [](const Gate&, void*) { return false; };
+        stall(gate);
+        blocked(gate);
+        require(gate.invalid && !gate.complete(), "failed physical receipt cannot establish the premise");
+    }
     {
         Gate gate;
         blocked(gate);
