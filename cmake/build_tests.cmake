@@ -8326,6 +8326,54 @@ if(BUILD_TESTING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
     endforeach()
 endif()
 
+# Compile the production client in a separate test object. Only that object
+# redirects native calls; ordinary runtime and test witnesses use real APIs.
+if(BUILD_TESTING AND TARGET capsid-worker AND
+   CMAKE_SYSTEM_NAME MATCHES "^(Linux|Darwin|Windows)$")
+    add_library(test-worker-spawn-rollback-client OBJECT src/client.cc)
+    target_include_directories(test-worker-spawn-rollback-client PRIVATE
+        include src tests "${CAPSID_GENERATED_DIR}")
+    target_link_libraries(test-worker-spawn-rollback-client PRIVATE capsid_sanitizers)
+    target_compile_definitions(test-worker-spawn-rollback-client PRIVATE
+        CAPSID_TEST_SPAWN_ROLLBACK_RENAME=1)
+    if(CAPSID_ENABLE_ASAN)
+        target_compile_definitions(test-worker-spawn-rollback-client PRIVATE CAPSID_ASAN_BUILD=1)
+    endif()
+    if(CAPSID_ENABLE_TSAN)
+        target_compile_definitions(test-worker-spawn-rollback-client PRIVATE CAPSID_TSAN_BUILD=1)
+    endif()
+    if(MSVC)
+        target_compile_options(test-worker-spawn-rollback-client PRIVATE
+            "/FI${CMAKE_CURRENT_SOURCE_DIR}/tests/worker_spawn_rollback_hooks.h")
+    else()
+        target_compile_options(test-worker-spawn-rollback-client PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/tests/worker_spawn_rollback_hooks.h")
+    endif()
+    add_executable(test-worker-spawn-rollback tests/test_worker_spawn_rollback.cc
+        $<TARGET_OBJECTS:test-worker-spawn-rollback-client>)
+    target_include_directories(test-worker-spawn-rollback PRIVATE include src tests)
+    target_link_libraries(test-worker-spawn-rollback PRIVATE capsid_runtime capsid_sanitizers Threads::Threads)
+    foreach(rollback_target IN ITEMS test-worker-spawn-rollback-client test-worker-spawn-rollback)
+        set_target_properties(${rollback_target} PROPERTIES CXX_STANDARD 11
+            CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            if(MSVC)
+                target_compile_options(${rollback_target} PRIVATE /W4 /WX)
+            else()
+                target_compile_options(${rollback_target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+                if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+                    target_compile_options(${rollback_target} PRIVATE -Wno-maybe-uninitialized)
+                endif()
+            endif()
+        endif()
+    endforeach()
+    add_dependencies(test-worker-spawn-rollback capsid-worker test-stubborn-worker)
+    add_test(NAME worker_spawn_rollback
+        COMMAND test-worker-spawn-rollback $<TARGET_FILE:capsid-worker> $<TARGET_FILE:test-stubborn-worker>)
+    set_tests_properties(worker_spawn_rollback PROPERTIES
+        TIMEOUT 15 LABELS "worker;abi;lifecycle;allocation")
+endif()
+
 # These allocation rollback/admission tests replace global new/delete.
 # Clang's static TSan C++ runtime defines those symbols strongly. Use its
 # shared runtime for these tests to retain the allocator probes and race
@@ -8348,7 +8396,8 @@ if(BUILD_TESTING AND CAPSID_ENABLE_TSAN AND CMAKE_SYSTEM_NAME STREQUAL "Linux" A
     endif()
     foreach(_capsid_allocation_test IN ITEMS
             test-channel-io test-host-single-worker-lifecycle
-            test-host-static-pool-adoption test-host-external-drain)
+            test-host-static-pool-adoption test-host-external-drain
+            test-worker-spawn-rollback)
         if(TARGET "${_capsid_allocation_test}")
             target_link_options("${_capsid_allocation_test}" PRIVATE -shared-libsan)
             set_property(TARGET "${_capsid_allocation_test}" APPEND PROPERTY
