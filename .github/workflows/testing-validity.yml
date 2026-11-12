@@ -1,20 +1,8 @@
-name: Testing validity
-
+name: Complete cold stabilization and real perf prerequisite candidate validation
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-  workflow_call:
-
 permissions:
   contents: read
-
-concurrency:
-  group: testing-validity-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   release-wpt-and-delegated-sandbox:
     runs-on: ubuntu-24.04
@@ -24,6 +12,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 704d1c864202dda18f1d9dc00e22c9a182686ea2
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -56,8 +45,9 @@ jobs:
           set -euo pipefail
           # Hosted probes verified this Ubuntu mirror while the ubuntu.com
           # domains failed DNS. Preserve suites, components and Signed-By.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic
           /usr/bin/openssl version
@@ -374,6 +364,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 704d1c864202dda18f1d9dc00e22c9a182686ea2
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -393,8 +384,9 @@ jobs:
         run: |
           set -euo pipefail
           # Match the Release dependency transport and reject stale indexes.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_network[@]}" update --error-on=any
           # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
           # included, arch-suffixed) that the clang-based tsan matrix entry
@@ -637,6 +629,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 704d1c864202dda18f1d9dc00e22c9a182686ea2
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -644,8 +637,9 @@ jobs:
 
       - name: Install Clang and Ninja
         run: |
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
 
@@ -663,6 +657,11 @@ jobs:
       - name: Build fuzz harnesses
         run: cmake --build build-fuzz --parallel 2
 
+      - name: Retain full fuzz commands and original registration
+        run: |
+          ninja -C build-fuzz -t commands > build-fuzz/full-build-commands.txt
+          ctest --test-dir build-fuzz --show-only=json-v1 -L fuzz > build-fuzz/full-registration.json
+
       - name: Run bounded corpus gates
         run: |
           ctest --test-dir build-fuzz \
@@ -677,7 +676,14 @@ jobs:
         with:
           name: fuzz-hosted-evidence
           if-no-files-found: error
-          path: build-fuzz/fuzz-junit.xml
+          path: |
+            build-fuzz/fuzz-junit.xml
+            build-fuzz/Testing/Temporary/LastTest.log
+            build-fuzz/CMakeCache.txt
+            build-fuzz/compile_commands.json
+            build-fuzz/CTestTestfile.cmake
+            build-fuzz/full-build-commands.txt
+            build-fuzz/full-registration.json
 
   posix-host-library:
     runs-on: macos-15
@@ -687,6 +693,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 704d1c864202dda18f1d9dc00e22c9a182686ea2
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -798,13 +805,41 @@ jobs:
             test-host-admin-service
 
       - name: Run POSIX host-side matrix
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-full-driver-reports
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          build=Path('build-macos');cache=(build/'CMakeCache.txt').read_text()
+          assert 'CMAKE_GENERATOR:INTERNAL=Unix Makefiles' in cache
+          commands=json.loads((build/'compile_commands.json').read_text());assert commands
+          links=[dict(file=str(p.relative_to(build)),command=p.read_text()) for p in sorted(build.rglob('link.txt'))]
+          assert links
+          (build/'full-build-commands.txt').write_text(json.dumps(dict(generator='Unix Makefiles',actualCompileDatabase=commands,generatedLinkCommands=links),indent=2)+'\n')
+          print(json.dumps(dict(complete=True,generator='Unix Makefiles',compileCommands=len(commands),linkCommands=len(links))))
+          PY
+          ctest --test-dir build-macos --show-only=json-v1 \
+            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$' \
+            > build-macos/full-registration.json
           ctest --test-dir build-macos \
             --no-tests=error \
             --output-on-failure \
             --output-junit macos-junit.xml \
             -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
 
+      - name: Stage complete native reports preserving original member names
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,tarfile
+          out=Path('native-raw-archive');out.mkdir()
+          with tarfile.open(out/'macos-raw-driver-reports.tar.gz','w:gz') as archive:
+            report=Path(os.environ['RUNNER_TEMP'])/'capsid-full-driver-reports'
+            if report.exists():archive.add(report,arcname='capsid-full-driver-reports')
+          PY
       - name: Save macOS evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -814,7 +849,11 @@ jobs:
           path: |
             build-macos/macos-junit.xml
             build-macos/Testing/Temporary/LastTest.log
+            native-raw-archive/macos-raw-driver-reports.tar.gz
             build-macos/CMakeCache.txt
+            build-macos/compile_commands.json
+            build-macos/full-build-commands.txt
+            build-macos/full-registration.json
 
   windows-host-library:
     runs-on: windows-latest
@@ -826,6 +865,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 704d1c864202dda18f1d9dc00e22c9a182686ea2
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -975,7 +1015,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run Windows host-side matrix
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-full-driver-reports
         run: |
+          ninja -C build-windows -t commands | Out-File -FilePath build-windows/full-build-commands.txt -Encoding utf8
+          ctest --test-dir build-windows --show-only=json-v1 -E '^wpt_conformance_not_configured$' |
+            Out-File -FilePath build-windows/full-registration.json -Encoding utf8
           $evidence_root = (Resolve-Path build-windows).Path
           $ctest_log = Join-Path $evidence_root 'ctest.log'
           $junit_path = Join-Path $evidence_root 'windows-junit.xml'
@@ -1005,6 +1050,11 @@ jobs:
           path: |
             build-windows/windows-junit.xml
             build-windows/ctest.log
+            build-windows/CMakeCache.txt
+            build-windows/compile_commands.json
+            build-windows/full-build-commands.txt
+            build-windows/full-registration.json
+            ${{ runner.temp }}/capsid-full-driver-reports/
             build-windows/Testing/Temporary/LastTest.log
             build-windows/workerd-compatibility/
 
