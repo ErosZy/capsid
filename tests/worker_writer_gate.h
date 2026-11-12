@@ -21,6 +21,18 @@ struct WorkerWriterGate {
     uint64_t blocked_acks = 0;
     unsigned accepted_acks = 0;
     unsigned accepted_cancels = 0;
+    bool pressure_notified = false;
+    using PressureReady = bool (*)(const WorkerWriterGate&, void*);
+    PressureReady pressure_ready = nullptr;
+    void* pressure_state = nullptr;
+
+    void notify_pressure_ready() {
+        if (invalid || pressure_notified || released || cancel_queued ||
+            !first_body_sent || !stalled || !stalled_writes || !ack_blocked ||
+            !blocked_acks || !dial || peak_queue != 4096 || accepted_acks) return;
+        pressure_notified = true;
+        if (pressure_ready && !pressure_ready(*this, pressure_state)) invalid = true;
+    }
 
     static uint64_t request_id(const uint8_t* data) {
         uint64_t result = 0;
@@ -42,6 +54,7 @@ struct WorkerWriterGate {
         if (!gate.released && (gate.stalled || (gate.first_body_sent && filler_body(data,size)))) {
             gate.stalled = true;
             ++gate.stalled_writes;
+            gate.notify_pressure_ready();
             return 0;
         }
         if (!gate.first_body_seen && filler_body(data,size)) {
@@ -112,10 +125,11 @@ struct WorkerWriterGate {
                    (frame.type == p::kChannelData || frame.type == p::kChannelClose)) {
             gate.invalid = true;
         }
+        gate.notify_pressure_ready();
     }
 
     bool complete() const {
-        return !invalid && first_body_sent && stalled && stalled_writes != 0 &&
+        return !invalid && pressure_notified && first_body_sent && stalled && stalled_writes != 0 &&
             ack_blocked && blocked_acks != 0 && cancel_queued && released &&
             accepted_acks == 1 && accepted_cancels == 1 && peak_queue == 4096;
     }

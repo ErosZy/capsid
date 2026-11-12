@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { archivedQualification } from "./documentation_archive.mjs";
 
 const root = path.resolve(process.argv[2] ?? ".");
 
@@ -32,12 +33,18 @@ const documentPaths = [
 ].map((value) => value.split(path.sep).join("/")).sort();
 
 const documents = new Map();
+let archivedSnapshots = 0;
 for (const relativePath of documentPaths) {
+  const bytes = await readFile(path.join(root, relativePath));
+  if (await archivedQualification(root, relativePath, bytes)) {
+    archivedSnapshots += 1;
+    continue;
+  }
   documents.set(
     relativePath,
     // Normalize CRLF checkouts (git autocrlf on Windows) so the frozen
     // fragment matching below is line-ending agnostic.
-    (await readFile(path.join(root, relativePath), "utf8")).replace(
+    bytes.toString("utf8").replace(
       /\r\n/g,
       "\n",
     ),
@@ -83,7 +90,7 @@ for (const [relativePath, content] of documents) {
 // Every maintained docs/*.md file must be reachable from the docs index. This
 // permits a small hierarchy (for example the framework index) without allowing
 // an unindexed orphan document to accumulate.
-const docsPaths = documentPaths.filter((value) => value.startsWith("docs/"));
+const docsPaths = [...documents.keys()].filter((value) => value.startsWith("docs/"));
 const reachable = new Set(["docs/README.md"]);
 const pending = ["docs/README.md"];
 while (pending.length > 0) {
@@ -286,6 +293,6 @@ for (const staleFragment of [
 }
 
 console.log(
-  `current docs: ${documentPaths.length} documents, ` +
+  `current docs: ${documents.size} documents, ${archivedSnapshots} archived snapshots hash-checked, ` +
     `${capabilityManifest.modules.built_and_available.length} modules verified`,
 );

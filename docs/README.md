@@ -79,3 +79,5 @@ Capsid documentation is organized around selection → integration → configura
 - Maintain only the contracts and reproducible conclusions of the current commit; do not preserve review processes, status snapshots, or generated reports.
 - Source-of-truth priority: public headers and build configuration > raw test/benchmark artifacts > Markdown.
 - Every `docs/*.md` file must be reachable from this page; relative links are validated by `tests/audit-current-docs.mjs`.
+
+- Dated `docs/evidence/v0.3.0/*/qualification-before.md` files preserve earlier qualification text verbatim. Their adjacent `index.json` must contain the exact SHA256; the documentation audit checks those bytes as archives. Other Markdown files retain the ordinary link and reachability checks.

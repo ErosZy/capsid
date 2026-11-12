@@ -826,7 +826,7 @@ public:
           ctx_(NULL),
           poll_started_(false),
           deadline_timer_started_(false),
-          poll_events_(UV_READABLE),
+          poll_events_(0),
           pump_in_progress_(false),
           diag_samples_(0),
           flush_syscall_samples_(0),
@@ -9998,9 +9998,10 @@ private:
         if (!outbound_.drained()) {
             events |= UV_WRITABLE;
         }
-        if (events != poll_events_) {
-            poll_events_ = events;
-        }
+        // Re-arming an unchanged uv_poll_t invalidates pending kqueue events
+        // for this fd. A writable callback must not erase a same-batch read.
+        if (events == poll_events_) return;
+        poll_events_ = events;
         uv_poll_start(&poll_, poll_events_, poll_callback);
     }
 
