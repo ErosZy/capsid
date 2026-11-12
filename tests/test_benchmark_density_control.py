@@ -200,6 +200,54 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(24,result['responses_checked']);coverage.verify(1,24)
         self.assertEqual([8,16],sorted(set(waves)));self.assertLessEqual(max(waves),64)
 
+    def test_large_pool_conditioning_can_exceed_64_without_changing_qps(self):
+        coverage=control.Coverage(65,'large');pending=[];sequence={};waves=[];lock=threading.Lock()
+        def wave(ports,nonce,*,connect_parallel):
+            self.assertEqual(64,connect_parallel)
+            observations=[]
+            for port in ports:
+                identities=49 if len(ports)<130 else 65
+                worker='w'+str(len(waves)%identities)
+                waves.append(len(ports));sequence[worker]=sequence.get(worker,0)+1
+                pending.append(dict(nonce=nonce,worker=worker,count=sequence[worker]))
+                observations.append(dict(port=port,status=200,ok=True,bodySHA256='a'*64))
+            return observations
+        def poll():
+            while pending:coverage.add(pending.pop(0))
+        with tempfile.TemporaryDirectory() as temporary:
+            probe=DensityProbe(host=args.node,worker=args.node,workerd=args.node,apps=temporary,out=temporary,
+                               cpuset='0',parallel=64,coverage_timeout=5)
+            with patch('density_probe.validated_wave',side_effect=wave):
+                result=probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=poll),
+                                   'capsid',[12345],65,1,'large',io.StringIO())
+        coverage.verify(1,result['responses_checked'])
+        self.assertEqual(520,result['responses_checked'])
+        self.assertEqual([520],sorted(set(waves)))
+        self.assertEqual(4160,result['warmupConcurrencyLimit'])
+        self.assertEqual(520,result['maximumWaveRequests'])
+        self.assertEqual(64,probe.parallel)
+
+    def test_large_wave_sends_all_requests_before_waiting_for_responses(self):
+        from density_probe import validated_wave
+        received=[];complete=threading.Event()
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                received.append(self.headers['x-capsid-bench-nonce'])
+                if len(received)==3:complete.set()
+                if not complete.wait(3):return
+                self.send_response(200);self.send_header('Content-Length',str(len(EXPECTED_BODY)))
+                self.end_headers();self.wfile.write(EXPECTED_BODY)
+            def log_message(self,*_):pass
+        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+        try:
+            observations=validated_wave([server.server_port]*3,'burst',connect_parallel=2)
+            self.assertEqual(['burst']*3,received)
+            self.assertEqual(3,len(observations));self.assertTrue(all(row['ok'] for row in observations))
+        finally:
+            complete.set();server.shutdown();thread.join(timeout=2);server.server_close()
+            self.assertFalse(thread.is_alive())
+
     def test_real_http_wrong_body_and_status_cannot_pass_correctness(self):
         response = [200, EXPECTED_BODY]
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -218,14 +266,58 @@ class CoverageTests(unittest.TestCase):
             for status, body in ((200, b"wrong"), (503, EXPECTED_BODY), (200, EXPECTED_BODY + b"extra")):
                 with self.subTest(status=status, body=body):
                     response[:] = status, body
-                    with self.assertRaises(ProbeError) as raised:
-                        validated_request(server.server_port, "test")
-                    self.assertEqual(raised.exception.code, "correctness")
+                    from density_probe import validated_wave
+                    for validate in (lambda: validated_request(server.server_port, "test"),
+                                     lambda: validated_wave([server.server_port], "test")):
+                        with self.assertRaises(ProbeError) as raised:
+                            validate()
+                        self.assertEqual(raised.exception.code, "correctness")
         finally:
             server.shutdown()
             thread.join(timeout=2)
             server.server_close()
             self.assertFalse(thread.is_alive())
+
+    def test_failed_wave_connection_closes_the_already_connected_peer(self):
+        import socket
+        import socketserver
+        from density_probe import validated_wave
+        closed=threading.Event();received=[]
+        class Handler(socketserver.StreamRequestHandler):
+            def handle(self):
+                received.append(self.rfile.readline())
+                closed.set()
+        server=socketserver.ThreadingTCPServer(('127.0.0.1',0),Handler)
+        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+        try:
+            with socket.socket() as refused:
+                refused.bind(('127.0.0.1',0))
+                with self.assertRaises(ProbeError) as raised:
+                    validated_wave([server.server_address[1],refused.getsockname()[1]],'failed',connect_parallel=1)
+                self.assertEqual('request-failed',raised.exception.code)
+                self.assertTrue(closed.wait(3),'connected peer observes close after another connection fails')
+                self.assertEqual([b''],received,'a failed connection wave sends no HTTP request')
+        finally:
+            server.shutdown();thread.join(timeout=2);server.server_close()
+            self.assertFalse(thread.is_alive())
+
+    def test_completed_last_wave_cannot_hide_an_expired_coverage_deadline(self):
+        now=[0];coverage=control.Coverage(1,'late');pending=[]
+        def request(port,nonce,*,start):
+            now[0]=6;pending.append(dict(nonce=nonce,worker='one',count=1))
+            return dict(port=port,status=200,ok=True,bodySHA256='a'*64)
+        def poll():
+            while pending:coverage.add(pending.pop(0))
+        with tempfile.TemporaryDirectory() as temporary:
+            probe=DensityProbe(host=args.node,worker=args.node,workerd=args.node,apps=temporary,out=temporary,
+                               cpuset='0',parallel=64,coverage_timeout=5)
+            with patch('density_probe.time.monotonic',side_effect=lambda:now[0]), \
+                 patch('density_probe.validated_request',side_effect=request):
+                with self.assertRaises(ProbeError) as raised:
+                    probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=poll),
+                                'capsid',[12345],1,1,'late',io.StringIO())
+                self.assertEqual('coverage-deadline',raised.exception.code)
+        self.assertTrue(coverage.complete(1),'coverage alone cannot replace the elapsed-time bound')
 
     def test_large_total_does_not_prove_each_worker(self):
         coverage = control.Coverage(2, "run")

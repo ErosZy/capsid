@@ -94,6 +94,49 @@ def validated_request(port, nonce, *, start=None):
         connection.close()
 
 
+def validated_wave(ports, nonce, *, connect_parallel=64):
+    """Connect a bounded wave, emit every request, then validate responses.
+
+    Large waves use a single sender so Python thread wakeups cannot turn the
+    intended burst into hundreds of sequential fast request/response pairs.
+    The response parser and exact-byte requirements match validated_request.
+    """
+    sockets = []
+    try:
+        failure = None
+        with ThreadPoolExecutor(max_workers=min(connect_parallel, len(ports))) as executor:
+            pending = [executor.submit(socket.create_connection, ("127.0.0.1", port), timeout=5)
+                       for port in ports]
+            for future in pending:
+                try:
+                    sockets.append(future.result())
+                except OSError as exc:
+                    failure = failure or exc
+        if failure is not None:
+            raise failure
+        packets = [("GET /@capsid/orders/bench/json HTTP/1.1\r\n"
+                    f"Host: 127.0.0.1:{port}\r\nConnection: close\r\n"
+                    f"x-capsid-bench-nonce: {nonce}\r\n\r\n").encode("ascii") for port in ports]
+        for client, packet in zip(sockets, packets):
+            client.sendall(packet)
+        observations = []
+        for port, client in zip(ports, sockets):
+            with http.client.HTTPResponse(client) as response:
+                response.begin()
+                body = response.read(len(EXPECTED_BODY) + 1)
+                if response.status != 200 or body != EXPECTED_BODY:
+                    raise ProbeError("correctness", "density request returned the wrong status or exact body",
+                                     status=response.status, actualSHA256=hashlib.sha256(body).hexdigest())
+                observations.append({"port": port, "status": response.status, "ok": True,
+                                     "bodySHA256": hashlib.sha256(body).hexdigest()})
+        return observations
+    except (OSError, http.client.HTTPException) as exc:
+        raise ProbeError("request-failed", f"density wave failed: {exc}") from exc
+    finally:
+        for client in sockets:
+            client.close()
+
+
 class DensityProbe:
     def __init__(self, *, host, worker, workerd, apps, out, cpuset, warm_requests=100,
                  parallel=64, startup_timeout=120, coverage_timeout=300,
@@ -163,10 +206,18 @@ class DensityProbe:
             time.sleep(.05)
         raise ProbeError("readiness-timeout", "density pool did not become ready within its deadline")
 
+    def warmup_concurrency(self, count):
+        # Density conditioning must reach every worker before PSS is read.
+        # Up to 64 clients per worker leave room for fast completions;
+        # this is separate from the QPS lane's fixed 64 in-flight requests.
+        return max(self.parallel, count * 64)
+
     def cover(self, tree, counter, stack, ports, count, target, nonce, output):
         deadline = time.monotonic() + self.coverage_timeout
-        responses, maximum = 0, max(64, count * target * 8)
-        batch_limit = min(self.parallel, max(1, count))
+        responses, maximum = 0, max(64, count * target * (32 if target > 1 else 8))
+        concurrency = self.warmup_concurrency(count)
+        batch_limit = min(concurrency, maximum if count > self.parallel else max(1, count))
+        maximum_wave = 0
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
             while not counter.coverage.complete(target):
                 previous_minimum = (min(counter.coverage.counts.values())
@@ -182,12 +233,17 @@ class DensityProbe:
                     if batch <= 0:
                         raise ProbeError("coverage-incomplete", "workerd cells did not report their validated requests")
                 selected = [ports[(responses + i) % len(ports)] for i in range(batch)]
-                start = threading.Barrier(batch)
-                futures = [executor.submit(validated_request, port, nonce, start=start) for port in selected]
-                for future in futures:
-                    response = future.result()
+                maximum_wave = max(maximum_wave, batch)
+                if batch > self.parallel:
+                    observations = validated_wave(selected, nonce, connect_parallel=self.parallel)
+                else:
+                    start = threading.Barrier(batch)
+                    futures = [executor.submit(validated_request, port, nonce, start=start) for port in selected]
+                    observations = (future.result() for future in futures)
+                for response in observations:
                     responses += 1
-                    output.write(json.dumps(dict(response, sequence=responses), sort_keys=True) + "\n")
+                    output.write(json.dumps(dict(response, sequence=responses, waveRequests=batch,
+                                                 warmupConcurrencyLimit=concurrency), sort_keys=True) + "\n")
                 output.flush()
                 # LOG delivery may follow the response, but a dropped log must
                 # fail coverage instead of silently substituting total traffic.
@@ -204,12 +260,18 @@ class DensityProbe:
                 if stack == "capsid" and minimum <= previous_minimum and not counter.coverage.complete(target):
                     # Equal-load ties favor the lowest slot. A fast response
                     # can finish before later clients even connect; synchronize
-                    # the connected clients and widen a starved wave, retaining
-                    # the configured concurrency and original request budget.
-                    batch_limit = min(self.parallel, batch_limit * 2)
+                    # the connected clients and widen a starved wave. The
+                    # density-only limit scales with the pool; the original
+                    # request budget and per-worker assertions are retained.
+                    batch_limit = min(concurrency, batch_limit * 2)
+        if time.monotonic() >= deadline:
+            raise ProbeError("coverage-deadline", "per-worker request target completed after its deadline",
+                             responses=responses, observed=counter.coverage.counts)
         counter.coverage.verify(target, responses)
         return {"ok": True, "errors_as_success": False, "responses_checked": responses,
-                "errors": 0, "timeouts": 0, "mismatches": 0}
+                "errors": 0, "timeouts": 0, "mismatches": 0,
+                "warmupConcurrencyLimit": concurrency, "maximumWaveRequests": maximum_wave,
+                "maximumRequestsAllowed": maximum, "coverageTimeoutSeconds": self.coverage_timeout}
 
     def __call__(self, *, stack, size, phase, count, ports, release_ports, probe_index, final):
         label = f"probe-{probe_index:05d}-{stack}-{size}-{phase}-{count}"
@@ -223,7 +285,9 @@ class DensityProbe:
             argv = self.prepare(folder, stack, size, count, ports, nonce)
             write_json(archive / "launch.json", {"command": ["taskset", "-c", self.cpuset, *argv],
                        "stack": stack, "size": size, "count": count, "phase": phase,
-                       "ports": ports, "nonce": nonce, "mode": "managed" if stack == "capsid" else "workerd"})
+                       "ports": ports, "nonce": nonce, "mode": "managed" if stack == "capsid" else "workerd",
+                       "configuredParallelRequests": self.parallel,
+                       "warmupConcurrencyLimit": self.warmup_concurrency(count)})
             with (archive / "stderr.log").open("wb") as logs, (archive / "requests.jsonl").open("w", encoding="utf-8") as requests:
                 try:
                     release_ports()

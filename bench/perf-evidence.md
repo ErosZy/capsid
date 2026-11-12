@@ -69,6 +69,18 @@ including density. There is no mixed-origin publication mode.
 | QPS | capsid, workerd, FastAPI, Flask, PHP × JSON 1k/16k/stream | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
 | Density | capsid/workerd × 10k/100k/1m × cold/warm | 2048 MiB; 100 requests per worker/cell in warm phase; two stable reads; two verification retries |
 
+Density uses `warmupConcurrencyPolicy: pool-scaled-burst-v1`, base
+`parallelRequests: 64` and `warmupConcurrencyFactor: 64`. Each cell's conditioning
+limit is `max(64, 64 * count)`; its correctness file records that limit and the
+largest actual wave. All conditioning completes before settling and PSS reads.
+Cold/warm attempts are bounded by `max(64, 8 * count)` and
+`max(64, 32 * count * 100)` respectively, with a 300-second deadline.
+Correctness files bind `maximumRequestsAllowed` and `coverageTimeoutSeconds`
+to those declared parameters; every response and per-worker target is checked.
+This changes density conditioning only; QPS retains 64 connections/in-flight.
+Archives using the earlier density protocol remain historical observations;
+the collector does not fill the new policy or wave claims into old records.
+
 Each manifest record identifies `stack`, `size` or `workload`, and density
 `phase`. It lists `samples`, `correctness`, `binaries`, and `fixtures`.
 Every required cell must occur exactly once. Sample and correctness files

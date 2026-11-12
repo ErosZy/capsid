@@ -170,6 +170,16 @@ work; controller tests and restricted smoke do not qualify a performance point.
   per worker/cell; initialization, not static loading) and **warmed**
   (100 requests through each, then settle). A pool that dies under the
   warm-up is a failed probe, never a small reading.
+- **Conditioning concurrency:** density conditioning uses a recorded limit of
+  `max(64, 64 * pool_count)` and connected request waves, with all requests in a
+  large wave sent before response reads. This user-approved density protocol
+  change preserves production least-loaded/lowest-slot scheduling. Cold/warm
+  coverage still requires every worker to reach 1/100 requests. Cold permits
+  at most `max(64, 8 * count)` validated requests, warm permits at most
+  `max(64, 32 * count * 100)`, and both retain the 300-second deadline. These
+  explicit attempt bounds accommodate the production tie rule's uneven
+  distribution; they do not replace per-worker coverage. The clients finish before
+  settling and PSS sampling. QPS remains fixed at 64 connections/in-flight.
 - **Warm-phase gating:** request failures are counted and fatal (a warm
   pass that cannot reach its targets understates a pool that is quietly
   shedding); the post-settle sample requires two consecutive **equal**

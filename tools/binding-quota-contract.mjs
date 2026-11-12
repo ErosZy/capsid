@@ -27,7 +27,7 @@ export function validateBindingQuotaReport(report, expected) {
     assert.equal(report.schema, 'capsid-binding-quota-v1'); assert.equal(report.complete, true);
     assert.equal(report.runId, expected.runId); assert.match(report.runId, /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
     assert.equal(report.kind, expected.kind); assert.ok(['request', 'worker'].includes(report.kind));
-    assert.equal(report.platform, expected.platform); assert.ok(['win32', 'linux'].includes(report.platform));
+    assert.equal(report.platform, expected.platform); assert.ok(['win32', 'linux', 'darwin'].includes(report.platform));
     equal(report.inputs, expected.inputs); equal(report.binaries, expected.binaries);
     assert.ok(Array.isArray(report.observations)); assert.equal(report.observations.length, report.kind==='request' ? 4 : 1);
     return report.kind==='request'

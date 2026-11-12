@@ -35,7 +35,9 @@ PROTOCOL = {
             "memoryProtocol": "fresh-owned-forest-v1", "readinessProtocol": "exact-http-before-traffic-v1",
             "pssStableReads": 2, "pssMaxReads": 8, "pssIntervalSeconds": 1, "pssSettleSeconds": 1},
     "density": {"budgetMb": 2048, "warmRequests": 100, "stableReads": 2,
-                "verificationRetries": 2},
+                "verificationRetries": 2, "parallelRequests": 64,
+                "warmupConcurrencyPolicy": "pool-scaled-burst-v1", "warmupConcurrencyFactor": 64,
+                "coldRequestFactor": 8, "warmRequestFactor": 32, "coverageTimeoutSeconds": 300},
 }
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -360,6 +362,23 @@ def validate_samples(archive, lane, record, summary):
             integer(count, f"{key}: requests per worker", 100 if key[2] == "warm" else 1)
         need(verdicts[0]["responses_checked"] == sum(coverage.values()),
              f"{key}: correctness count disagrees with worker coverage")
+        protocol = archive.manifest["protocol"]
+        concurrency = max(protocol["parallelRequests"], row["count"] * protocol["warmupConcurrencyFactor"])
+        integer(verdicts[0].get("warmupConcurrencyLimit"), f"{key}: warmup concurrency")
+        need(verdicts[0]["warmupConcurrencyLimit"] == concurrency,
+             f"{key}: warmup concurrency disagrees with pool-scaled protocol")
+        integer(verdicts[0].get("maximumWaveRequests"), f"{key}: maximum warmup wave")
+        need(verdicts[0]["maximumWaveRequests"] <= concurrency,
+             f"{key}: warmup wave exceeds pool-scaled concurrency")
+        target = protocol["warmRequests"] if key[2] == "warm" else 1
+        request_limit = max(64, row["count"] * target * protocol["warmRequestFactor" if key[2] == "warm" else "coldRequestFactor"])
+        integer(verdicts[0].get("maximumRequestsAllowed"), f"{key}: warmup request budget")
+        integer(verdicts[0].get("coverageTimeoutSeconds"), f"{key}: warmup deadline")
+        need(verdicts[0].get("maximumRequestsAllowed") == request_limit and
+             verdicts[0]["responses_checked"] <= request_limit,
+             f"{key}: warmup request budget disagrees with protocol")
+        need(verdicts[0].get("coverageTimeoutSeconds") == protocol["coverageTimeoutSeconds"],
+             f"{key}: warmup deadline disagrees with protocol")
         need(row.get("limit") in ("budget", "cap"), f"{key}: missing search limit status")
         cap = archive.manifest["protocol"]["caps"][key[0]]
         need(row["count"] <= cap and (row["limit"] != "cap" or row["count"] == cap),

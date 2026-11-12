@@ -90,8 +90,19 @@ size_t own_children() {
     if (bytes < 0 || (bytes == 0 && errno != 0) || bytes >= capacity || bytes % sizeof(pid_t) != 0)
         fail("complete native child inventory");
     size_t count = 0;
-    for (int i = 0; i < bytes / static_cast<int>(sizeof(pid_t)); ++i)
-        if (children[static_cast<size_t>(i)] > 0) ++count;
+    for (int i = 0; i < bytes / static_cast<int>(sizeof(pid_t)); ++i) {
+        const pid_t child = children[static_cast<size_t>(i)];
+        if (child <= 0) continue;
+        // Failed native spawns can briefly remain in the PID inventory after
+        // they are no longer children. WNOWAIT verifies ownership without
+        // reaping either a live child or an actual zombie.
+        siginfo_t status{};
+        int result;
+        do { result = waitid(P_PID, static_cast<id_t>(child), &status, WEXITED | WNOHANG | WNOWAIT); }
+        while (result < 0 && errno == EINTR);
+        if (result == 0) ++count;
+        else if (errno != ECHILD) fail("native child ownership observation");
+    }
     return count;
 #else
     DIR *dir = opendir("/proc");
@@ -187,9 +198,17 @@ void validate_observers(const TemporaryFixture &fixture) {
         usleep(1000);
     }
     const bool child_observed = own_children() == 1;
-    const int stopped = kill(child, SIGTERM); int status = 0; pid_t reaped;
+    const int stopped = kill(child, SIGTERM);
+    siginfo_t terminal{};
+    int waited = -1;
+    if (stopped == 0) {
+        do { waited = waitid(P_PID, static_cast<id_t>(child), &terminal, WEXITED | WNOWAIT); }
+        while (waited < 0 && errno == EINTR);
+    }
+    const bool zombie_observed = waited == 0 && terminal.si_pid == child && own_children() == 1;
+    int status = 0; pid_t reaped;
     do {reaped = waitpid(child, &status, 0);} while (reaped < 0 && errno == EINTR);
-    if (!wrote || !child_observed || stopped != 0 || reaped != child || !WIFSIGNALED(status) || WTERMSIG(status) != SIGTERM)
+    if (!wrote || !child_observed || !zombie_observed || stopped != 0 || reaped != child || !WIFSIGNALED(status) || WTERMSIG(status) != SIGTERM)
         fail("actual marker child and native child enumeration positive control");
     if (unlink(fixture.marker.c_str()) != 0 || own_children() != 0 || fd_count() != before)
         fail("positive controls must leave no descriptor or child residue");

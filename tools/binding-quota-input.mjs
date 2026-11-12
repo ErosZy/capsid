@@ -81,9 +81,9 @@ export const workerQuotaTemplate = () => workerModel;
 export const workerQuotaExpected = () => structuredClone(workerModel);
 export const bindingQuotaExit = () => ({reaped: true, channelClosed: true, code: 0});
 export function quotaReadyLine(platform) {
-    assert.ok(platform==='win32' || platform==='linux');
-    // Linux always installs CORE/NOFILE RLIMITS; Windows memory limit0 does not.
-    const features = platform==='linux' ? 1 : 0;
+    assert.ok(['win32', 'linux', 'darwin'].includes(platform));
+    // POSIX installs CORE/NOFILE RLIMITS; Windows memory limit0 does not.
+    const features = platform==='win32' ? 0 : 1;
     return 'memoryLimit=0 actualFeatures='+features+' expectedFeatures='+features;
 }
 export function requestQuotaTranscript(row, platform) {

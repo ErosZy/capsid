@@ -99,7 +99,16 @@ StreamDecoder::Result StreamDecoder::consume(const uint8_t *bytes, size_t size,
             std::min<uint64_t>(remaining_, credit), std::min<size_t>(size - *used, 16384)));
         if (remaining_ && !amount) return NeedMore;
         item->payload.resize(amount);
-        for (size_t i=0; i<amount; ++i) item->payload[i] = bytes[(*used)++] ^ (role_ == kServer ? header_[header_needed_ - 4 + (offset_+i)%4] : 0);
+        const size_t input_offset = *used;
+        if (role_ == kServer) {
+            const uint8_t *key = header_.data() + header_needed_ - 4;
+            for (size_t i = 0; i < amount; ++i)
+                item->payload[i] = bytes[input_offset + i] ^ key[(offset_ + i) % 4];
+        } else {
+            for (size_t i = 0; i < amount; ++i)
+                item->payload[i] = bytes[input_offset + i];
+        }
+        *used = input_offset + amount;
         const bool end = fin_ && remaining_ == amount;
         // Message payloads are delivered as-is: workerd does not
         // validate text UTF-8 on the wire; the worker's TextDecoder

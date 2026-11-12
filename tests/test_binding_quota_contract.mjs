@@ -19,8 +19,8 @@ const bad=(row,kind,change,variant='plain',sync=true)=>{
 const set=(value,path,item)=>{let parent=value;for(const key of path.slice(0,-1))parent=parent[key];parent[path.at(-1)]=item;};
 const del=(value,path)=>{let parent=value;for(const key of path.slice(0,-1))parent=parent[key];delete parent[path.at(-1)];};
 
-test('fixed64/request and1024/worker models and both actual platform proof formats',()=>{
-    for(const platform of ['win32','linux']){
+test('fixed64/request and1024/worker models and all three native platform proof formats',()=>{
+    for(const platform of ['win32','linux','darwin']){
         for(const variant of bindingQuotaVariants)check(observation('request',variant,platform),'request',variant,platform);
         const row=observation('worker','plain',platform);check(row,'worker','plain',platform);
         assert.equal(row.responses.at(-1).value.slices.length,17);assert.equal(row.responses.at(-1).value.late.length,1088);
@@ -124,4 +124,17 @@ test('fixed immutable input templates do not accept caller changes',()=>{
     const first=requestQuotaExpected('plain');first.request2.late[0].status='fulfilled';assert.equal(requestQuotaExpected('plain').request2.late[0].status,'rejected');
     const second=workerQuotaExpected();second.responses[5].value.summary.data.active=1;assert.equal(workerQuotaExpected().responses[5].value.summary.data.active,0);
 });
-after(()=>{assert.equal(rejected,677);console.log(JSON.stringify({complete:true,rejectedMutations:rejected,requestVariants:4,workerPeak:1024}));});
+
+test('Darwin complete reports require POSIX READY features and reject unsupported platforms',()=>{
+    for(const kind of ['request','worker']){
+        const report=syntheticReport(kind);report.platform='darwin';
+        for(const row of report.observations)row.stdout=transcript(row,kind,'darwin');
+        validateBindingQuotaReport(report,identity(report));
+        const wrong=structuredClone(report);
+        wrong.observations[0].stdout=wrong.observations[0].stdout.replace('actualFeatures=1 expectedFeatures=1','actualFeatures=0 expectedFeatures=0');
+        reject(()=>validateBindingQuotaReport(wrong,identity(report)));
+        const unsupported=structuredClone(report);unsupported.platform='freebsd';
+        reject(()=>validateBindingQuotaReport(unsupported,identity(unsupported)));
+    }
+});
+after(()=>{assert.equal(rejected,681);console.log(JSON.stringify({complete:true,rejectedMutations:rejected,requestVariants:4,workerPeak:1024}));});

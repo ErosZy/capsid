@@ -130,7 +130,10 @@ class ProducerTests(unittest.TestCase):
                         "pss_readings_kb": [1024, 1024], "requestsPerWorker": {"synthetic-worker": requests},
                         "probeDirectory": directory, "cleanup": {"ownedPidsRemaining": 0},
                         "correctness": {"ok": True, "errors_as_success": False, "responses_checked": requests,
-                                        "errors": 0, "mismatches": 0, "timeouts": 0}}
+                                        "errors": 0, "mismatches": 0, "timeouts": 0,
+                                        "warmupConcurrencyLimit": 64, "maximumWaveRequests": 1,
+                                        "maximumRequestsAllowed": 3200 if call["phase"] == "warm" else 64,
+                                        "coverageTimeoutSeconds": 300}}
         with patch.object(lane, "DensityProbe", SyntheticProbe):
             result = lane.run_lane(self.configuration)
         self.assertTrue(result["publicationEligible"], "contract fixture only, never an actual performance point")

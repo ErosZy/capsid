@@ -129,7 +129,10 @@ class Fixture:
                              "pss_readings_kb": [1024, 1024],
                              "requestsPerWorker": {"worker-1": count, "worker-2": count}, "limit": "cap"}]
                     self.raw(path, record, f"raw.{index}.jsonl", rows)
-                    self.verdict(path, record, f"correctness.{index}.json", count * 2)
+                    self.verdict(path, record, f"correctness.{index}.json", count * 2,
+                                 {"warmupConcurrencyLimit": 128, "maximumWaveRequests": 2,
+                                  "maximumRequestsAllowed": 6400 if key[2] == "warm" else 64,
+                                  "coverageTimeoutSeconds": 300})
                 m["records"].append(record)
             if lane == "qps":
                 memory = {}
@@ -381,6 +384,23 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 name = f.manifests["qps"]["records"][0]["correctness"][0]
                 f.mutate_json("qps", name, lambda d: d.update({field: value}))
                 with self.assertRaisesRegex(contract.EvidenceError, error):
+                    self.collect()
+
+    def test_density_warmup_policy_and_actual_wave_must_agree(self):
+        f = self.fixture
+        for field, value in (("warmupConcurrencyLimit", 63), ("warmupConcurrencyLimit", True),
+                             ("maximumWaveRequests", 129), ("maximumWaveRequests", 0),
+                             ("maximumRequestsAllowed", 999999), ("coverageTimeoutSeconds", 301)):
+            with self.subTest(field=field, value=value), f.transaction():
+                name = f.manifests["density"]["records"][0]["correctness"][0]
+                f.mutate_json("density", name, lambda row: row.update({field: value}))
+                with self.assertRaisesRegex(contract.EvidenceError, "warmup"):
+                    self.collect()
+        for field in ("warmupConcurrencyPolicy", "warmupConcurrencyFactor"):
+            with self.subTest(field=field), f.transaction():
+                del f.manifests["density"]["protocol"][field]
+                f.manifest("density")
+                with self.assertRaisesRegex(contract.EvidenceError, "protocol"):
                     self.collect()
 
     def test_qps_payload_claims_cannot_be_omitted_or_swapped(self):
