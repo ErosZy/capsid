@@ -1,3 +1,4 @@
+#include "worker_writer_receipt.h"
 #include "worker_runtime.h"
 #include "worker_writer_gate.h"
 
@@ -6,7 +7,17 @@
 using Gate = capsid_test::WorkerWriterGate;
 
 int main(int argc, char** argv) {
+    capsid_test::WriterReceipt receipt;
+    if (!receipt.valid()) {
+        std::fprintf(stderr, "WRITER_GATE could not create the exclusive owned receipt\n");
+        return 74;
+    }
     Gate gate;
+    gate.pressure_ready = [](const Gate& value, void* state) {
+        return static_cast<capsid_test::WriterReceipt*>(state)->publish(
+            value.dial, value.peak_queue, value.stalled_writes, value.blocked_acks);
+    };
+    gate.pressure_state = &receipt;
     CapsidWorkerIo io;
     io.write = Gate::write;
     io.observe = Gate::observe;
