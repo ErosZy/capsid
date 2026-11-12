@@ -8835,6 +8835,7 @@ private:
     }
 
     bool handle_frame(const capsid::protocol::Frame &frame) {
+        if (io_) std::fprintf(stderr,"WRITER_INPUT type=%u request=%llu queue=%zu\n",unsigned(frame.type),static_cast<unsigned long long>(frame.request_id),outbound_.logical_size());
         // The worker now shares the endpoint state and native queue core.
         // READY remains carriage-only until the JS connection owner and
         // network adapters are complete; an unnegotiated channel/Upgrade
