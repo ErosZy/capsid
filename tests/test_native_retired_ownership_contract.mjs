@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import net from 'node:net';
+import {spawn} from 'node:child_process';
+import {waitForWorkerdListen} from './helpers/workerd_listener_control.mjs';
 import {validateRetiredCase, validateRetiredReport} from '../tools/native-retired-ownership-contract.mjs';
 
 const samples = JSON.parse(fs.readFileSync(new URL('./fixtures/native-retired-ownership-contract-samples.json', import.meta.url)));
@@ -63,3 +66,46 @@ for (const [name, group, mutate] of controls) {
         assert.throws(() => validateRetiredReport(value, group));
     });
 }
+
+function childWithControl(program) {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', program],
+        {stdio: ['ignore', 'ignore', 'pipe', 'pipe']});
+    child.stderr.resume();
+    return {child, closed: new Promise(resolve => child.once('close', resolve))};
+}
+async function stopControlChild({child, closed}) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+    await closed;
+}
+test('listener control selects the child-owned port while an unrelated port remains occupied', async () => {
+    let decoyConnections = 0;
+    const decoy = net.createServer(socket => {++decoyConnections; socket.end('HTTP/1.1 201 Decoy\r\nContent-Length: 5\r\n\r\ndecoy');});
+    await new Promise((resolve, reject) => {decoy.once('error', reject); decoy.listen(0, '127.0.0.1', resolve);});
+    const running = childWithControl(`import net from 'node:net';import fs from 'node:fs';
+const server=net.createServer(socket=>socket.once('data',()=>socket.end('HTTP/1.1 200 Child\\r\\nContent-Length: 5\\r\\nConnection: close\\r\\n\\r\\nchild')));
+server.listen(0,'127.0.0.1',()=>fs.writeSync(3,JSON.stringify({event:'listen',socket:'http',port:server.address().port})+'\\n'));`);
+    try {
+        const bound = await waitForWorkerdListen(running.child, 5000);
+        assert.notEqual(bound.port, decoy.address().port);
+        assert.equal(JSON.parse(bound.line).port, bound.port);
+        const response = await fetch(`http://127.0.0.1:${bound.port}/owner`, {signal: AbortSignal.timeout(5000)});
+        assert.equal(response.status, 200);
+        assert.equal(await response.text(), 'child');
+        assert.equal(decoyConnections, 0);
+    } finally {
+        await stopControlChild(running);
+        await new Promise(resolve => decoy.close(resolve));
+    }
+});
+for (const [name, program, expected] of [
+    ['wrong socket', "import fs from 'node:fs';fs.writeSync(3,JSON.stringify({event:'listen',socket:'other',port:1234})+'\\n');setInterval(()=>{},1000)", /workerd listener control socket/],
+    ['malformed event', "import fs from 'node:fs';fs.writeSync(3,'{bad}\\n');setInterval(()=>{},1000)", /JSON|property/],
+    ['oversized event', "import fs from 'node:fs';fs.writeSync(3,'x'.repeat(65537));setInterval(()=>{},1000)", /oversized/],
+    ['early EOF', "import fs from 'node:fs';fs.closeSync(3);setInterval(()=>{},1000)", /ended before readiness/],
+    ['child exit', 'process.exit(0)', /ended before readiness|exited before listener/],
+    ['missing event', 'setInterval(()=>{},1000)', /deadline/],
+]) test('reject listener control ' + name, async () => {
+    const running = childWithControl(program);
+    try {await assert.rejects(waitForWorkerdListen(running.child, name === 'missing event' ? 100 : 5000), expected);}
+    finally {await stopControlChild(running);}
+});

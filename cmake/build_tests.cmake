@@ -2436,7 +2436,7 @@ if(BUILD_TESTING)
                 COMMAND "${CAPSID_HOST_TEST_NODE}" --test
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_binding_fetch_arguments_contract.mjs")
             set_tests_properties(binding_fetch_arguments_contract_controls
-                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle")
+                PROPERTIES TIMEOUT 30 LABELS "worker;binding;fetch;compatibility;lifecycle" RUN_SERIAL TRUE)
 
             # A BindingID owns native handles across calls and User requests.
             # Hold the actual source at headers until request1 has ended and
@@ -3088,13 +3088,16 @@ if(BUILD_TESTING)
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_control.py"
                     --module "${CMAKE_CURRENT_SOURCE_DIR}/bench/cold_control.py")
             set_tests_properties(benchmark_cold_control PROPERTIES
-                LABELS "host;benchmark;measurement" TIMEOUT 60)
+                LABELS "host;benchmark;measurement" TIMEOUT 60 RUN_SERIAL TRUE)
+            # Real /proc PSS samples include shared-library page fractions.
+            # Unrelated CTest processes must not change those denominators.
+            # Each test still runs its own concurrent-controller scenarios.
             add_test(NAME benchmark_cold_producer
                 COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_lane.py"
                     --lane "${CMAKE_CURRENT_SOURCE_DIR}/bench/cold-start.py")
             set_tests_properties(benchmark_cold_producer PROPERTIES
-                LABELS "host;benchmark;measurement;lifecycle;evidence" TIMEOUT 60)
+                LABELS "host;benchmark;measurement;lifecycle;evidence" TIMEOUT 60 RUN_SERIAL TRUE)
 
             if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                 # Go is optional for runtime consumers. When available, ALL
@@ -3124,7 +3127,7 @@ if(BUILD_TESTING)
                             --loadgen "${CAPSID_BENCH_LOADGEN}"
                             --probe "${CMAKE_CURRENT_SOURCE_DIR}/bench/qps_probe.py")
                     set_tests_properties(benchmark_qps_probe PROPERTIES
-                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 90)
+                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 90 RUN_SERIAL TRUE)
                 endif()
                 if(TARGET benchmark-cold-start)
                     # Actual /proc mapping controls show Clang ASan's default
@@ -3142,7 +3145,7 @@ if(BUILD_TESTING)
                             --worker "$<TARGET_FILE:capsid-worker>"
                             ${CAPSID_COLD_TEST_SETTLE_ARGS})
                     set_tests_properties(benchmark_cold_tool PROPERTIES
-                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 100)
+                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 100 RUN_SERIAL TRUE)
                     add_test(NAME benchmark_cold_descendants
                         COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
                             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_descendants.py"
@@ -3154,7 +3157,7 @@ if(BUILD_TESTING)
                             DescendantTests.test_wrong_response_reaps_descendant_without_sample
                             DescendantTests.test_timeout_reaps_descendant_without_sample)
                     set_tests_properties(benchmark_cold_descendants PROPERTIES
-                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 30)
+                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 30 RUN_SERIAL TRUE)
                     foreach(CAPSID_COLD_DESCENDANT_MODE fork clone)
                         add_test(NAME "benchmark_cold_descendant_sample_${CAPSID_COLD_DESCENDANT_MODE}"
                             COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
@@ -3166,7 +3169,7 @@ if(BUILD_TESTING)
                                 ${CAPSID_COLD_TEST_SETTLE_ARGS}
                                 DescendantTests.test_normal_sample_includes_descendant_and_reaps_it_before_output)
                         set_tests_properties("benchmark_cold_descendant_sample_${CAPSID_COLD_DESCENDANT_MODE}" PROPERTIES
-                            LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 30)
+                            LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 30 RUN_SERIAL TRUE)
                     endforeach()
                 endif()
                 add_test(
