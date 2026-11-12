@@ -112,6 +112,19 @@ for(const jobName of ['release-wpt-and-delegated-sandbox','sanitizers','posix-ho
 }
 
 const sanitizerJob = workflow.split('  sanitizers:')[1]?.split(/\n  [a-z][a-z-]+:\r?\n/)[0];
+const reportArchiveStep = sanitizerJob?.split('      - name: Archive sanitizer driver reports preserving original names')[1]?.split(/\r?\n      - name:/)[0];
+assert.ok(reportArchiveStep, 'sanitizer raw reports must be archived before upload');
+for (const fragment of ['if: always()', 'REPORT_DIRECTORY: build-${{ matrix.name }}/matrix-case-reports',
+  "tarfile.open(archive,'w:gz',dereference=False)", 'output.add(report,arcname=report.name)',
+  "archive.name+'.sha256'"])
+  assert.ok(reportArchiveStep.includes(fragment), `sanitizer archive preserves all raw names: ${fragment}`);
+const sanitizerUpload = sanitizerJob?.split('      - name: Save sanitizer evidence')[1];
+assert.ok(sanitizerUpload.includes('build-${{ matrix.name }}/matrix-case-reports.tar.gz') &&
+  sanitizerUpload.includes('build-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256'),
+  'sanitizer upload carries the opaque archive and checksum');
+assert.doesNotMatch(sanitizerUpload, /matrix-case-reports\/\s*(?:\r?\n|$)/,
+  'raw runtime paths with POSIX colons cannot be submitted directly to upload-artifact');
+
 function sanitizerStep(name) {
   const step = sanitizerJob?.split(`      - name: ${name}`)[1]?.split(/\r?\n      - name:/)[0];
   assert.ok(step, `sanitizer job requires step: ${name}`);

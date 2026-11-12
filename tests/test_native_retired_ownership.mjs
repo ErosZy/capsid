@@ -11,6 +11,7 @@ import {plansForGroup, validateRetiredCase, validateRetiredReport} from '../tool
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {referenceArchitecture, referenceLockName, referencePlatform} from '../tools/workerd-platform.mjs';
+import {waitForWorkerdListen} from './helpers/workerd_listener_control.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const {values: args} = parseArgs({options: {worker: {type: 'string'}, helper: {type: 'string'},
@@ -33,7 +34,8 @@ assert.equal(referenceArchitecture(referenceLock), process.arch);
 const staticPacketFile = path.join(root, 'tests/fixtures/workerd-native-branch-graph-primary-lock.json');
 const staticPackets = read(staticPacketFile).packets;
 const measuredFiles = [program, worker, helper, reference, referenceLockFile, staticPacketFile,
-    fileURLToPath(import.meta.url), path.join(root, 'tools/native-retired-ownership-contract.mjs'), path.join(root, 'tools/workerd-platform.mjs')];
+    fileURLToPath(import.meta.url), path.join(root, 'tools/native-retired-ownership-contract.mjs'), path.join(root, 'tools/workerd-platform.mjs'),
+    path.join(root, 'tests/helpers/workerd_listener_control.mjs'), path.join(root, 'tools/workerd-fetch-byob-contract.mjs')];
 const measured = Object.fromEntries(measuredFiles.map(file => [file, hash(file)]));
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'capsid-native-retired-ownership-'));
 const reportDir = process.env.CAPSID_WS_REPORT_DIR ?? output; fs.mkdirSync(reportDir, {recursive: true});
@@ -50,17 +52,13 @@ async function within(promise, ms, label) {
 async function listen(server, address, port) {
     await new Promise((resolve, reject) => {server.once('error', reject); server.listen({host: address, port, ipv6Only: address === '::1'}, resolve);});
 }
-async function vacantPort() {
-    const server = net.createServer(); await listen(server, '127.0.0.1', 0); const port = server.address().port;
-    await new Promise(resolve => server.close(resolve)); return port;
-}
 async function packet(bodyKind) {
     const value = staticPackets[bodyKind], prefix = Buffer.from(value.prefix, 'base64'), suffix = Buffer.from(value.suffix, 'base64');
     return {decoded: Buffer.from(Array.from({length: 17}, (_, i) => i + 1)), prefix, suffix, whole: Buffer.concat([prefix, suffix])};
 }
-function startChild(binary, args, row, name) {
+function startChild(binary, args, row, name, control = false) {
     row.command = [binary, ...args]; row.stdout = ''; row.stderr = '';
-    const child = spawn(binary, args, {stdio: ['pipe', 'pipe', 'pipe']}); child.stdin.on('error', () => {});
+    const child = spawn(binary, args, {stdio: control ? ['pipe', 'pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe']}); child.stdin.on('error', () => {});
     child.stdout.on('data', value => {row.stdout += value;}); child.stderr.on('data', value => {row.stderr += value;});
     const closed = new Promise((resolve, reject) => {child.once('close', (code, signal) => resolve({code, signal})); child.once('error', reject);});
     child.on('error', error => {row.spawnError = String(error);});
@@ -114,20 +112,17 @@ async function sourceTerminal(row) {
     assert.equal(row.sourceTerminalBeforeRuntimeStop, true);
 }
 async function referencePair(row, target, copied, directory, releaseSuffix) {
-    const port = await vacantPort(), config = path.join(directory, 'reference.capnp');
+    const config = path.join(directory, 'reference.capnp');
     fs.writeFileSync(config, `using Workerd = import "/workerd/workerd.capnp";
 const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(referenceLock.compatibility_date)},
 compatibilityFlags=${JSON.stringify(referenceLock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")])),
-(name="internet",network=(allow=["local"]))],sockets=[(name="http",address="127.0.0.1:${port}",http=(),service="main")]);
+(name="internet",network=(allow=["local"]))],sockets=[(name="http",address="127.0.0.1:0",http=(),service="main")]);
 `);
     row.configSHA256 = hash(config);
-    const {child, closed} = startChild(reference, ['serve', config], row, 'reference');
+    const {child, closed} = startChild(reference, ['serve', config, '--control-fd=3'], row, 'reference', true);
     try {
-        const start = performance.now();
-        while (true) {
-            try {const socket = await new Promise((resolve, reject) => {const s = net.createConnection({host: '127.0.0.1', port}, () => resolve(s)); s.once('error', reject);}); socket.destroy(); break;}
-            catch {assert.equal(child.exitCode, null); assert.ok(performance.now() - start < 5000); await delay(10);}
-        }
+        row.listenerControl = await waitForWorkerdListen(child, 5000);
+        const {port} = row.listenerControl;
         const owner = await fetch(`http://127.0.0.1:${port}/owner?target=${encodeURIComponent(target)}`, {signal: AbortSignal.timeout(5000)});
         assert.equal(owner.status, 200); row.owner = await owner.json(); row.ownerHttpEndedBeforeGuest = true;
         await waitForOwnerSourceRetirement(row);
