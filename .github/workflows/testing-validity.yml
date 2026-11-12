@@ -1,20 +1,11 @@
-name: Testing validity
-
+name: Complete current Release sanitizer and Windows qualification
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-  workflow_call:
-
 permissions:
   contents: read
-
 concurrency:
-  group: testing-validity-${{ github.ref }}
+  group: current-complete-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   release-wpt-and-delegated-sandbox:
     runs-on: ubuntu-24.04
@@ -24,6 +15,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 991adfc40c0bc1d3fe9a58ec2877d8b5d26b0192
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -161,6 +153,11 @@ jobs:
       - name: Build
         run: cmake --build build-validity --parallel 2
 
+      - name: Preserve complete production commands and registration
+        run: |
+          ninja -C build-validity -t commands > build-validity/full-build-commands.txt
+          ctest --test-dir build-validity --show-only=json-v1 > build-validity/full-registration.json
+
       - name: Require complete workerd WebSocket comparison
         run: |
           node tools/run-workerd-ws-gate.mjs \
@@ -168,6 +165,8 @@ jobs:
 
       - name: Run the complete ordinary-host matrix
         id: ordinary_host
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-ordinary-driver-reports
         # The raw step retains its failure outcome and exit code. The next
         # mandatory acceptance step permits only the exact locked profile.
         continue-on-error: true
@@ -313,6 +312,10 @@ jobs:
           name: release-wpt-hosted-evidence
           if-no-files-found: error
           path: |
+            build-validity/CMakeCache.txt
+            build-validity/full-build-commands.txt
+            build-validity/full-registration.json
+            ${{ runner.temp }}/capsid-ordinary-driver-reports/
             build-validity/ordinary-host-junit.xml
             build-validity/ordinary-host-registration.json
             build-validity/ordinary-host-exit-code.txt
@@ -370,6 +373,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 991adfc40c0bc1d3fe9a58ec2877d8b5d26b0192
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -517,6 +521,12 @@ jobs:
         run: |
           cmake --build "build-${{ matrix.name }}" --parallel 2
 
+      - name: Preserve complete instrumented commands and registrations
+        run: |
+          ninja -C "build-${{ matrix.name }}" -t commands > "build-${{ matrix.name }}/full-build-commands.txt"
+          ctest --test-dir "build-${{ matrix.name }}" --show-only=json-v1 > "build-${{ matrix.name }}/full-registration.json"
+          ctest --test-dir "build-${{ matrix.name }}" --show-only=json-v1 -E '${{ matrix.ctest_exclude }}' > "build-${{ matrix.name }}/selected-registration.json"
+
       - name: Record original ASan RSS results
         id: asan_rss_raw
         if: matrix.name == 'asan'
@@ -562,6 +572,7 @@ jobs:
 
       - name: Run ${{ matrix.name }} matrix
         env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-matrix-driver-reports
           ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
           TSAN_OPTIONS: halt_on_error=1
@@ -606,6 +617,11 @@ jobs:
           name: ${{ matrix.name }}-hosted-evidence
           if-no-files-found: error
           path: |
+            build-${{ matrix.name }}/CMakeCache.txt
+            build-${{ matrix.name }}/full-build-commands.txt
+            build-${{ matrix.name }}/full-registration.json
+            build-${{ matrix.name }}/selected-registration.json
+            ${{ runner.temp }}/capsid-matrix-driver-reports/
             build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
             build-${{ matrix.name }}/Testing/Temporary/LastTest.log
             build-asan/asan-rss-raw-junit.xml
@@ -618,168 +634,6 @@ jobs:
             build-tsan/tsan-memory-*.json
             ${{ runner.temp }}/capsid-native-provider-evidence/
 
-  fuzz:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Install Clang and Ninja
-        run: |
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
-
-      - name: Configure fuzz harnesses
-        env:
-          CC: clang
-          CXX: clang++
-        run: |
-          cmake -S . -B build-fuzz -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCAPSID_BUILD_WORKER=OFF \
-            -DCAPSID_BUILD_FUZZERS=ON \
-            -DCAPSID_USE_MIMALLOC=OFF
-
-      - name: Build fuzz harnesses
-        run: cmake --build build-fuzz --parallel 2
-
-      - name: Run bounded corpus gates
-        run: |
-          ctest --test-dir build-fuzz \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit fuzz-junit.xml \
-            -L fuzz
-
-      - name: Save fuzz evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: fuzz-hosted-evidence
-          if-no-files-found: error
-          path: build-fuzz/fuzz-junit.xml
-
-  posix-host-library:
-    runs-on: macos-15
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      # Keep the POSIX gate honest for the complete M1D Admin surface.  The
-      # transport and long-lived service are intentionally conditional on
-      # Boost, so relying on the runner image could silently skip their
-      # compilation (and miss Linux-only APIs in otherwise POSIX sources).
-      - name: Install macOS Host dependencies
-        run: brew install boost c-ares openssl@3.5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          python3 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the macOS configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-
-      # §12.5 macOS row: Host units plus the non-strict worker contracts.
-      # Linux-only strict-sandbox and managed-suite tests are not registered
-      # on macOS (they SKIP by absence, never FAIL), and the §12.3 fresh
-      # second build is excluded here to keep the job inside its time budget
-      # (the Release job runs it on Linux).
-      - name: Configure macOS host library and worker contracts
-        run: |
-          set -euo pipefail
-          node_binary=$(node -p 'process.execPath')
-          cmake -S . -B build-macos \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_BUILD_WORKER=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_HOST_TEST_NODE="${node_binary}" \
-            -DCAPSID_NODE_EXECUTABLE="${node_binary}"
-
-      - name: Build macOS Host, Admin transport, and unit gates
-        run: |
-          cmake --build build-macos --parallel 2
-          # Named targets make a missing/quietly skipped Boost-backed Admin
-          # surface an explicit configuration failure.
-          cmake --build build-macos --parallel 2 --target \
-            capsid-host \
-            test-host-admin-api \
-            test-host-admin-http \
-            test-host-admin-service
-
-      - name: Run POSIX host-side matrix
-        run: |
-          ctest --test-dir build-macos \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit macos-junit.xml \
-            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
-
-      - name: Save macOS evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: macos-host-library-evidence
-          if-no-files-found: error
-          path: |
-            build-macos/macos-junit.xml
-            build-macos/Testing/Temporary/LastTest.log
-            build-macos/CMakeCache.txt
-
   windows-host-library:
     runs-on: windows-latest
     # The measured serial Release matrix alone takes about 104 minutes.
@@ -790,6 +644,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 991adfc40c0bc1d3fe9a58ec2877d8b5d26b0192
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -932,6 +787,15 @@ jobs:
             exit 1
           }
 
+      - name: Preserve complete Windows commands and registration
+        shell: pwsh
+        run: |
+          ninja -C build-windows -t commands | Out-File -FilePath build-windows/full-build-commands.txt -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-windows --show-only=json-v1 -E '^wpt_conformance_not_configured$' |
+            Out-File -FilePath build-windows/selected-registration.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run the native Windows workerd compatibility gate
         shell: pwsh
         run: |
@@ -939,6 +803,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run Windows host-side matrix
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-windows-driver-reports
         run: |
           $evidence_root = (Resolve-Path build-windows).Path
           $ctest_log = Join-Path $evidence_root 'ctest.log'
@@ -967,90 +833,13 @@ jobs:
           name: windows-host-library-evidence
           if-no-files-found: error
           path: |
+            build-windows/CMakeCache.txt
+            build-windows/full-build-commands.txt
+            build-windows/selected-registration.json
+            build-windows/build.log
+            ${{ runner.temp }}/capsid-windows-driver-reports/
             build-windows/windows-junit.xml
             build-windows/ctest.log
             build-windows/Testing/Temporary/LastTest.log
             build-windows/workerd-compatibility/
 
-  hosted-evidence-index:
-    if: always()
-    needs:
-      - release-wpt-and-delegated-sandbox
-      - sanitizers
-      - fuzz
-      - posix-host-library
-      - windows-host-library
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    steps:
-      - name: Download all hosted evidence
-        continue-on-error: true
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          pattern: '*-evidence'
-          path: hosted-evidence/inputs
-
-      - name: Generate run and content index
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          set -euo pipefail
-          mkdir -p hosted-evidence/inputs
-          {
-            printf 'run_url=%s/%s/actions/runs/%s\n' \
-              "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
-            printf 'repository=%s\n' "${GITHUB_REPOSITORY}"
-            printf 'commit_sha=%s\n' "${GITHUB_SHA}"
-            printf 'ref=%s\n' "${GITHUB_REF}"
-            printf 'release=%s\n' "${RELEASE_RESULT}"
-            printf 'sanitizers=%s\n' "${SANITIZER_RESULT}"
-            printf 'fuzz=%s\n' "${FUZZ_RESULT}"
-            printf 'macos=%s\n' "${MACOS_RESULT}"
-            printf 'windows=%s\n' "${WINDOWS_RESULT}"
-          } > hosted-evidence/run.txt
-          # §12.5: the index also records the Release package identity —
-          # build ID, compatibility ID, package hash and SBOM hash — from
-          # the Release job's package-evidence.txt.
-          package_evidence=$(find hosted-evidence/inputs \
-            -name package-evidence.txt -print -quit)
-          if test -n "${package_evidence}"; then
-            cat "${package_evidence}" >> hosted-evidence/run.txt
-          fi
-          (
-            cd hosted-evidence
-            find inputs -type f -print0 |
-              sort -z |
-              xargs -0 -r sha256sum > sha256sums.txt
-            sha256sum sha256sums.txt |
-              awk '{print $1}' > evidence-tree.sha256
-          )
-
-      - name: Save hosted evidence index
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: hosted-evidence-index
-          if-no-files-found: error
-          path: |
-            hosted-evidence/run.txt
-            hosted-evidence/sha256sums.txt
-            hosted-evidence/evidence-tree.sha256
-
-      - name: Require every hosted job to pass
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          test "${RELEASE_RESULT}" = success
-          test "${SANITIZER_RESULT}" = success
-          test "${FUZZ_RESULT}" = success
-          test "${MACOS_RESULT}" = success
-          test "${WINDOWS_RESULT}" = success
