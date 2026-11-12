@@ -3,6 +3,7 @@
 #include "win32_compat.h"
 #include "worker_exit_assertions.h"
 #include "graceful_worker_exit.h"
+#include "worker_writer_receipt.h"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +11,9 @@
 #include <string>
 #include <stdexcept>
 #include <thread>
+#include <fstream>
+#include <iterator>
+#include <sstream>
 
 namespace {
 void check(bool value,const char *message) {
@@ -19,6 +23,30 @@ void check(bool value,const char *message) {
     }
 }
 void ok(capsid_result result,const char *message) { check(result==CAPSID_OK,message); }
+struct ReceiptCleanup {
+    std::string path;
+    ~ReceiptCleanup() { if (!path.empty()) std::remove(path.c_str()); }
+};
+void await_writer_pressure(const std::string& path,int64_t pid,uint64_t dial) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    for (;;) {
+        std::ifstream file(path,std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(file)),std::istreambuf_iterator<char>());
+        if (!bytes.empty() && bytes.back()=='\n') {
+            std::istringstream input(bytes);std::string magic,extra;
+            unsigned long long owner=0,actual_dial=0,queued=0,limit=0,stalls=0,blocked=0;
+            check(bool(input>>magic>>owner>>actual_dial>>queued>>limit>>stalls>>blocked),"complete actual writer receipt");
+            check(!(input>>extra) && magic=="WRITER_PRESSURE" && owner==static_cast<unsigned long long>(pid) &&
+                  actual_dial==dial && queued==4096 && limit==4096 && stalls && blocked,
+                  "owned child actually observed ACCEPT, a full queue and a physical write stall");
+            std::printf("WRITER_BARRIER pid=%llu dial=%llu queue=%llu limit=%llu stalls=%llu blocked=%llu\n",
+                owner,actual_dial,queued,limit,stalls,blocked);
+            return;
+        }
+        check(std::chrono::steady_clock::now()<deadline,"actual blocked ACK and stalled writer receipt deadline");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
 struct Peer {
     capsid_worker *worker=nullptr;
     ~Peer() { capsid_worker_destroy(worker); }
@@ -61,10 +89,16 @@ constexpr char bundle[]=R"JS(
 let orphanCallbacks=0;
 const orphanSockets=[];
 const headWaiters=[];
+let pressureSocket=null,pressureCloseRequested=false;
 export default {async fetch(request) {
     const path=new URL(request.url).pathname;
     if(path==='/healthy')return new Response('healthy');
     if(path==='/filler')return new Response('f'.repeat(1024*1024));
+    if(path==='/pressure-close') {
+        if(!pressureSocket)return new Response('incorrect-pressure-state');
+        pressureCloseRequested=true;
+        return new Response('close-requested');
+    }
     if(path==='/barrier-size')return new Response(String(headWaiters.length));
     if(path==='/barrier-response')return new Promise(resolve=>headWaiters.push({resolve,kind:new URL(request.url).searchParams.get('kind')}));
     if(path==='/barrier-release') {
@@ -96,7 +130,16 @@ export default {async fetch(request) {
         ws.onerror=()=>events.push('error');
         ws.onclose=e=>{events.push('close');resolve({initial,early,events,code:e.code,clean:e.wasClean,state:ws.readyState,protocol:ws.protocol})};
         if(path==='/cancel')ws.close();
-        if(path==='/pressure')setTimeout(()=>ws.close(),200);
+        if(path==='/pressure') {
+            pressureSocket=ws;
+            // Preserve the original HTTP owner's timer context. A different
+            // HTTP request signals the barrier without operating on its socket.
+            const closeWhenObserved=()=>{
+                if(pressureCloseRequested)ws.close();
+                else setTimeout(closeWhenObserved,1);
+            };
+            setTimeout(closeWhenObserved,1);
+        }
     }));
 }};
 )JS";
@@ -202,12 +245,15 @@ void response_head_pressure(const char *worker_path, uint16_t version) {
     std::printf("response head pressure v%u: 16-owner progress barrier, 4096-byte wire queue, mixed large/fixed/empty/stream bodies and terminals PASS\n",unsigned(version));
 }
 
-void result_ack_pressure(const char *worker_path) {
+void result_ack_pressure_case(const char *worker_path,unsigned delay_before_accept_ms) {
     std::puts("exercising observed ACCEPT before open under writer pressure");
     capsid_worker_config config;capsid_worker_config_init(&config);config.worker_path=worker_path;config.max_queued_bytes=4096;
     config.request_timeout_ms=10000;
     capsid_protocol_options options;capsid_protocol_options_init(&options,sizeof(options));options.wire_version=4;options.capabilities=27;
+    ReceiptCleanup receipt;
     Peer peer;ok(capsid_worker_spawn_ex(&config,&options,&peer.worker),"pressure spawn");
+    const int64_t worker_pid=capsid_worker_pid(peer.worker);check(worker_pid>0,"actual owned writer worker PID");
+    receipt.path=capsid_test::writer_receipt_path(worker_pid);
     ok(capsid_worker_load_bundle(peer.worker,reinterpret_cast<const uint8_t *>(bundle),std::strlen(bundle)),"load");check(peer.next().type==CAPSID_EVENT_READY,"READY");
     peer.begin(50,"/oversized");check(peer.response(50)=="RangeError","oversized OPEN is rejected without unannounced owner or dial frame");
     peer.begin(1,"/pressure");auto dial=peer.channel(CAPSID_EVENT_CHANNEL_DIAL);
@@ -216,7 +262,8 @@ void result_ack_pressure(const char *worker_path) {
     std::string filler;
     // The fixture delegates the head and first body to the real socket,
     // then stalls the following full-sized body frame. The real Worker
-    // keeps processing ACCEPT and the original 200ms JS close timer.
+    // keeps processing input. Closing waits for both actual observer barriers,
+    // so a slow Host cannot close the pending dial before ACCEPT was observed.
     while(filler.empty()) {
         const auto event=peer.next();
         check(event.request_id==100,"filler progress belongs to the pressure owner");
@@ -230,10 +277,14 @@ void result_ack_pressure(const char *worker_path) {
             filler.append(reinterpret_cast<const char*>(event.payload.data),event.payload.size);
         } else check(false,"filler must make real body progress before ACCEPT");
     }
+    if(delay_before_accept_ms)std::this_thread::sleep_for(std::chrono::milliseconds(delay_before_accept_ms));
     ok(capsid_worker_dial_accept(peer.worker,dial.dial_id,1,1024*1024,"chat"),"ACCEPT under pressure");
     ok(capsid_worker_flush(peer.worker),"deliver ACCEPT");
-    bool ack=false,cancel=false,complete=false,head=false;std::string body;
-    while(!complete || !filler_complete) {
+    await_writer_pressure(receipt.path,worker_pid,dial.dial_id);
+    peer.begin(101,"/pressure-close");
+    bool ack=false,cancel=false,complete=false,head=false,control_head=false,control_complete=false;
+    std::string body,control_body;
+    while(!complete || !filler_complete || !control_complete) {
         auto event=peer.next();
         if(event.type>=CAPSID_EVENT_CHANNEL_DIAL && event.type<=CAPSID_EVENT_CHANNEL_ACK) {
             capsid_channel_event view;capsid_channel_event_init(&view);ok(capsid_channel_event_decode(&event,&view,sizeof(view)),"channel decode");
@@ -251,8 +302,15 @@ void result_ack_pressure(const char *worker_path) {
             if(event.type==CAPSID_EVENT_RESPONSE_BODY)filler.append(reinterpret_cast<const char*>(event.payload.data),event.payload.size);
             else if(event.type==CAPSID_EVENT_RESPONSE_END)filler_complete=true;
             else check(false,"no duplicate filler head or unexpected event");
+        } else if(event.request_id==101) {
+            check(!control_complete,"no close-control event after its terminal");
+            if(event.type==CAPSID_EVENT_RESPONSE_HEAD) {check(!control_head&&event.status==200,"one actual close-control response head");control_head=true;}
+            else if(event.type==CAPSID_EVENT_RESPONSE_BODY) {check(control_head,"close-control body follows its head");control_body.append(reinterpret_cast<const char *>(event.payload.data),event.payload.size);}
+            else if(event.type==CAPSID_EVENT_RESPONSE_END) {check(control_head,"close-control terminal follows its head");control_complete=true;}
+            else check(false,"close-control response event kind");
         } else check(false,"all pressured frames retain their original owner");
     }
+    check(control_body=="close-requested","CONNECTING close runs only after the observed blocked result ACK");
     check(ack && cancel && body.find("\"events\":[\"error\",\"close\"]")!=std::string::npos,"no spurious open under result ACK pressure");
     check(body.find("\"initial\":0")!=std::string::npos && body.find("\"state\":3")!=std::string::npos &&
           body.find("\"code\":1006")!=std::string::npos && body.find("\"clean\":false")!=std::string::npos,
@@ -268,7 +326,13 @@ void result_ack_pressure(const char *worker_path) {
         exited.channel_closed ? 1 : 0,exited.reaped ? 1 : 0,exited.status,exited.wait_error,
         cleanup.destroy_forced ? 1 : 0,exited.error_events);
     check(exited.clean() && !cleanup.destroy_forced,"real writer fixture verifies the full-queue premise and exits naturally");
-    std::puts("writer pressure: observed ACCEPT cancels assigned identity before open PASS");
+    check(std::remove(receipt.path.c_str())==0,"owned receipt removed after actual worker exit");receipt.path.clear();
+    std::printf("writer pressure: observed ACCEPT cancels assigned identity before open; pre-ACCEPT delay=%u ms PASS\n",delay_before_accept_ms);
+}
+
+void result_ack_pressure(const char *worker_path) {
+    result_ack_pressure_case(worker_path,0);
+    result_ack_pressure_case(worker_path,350);
 }
 
 }
