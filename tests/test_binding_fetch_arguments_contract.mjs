@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test, after} from 'node:test';
+import {serialize, deserialize} from 'node:v8';
 import {createHash} from 'node:crypto';
 import {bindingArgumentKinds, bindingArgumentRoutes, bindingArgumentViews, bindingArgumentMethods, bindingArgumentInputPaths,
     bindingArgumentPacket, bindingArgumentStateTemplate, expectedBindingArgumentEnvelope} from '../tools/binding-fetch-arguments-input.mjs';
@@ -9,6 +10,14 @@ import {assertBindingArgumentCase, validateBindingArgumentReport, loadBindingArg
 const freeze = value => {if (value && typeof value === 'object') {for (const child of Object.values(value)) freeze(child); Object.freeze(value);} return value;};
 const hash = value => createHash('sha256').update(value).digest('hex');
 const stdout = item => 'memoryLimit=0 actualFeatures=0 expectedFeatures=0\nBINDING_BODY '+JSON.stringify({state: item.state, calls: item.calls, wireTypes: item.wireTypes})+'\nBINDING_EXIT '+JSON.stringify(item.workerExit)+'\n';
+// Serialized construction inputs are shared only after deep freezing. Every
+// counterexample gets a fresh mutable graph and is validated independently.
+const sampleBytes = new WeakMap();
+function copySample(base) {
+    assert.ok(Object.isFrozen(base), 'only immutable construction samples may be serialized once');
+    if (!sampleBytes.has(base)) sampleBytes.set(base, serialize(base));
+    return deserialize(sampleBytes.get(base));
+}
 let rejected = 0;
 function sample(bodyKind, route, view, method) {
     const port = 19000, envelope = structuredClone(expectedBindingArgumentEnvelope(bodyKind, route, view, method)), request = 'GET /body HTTP/1.1\r\nHost: 127.0.0.1:'+port;
@@ -19,7 +28,7 @@ function sample(bodyKind, route, view, method) {
         finalSources: structuredClone(sources), child: {code: 0, signal: null}, workerExit: {reaped: true, channelClosed: true, code: 0}, stdout: '', stderr: ''}; item.stdout = stdout(item); return item;
 }
 function reject(base, change, syncFinal = true, syncStdout = true) {
-    const item = structuredClone(base); change(item); if (syncFinal) item.finalSources = structuredClone(item.sourcesBeforeStop); if (syncStdout) item.stdout = stdout(item);
+    const item = copySample(base); change(item); if (syncFinal) item.finalSources = structuredClone(item.sourcesBeforeStop); if (syncStdout) item.stdout = stdout(item);
     assert.throws(() => assertBindingArgumentCase(item, base.bodyKind, base.route, base.view, base.method)); rejected++;
 }
 function leaves(value, prefix = []) {
@@ -30,7 +39,7 @@ const changeLeaf = (item, path) => {let parent = item; for (const key of path.sl
     parent[key] = value === null ? false : typeof value === 'boolean' ? Number(value) : typeof value === 'number' ? value+1 : typeof value === 'string' ? value+'!' : null;};
 for (const bodyKind of bindingArgumentKinds) for (const route of bindingArgumentRoutes) test(bodyKind+'/'+route+': exact valid family and typed mutable counterexamples', () => {
     for (const view of bindingArgumentViews) for (const method of bindingArgumentMethods) assertBindingArgumentCase(sample(bodyKind, route, view, method), bodyKind, route, view, method);
-    const base = sample(bodyKind, route, bodyKind === 'raw' ? 'Float64Array' : 'DataView', bodyKind === 'raw' ? 'read' : 'least');
+    const base = freeze(sample(bodyKind, route, bodyKind === 'raw' ? 'Float64Array' : 'DataView', bodyKind === 'raw' ? 'read' : 'least'));
     for (const key of Object.keys(base)) reject(base, item => {delete item[key];}, false, false);
     for (let index = 0; index < base.state.rows.length; index++) {
         const row = base.state.rows[index];
@@ -49,8 +58,9 @@ for (const bodyKind of bindingArgumentKinds) for (const route of bindingArgument
         item => {item.sourcesBeforeStop[0].sent = '';}, item => {item.sourcesBeforeStop[0].events[1].sequence = 0;}, item => {item.sourcesBeforeStop[0].events[2].sequence = 99999;},
         item => {item.sourcesBeforeStop[0].rawRequest += 'AA==';}, item => {item.sourcesBeforeStop.pop();}, item => {item.sampleSequence--;}, item => {item.workerExit.code = 1;}, item => {item.child.code = 1;}, item => {item.stderr = 'unexpected';}]) reject(base, change);
     reject(base, item => {item.finalSources[0].peerEnded = false;}, false); reject(base, item => {item.stdout += 'manufactured\n';}, true, false);
-    assertBindingArgumentCase(base, bodyKind, route, base.view, base.method); base.calls[0].signalNew = false; base.stdout = stdout(base);
-    assert.throws(() => assertBindingArgumentCase(base, bodyKind, route, base.view, base.method)); rejected++;
+    const mutable = copySample(base);
+    assertBindingArgumentCase(mutable, bodyKind, route, base.view, base.method); mutable.calls[0].signalNew = false; mutable.stdout = stdout(mutable);
+    assert.throws(() => assertBindingArgumentCase(mutable, bodyKind, route, base.view, base.method)); rejected++;
 });
 test('both actual primaries are checked against the input model even when their rows are wrong together', () => {
     const {archive, metadata} = loadBindingArgumentPrimaries();
@@ -89,4 +99,18 @@ test('input templates are deeply immutable, sample copies independent and the32 
     for (const selection of selections.slice(1, 32)) bindingArgumentStateTemplate(...selection); assert.equal(bindingArgumentStateTemplate(...selections[0]), first);
     bindingArgumentStateTemplate(...selections[32]); assert.notEqual(bindingArgumentStateTemplate(...selections[0]), first);
 });
+test('serialized immutable samples produce independent complete mutable counterexamples', () => {
+    const base = freeze(sample('raw', 'getReader', 'Float64Array', 'read'));
+    const left = copySample(base), right = copySample(base);
+    assert.deepEqual(left, structuredClone(base)); assert.deepEqual(right, structuredClone(base));
+    assert.notEqual(left, right); assert.notEqual(left.state.rows[1].retry.backing, right.state.rows[1].retry.backing);
+    assert.ok(!Object.isFrozen(left) && !Object.isFrozen(left.state.rows[1].retry.backing));
+    assertBindingArgumentCase(left, 'raw', 'getReader', 'Float64Array', 'read');
+    left.state.rows[1].retry.backing[0] = 0; left.stdout = stdout(left);
+    assert.throws(() => assertBindingArgumentCase(left, 'raw', 'getReader', 'Float64Array', 'read'));
+    assert.equal(right.state.rows[1].retry.backing[0], 1); assert.equal(base.state.rows[1].retry.backing[0], 1);
+    assertBindingArgumentCase(right, 'raw', 'getReader', 'Float64Array', 'read');
+    assert.throws(() => copySample(sample('raw', 'getReader', 'Float64Array', 'read')));
+});
+
 after(() => {assert.equal(rejected, 19189); console.log(JSON.stringify({complete: true, uniqueArgumentInputs: 10920, rejectedMutations: rejected}));});

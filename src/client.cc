@@ -1212,12 +1212,12 @@ capsid_result map_frame_to_event(capsid_worker *worker,
 
 #if defined(_WIN32)
 bool wait_for_child(HANDLE process, uint32_t timeout_ms,
-                    capsid::WorkerExitStatus* status) {
+                    capsid::WorkerExitStatus* status, bool block = false) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() +
         std::chrono::milliseconds(timeout_ms);
     for (;;) {
-        const DWORD result = WaitForSingleObject(process, 0);
+        const DWORD result = WaitForSingleObject(process, block ? INFINITE : 0);
         if (result == WAIT_OBJECT_0) {
             DWORD code = 0;
             if (GetExitCodeProcess(process, &code)) {
@@ -1233,7 +1233,7 @@ bool wait_for_child(HANDLE process, uint32_t timeout_ms,
             status->wait_error = GetLastError();
             return false;
         }
-        if (std::chrono::steady_clock::now() >= deadline) {
+        if (!block && std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -1257,13 +1257,13 @@ void kill_and_reap(HANDLE process) {
 }
 #else
 bool wait_for_child(pid_t pid, uint32_t timeout_ms,
-                    capsid::WorkerExitStatus* observed) {
+                    capsid::WorkerExitStatus* observed, bool block = false) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() +
         std::chrono::milliseconds(timeout_ms);
     for (;;) {
         int status = 0;
-        const pid_t result = waitpid(pid, &status, WNOHANG);
+        const pid_t result = waitpid(pid, &status, block ? 0 : WNOHANG);
         if (result == pid) {
             observed->observed = WIFEXITED(status) || WIFSIGNALED(status);
             observed->exit_code = WIFEXITED(status)
@@ -1282,7 +1282,7 @@ bool wait_for_child(pid_t pid, uint32_t timeout_ms,
             observed->wait_error = static_cast<std::uint32_t>(errno);
             return false;
         }
-        if (std::chrono::steady_clock::now() >= deadline) {
+        if (!block && std::chrono::steady_clock::now() >= deadline) {
             return false;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -2991,7 +2991,7 @@ capsid::WorkerExitStatus capsid::destroy_worker_with_status(
         if (!wait_for_child(worker->process, 50, &status)) {
             status.destroy_forced = true;
             terminate_process(worker->process);
-            wait_for_child(worker->process, 250, &status);
+            wait_for_child(worker->process, 250, &status, true);
         }
         CloseHandle(worker->process);
         worker->process = NULL;
@@ -3003,7 +3003,7 @@ capsid::WorkerExitStatus capsid::destroy_worker_with_status(
         if (!wait_for_child(worker->pid, 50, &status)) {
             status.destroy_forced = true;
             kill(worker->pid, SIGKILL);
-            wait_for_child(worker->pid, 250, &status);
+            wait_for_child(worker->pid, 250, &status, true);
         }
     }
 #endif

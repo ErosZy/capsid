@@ -3,7 +3,8 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import {readNativeArgumentSample} from './helpers/ws_fetch_arguments_sample.mjs';
 import {nativeArgumentKinds,nativeArgumentRoutes,nativeArgumentShardCases,nativeArgumentCapacity,
-    assertNativeArgumentCase,assertNativeArgumentState,validateNativeArgumentReport,compareNativeArgumentShardReports}
+    assertNativeArgumentCase,assertNativeArgumentState,validateNativeArgumentReport,compareNativeArgumentShardReports,
+    expectedNativeArgumentState,nativeArgumentStateTemplate}
     from '../tools/workerd-fetch-arguments-contract.mjs';
 import {referenceBackendModes} from '../tools/workerd-platform.mjs';
 
@@ -115,4 +116,40 @@ test('five route shards require every supported backend and all5460 rows',()=>{
         {complete:true,groupsPerBackend:130,observationsPerBackend:5460,shardsPerBackend:5,backends:3});
     assert.throws(()=>compareNativeArgumentShardReports(reference.slice(1),candidates,expected));
     assert.throws(()=>compareNativeArgumentShardReports(reference,candidates.slice(1),expected));
+});
+
+test('mutable construction results cannot alter another model or the fixed input bytes',()=>{
+    const kind=nativeArgumentKinds[0],challenge='model-independence';
+    const left=expectedNativeArgumentState(kind,challenge),right=expectedNativeArgumentState(kind,challenge);
+    const row=s=>s.rows.find(r=>r.scenario==='valid-minimum');
+    row(left).read.value.bytes[0]=99;row(left).read.value.backing[8]=88;
+    assert.equal(row(right).read.value.bytes[0],1);assert.equal(row(right).read.value.backing[8],1);
+    assert.equal(row(expectedNativeArgumentState(kind,challenge)).read.value.bytes[0],1);
+    assert.throws(()=>assertNativeArgumentState(left,kind,challenge));
+    assertNativeArgumentState(right,kind,challenge);
+});
+test('only immutable input templates are shared and the FIFO capacity remains32',()=>{
+    const kind=nativeArgumentKinds[0];
+    // Fill the cache with unrelated keys, then track one exact32-entry window.
+    for(let i=0;i<32;i++)nativeArgumentStateTemplate(kind,'template-prime-'+i);
+    const first=nativeArgumentStateTemplate(kind,'template-window-0');
+    const refused=first.rows.find(row=>row.scenario==='invalid-view');
+    assert.ok(Object.isFrozen(first)&&Object.isFrozen(first.rows)&&Object.isFrozen(refused.retry.bytes));
+    assert.throws(()=>{refused.retry.bytes[0]=99;},TypeError);
+    for(let i=1;i<32;i++)nativeArgumentStateTemplate(kind,'template-window-'+i);
+    assert.equal(nativeArgumentStateTemplate(kind,'template-window-0'),first);
+    nativeArgumentStateTemplate(kind,'template-window-32');
+    assert.notEqual(nativeArgumentStateTemplate(kind,'template-window-0'),first);
+    assert.throws(()=>nativeArgumentStateTemplate(kind,null));
+    assert.throws(()=>nativeArgumentStateTemplate('unknown-kind','template-window-0'));
+});
+test('a previously accepted mutable state is checked again after mutation',()=>{
+    const kind=nativeArgumentKinds[0],challenge='repeat-current-state';
+    const state=expectedNativeArgumentState(kind,challenge);
+    assertNativeArgumentState(state,kind,challenge);
+    const retry=state.rows.find(row=>row.scenario==='invalid-view').retry;
+    retry.bytes[0]=99;
+    assert.throws(()=>assertNativeArgumentState(state,kind,challenge));
+    retry.bytes[0]=1;assertNativeArgumentState(state,kind,challenge);
+    state.rows[0].unknown=true;assert.throws(()=>assertNativeArgumentState(state,kind,challenge));
 });

@@ -57,7 +57,7 @@ Options not selected:
 | SQLite/other database | v1 is single-process single-writer; it needs only one active-version pointer, with no database queries or transaction requirements |
 | Boost.JSON as the security-sensitive config parser | Duplicate keys use last-wins, which cannot directly satisfy fail-closed configuration requirements |
 
-The integration constraint that remains in effect: `capsid_worker_destroy()` is a synchronous bounded reclamation path that can wait hundreds of milliseconds in the worst case, so it cannot run in a data-plane reactor callback. The host should first remove the worker from its owner shard and shut it down, then hand the sole handle to a bounded reaper executor.
+The integration constraint that remains in effect: `capsid_worker_destroy()` is synchronous and reaps the child before returning. Its natural-exit grace is 50 milliseconds; after forced termination it waits for the actual OS exit result, so the total duration depends on OS scheduling rather than a fixed 300-millisecond deadline. It cannot run in a data-plane reactor callback. The host first removes the worker from its owner shard and shuts it down, then hands the sole handle to a reaper executor with bounded concurrency.
 
 ## 3. Key Contract Additions
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {isDeepStrictEqual} from 'node:util';
 import {referenceBackendModes} from './workerd-platform.mjs';
 import {assertFetchTransitionCertificates} from './workerd-fetch-transition-contract.mjs';
 import {assertNativeFetchEnvelope,exactFields} from './workerd-native-fetch-contract.mjs';
@@ -17,7 +18,7 @@ const invocation='Illegal invocation: function called with incorrect `this` refe
   +'See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.';
 const payload=Array.from({length:16},(_,i)=>i+1);
 const bytes=(offset,count,bufferBytes,content,backing,done=false)=>({done,type:'Uint8Array',byteOffset:offset,
-  byteLength:count,bufferBytes,bytes:content,backing});
+  byteLength:count,bufferBytes,bytes:[...content],backing:[...backing]});
 export function expectedNativeArgumentState(kind,challenge){
   assert.ok(nativeArgumentKinds.includes(kind));
   const [,,route,viewName,method]=kind.split('-'),width=nativeArgumentWidths[viewName];
@@ -65,8 +66,28 @@ export function expectedNativeArgumentState(kind,challenge){
   });
   return {kind,challenge,rows,unexpected:null};
 }
+// Bound immutable input-model construction only. Every current report and
+// state still receives a complete value comparison on every validation.
+const stateTemplates=new Map();
+const freezeModel=value=>{
+  if(value&&typeof value==='object'&&!Object.isFrozen(value)){
+    for(const child of Object.values(value))freezeModel(child);
+    Object.freeze(value);
+  }
+  return value;
+};
+export function nativeArgumentStateTemplate(kind,challenge){
+  assert.ok(nativeArgumentKinds.includes(kind));assert.equal(typeof challenge,'string');
+  const key=JSON.stringify([kind,challenge]);
+  if(!stateTemplates.has(key)){
+    const value=freezeModel(expectedNativeArgumentState(kind,challenge));
+    if(stateTemplates.size===32)stateTemplates.delete(stateTemplates.keys().next().value);
+    stateTemplates.set(key,value);
+  }
+  return stateTemplates.get(key);
+}
 export function assertNativeArgumentState(state,kind,challenge){
-  assert.deepEqual(state,expectedNativeArgumentState(kind,challenge),'independent native argument, view, release, ownership and retry model');
+  assert.ok(isDeepStrictEqual(state,nativeArgumentStateTemplate(kind,challenge)),'independent native argument, view, release, ownership and retry model');
   return state.rows.length;
 }
 export const nativeArgumentShardCases=Object.freeze(Object.fromEntries(nativeArgumentRoutes.map((route,index)=>

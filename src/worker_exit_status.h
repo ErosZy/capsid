@@ -22,9 +22,10 @@ struct WorkerExitStatus {
     }
 };
 
-// Same ownership, bounded abortive cleanup and exactly-once reap as the
-// public destroy API. Captures status in that reap; no competing waiter,
-// second PID lookup or extra grace period. No C ABI changes.
+// Same ownership, synchronous abortive cleanup and exactly-once reap as the
+// public destroy API. The natural-exit grace is bounded; after forced exit,
+// wait for the actual OS result before returning. Captures status in that
+// reap, without a competing waiter or second PID lookup. No C ABI changes.
 WorkerExitStatus destroy_worker_with_status(capsid_worker* worker) noexcept;
 
 }  // namespace capsid

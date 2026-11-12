@@ -1860,6 +1860,23 @@ if(BUILD_TESTING)
                 set_tests_properties(spawn_failure_recovery PROPERTIES SKIP_RETURN_CODE 77)
             endif()
 
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                # Exercise actual forced exits with delayed nonblocking wait
+                # observations and EINTR. Link wrapping is confined to this
+                # test executable; the production runtime has no test hook.
+                add_executable(test-worker-forced-reap
+                    tests/test_worker_forced_reap.cc)
+                target_include_directories(test-worker-forced-reap PRIVATE
+                    include src "${CAPSID_GENERATED_DIR}")
+                target_link_libraries(test-worker-forced-reap PRIVATE capsid_runtime)
+                target_link_options(test-worker-forced-reap PRIVATE
+                    "-Wl,--wrap=waitpid" "-Wl,--wrap=kill")
+                add_test(NAME worker_forced_reap
+                    COMMAND test-worker-forced-reap $<TARGET_FILE:capsid-worker>)
+                set_tests_properties(worker_forced_reap PROPERTIES
+                    LABELS "worker;abi;lifecycle" TIMEOUT 15)
+            endif()
+
             add_executable(
                 test-worker-v4-negotiation
                 tests/test_worker_v4_negotiation.cc)
