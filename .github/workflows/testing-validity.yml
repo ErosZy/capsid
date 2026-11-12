@@ -608,6 +608,25 @@ jobs:
             --resource-report-root build-tsan \
             --output build-tsan/tsan-memory-acceptance.json
 
+      - name: Archive sanitizer driver reports preserving original names
+        if: always()
+        env:
+          REPORT_DIRECTORY: build-${{ matrix.name }}/matrix-case-reports
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,tarfile
+          report=Path(os.environ['REPORT_DIRECTORY'])
+          report.parent.mkdir(parents=True,exist_ok=True)
+          archive=report.parent/(report.name+'.tar.gz')
+          with tarfile.open(archive,'w:gz',dereference=False) as output:
+              if report.exists():output.add(report,arcname=report.name)
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
+          print(json.dumps(dict(complete=True,sourceDirectory=str(report),sourceExists=report.exists(),
+              archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))
+          PY
+
       - name: Save sanitizer evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -616,7 +635,8 @@ jobs:
           if-no-files-found: error
           path: |
             build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
-            build-${{ matrix.name }}/matrix-case-reports/
+            build-${{ matrix.name }}/matrix-case-reports.tar.gz
+            build-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256
             build-${{ matrix.name }}/Testing/Temporary/LastTest.log
             build-perf-prerequisite/evidence/
             build-asan/asan-rss-raw-junit.xml
