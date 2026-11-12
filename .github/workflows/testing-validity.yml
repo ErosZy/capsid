@@ -59,7 +59,7 @@ jobs:
           sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv
+          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic
           /usr/bin/openssl version
           # The vendor audit's expected tag must match cmake/build_tests.cmake
           # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
@@ -74,6 +74,9 @@ jobs:
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
+
+      - name: Require actual Linux perf counters for evidence controls
+        run: python3 -B tools/setup-hosted-perf.py
 
       - name: Install locked independent WebSocket clients
         run: |
@@ -323,6 +326,7 @@ jobs:
             build-validity/txiki-upgrade-report.json
             build-validity/txiki-upgrade-report.md
             build-validity/package-evidence.txt
+            build-perf-prerequisite/evidence/
             build-validity/generated/build-info.txt
             build-validity/capsid-*.tar.gz
             ${{ runner.temp }}/capsid-native-provider-evidence/
@@ -395,7 +399,7 @@ jobs:
           # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
           # included, arch-suffixed) that the clang-based tsan matrix entry
           # links against.
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv
+          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv linux-tools-generic
           /usr/bin/openssl version
           # The vendor audit's expected tag must match cmake/build_tests.cmake
           # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
@@ -410,6 +414,9 @@ jobs:
           do
             npm ci --ignore-scripts --prefix "${directory}"
           done
+
+      - name: Require actual Linux perf counters for evidence controls
+        run: python3 -B tools/setup-hosted-perf.py
 
       - name: Install locked independent clients and reference for sanitizers
         run: |
@@ -565,7 +572,9 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
           TSAN_OPTIONS: halt_on_error=1
+          CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-${{ matrix.name }}/matrix-case-reports
         run: |
+          mkdir -p "${CAPSID_WS_REPORT_DIR}"
           ctest --test-dir "build-${{ matrix.name }}" \
             --no-tests=error \
             --output-on-failure \
@@ -607,7 +616,9 @@ jobs:
           if-no-files-found: error
           path: |
             build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
+            build-${{ matrix.name }}/matrix-case-reports/
             build-${{ matrix.name }}/Testing/Temporary/LastTest.log
+            build-perf-prerequisite/evidence/
             build-asan/asan-rss-raw-junit.xml
             build-asan/asan-rss-raw-LastTest.log
             build-asan/asan-rss-raw-exit-code.txt

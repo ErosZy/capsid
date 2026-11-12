@@ -1,0 +1,82 @@
+{
+  "complete": true,
+  "status": "all-three-profile-tests-independently-qualified-original-collector-failure-retained",
+  "reviewedUTC": "2026-11-12T13:42:05.595821+00:00",
+  "changedFiles": {
+    "cmake/build_tests.cmake": "2c7041a2a3aec4e522c8c723ea0609d7226e04d36fb00425a85a1b9d243f8e22",
+    "tests/test_benchmark_cold_tool.py": "8745178c06927e8476d28727c1488c566f1d4ab3ed45029ee6a478e5eee1ab2c",
+    "tests/test_benchmark_cold_descendants.py": "4cdc49f9e7db8d5432e5f6ba987ef700f0105b0fcb19f836eeab1a0739190411"
+  },
+  "profiles": {
+    "gcc": {
+      "selectedCtest": 4,
+      "passed": 4,
+      "skipped": 0,
+      "originalSevenAssertionsRetained": true,
+      "originalSevenPassed": true,
+      "actualDescendantScenarios": 10,
+      "oldActualFailures": 10,
+      "actualTestSeconds": {
+        "benchmark_cold_tool": 7.69687,
+        "benchmark_cold_descendants": 1.36555,
+        "benchmark_cold_descendant_sample_fork": 2.2244,
+        "benchmark_cold_descendant_sample_clone": 2.23957
+      },
+      "defaultFakeStackRetained": true,
+      "settleMs": 1000,
+      "artifactSHA256": "683bcb9887ac451b8dc2bef75f28eff662c0509e50b4118d9ee81e02035b3d76",
+      "originalCollectorFailedAfterAllTestsPassed": true,
+      "rawOriginalCollectorRecordSHA256": "90c8c4353f91dca8c51bf5024e748837d40421d7509d56acf19e054ed07470f4"
+    },
+    "release": {
+      "selectedCtest": 4,
+      "passed": 4,
+      "skipped": 0,
+      "originalSevenAssertionsRetained": true,
+      "originalSevenPassed": true,
+      "actualDescendantScenarios": 10,
+      "oldActualFailures": 10,
+      "actualTestSeconds": {
+        "benchmark_cold_tool": 6.77935,
+        "benchmark_cold_descendants": 0.962053,
+        "benchmark_cold_descendant_sample_fork": 2.12187,
+        "benchmark_cold_descendant_sample_clone": 2.1244
+      },
+      "defaultFakeStackRetained": true,
+      "settleMs": 1000,
+      "artifactSHA256": "449eb7c826055f2a1a51132bd363f3f4f1670597673cb61fd9ccd86517b79058",
+      "originalCollectorFailedAfterAllTestsPassed": true,
+      "rawOriginalCollectorRecordSHA256": "e3722a88a1e9a79414d54f3392ba00d02fb038040ea6ad1b654abc9d1696ddcf"
+    },
+    "clang": {
+      "selectedCtest": 4,
+      "passed": 4,
+      "skipped": 0,
+      "originalSevenAssertionsRetained": true,
+      "originalSevenPassed": true,
+      "actualDescendantScenarios": 10,
+      "oldActualFailures": 10,
+      "actualTestSeconds": {
+        "benchmark_cold_tool": 65.6713,
+        "benchmark_cold_descendants": 1.78185,
+        "benchmark_cold_descendant_sample_fork": 21.3551,
+        "benchmark_cold_descendant_sample_clone": 21.3551
+      },
+      "defaultFakeStackRetained": true,
+      "settleMs": 20000,
+      "artifactSHA256": "c1e2e881c1bb8bd4ab38417cafa8d44fd2566f727ec1305092293133871787a4",
+      "originalCollectorFailedAfterAllTestsPassed": true,
+      "rawOriginalCollectorRecordSHA256": "0e7cd4282aebfc069c1e89abc5886c61e290237b3d6d7a0ef6aa3bd9ef8ce320"
+    }
+  },
+  "actualRuntimeColdDefaultsAndTimingUnchanged": true,
+  "originalAllAssertionsRetained": true,
+  "originalCancellationAndFailureDeadlinesUnchanged": true,
+  "onlySuccessfulOuterWaitAccountsForExplicitSettle": true,
+  "originalCTest100AndDescendant30BudgetsUnchanged": true,
+  "actualNewCtestCoverageStillAllTenDescendantScenarios": true,
+  "fullSanitizerOrProviderAcceptanceNotClaimed": true,
+  "productionSchedulingAndQps64Unchanged": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

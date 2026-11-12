@@ -2,6 +2,8 @@
 // requires exact first/warm responses and stable positive worker-tree PSS.
 #include <poll.h>
 #include <signal.h>
+#include <sys/prctl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <algorithm>
 #include <cerrno>
@@ -23,6 +25,66 @@ extern "C" void interrupt_handler(int number) { interrupted = number; }
 void check_interrupt() {
     if (interrupted) cold::fail("interrupted", "measurement interrupted");
 }
+// This standalone Linux probe owns one worker tree, including descendants
+// orphaned while the public C ABI destroys the direct worker. Keep that
+// responsibility here rather than changing the embedding application's
+// process-wide subreaper or waiting for its unrelated children in the C ABI.
+class WorkerDescendants {
+public:
+    WorkerDescendants() {
+        if (prctl(PR_GET_CHILD_SUBREAPER, &previous_, 0L, 0L, 0L) != 0 ||
+            prctl(PR_SET_CHILD_SUBREAPER, 1L, 0L, 0L, 0L) != 0) {
+            cold::fail("worker-cleanup", "cannot own orphaned worker descendants");
+        }
+        active_ = true;
+    }
+    WorkerDescendants(const WorkerDescendants&) = delete;
+    WorkerDescendants& operator=(const WorkerDescendants&) = delete;
+    ~WorkerDescendants() {
+        if (active_ && !cleanup()) std::fputs("cold-start: worker-cleanup: cannot reap worker descendants\n", stderr);
+    }
+    void close() {
+        if (active_ && !cleanup()) cold::fail("worker-cleanup", "cannot reap worker descendants");
+    }
+private:
+    bool cleanup() noexcept {
+        // The C-ABI worker owner is destroyed first. Any remaining direct
+        // children are descendants adopted by this single-purpose probe.
+        // A live, unreaped child pins its PID: wait for that exact child
+        // before signaling it, and never use a process-name/group sweep.
+        char path[96];
+        std::snprintf(path, sizeof(path), "/proc/self/task/%ld/children", static_cast<long>(getpid()));
+        for (;;) {
+            FILE* children = std::fopen(path, "r");
+            if (!children) return false;
+            long child = 0;
+            const int parsed = std::fscanf(children, "%ld", &child);
+            const bool failed = std::ferror(children) != 0;
+            std::fclose(children);
+            if (failed) return false;
+            if (parsed == EOF) break;
+            if (parsed != 1 || child <= 0 || child > INT32_MAX) return false;
+            const auto pid = static_cast<pid_t>(child);
+            int status = 0;
+            pid_t waited;
+            do { waited = waitpid(pid, &status, WNOHANG | __WALL); } while (waited < 0 && errno == EINTR);
+            if (waited < 0) return false;  // Never signal an unowned/recycled PID.
+            if (waited == pid && (WIFEXITED(status) || WIFSIGNALED(status))) continue;
+            if (kill(pid, SIGKILL) != 0 && errno != ESRCH) return false;
+            do {
+                do { waited = waitpid(pid, &status, __WALL); } while (waited < 0 && errno == EINTR);
+                if (waited != pid) return false;
+            } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+            // Killing an adopted parent may adopt more descendants. Read
+            // the kernel's child list again only after this child is reaped.
+        }
+        if (prctl(PR_SET_CHILD_SUBREAPER, static_cast<long>(previous_), 0L, 0L, 0L) != 0) return false;
+        active_ = false;
+        return true;
+    }
+    int previous_ = 0;
+    bool active_ = false;
+};
 struct Args {
     std::string worker, mode, input, source_name;
     int iterations = 1, warm = 50, timeout_ms = 10000;
@@ -189,6 +251,7 @@ void run(const Args& args) {
     ProcFS proc;
     for (int iter = 0; iter < args.iterations; ++iter) {
         check_interrupt();
+        WorkerDescendants descendants;  // Setup/teardown stays outside cold timing.
         const auto t0 = Clock::now(), startup_deadline = t0 + std::chrono::milliseconds(args.timeout_ms);
         capsid_worker_config config;
         capsid_worker_config_init(&config);
@@ -233,6 +296,7 @@ void run(const Args& args) {
                 std::fprintf(stderr, "pss-attempt "); emit_sample(stderr, sample); std::fputc('\n', stderr);
             }, args.pss_attempts);
         worker.reset();  // Abortive C ABI destroy reaps this child before output.
+        descendants.close();
         check_interrupt();
         const auto& last = samples.back();
         std::printf("{\"round\":%d,\"ok\":true,\"mode\":\"%s\",\"size\":%zu,\"spawn_ms\":%.6f,\"load_ms\":%.6f,"

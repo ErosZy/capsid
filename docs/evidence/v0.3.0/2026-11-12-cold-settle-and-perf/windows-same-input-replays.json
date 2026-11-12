@@ -1,0 +1,40 @@
+{
+  "complete": true,
+  "status": "original-windows-reference-codec-observations-retained",
+  "createdUTC": "2026-11-12T13:09:26.048157+00:00",
+  "sourceSnapshot": "63a3cc1a1ed222c6639be01c8fb41e48c29c6479",
+  "originalCIFailureSHA256": "6928dc132a6e9f876971a6e88ce6d4b78b787a9ed6c8ba96199147b50a4da48a",
+  "sourceAndAssertionsUnchanged": true,
+  "earlierFailureNotReplacedByReplay": true,
+  "diagnosticOnly": true,
+  "steps": [
+    {
+      "attempt": 1,
+      "seconds": 71.06300000002375,
+      "exitCode": 0,
+      "complete": true,
+      "cases": 31,
+      "failures": [],
+      "reportSHA256": "c1c8c799a266a3fd1f2258a657cab8be104af81eeb6004b3c237a77041a2dece"
+    },
+    {
+      "attempt": 2,
+      "seconds": 71.31199999997625,
+      "exitCode": 0,
+      "complete": true,
+      "cases": 31,
+      "failures": [],
+      "reportSHA256": "1ec084e738f7d1d46586e82ceb5f64a312769a53501588759bf3cb66adf56a65"
+    },
+    {
+      "attempt": 3,
+      "seconds": 71.31300000002375,
+      "exitCode": 0,
+      "complete": true,
+      "cases": 31,
+      "failures": [],
+      "reportSHA256": "182765961c6b503999ea100485748244a1c231145f66a48079c82135f1b0f5a5"
+    }
+  ],
+  "fullV030GoalComplete": false
+}

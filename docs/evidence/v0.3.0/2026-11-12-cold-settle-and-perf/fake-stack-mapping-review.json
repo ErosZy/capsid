@@ -1,0 +1,132 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-12T13:30:10.978053+00:00",
+  "diagnosticOnly": true,
+  "actualUnmodifiedWorkerSHA256": "0d2d1ae5116235fc3632c7d820bd69012125f07737becfe85f0a2f8e9f56762b",
+  "actualToolSHA256": "e3ae50d1b22dbbee4294636281417330bcdc4e46976d60ccc5269d86d72318bb",
+  "analyses": [
+    {
+      "label": "default-one-second",
+      "exitCode": 1,
+      "settleMs": 1000,
+      "defaultFakeStack": true,
+      "actualFakeStackRanges": [
+        [
+          140432863358976,
+          140432874930176
+        ],
+        [
+          140432798330880,
+          140432809902080
+        ],
+        [
+          140432786759680,
+          140432798330880
+        ],
+        [
+          140432775188480,
+          140432786759680
+        ],
+        [
+          140432763617280,
+          140432775188480
+        ]
+      ],
+      "firstIdle": {
+        "seconds": 1.0921244570000006,
+        "totalPss": 56867,
+        "fakeStackMappingPss": 6092
+      },
+      "lastIdle": {
+        "seconds": 8.234595762999998,
+        "totalPss": 57631,
+        "fakeStackMappingPss": 6772
+      },
+      "totalPssGrowth": 764,
+      "fakeStackMappingGrowth": 680,
+      "actualPssSamples": [
+        56879,
+        56991,
+        57111,
+        57223,
+        57339,
+        57451,
+        57567,
+        57639
+      ]
+    },
+    {
+      "label": "diagnostic-without-fake-stack",
+      "exitCode": 0,
+      "settleMs": 1000,
+      "defaultFakeStack": false,
+      "actualFakeStackRanges": [],
+      "firstIdle": {
+        "seconds": 1.0916356979999975,
+        "totalPss": 50243,
+        "fakeStackMappingPss": 0
+      },
+      "lastIdle": {
+        "seconds": 3.037287751000001,
+        "totalPss": 50246,
+        "fakeStackMappingPss": 0
+      },
+      "totalPssGrowth": 3,
+      "fakeStackMappingGrowth": 0,
+      "actualPssSamples": [
+        50251,
+        50253,
+        50253
+      ]
+    },
+    {
+      "label": "default-twenty-second",
+      "exitCode": 0,
+      "settleMs": 20000,
+      "defaultFakeStack": true,
+      "actualFakeStackRanges": [
+        [
+          140618236915712,
+          140618248486912
+        ],
+        [
+          140618173984768,
+          140618185555968
+        ],
+        [
+          140618162413568,
+          140618173984768
+        ],
+        [
+          140618150842368,
+          140618162413568
+        ],
+        [
+          140618139271168,
+          140618150842368
+        ]
+      ],
+      "firstIdle": {
+        "seconds": 1.0930186630000023,
+        "totalPss": 57077,
+        "fakeStackMappingPss": 6088
+      },
+      "lastIdle": {
+        "seconds": 21.039677701000002,
+        "totalPss": 57844,
+        "fakeStackMappingPss": 6768
+      },
+      "totalPssGrowth": 767,
+      "fakeStackMappingGrowth": 680,
+      "actualPssSamples": [
+        57851,
+        57851
+      ]
+    }
+  ],
+  "disabledFakeStackControlNotQualification": true,
+  "defaultFakeStackWithTwentySecondSettleProducesStrictEqualSamples": true,
+  "originalEightSamplesAndOneSecondIntervalUnchanged": true,
+  "fullOriginalSevenTestQualificationStillRequired": true,
+  "fullV030GoalComplete": false
+}

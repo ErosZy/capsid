@@ -1,0 +1,52 @@
+{
+  "schema": "capsid-workerd-compatible-release-acceptance-v1",
+  "complete": true,
+  "status": "compatible-with-retained-standard-failures",
+  "standardsConformanceClaimed": false,
+  "ordinarySuitePassed": false,
+  "inputSHA256": {
+    "/mnt/d/capsid-verification-20261108/evidence/v030-final13-production-linux-unfiltered-r1/LastTest.log": "c293e2b71f7801f6f3c4864d2d98bc51e74b4433029a369b9a540d73996fcae3",
+    "/mnt/d/capsid-verification-20261108/evidence/v030-final13-production-linux-unfiltered-r1/junit.xml": "a13c5d510e81ab23fd82a0420c73d8695ddb4302dbd73c5ea43c0d88e335f2d1",
+    "/mnt/d/capsid-verification-20261108/evidence/v030-final13-production-linux-build-r1/inventory.json": "c5240ace2f7e0cd72db5b535b216e1ff4741180961c8d11a40c0205a3b39e927",
+    "/mnt/d/capsid-verification-20261108/evidence/v030-final13-reference-and-release-r1/captured/context.json": "b44b273a00a3f440aa32a255c228b99d0ad52a07d5b85eaf5e5bcd1b9d6bc5db",
+    "/mnt/d/capsid-verification-20261108/evidence/v030-final13-reference-and-release-r1/actual-ctest-exit-code.txt": "aa67a169b0bba217aa0aa88a65346920c84c42447c36ba5f7ea65f422c1fe5d8",
+    "/root/capsid-verification-20261109/source-v030-final13-r1/tests/wpt/workerd-default-profile-v2.json": "fba79b78b76f60b8cfcba5e28f8e48f05e86e1a14fca6b6c9101e6a35d43845e",
+    "/root/capsid-verification-20261109/source-v030-final13-r1/tests/wpt/manifest.json": "b9baf66727b822295c33b7624cd5cb2cd18d2e428123f0cb7f0542d05e3f708f",
+    "/root/capsid-verification-20261109/build-v030-production-final13-r1/capsid-host": "842318e7d80f17bcb4322998fdeb65bb3c16298ef50ec0d3d6d2d04ba706a16e",
+    "/root/capsid-verification-20261109/build-v030-production-final13-r1/capsid-worker": "c2bb4cd56000b4383eccb35631cd993f0fbc0da323d597db9b77257488def59d",
+    "/root/capsid-verification-20261109/source-v030-final13-r1/tools/workerd-wpt-acceptance.mjs": "aa8eda052129cd228a97708767847be8866d1d91c626a565325aef5ae8ca3e3e",
+    "/root/capsid-verification-20261109/source-v030-final13-r1/tools/workerd-wpt-profile-v2.mjs": "6aa1cbd8efaee228bfc805d3e064741602d1b37dac7ff7fe6be786d3fdd09d17"
+  },
+  "rawCTestExitText": "8\n",
+  "rawStepOutcome": "failure",
+  "rawFullSuite": {
+    "selected": 1110,
+    "failed": [
+      "worker_wpt_fetch_api_headers_headers_basic_any_js",
+      "worker_wpt_fetch_api_headers_headers_errors_any_js",
+      "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+      "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+      "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+    ],
+    "skipped": []
+  },
+  "compatibilityQualified": true,
+  "ordinary": {
+    "selected": 1110,
+    "rawCTestExitCode": 8,
+    "rawStepOutcome": "failure",
+    "failed": [
+      "worker_wpt_fetch_api_headers_headers_basic_any_js",
+      "worker_wpt_fetch_api_headers_headers_errors_any_js",
+      "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+      "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+      "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+    ],
+    "skipped": [],
+    "ordinarySuitePassed": false,
+    "requiresPrivilegedSandboxCoverage": false
+  },
+  "profileAudit": "/mnt/d/capsid-verification-20261108/evidence/v030-final13-reference-and-release-r1/profile-audit.json",
+  "profileAuditSHA256": "c4c28eee284013943fa76eeb7e892b6691f946576d36865b7cf3f6a7ab4f161c",
+  "privilegedSandboxAndOtherHostedJobsStillMandatory": true
+}

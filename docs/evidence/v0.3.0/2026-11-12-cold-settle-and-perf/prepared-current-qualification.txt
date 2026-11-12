@@ -1,0 +1,47 @@
+# v0.3.0 当前验收与兼容边界
+
+更新时间：2026-11-12T13:47:52.639275+00:00。**v0.3.0 尚未完成全平台、完整资源及正式性能验收。** 本轮在父候选 `4e469b3` 上审校并准备冷启动测试采样前静置与 CI perf 前提修正。构建生成的身份文件和候选清单确定实际源码；本轮组件通过不代表新源码已完成完整组合。工作区 HEAD 仍为 `8028b88adff26cbc1abcb9a2fafce2ffc3d8090f`，未推送主分支、创建标签或发布。
+
+## 全部要求及当前状态
+
+完整要求、状态和历史引用保存在[原始要求账本](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/requirements.json)和[更新前完整账本](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/goal-ledger-before.json)。下表保留 R1–R9；定向完成项仍须与最终组合对应。
+
+| 要求 | 范围 | 状态 |
+|---|---|---|
+| R1 | 标准字节流部分/未对齐 EOF、零 EOF backing、高 minimum 取消及 36 个延迟组合 | 定向要求完成 |
+| R2 | BigInt limb 边界、转换顺序、分配限制、独立回归及上游来源 | 定向要求完成 |
+| R3 | 真实 native fetch body 参数、released/detached/invalid view、全部 view/构造路径、重试/数据/owner/credit/退出、并发/context/abort/intrinsics | 组合验收进行中 |
+| R4 | 真实非零 C ABI response-body 限额经 Upgrade，known/unknown 长度及 below/equal/above、Default/BYOB、取消与回收 | 定向要求完成 |
+| R5 | 普通 fetch 元数据及 tee/clone/values/pipe 分支、资源与 reader 取消归属图 | 组合验收进行中 |
+| R6 | DefaultReader 精确 chunk 序列/时序、额度控制、Linux rich-JSON invalid IPC frame 根因 | 组合验收进行中 |
+| R7 | 历史 15 个失败组合、真实跳过前提、原始失败与 WPT/profile 证据 | 组合验收进行中 |
+| R8 | 干净 Debug/Release/Linux LTO/CI、依赖 instrumentation、fuzz、持续运行、正式性能/密度及四视口 | 尚未完成 |
+| R9 | 完成 R1–R8、冻结完整候选并执行最终组合接受；发布仍需授权 | 尚未完成 |
+
+## 本轮已验证修正
+
+冷启动工具在公开 C ABI 回收直接 worker 后，再回收自身收养的后代，成功样本须在清理完成后输出。真实 fork/clone 包装器随后 exec 原生 worker，覆盖 SIGINT、SIGTERM、正常输出、错误响应和超时。原断言继续在外围夹具清理之前检查整树。GCC ASan、Clang ASan/UBSan、Release 各通过原 7 项及全部 10 个后代场景，旧实现各被 10 个断言拒绝；新增两项正常场景各自保留 30 秒测试预算。
+
+Clang 空闲 PSS 的映射对照中，默认一秒静置期间总增量 764 KiB，其中 680 KiB 落在 FakeStack 映射。同一 worker 保留默认 instrumentation、静置 20 秒后取得两次相等正 PSS。因此只为 Clang ASan 功能测试配置 20 秒采样前静置；原 100 秒 CTest、两次完全相等、最多 8 次采样、采样间隔及取消期限保留。Clang 原 7 项实际 65.7 秒，两项正常后代各 21.4 秒。关闭 FakeStack 的诊断对照不计验收，生产 cold 默认参数和正式测量协议保持原值。
+
+三种构建的 4 个 CTest 均通过。临时 CI 的后置收集器因 unittest 进度点与 JSON 行交错而失败；原失败记录保留，独立复核恢复全部 10 行及正负控制，没有重写原结果。[三个构建审计](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/cold-three-profile-review.json)和[原始内存映射对照](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/fake-stack-mapping-review.json)可复核。
+
+真实 Ubuntu runner 上安装并选择实际 perf，四个软件计数器探测通过；构建真实 Host/worker 后，原 A/B 证据控制在原 600 秒预算内输出 PASS。CI 复用该已执行的 helper，完整 sanitizer 矩阵另保存原始场景 sidecar，测试选择和单项时限不变。这不是产品性能点。[实际 perf 前提](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/actual-perf-prerequisite.json)、[控制输出](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/actual-perf-controls.stdout.log)和[真实程序摘要](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/actual-perf-identity-fixtures.sha256)保留。
+
+## 完整结果与未通过项
+
+下列完整结果属于父源码 `63a3cc1`，不替代本轮新组合：Linux Release/LTO 完整 ALL 通过；未过滤 1110 项为 1105 通过、0 跳过、5 项原 WPT 差异。同源严格 workerd 171 项全部通过并取得版本化兼容接受，原 5 项差异与 4 项超时保留，ordinarySuitePassed 和 standardsConformanceClaimed 仍为 false。[完整接受记录](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/parent-linux-compatibility-acceptance.json)保留输入绑定。
+
+父源码 UBSan 为 1009 通过、0 失败、5 个原声明跳过；9 项 fuzz、7×10000=70000 次及 27 个相关编译单元已审计。Alpine 3.24 原 Docker 发布配方的 9 项原生/包消费测试通过，3 个归档程序独立解析 ELF 后均无解释器或共享库依赖；这不等于完整 musl 全量或参考接受。完整原始归档及 SHA256 仍在此前日期目录和工作区保存，[此前完整审校历史](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/qualification-before.md)逐字节归档。
+
+父源码 ASan 1015 项中 1008 通过、1 失败、6 跳过，失败为取消冷启动后的僵尸后代；本轮已独立修正，尚需新组合完整验证。TSan 1003 项中 994 通过、3 失败、6 跳过，失败为 native_fetch_large_gzip 的辅助状态观测及 managed 的 native-reader-lifecycle、reader-scope 完整采集/清理；[TSan 原始审计](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/parent-tsan-review.json)未改写。另一个保留原源码、依赖构建、测试与时限的任务正在补采三项完整 sidecar。
+
+Windows 原 workerd 134 项为 133 通过、1 失败、0 跳过，失败发生在 pinned workerd 的 codec-supp-fragment-crc-late 源 EOF 观测。同输入、同二进制的 3 次复查各 31 场景通过，未当作修复；[逐次记录](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/windows-same-input-replays.json)保留。macOS 父候选 fa40606 曾完成 758 项、747 通过、11 个原声明跳过；63a3cc1 的本轮构建通过，临时采集器误调用 Ninja 导致测试未启动，已另行修正采集方式，原生成器与测试预算保留，等待真实完整结果。
+
+## 剩余执行与正式协议
+
+保留实际运行中的父源码完整 Clang ASan/UBSan 与随后 TSan 诊断，不把旧二进制结果归为新候选。必须先解决上述 TSan 和 Windows 原参考失败，并完成当前源码原生平台、依赖 instrumentation、资源回收、时序、ABI/旧接口、分配故障及 1800 秒持续运行，再取得最终组合接受。
+
+正式测量仍需同一安静会话的候选、v0.2.2 和 pinned workerd 对照及全部原始输入/输出。QPS 保持 64 并发；cold 保留原尺寸、轮次和 warm 50；密度保留 2048 MiB、全部后代 PSS、两次相等正读数与退出证据。已批准按池规模扩大密度预热并发，逐 worker 验证冷至少 1 次、热至少 100 次后采样，生产调度不变。[父候选三条正式命令输入核对](evidence/v0.3.0/2026-11-12-cold-settle-and-perf/parent-formal-input-plan.json)属于准备，正式性能点仍为 0。
+
+1280/960/820/600 四视口已有历史真实截图，正式数据载入后须再次验收。全部 R1–R9 完成并与同一个最终候选绑定后才能宣布版本完成；不自动发布。

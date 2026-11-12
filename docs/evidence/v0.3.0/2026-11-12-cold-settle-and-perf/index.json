@@ -1,0 +1,22 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-12T13:47:52.639275+00:00",
+  "historicalDocumentSHA256": "f06a63ca4cb62ce9462a16f4864de8e2d89bbde68bb11a5e5dee58015a1e6014",
+  "files": {
+    "actual-perf-controls.stdout.log": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+    "actual-perf-identity-fixtures.sha256": "d8c05a51bda4d29664d1b7709ab46aebdca0b021e6ba3e8222e2a778a2b2c8ac",
+    "actual-perf-prerequisite.json": "14f445817954e9d83e607dc331a6e393c2f51a058396d125e032d73c46e4fe51",
+    "cold-three-profile-review.json": "6f1f3bf6b9d61df1daeed136f0c611fb11690a15e5e211176bbc63ee1b62624b",
+    "fake-stack-mapping-review.json": "c02c75ad299427fffa9c188b52a97c4b831aaae83ae1e3cc6ff00a7b468ef366",
+    "goal-ledger-before.json": "7f3a35b2759bd8651ac533a3e7ec16ff729e66a2309d40dde69cae2965492f0a",
+    "parent-formal-input-plan.json": "0c848d003d3808720c50f2374aca87234ed61e7d05722e37281367995d62dae3",
+    "parent-linux-compatibility-acceptance.json": "2306e630a538a4d2431a4c4e3f214a5e6c7ca7fd7c26e279350a6d54c6e789fe",
+    "parent-tsan-review.json": "16f2d64162c0f3c6694c03d6e7c29de1c0f878eed6b526ebbf8e2aca6c8cf273",
+    "qualification-before.md": "f06a63ca4cb62ce9462a16f4864de8e2d89bbde68bb11a5e5dee58015a1e6014",
+    "requirements.json": "682d9064dd8debb0dd5efd8fae9202fd512e5cd94101905d36c595ca425dced7",
+    "windows-same-input-replays.json": "37fea4f19c01cf1d6cc1b3666806478a8564694956f88ff86e908ee4031693cc",
+    "prepared-current-qualification.txt": "be489cd664e0cfd1cb9ee7b97b376b7241d85a4237c81f0d38600865dbeffb6d"
+  },
+  "fullV030GoalComplete": false,
+  "note": "Compact closed current-state evidence. Complete historical source text is byte-preserved; prior raw artifacts remain in their original dated directories and retained workspace."
+}

@@ -13,5 +13,9 @@
 /tests/fixtures/*.mjs -text
 /tests/fixtures/workerd-ws/*.mjs -text
 
+# Captured evidence and byte-preserved qualification archives bind raw SHA256.
+# Keep every dated artifact's bytes intact on native Windows checkouts.
+/docs/evidence/** -text
+
 # Retained benchmark CSV files use the csv module's RFC-style CRLF records.
 /bench/results/**/*.csv -whitespace

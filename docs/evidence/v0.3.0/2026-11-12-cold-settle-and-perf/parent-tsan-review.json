@@ -1,0 +1,27 @@
+{
+  "complete": true,
+  "status": "current-selected-tsan-matrix-failed",
+  "snapshot": "63a3cc1a1ed222c6639be01c8fb41e48c29c6479",
+  "run": 43211057022,
+  "job": 131158474322,
+  "selected": 1003,
+  "passed": 994,
+  "failures": [
+    "native_fetch_large_gzip",
+    "websocket_native_reader_lifecycle_managed",
+    "websocket_reader_scope_managed"
+  ],
+  "skipped": [
+    "host_managed_executable_active_state_foreign_owner",
+    "host_managed_recovery_rejects_oversized_snapshot",
+    "host_single_worker_ab_emits_complete_evidence",
+    "worker_sandbox_namespaces",
+    "worker_sandbox_cgroup_v2",
+    "worker_sandbox_network_namespace"
+  ],
+  "junitSHA256": "a3540e7d894629a5dba6be9b91a650b4235f4b020a79db88100e89792a788d4b",
+  "artifactSHA256": "9666cc20f06c3fdbcf3542e1ccc73e4aa460ded5434b60e8177ffc37c39b49a6",
+  "originalFullResultNotWaived": true,
+  "ordinarySelectedMatrixAccepted": false,
+  "fullV030GoalComplete": false
+}

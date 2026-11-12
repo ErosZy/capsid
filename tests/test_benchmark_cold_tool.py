@@ -17,6 +17,7 @@ import unittest
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('--tool', type=Path)
 parser.add_argument('--worker', type=Path)
+parser.add_argument('--settle-ms', type=int, default=1000)
 parser.add_argument('--runtime', type=Path, default=Path(__file__).resolve().parents[1] / 'bench/measurement_runtime.py')
 args, remaining = parser.parse_known_args()
 spec = importlib.util.spec_from_file_location('cold_test_process_owner', args.runtime)
@@ -45,7 +46,7 @@ class ColdToolTests(unittest.TestCase):
         self.addCleanup(stderr.close)
         return runtime.OwnedProcess([str(args.tool), '--worker', str(args.worker),
             '--mode', 'source', '--input', str(app), '--source-name', app.as_uri(),
-            '--strict', '--warm', '2', *extra], stdout=stdout, stderr=stderr)
+            '--strict', '--warm', '2', '--settle-ms', str(args.settle_ms), *extra], stdout=stdout, stderr=stderr)
 
     def finish(self, owned, deadline=20):
         end = time.monotonic() + deadline
@@ -76,7 +77,9 @@ class ColdToolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='capsid-cold-valid-') as folder:
             with self.launch(Path(folder), source, '--iterations', '2') as owned:
                 controller_pid = owned.root.pid
-                code, rows = self.finish(owned)
+                # Account only for the configured pre-sampling settle in
+                # each iteration. Request deadlines and CTest's 100s stay.
+                code, rows = self.finish(owned, deadline=20 + 2 * max(0, args.settle_ms - 1000) / 1000)
                 self.assertEqual(0, code, self.err.read_text())
                 self.assertEqual([1, 2], [r['round'] for r in rows])
                 for row in rows:
@@ -123,7 +126,7 @@ class ColdToolTests(unittest.TestCase):
                 else:
                     with tempfile.TemporaryDirectory(prefix='capsid-cold-stream-') as folder:
                         with self.launch(Path(folder), source) as owned:
-                            code, rows = self.finish(owned)
+                            code, rows = self.finish(owned, deadline=20 + max(0, args.settle_ms - 1000) / 1000)
                             self.assertEqual(0, code, self.err.read_text())
                             self.assertEqual(1, len(rows))
                             self.assertEqual(3, rows[0]['correctness']['responses_checked'])

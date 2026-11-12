@@ -64,6 +64,12 @@ if(BUILD_TESTING)
     set_tests_properties(benchmark_cold_measurement PROPERTIES
         LABELS "benchmark;measurement" TIMEOUT 10)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CAPSID_BUILD_WORKER)
+        add_executable(test-cold-worker-descendant tests/helpers/cold_worker_descendant.cc)
+        set_target_properties(test-cold-worker-descendant PROPERTIES
+            CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+        if(CAPSID_STRICT_WARNINGS)
+            target_compile_options(test-cold-worker-descendant PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        endif()
         add_executable(benchmark-cold-start bench/cold-start.cc)
         target_link_libraries(benchmark-cold-start PRIVATE capsid_runtime)
         set_target_properties(benchmark-cold-start PROPERTIES
@@ -3121,13 +3127,47 @@ if(BUILD_TESTING)
                         LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 90)
                 endif()
                 if(TARGET benchmark-cold-start)
+                    # Actual /proc mapping controls show Clang ASan's default
+                    # FakeStack pages settle after the one-second window.
+                    # Keep that instrumentation and the strict PSS predicate;
+                    # wait before sampling, outside the cold timing region.
+                    set(CAPSID_COLD_TEST_SETTLE_ARGS)
+                    if(CAPSID_ENABLE_ASAN AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+                        list(APPEND CAPSID_COLD_TEST_SETTLE_ARGS --settle-ms 20000)
+                    endif()
                     add_test(NAME benchmark_cold_tool
                         COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
                             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_tool.py"
                             --tool "$<TARGET_FILE:benchmark-cold-start>"
-                            --worker "$<TARGET_FILE:capsid-worker>")
+                            --worker "$<TARGET_FILE:capsid-worker>"
+                            ${CAPSID_COLD_TEST_SETTLE_ARGS})
                     set_tests_properties(benchmark_cold_tool PROPERTIES
                         LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 100)
+                    add_test(NAME benchmark_cold_descendants
+                        COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_descendants.py"
+                            --tool "$<TARGET_FILE:benchmark-cold-start>"
+                            --worker "$<TARGET_FILE:capsid-worker>"
+                            --descendant-helper "$<TARGET_FILE:test-cold-worker-descendant>"
+                            ${CAPSID_COLD_TEST_SETTLE_ARGS}
+                            DescendantTests.test_cancel_reaps_both_kinds_of_real_descendant
+                            DescendantTests.test_wrong_response_reaps_descendant_without_sample
+                            DescendantTests.test_timeout_reaps_descendant_without_sample)
+                    set_tests_properties(benchmark_cold_descendants PROPERTIES
+                        LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 30)
+                    foreach(CAPSID_COLD_DESCENDANT_MODE fork clone)
+                        add_test(NAME "benchmark_cold_descendant_sample_${CAPSID_COLD_DESCENDANT_MODE}"
+                            COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_cold_descendants.py"
+                                --tool "$<TARGET_FILE:benchmark-cold-start>"
+                                --worker "$<TARGET_FILE:capsid-worker>"
+                                --descendant-helper "$<TARGET_FILE:test-cold-worker-descendant>"
+                                --descendant-mode "${CAPSID_COLD_DESCENDANT_MODE}"
+                                ${CAPSID_COLD_TEST_SETTLE_ARGS}
+                                DescendantTests.test_normal_sample_includes_descendant_and_reaps_it_before_output)
+                        set_tests_properties("benchmark_cold_descendant_sample_${CAPSID_COLD_DESCENDANT_MODE}" PROPERTIES
+                            LABELS "host;benchmark;measurement;lifecycle" TIMEOUT 30)
+                    endforeach()
                 endif()
                 add_test(
                     NAME benchmark_fake_worker_lifecycle
