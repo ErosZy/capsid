@@ -4680,6 +4680,11 @@ if(BUILD_TESTING)
             set_tests_properties(native_provider_patch_controls PROPERTIES
                 TIMEOUT 20 LABELS "build;dependency;sanitizer;contract")
         endif()
+        add_test(NAME documentation_archive_contract_controls
+            COMMAND "${CAPSID_NODE_EXECUTABLE}" --test
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_documentation_archive.mjs")
+        set_tests_properties(documentation_archive_contract_controls PROPERTIES
+            TIMEOUT 20 LABELS "documentation;audit;contract")
         add_test(
             NAME current_documentation_audit
             COMMAND "${CAPSID_NODE_EXECUTABLE}"
