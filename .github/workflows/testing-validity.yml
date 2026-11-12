@@ -1,12 +1,7 @@
-name: Testing validity
+name: Complete final reset and density protocol candidate validation
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-  workflow_call:
 
 permissions:
   contents: read
@@ -24,6 +19,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 06562c017355c2c98d8442a60e933b3b7ce5d1ca
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -164,6 +160,11 @@ jobs:
       - name: Build
         run: cmake --build build-validity --parallel 2
 
+      - name: Preserve complete production build and registration identities
+        run: |
+          ninja -C build-validity -t commands > build-validity/full-build-commands.txt
+          ctest --test-dir build-validity --show-only=json-v1 > build-validity/full-registration.json
+
       - name: Require complete workerd WebSocket comparison
         run: |
           node tools/run-workerd-ws-gate.mjs \
@@ -171,6 +172,8 @@ jobs:
 
       - name: Run the complete ordinary-host matrix
         id: ordinary_host
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-validity/ordinary-driver-reports
         # The raw step retains its failure outcome and exit code. The next
         # mandatory acceptance step permits only the exact locked profile.
         continue-on-error: true
@@ -309,6 +312,24 @@ jobs:
             sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256
           fi
 
+      - name: Archive complete ordinary driver reports
+        if: always()
+        env:
+          REPORT_DIRECTORY: ${{ github.workspace }}/build-validity/ordinary-driver-reports
+          RAW_ARCHIVE: build-validity/ordinary-driver-reports.tar.gz
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,tarfile
+          report=Path(os.environ['REPORT_DIRECTORY']);archive=Path(os.environ['RAW_ARCHIVE'])
+          archive.parent.mkdir(parents=True,exist_ok=True)
+          with tarfile.open(archive,'w:gz',dereference=False) as output:
+              if report.exists():output.add(report,arcname='raw-driver-reports')
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
+          print(json.dumps(dict(sourceExists=report.exists(),archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))
+          PY
+
       - name: Save hosted Release evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -318,6 +339,13 @@ jobs:
           path: |
             build-validity/ordinary-host-junit.xml
             build-validity/ordinary-host-registration.json
+            build-validity/full-registration.json
+            build-validity/full-build-commands.txt
+            build-validity/CMakeCache.txt
+            build-validity/compile_commands.json
+            build-validity/generated/build-info.txt
+            build-validity/ordinary-driver-reports.tar.gz
+            build-validity/ordinary-driver-reports.tar.gz.sha256
             build-validity/ordinary-host-exit-code.txt
             build-validity/workerd-wpt-profile-evidence/
             build-validity/workerd-ws-evidence.tar.gz
@@ -374,6 +402,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 06562c017355c2c98d8442a60e933b3b7ce5d1ca
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -524,6 +553,12 @@ jobs:
         run: |
           cmake --build "build-${{ matrix.name }}" --parallel 2
 
+      - name: Preserve complete instrumented build and registration identities
+        run: |
+          ninja -C "build-${{ matrix.name }}" -t commands > "build-${{ matrix.name }}/full-build-commands.txt"
+          ctest --test-dir "build-${{ matrix.name }}" --show-only=json-v1 > "build-${{ matrix.name }}/full-registration.json"
+          ctest --test-dir "build-${{ matrix.name }}" --show-only=json-v1 -E '${{ matrix.ctest_exclude }}' > "build-${{ matrix.name }}/selected-registration.json"
+
       - name: Record original ASan RSS results
         id: asan_rss_raw
         if: matrix.name == 'asan'
@@ -635,6 +670,12 @@ jobs:
           if-no-files-found: error
           path: |
             build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
+            build-${{ matrix.name }}/CMakeCache.txt
+            build-${{ matrix.name }}/compile_commands.json
+            build-${{ matrix.name }}/full-build-commands.txt
+            build-${{ matrix.name }}/full-registration.json
+            build-${{ matrix.name }}/selected-registration.json
+            build-${{ matrix.name }}/generated/build-info.txt
             build-${{ matrix.name }}/matrix-case-reports.tar.gz
             build-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256
             build-${{ matrix.name }}/Testing/Temporary/LastTest.log
@@ -657,6 +698,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 06562c017355c2c98d8442a60e933b3b7ce5d1ca
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -683,6 +725,11 @@ jobs:
       - name: Build fuzz harnesses
         run: cmake --build build-fuzz --parallel 2
 
+      - name: Preserve complete fuzz build and registration identities
+        run: |
+          ninja -C build-fuzz -t commands > build-fuzz/full-build-commands.txt
+          ctest --test-dir build-fuzz --show-only=json-v1 -L fuzz > build-fuzz/full-registration.json
+
       - name: Run bounded corpus gates
         run: |
           ctest --test-dir build-fuzz \
@@ -697,7 +744,14 @@ jobs:
         with:
           name: fuzz-hosted-evidence
           if-no-files-found: error
-          path: build-fuzz/fuzz-junit.xml
+          path: |
+            build-fuzz/fuzz-junit.xml
+            build-fuzz/Testing/Temporary/LastTest.log
+            build-fuzz/CMakeCache.txt
+            build-fuzz/compile_commands.json
+            build-fuzz/full-build-commands.txt
+            build-fuzz/full-registration.json
+            build-fuzz/generated/build-info.txt
 
   posix-host-library:
     runs-on: macos-15
@@ -707,6 +761,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 06562c017355c2c98d8442a60e933b3b7ce5d1ca
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -817,13 +872,47 @@ jobs:
             test-host-admin-http \
             test-host-admin-service
 
+      - name: Preserve complete native macOS build and registration identities
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          build=Path('build-macos');cache=(build/'CMakeCache.txt').read_text()
+          assert 'CMAKE_GENERATOR:INTERNAL=Unix Makefiles' in cache
+          commands=json.loads((build/'compile_commands.json').read_text());assert commands
+          links=[dict(file=str(p.relative_to(build)),command=p.read_text()) for p in sorted(build.rglob('link.txt'))]
+          assert links
+          (build/'full-build-commands.txt').write_text(json.dumps(dict(generator='Unix Makefiles',actualCompileDatabase=commands,generatedLinkCommands=links),indent=2)+'\n')
+          PY
+          ctest --test-dir build-macos --show-only=json-v1 -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$' > build-macos/full-registration.json
+
       - name: Run POSIX host-side matrix
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-full-driver-reports
         run: |
           ctest --test-dir build-macos \
             --no-tests=error \
             --output-on-failure \
             --output-junit macos-junit.xml \
             -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
+
+      - name: Archive all native macOS driver reports
+        if: always()
+        env:
+          REPORT_DIRECTORY: ${{ runner.temp }}/capsid-full-driver-reports
+          RAW_ARCHIVE: native-raw-archive/macos-driver-reports.tar.gz
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,tarfile
+          report=Path(os.environ['REPORT_DIRECTORY']);archive=Path(os.environ['RAW_ARCHIVE'])
+          archive.parent.mkdir(parents=True,exist_ok=True)
+          with tarfile.open(archive,'w:gz',dereference=False) as output:
+              if report.exists():output.add(report,arcname='raw-driver-reports')
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
+          print(json.dumps(dict(sourceExists=report.exists(),archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))
+          PY
 
       - name: Save macOS evidence
         if: always()
@@ -835,6 +924,12 @@ jobs:
             build-macos/macos-junit.xml
             build-macos/Testing/Temporary/LastTest.log
             build-macos/CMakeCache.txt
+            build-macos/compile_commands.json
+            build-macos/full-build-commands.txt
+            build-macos/full-registration.json
+            build-macos/generated/build-info.txt
+            native-raw-archive/macos-driver-reports.tar.gz
+            native-raw-archive/macos-driver-reports.tar.gz.sha256
 
   windows-host-library:
     runs-on: windows-latest
@@ -846,6 +941,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: 06562c017355c2c98d8442a60e933b3b7ce5d1ca
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -988,6 +1084,15 @@ jobs:
             exit 1
           }
 
+      - name: Preserve complete native Windows build and registration identities
+        shell: pwsh
+        run: |
+          ninja -C build-windows -t commands | Out-File -FilePath build-windows/full-build-commands.txt -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-windows --show-only=json-v1 -E '^wpt_conformance_not_configured$' |
+            Out-File -FilePath build-windows/full-registration.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run the native Windows workerd compatibility gate
         shell: pwsh
         run: |
@@ -995,6 +1100,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run Windows host-side matrix
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ runner.temp }}/capsid-full-driver-reports
         run: |
           $evidence_root = (Resolve-Path build-windows).Path
           $ctest_log = Join-Path $evidence_root 'ctest.log'
@@ -1024,6 +1131,11 @@ jobs:
           if-no-files-found: error
           path: |
             build-windows/windows-junit.xml
+            build-windows/full-registration.json
+            build-windows/full-build-commands.txt
+            build-windows/build.log
+            build-windows/generated/build-info.txt
+            ${{ runner.temp }}/capsid-full-driver-reports/
             build-windows/ctest.log
             build-windows/Testing/Temporary/LastTest.log
             build-windows/workerd-compatibility/
