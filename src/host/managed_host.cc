@@ -51,12 +51,11 @@ namespace {
 
 constexpr const char* kCompleteMarker = "COMPLETE";
 
-// File-descriptor slots are process-wide and can be reused the instant a
-// close lands. The deploy thread closes its state-root fd while the worker
-// supervisor concurrently opens/reads health-check files beneath the same
-// root; without a common serialization point those two operations can race
-// on one fd slot (TSan: close vs fstat on the reused descriptor). All
-// state-root closes and bounded reads therefore take this mutex.
+// Keep state-directory verification, temporary directory closes, bounded
+// file reads, and terminal state descriptor closes in one synchronization
+// domain. Each returned descriptor remains exclusively owned by its caller.
+// These helpers hold the mutex only for bounded filesystem operations;
+// worker startup, activation, and request handling never wait under it.
 std::mutex g_managed_fd_mutex;
 
 void close_managed_state_fd(int fd) {
@@ -212,6 +211,7 @@ bool make_dir_at(int dir_fd, const char* name) {
 // directory fails the walk instead of redirecting subsequent I/O. The
 // caller owns the returned fd.
 int prepare_subdir_at(int parent_fd, const char* name) {
+    std::lock_guard<std::mutex> fd_guard(g_managed_fd_mutex);
     if (!make_dir_at(parent_fd, name)) {
         return -1;
     }
@@ -232,6 +232,7 @@ int prepare_subdir_at(int parent_fd, const char* name) {
 // Same verification for a subdirectory that must already exist (never
 // created here): O_NOFOLLOW open, directory, Host-owned, mode 0700.
 int open_verified_subdir(int parent_fd, const char* name) {
+    std::lock_guard<std::mutex> fd_guard(g_managed_fd_mutex);
     const int fd = openat(parent_fd, name,
                           O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (fd < 0) {
@@ -1045,6 +1046,7 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
 // to the returned fd, so stateRoot cannot be swapped between a path-based
 // open and the state I/O that follows (TOCTOU). The caller owns the fd.
 int open_verified_state_root(const std::string& state_root) {
+    std::lock_guard<std::mutex> fd_guard(g_managed_fd_mutex);
     const int state_fd =
         open(state_root.c_str(),
              O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
@@ -1054,7 +1056,7 @@ int open_verified_state_root(const std::string& state_root) {
     struct stat st = {};
     if (fstat(state_fd, &st) != 0 || !S_ISDIR(st.st_mode) ||
         st.st_uid != geteuid() || (st.st_mode & 0077) != 0) {
-        close_managed_state_fd(state_fd);
+        close(state_fd);
         return -1;
     }
     return state_fd;
@@ -1068,6 +1070,7 @@ int open_verified_state_root(const std::string& state_root) {
 // App state at all.
 int open_verified_app_state_dir(int state_fd, const std::string& application,
                                 bool create) {
+    std::lock_guard<std::mutex> fd_guard(g_managed_fd_mutex);
     int apps_fd = openat(state_fd, "apps",
                          O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (apps_fd < 0 && create && errno == ENOENT &&
