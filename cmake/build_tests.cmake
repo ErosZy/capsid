@@ -4406,6 +4406,8 @@ if(BUILD_TESTING)
             src/host/ws_stream.cc
             src/protocol.cc
         )
+        # Keep full fuzz/ASan/UBSan instrumentation and every existing gate.
+        target_compile_options(fuzz-websocket-frames PRIVATE -O2)
         # Compile every exercised project source with fuzzer/ASan/UBSan flags.
         # OpenSSL is only an independent digest oracle. Do not substitute
         # an ordinary, uninstrumented capsid_host_core archive here.
