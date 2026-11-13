@@ -42,6 +42,39 @@ async function admin(socketPath, target, body, method=body?'POST':'GET') {
         request.setTimeout(5000,()=>request.destroy(new Error(`admin request deadline: ${target}`)));
     });
 }
+// bind() publishes the pathname before listen() accepts connections. Probe
+// only this startup condition under the original absolute deadline; deployment
+// and operation requests below remain one-shot, including ECONNREFUSED.
+async function waitForAdminListener(child,socketPath,deadline,stderr) {
+    for(;;) {
+        assert.ok(Date.now()<deadline&&child.exitCode===null&&child.signalCode===null,
+            `admin startup: ${stderr()}`);
+        try {
+            await new Promise((resolve,reject)=>{
+                const socket=net.createConnection({path:socketPath});
+                let settled=false;
+                const finish=error=>{
+                    if(settled)return;
+                    settled=true;clearTimeout(timer);
+                    child.removeListener('exit',exited);child.removeListener('error',failed);
+                    socket.destroy();
+                    if(error)reject(error);else resolve();
+                };
+                const exited=()=>finish(new Error(`admin startup: host exited: ${stderr()}`));
+                const failed=error=>finish(new Error('admin startup: host spawn failed',{cause:error}));
+                const timer=setTimeout(()=>finish(new Error('admin listener startup deadline')),
+                    Math.max(1,deadline-Date.now()));
+                socket.once('connect',()=>finish());socket.once('error',finish);
+                child.once('exit',exited);child.once('error',failed);
+                if(child.exitCode!==null||child.signalCode!==null)exited();
+            });
+            return;
+        } catch(error) {
+            if(!['ENOENT','ECONNREFUSED'].includes(error.code))throw error;
+            await delay(Math.min(25,Math.max(0,deadline-Date.now())));
+        }
+    }
+}
 async function unusedPort() {
     const listener=net.createServer();
     await new Promise((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',resolve);});
@@ -101,7 +134,7 @@ export async function startCapsid(host,worker,bundle,dir,mode='single-worker',op
     try {
         if(mode==='managed') {
             const deadline=Date.now()+20000;
-            while(!fs.existsSync(socketPath)) {assert.ok(Date.now()<deadline && child.exitCode===null && child.signalCode===null,`admin startup: ${stderr}`);await delay(25);}
+            await waitForAdminListener(child,socketPath,deadline,()=>stderr);
             const deploy=await admin(socketPath,'/v1/deploy',{app:'orders',version:'v1'});
             assert.equal(deploy.status,202,JSON.stringify(deploy.json));
             for(;;) {

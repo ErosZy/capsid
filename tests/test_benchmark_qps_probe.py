@@ -10,7 +10,9 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -23,6 +25,7 @@ parser.add_argument('--bad-after-ready',action='store_true');parser.add_argument
 args,remaining=parser.parse_known_args();sys.argv[1:]=remaining
 sys.path.insert(0,str(args.probe.resolve().parent))
 from qps_probe import QpsProbe
+from density_probe import DensityProbe, admin_request
 from measurement_runtime import ProcFS,PortAllocator,OwnedProcess,OwnedGroup,ProbeError
 from qps_control import checked_memory_pair
 
@@ -78,6 +81,85 @@ def wait_for(condition,timeout=20):
         if time.monotonic()>=deadline:return False
         time.sleep(.01)
     return True
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'owned benchmark probes require Linux')
+class AdminReadinessTests(unittest.TestCase):
+    """Real Unix bind/listen boundaries, not performance or synthetic lane data."""
+    def exercise(self, kind, refuse_post=False):
+        import socketserver
+        with tempfile.TemporaryDirectory(prefix='capsid-admin-probe-') as temp:
+            folder=Path(temp);(folder/'run').mkdir()
+            address=folder/'run/admin.sock';requests=[];threads=[]
+            class Handler(http.server.BaseHTTPRequestHandler):
+                protocol_version='HTTP/1.1'
+                def log_message(self,*_):pass
+                def do_POST(self):self.reply()
+                def do_GET(self):self.reply()
+                def reply(self):
+                    self.rfile.read(int(self.headers.get('Content-Length','0')))
+                    requests.append((self.command,self.path))
+                    body=b'{"operationId":"one"}' if self.command=='POST' else b'{"active":true}'
+                    self.send_response(202 if self.command=='POST' else 200)
+                    self.send_header('Content-Length',str(len(body)))
+                    self.send_header('Connection','close');self.end_headers();self.wfile.write(body)
+            server=socketserver.UnixStreamServer(str(address),Handler,bind_and_activate=False)
+            server.server_bind()
+            refused=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            refused.bind(str(folder/'run/refuse.sock'))
+            real_socket=socket.socket;refusals=[]
+            def activate():
+                server.server_activate()
+                thread=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.01},daemon=True)
+                thread.start();threads.append(thread)
+            class ObservedSocket(real_socket):
+                def connect(self,target):
+                    try:return super().connect(target)
+                    except ConnectionRefusedError:
+                        if str(target)==str(address) and not threads:
+                            refusals.append(target);activate()
+                        raise
+            tree=SimpleNamespace(alive=lambda:True,discover=lambda:[object(),object()],listeners_owned=lambda ports:True)
+            if kind=='qps':
+                adapter=QpsProbe(binaries={},apps=folder,out=folder,cpuset='0',workloads=['stream'])
+                invoke=lambda:adapter.wait_ready(None,[('host','worker',tree,[41000])],folder,'capsid',41000)
+                module='qps_probe'
+            else:
+                adapter=DensityProbe(host=Path(sys.executable),worker=Path(sys.executable),workerd=Path(sys.executable),
+                    apps=folder,out=folder,cpuset='0')
+                invoke=lambda:adapter.wait_ready(tree,folder,'capsid',[41000])
+                module='density_probe'
+            posts=[]
+            def business(path,method,route,*values,**options):
+                if method=='POST':
+                    posts.append(route)
+                    if refuse_post and len(posts)==1:path=folder/'run/refuse.sock'
+                return admin_request(path,method,route,*values,**options)
+            try:
+                if refuse_post:activate()
+                with patch('density_probe.socket.socket',ObservedSocket),patch(module+'.admin_request',business),\
+                        patch('qps_probe.exact_request',return_value={'ok':True}):
+                    if refuse_post:
+                        with self.assertRaises(ConnectionRefusedError):invoke()
+                        self.assertEqual(['/v1/deploy'],posts)
+                        self.assertEqual([],requests)
+                    else:
+                        invoke()
+                        self.assertEqual(1,len(refusals),'the actual pre-listen refusal must precede activation')
+                        self.assertEqual(['/v1/deploy'],posts)
+                        self.assertEqual([('POST','/v1/deploy'),('GET','/v1/apps/orders')],requests)
+            finally:
+                if threads:server.shutdown()
+                server.server_close();refused.close()
+                for thread in threads:thread.join(2);self.assertFalse(thread.is_alive())
+
+    def test_readiness_waits_for_listen_not_just_the_bound_file(self):
+        for kind in ('qps','density'):
+            with self.subTest(kind=kind):self.exercise(kind)
+
+    def test_business_connection_refusal_is_never_retried(self):
+        for kind in ('qps','density'):
+            with self.subTest(kind=kind):self.exercise(kind,refuse_post=True)
 
 
 class LaunchConfigurationTests(unittest.TestCase):

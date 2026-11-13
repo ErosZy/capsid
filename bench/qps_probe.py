@@ -11,7 +11,7 @@ import tempfile
 import time
 from urllib.parse import quote
 
-from density_probe import admin_request, write_json
+from density_probe import admin_listener_ready, admin_request, write_json
 from measurement_runtime import OwnedGroup, ProbeError, ProcFS, stable_pss
 from qps_control import checked_round, expected_body
 from perf_evidence import read_json, object_pairs
@@ -124,7 +124,7 @@ class QpsProbe:
                 raise ProbeError('qps-startup', 'serving root exited before readiness')
             if not deployed:
                 admin = folder / 'run/admin.sock'
-                if admin.exists():
+                if admin_listener_ready(admin, deadline):
                     admin_request(admin, 'POST', '/v1/deploy', b'{"app":"orders","version":"v1"}', accepted=(202,))
                     deployed = True
             if deployed:

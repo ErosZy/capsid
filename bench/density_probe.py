@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
+import errno
 import hashlib
 import http.client
 import json
@@ -56,6 +57,22 @@ class UnixHTTP(http.client.HTTPConnection):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         self.sock.connect(self.path)
+
+
+def admin_listener_ready(path, deadline):
+    """A bound pathname is not a listening service; never retry a business RPC."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+            probe.settimeout(min(2, remaining))
+            probe.connect(str(path))
+    except OSError as error:
+        if error.errno in (errno.ENOENT, errno.ECONNREFUSED):
+            return False
+        raise
+    return True
 
 
 def admin_request(path, method, route, body=None, accepted=(200,)):
@@ -190,7 +207,7 @@ class DensityProbe:
                 raise ProbeError("process-exited", "density serving process exited before readiness")
             if stack == "capsid":
                 admin = folder / "run/admin.sock"
-                if admin.exists():
+                if deployed or admin_listener_ready(admin, deadline):
                     if not deployed:
                         admin_request(admin, "POST", "/v1/deploy", b'{"app":"orders","version":"v1"}', accepted=(202,))
                         deployed = True
