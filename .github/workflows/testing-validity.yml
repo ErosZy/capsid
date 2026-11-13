@@ -1,1112 +1,171 @@
-name: Testing validity
-
+name: Private frame optimization comparison with original budgets
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-  workflow_call:
-
 permissions:
   contents: read
-
-concurrency:
-  group: testing-validity-${{ github.ref }}
-  cancel-in-progress: true
-
+  actions: read
 jobs:
-  release-wpt-and-delegated-sandbox:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Set up Deno
-        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
-        with:
-          deno-version: v2.x
-
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          # Hosted probes verified this Ubuntu mirror while the ubuntu.com
-          # domains failed DNS. Preserve suites, components and Signed-By.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic
-          /usr/bin/openssl version
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-
-      - name: Require actual Linux perf counters for evidence controls
-        run: python3 -B tools/setup-hosted-perf.py
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          /usr/bin/python3.12 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Check out the manifest-pinned WPT revision
-        env:
-          WPT_DIRECTORY: ${{ runner.temp }}/wpt
-        run: |
-          set -euo pipefail
-          repository=$(node -p \
-            "require('./tests/wpt/manifest.json').repository")
-          commit=$(node -p \
-            "require('./tests/wpt/manifest.json').commit")
-          git init "${WPT_DIRECTORY}"
-          git -C "${WPT_DIRECTORY}" remote add origin "${repository}"
-          git -C "${WPT_DIRECTORY}" fetch --depth=1 origin "${commit}"
-          git -C "${WPT_DIRECTORY}" checkout --detach FETCH_HEAD
-          test "$(git -C "${WPT_DIRECTORY}" rev-parse HEAD)" = "${commit}"
-
-      # capsid-bytecode-compile and the Host trust chain require OpenSSL
-      # >= 3.5. ubuntu-24.04 supplies 3.0, so the Release build must use the
-      # same pinned provider source as the sanitizer Host build.
-      - name: Build OpenSSL 3.5 for Release
-        run: |
-          set -euo pipefail
-          # Built in the runner temp dir: extracting the tarball inside the
-          # workspace dirties the checkout and trips the Release
-          # clean-worktree identity gate.
-          cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider openssl --source "$PWD" | tee "${evidence}/openssl-source.json"
-          ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm
-          make -j2
-          sudo make install_sw
-
-      - name: Build c-ares 1.34.5 for Release
-        run: |
-          set -euo pipefail
-          cd "${RUNNER_TEMP}"
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          curl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013
-          echo "cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz" | sha256sum -c -
-          tar xzf capsid-cares.tar.gz
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider cares --source "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" | tee "${evidence}/cares-source.json"
-          cmake -S "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" -B "${RUNNER_TEMP}/capsid-cares-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \
-            -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF
-          cmake --build "${RUNNER_TEMP}/capsid-cares-build" --parallel 2 --verbose
-          sudo cmake --install "${RUNNER_TEMP}/capsid-cares-build"
-          cp "${RUNNER_TEMP}/capsid-cares-build/compile_commands.json" "${evidence}/cares-compile-commands.json"
-
-      - name: Configure Release/LTO with WPT and benchmarks
-        env:
-          WPT_DIRECTORY: ${{ runner.temp }}/wpt
-        run: |
-          cmake -S . -B build-validity -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_USE_MIMALLOC=OFF \
-            -DCAPSID_BUILD_BENCHMARKS=ON \
-            -DCAPSID_GENERATE_LINK_MAP=ON \
-            -DCMAKE_PREFIX_PATH=/opt/openssl35 \
-            -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include \
-            -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \
-            -DCAPSID_SANDBOX_PROFILE=production \
-            -DCAPSID_WPT_ROOT="${WPT_DIRECTORY}"
-
-      - name: Build
-        run: cmake --build build-validity --parallel 2
-
-      - name: Require complete workerd WebSocket comparison
-        run: |
-          node tools/run-workerd-ws-gate.mjs \
-            build-validity build-validity/workerd-ws-evidence
-
-      - name: Run the complete ordinary-host matrix
-        id: ordinary_host
-        # The raw step retains its failure outcome and exit code. The next
-        # mandatory acceptance step permits only the exact locked profile.
-        continue-on-error: true
-        run: |
-          rm -f build-validity/ordinary-host-exit-code.txt
-          ctest --test-dir build-validity --no-tests=error --show-only=json-v1 \
-            > build-validity/ordinary-host-registration.json
-          ordinary_ctest_status=0
-          ctest --test-dir build-validity \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit ordinary-host-junit.xml \
-            --parallel 2 || ordinary_ctest_status=$?
-          printf '%s\n' "${ordinary_ctest_status}" > build-validity/ordinary-host-exit-code.txt
-          exit "${ordinary_ctest_status}"
-        # The worker_package_contents / smoke / reproducibility gates run in
-        # this full matrix (spec §12.3/§12.4): the archive is built, the
-        # package smoke consumes it, and a second fresh build must reproduce
-        # the identity and manifest.
-
-      - name: Audit the versioned workerd profile without changing standard results
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          evidence=build-validity/workerd-wpt-profile-evidence
-          mkdir -p "${evidence}"
-          cp build-validity/Testing/Temporary/LastTest.log "${evidence}/ordinary-LastTest.log"
-          cp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
-          cp build-validity/ordinary-host-exit-code.txt "${evidence}/ordinary-exit-code.txt"
-          node tools/run_workerd_wpt_context.mjs \
-            --build build-validity \
-            --registration build-validity/ordinary-host-registration.json \
-            --output "${evidence}/context"
-          node tools/workerd-wpt-acceptance.mjs audit \
-            --ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
-            --ordinary-outcome '${{ steps.ordinary_host.outcome }}' \
-            --last-test "${evidence}/ordinary-LastTest.log" \
-            --junit "${evidence}/ordinary-junit.xml" \
-            --registration build-validity/ordinary-host-registration.json \
-            --gate build-validity/workerd-ws-evidence \
-            --context "${evidence}/context/context.json" \
-            --build build-validity --wpt-root "${RUNNER_TEMP}/wpt" \
-            --output "${evidence}/profile-audit.json" \
-            --acceptance-output "${evidence}/compatibility-acceptance.json"
-
-      # The ordinary matrix runs unprivileged, so the sandbox tests skip
-      # (exit 77: namespaces/cgroups need privileges). Run them again under
-      # root so they execute instead of skipping — cgroup v2 and network
-      # namespace additionally run inside the delegated-sandbox container
-      # below, this step covers the native namespace probe.
-      - name: Run the privileged sandbox matrix
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          # Binding §7.9: a sandbox test that skips (77) under root is a
-          # failure in the Hosted Validity workflow — the delegated
-          # environment must actually execute every profile probe.
-          sudo ctest --test-dir build-validity \
-            --no-tests=error \
-            --output-on-failure \
-            -L sandbox 2>&1 | tee build-validity/sandbox-run.log
-          if grep -q "Skipped" build-validity/sandbox-run.log; then
-            echo "::error::a sandbox test skipped under root; Binding §7.9 "\
-                 "requires every probe to execute"
-            exit 1
-          fi
-
-      - name: Record package evidence (build ID, compatibility ID, package and SBOM hashes)
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          archive=$(ls -t build-validity/capsid-*.tar.gz | head -1)
-          test -f "${archive}"
-          package_sha256=$(sha256sum "${archive}" | awk '{print $1}')
-          build_info=build-validity/generated/build-info.txt
-          build_id=$(sed -n 's/^buildId=//p' "${build_info}")
-          compatibility_id=$(sed -n 's/^compatibilityId=//p' "${build_info}")
-          test -n "${build_id}"
-          test -n "${compatibility_id}"
-          staging=$(mktemp -d)
-          tar xzf "${archive}" -C "${staging}"
-          sbom=$(find "${staging}" -name SBOM.spdx.json -print -quit)
-          test -n "${sbom}"
-          sbom_sha256=$(sha256sum "${sbom}" | awk '{print $1}')
-          {
-            printf 'build_id=%s\n' "${build_id}"
-            printf 'compatibility_id=%s\n' "${compatibility_id}"
-            printf 'package_archive=%s\n' "$(basename "${archive}")"
-            printf 'package_sha256=%s\n' "${package_sha256}"
-            printf 'sbom_sha256=%s\n' "${sbom_sha256}"
-          } > build-validity/package-evidence.txt
-          cat build-validity/package-evidence.txt
-
-      - name: Generate txiki.js upgrade gate report
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          evidence=build-validity/workerd-wpt-profile-evidence
-          cmp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
-          python3 tools/generate-txiki-upgrade-report.py \
-            --source-root . \
-            --build-dir build-validity \
-            --junit "${evidence}/ordinary-junit.xml" \
-            --baseline docs/txiki-upgrade-baseline.json \
-            --node-executable "$(node -p 'process.execPath')" \
-            --workerd-python "${CAPSID_WS_INTEROP_PYTHON}" \
-            --workerd-acceptance "${evidence}/compatibility-acceptance.json" \
-            --workerd-last-test "${evidence}/ordinary-LastTest.log" \
-            --workerd-registration build-validity/ordinary-host-registration.json \
-            --workerd-gate build-validity/workerd-ws-evidence \
-            --workerd-context "${evidence}/context/context.json" \
-            --workerd-wpt-root "${RUNNER_TEMP}/wpt" \
-            --workerd-ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
-            --output-json build-validity/txiki-upgrade-report.json \
-            --output-md build-validity/txiki-upgrade-report.md
-
-      - name: Require delegated cgroup v2 and network namespace passes
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          docker run --rm \
-            --privileged \
-            --cgroupns=private \
-            -e CAPSID_DELEGATED_SANDBOX_CONTAINER=1 \
-            -v "${GITHUB_WORKSPACE}:/repo:ro" \
-            -v "${GITHUB_WORKSPACE}/build-validity:/build:ro" \
-            --entrypoint /bin/bash \
-            ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 \
-            /repo/scripts/run-delegated-sandbox-tests.sh /build
-
-      - name: Archive workerd execution evidence
-        if: always()
-        run: |
-          set -euo pipefail
-          if [ -d build-validity/workerd-ws-evidence ]; then
-            tar -czf build-validity/workerd-ws-evidence.tar.gz -C build-validity workerd-ws-evidence
-            sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256
-          fi
-
-      - name: Save hosted Release evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: release-wpt-hosted-evidence
-          if-no-files-found: error
-          path: |
-            build-validity/ordinary-host-junit.xml
-            build-validity/ordinary-host-registration.json
-            build-validity/ordinary-host-exit-code.txt
-            build-validity/workerd-wpt-profile-evidence/
-            build-validity/workerd-ws-evidence.tar.gz
-            build-validity/workerd-ws-evidence.tar.gz.sha256
-            build-validity/bench/build-metadata.json
-            build-validity/txiki-upgrade-report.json
-            build-validity/txiki-upgrade-report.md
-            build-validity/package-evidence.txt
-            build-perf-prerequisite/evidence/
-            build-validity/generated/build-info.txt
-            build-validity/capsid-*.tar.gz
-            ${{ runner.temp }}/capsid-native-provider-evidence/
-
-  sanitizers:
-    runs-on: ubuntu-24.04
-    # The measured TSan matrix alone takes over 60 minutes, before provider
-    # and product builds. Keep individual CTest timeouts unchanged.
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        # The packaging gates (worker_package_*) are the Release row's
-        # responsibility (§12.5): under sanitizers the instrumented worker
-        # links a dynamic libasan/libtsan, which the package smoke's
-        # undeclared-dependency scan would reject, and the §12.3 second
-        # fresh build would duplicate a full sanitizer build.
-        include:
-          - name: asan
-            cmake_flag: CAPSID_ENABLE_ASAN
-            build_host: 1
-            ctest_parallel: 2
-            ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$
-          - name: ubsan
-            cmake_flag: CAPSID_ENABLE_UBSAN
-            build_host: 1
-            ctest_parallel: 2
-            ctest_exclude: '^(wpt_conformance_not_configured|worker_package_.*)$'
-          - name: tsan
-            cmake_flag: CAPSID_ENABLE_TSAN
-            compiler: clang
-            build_host: 1
-            # TSan's shadow allocator runs out of mmap space under
-            # -j2 (observed: "ThreadSanitizer: out of memory ... Failed
-            # to mmap" on the hosted runner); the matrix runs serially.
-            ctest_parallel: 1
-            # Clang and GCC select the existing TSan test-driver wait
-            # scale. Run all native managed checks; an unsupported finite
-            # RLIMIT_AS probe reports its explicit CTest skip code.
-            ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Install build and locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          # Match the Release dependency transport and reject stale indexes.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
-          # included, arch-suffixed) that the clang-based tsan matrix entry
-          # links against.
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv linux-tools-generic
-          /usr/bin/openssl version
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-
-      - name: Require actual Linux perf counters for evidence controls
-        run: python3 -B tools/setup-hosted-perf.py
-
-      - name: Install locked independent clients and reference for sanitizers
-        run: |
-          set -euo pipefail
-          /usr/bin/python3.12 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker-side bytecode compiler and the Host both require OpenSSL
-      # >= 3.5. Every sanitizer entry therefore provisions the same pinned
-      # provider, even when that matrix entry does not build capsid-host.
-      - name: Build OpenSSL 3.5 for sanitizer targets
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            asan) sanitizer=address ;;
-            ubsan) sanitizer=undefined ;;
-            tsan) sanitizer=thread ;;
-            *) echo "Unknown sanitizer matrix entry" >&2; exit 1 ;;
-          esac
-          compiler=cc
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler=clang
-          fi
-          sanitizer_flags="-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all"
-          # Built in the runner temp dir: extracting the tarball inside the
-          # workspace dirties the checkout and trips the build-identity
-          # clean-worktree gate.
-          cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider openssl --source "$PWD" | tee "${evidence}/openssl-source.json"
-          # Match the Capsid compiler/runtime and instrument the provider's C
-          # implementation, including paths normally implemented in assembly.
-          CC="${compiler}" CFLAGS="${sanitizer_flags}" CXXFLAGS="${sanitizer_flags}" LDFLAGS="-fsanitize=${sanitizer}" \
-            ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm
-          make -j2
-          sudo make install_sw
-
-      - name: Build c-ares 1.34.5 for sanitizer targets
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            asan) sanitizer=address ;;
-            ubsan) sanitizer=undefined ;;
-            tsan) sanitizer=thread ;;
-            *) echo "Unknown sanitizer matrix entry" >&2; exit 1 ;;
-          esac
-          compiler=cc
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler=clang
-          fi
-          sanitizer_flags="-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all"
-          cd "${RUNNER_TEMP}"
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          curl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013
-          echo "cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz" | sha256sum -c -
-          tar xzf capsid-cares.tar.gz
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider cares --source "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" | tee "${evidence}/cares-source.json"
-          cmake -S "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" -B "${RUNNER_TEMP}/capsid-cares-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER="${compiler}" \
-            -DCMAKE_C_FLAGS="${sanitizer_flags}" \
-            -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${sanitizer}" \
-            -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \
-            -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF
-          cmake --build "${RUNNER_TEMP}/capsid-cares-build" --parallel 2 --verbose
-          sudo cmake --install "${RUNNER_TEMP}/capsid-cares-build"
-          cp "${RUNNER_TEMP}/capsid-cares-build/compile_commands.json" "${evidence}/cares-compile-commands.json"
-
-      - name: Configure ${{ matrix.name }}
-        run: |
-          compiler_args=()
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler_args=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
-          fi
-          host_args=(-DCMAKE_PREFIX_PATH=/opt/openssl35 -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include)
-          if [ "${{ matrix.build_host }}" = "1" ]; then
-            host_args+=(-DCAPSID_BUILD_HOST=ON)
-          fi
-          cmake -S . -B "build-${{ matrix.name }}" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -D${{ matrix.cmake_flag }}=ON \
-            -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \
-            -DCAPSID_SANDBOX_PROFILE=sanitizer \
-            -DCAPSID_USE_MIMALLOC=OFF \
-            -DCAPSID_BUILD_BENCHMARKS=ON \
-            "${compiler_args[@]}" "${host_args[@]}"
-
-      - name: Build ${{ matrix.name }}
-        run: |
-          cmake --build "build-${{ matrix.name }}" --parallel 2
-
-      - name: Record original ASan RSS results
-        id: asan_rss_raw
-        if: matrix.name == 'asan'
-        continue-on-error: true
-        env:
-          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: |
-          set -euo pipefail
-          rm -f build-asan/asan-rss-raw-exit-code.txt build-asan/asan-rss-raw-junit.xml build-asan/asan-rss-raw-LastTest.log
-          rm -f build-asan/asan-memory-registration.json build-asan/asan-memory-acceptance.json
-          rm -f build-asan/asan-memory-replacement-recursion.json build-asan/asan-memory-reclamation-idle.json
-          ctest --test-dir build-asan --no-tests=error --show-only=json-v1 > build-asan/asan-memory-registration.json
-          asan_rss_status=0
-          ctest --test-dir build-asan \
-            --no-tests=error --output-on-failure \
-            --output-junit asan-rss-raw-junit.xml --parallel 1 \
-            -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || asan_rss_status=$?
-          printf '%s\n' "${asan_rss_status}" > build-asan/asan-rss-raw-exit-code.txt
-          cp build-asan/Testing/Temporary/LastTest.log build-asan/asan-rss-raw-LastTest.log
-          exit "${asan_rss_status}"
-
-      - name: Record original TSan RSS results
-        id: tsan_rss_raw
-        if: matrix.name == 'tsan'
-        continue-on-error: true
-        env:
-          TSAN_OPTIONS: halt_on_error=1:exitcode=66
-        run: |
-          set -euo pipefail
-          rm -f build-tsan/tsan-rss-raw-exit-code.txt build-tsan/tsan-rss-raw-junit.xml build-tsan/tsan-rss-raw-LastTest.log
-          rm -f build-tsan/tsan-memory-registration.json build-tsan/tsan-memory-acceptance.json
-          rm -f build-tsan/tsan-memory-replacement-recursion.json build-tsan/tsan-memory-reclamation-idle.json
-          ctest --test-dir build-tsan --no-tests=error --show-only=json-v1 > build-tsan/tsan-memory-registration.json
-          tsan_rss_status=0
-          ctest --test-dir build-tsan \
-            --no-tests=error --output-on-failure \
-            --output-junit tsan-rss-raw-junit.xml --parallel 1 \
-            -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || tsan_rss_status=$?
-          printf '%s\n' "${tsan_rss_status}" > build-tsan/tsan-rss-raw-exit-code.txt
-          cp build-tsan/Testing/Temporary/LastTest.log build-tsan/tsan-rss-raw-LastTest.log
-          exit "${tsan_rss_status}"
-
-      - name: Run ${{ matrix.name }} matrix
-        env:
-          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-          TSAN_OPTIONS: halt_on_error=1
-          CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-${{ matrix.name }}/matrix-case-reports
-        run: |
-          mkdir -p "${CAPSID_WS_REPORT_DIR}"
-          ctest --test-dir "build-${{ matrix.name }}" \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit "${{ matrix.name }}-junit.xml" \
-            --parallel ${{ matrix.ctest_parallel }} \
-            -E '${{ matrix.ctest_exclude }}'
-
-      - name: Require separate ASan memory acceptance
-        if: ${{ !cancelled() && matrix.name == 'asan' && steps.asan_rss_raw.outcome != 'skipped' }}
-        run: |
-          python3 -B tools/asan-memory-acceptance.py \
-            --registration build-asan/asan-memory-registration.json \
-            --raw-junit build-asan/asan-rss-raw-junit.xml \
-            --raw-last-test build-asan/asan-rss-raw-LastTest.log \
-            --raw-exit-code build-asan/asan-rss-raw-exit-code.txt \
-            --raw-outcome '${{ steps.asan_rss_raw.outcome }}' \
-            --matrix-junit build-asan/asan-junit.xml \
-            --resource-report-root build-asan \
-            --output build-asan/asan-memory-acceptance.json
-
-      - name: Require separate TSan memory acceptance
-        if: ${{ !cancelled() && matrix.name == 'tsan' && steps.tsan_rss_raw.outcome != 'skipped' }}
-        run: |
-          python3 -B tools/asan-memory-acceptance.py --sanitizer tsan \
-            --registration build-tsan/tsan-memory-registration.json \
-            --raw-junit build-tsan/tsan-rss-raw-junit.xml \
-            --raw-last-test build-tsan/tsan-rss-raw-LastTest.log \
-            --raw-exit-code build-tsan/tsan-rss-raw-exit-code.txt \
-            --raw-outcome '${{ steps.tsan_rss_raw.outcome }}' \
-            --matrix-junit build-tsan/tsan-junit.xml \
-            --resource-report-root build-tsan \
-            --output build-tsan/tsan-memory-acceptance.json
-
-      - name: Archive sanitizer driver reports preserving original names
-        if: always()
-        env:
-          REPORT_DIRECTORY: build-${{ matrix.name }}/matrix-case-reports
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib,json,os,tarfile
-          report=Path(os.environ['REPORT_DIRECTORY'])
-          report.parent.mkdir(parents=True,exist_ok=True)
-          archive=report.parent/(report.name+'.tar.gz')
-          with tarfile.open(archive,'w:gz',dereference=False) as output:
-              if report.exists():output.add(report,arcname=report.name)
-          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
-          archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
-          print(json.dumps(dict(complete=True,sourceDirectory=str(report),sourceExists=report.exists(),
-              archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))
-          PY
-
-      - name: Save sanitizer evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: ${{ matrix.name }}-hosted-evidence
-          if-no-files-found: error
-          path: |
-            build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
-            build-${{ matrix.name }}/matrix-case-reports.tar.gz
-            build-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256
-            build-${{ matrix.name }}/Testing/Temporary/LastTest.log
-            build-perf-prerequisite/evidence/
-            build-asan/asan-rss-raw-junit.xml
-            build-asan/asan-rss-raw-LastTest.log
-            build-asan/asan-rss-raw-exit-code.txt
-            build-asan/asan-memory-*.json
-            build-tsan/tsan-rss-raw-junit.xml
-            build-tsan/tsan-rss-raw-LastTest.log
-            build-tsan/tsan-rss-raw-exit-code.txt
-            build-tsan/tsan-memory-*.json
-            ${{ runner.temp }}/capsid-native-provider-evidence/
-
-  fuzz:
+  frame-o2:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-
     steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out exact current qualification source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: a86b58ed761304a8c1de7f47aa92d5e9967be5fa
           submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
           fetch-tags: true
-
-      - name: Install Clang and Ninja
+      - name: Install original fuzz dependencies
         run: |
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://mirrors.edge.kernel.org/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           sudo apt-get "${apt_network[@]}" update --error-on=any
           sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
-
-      - name: Configure fuzz harnesses
-        env:
-          CC: clang
-          CXX: clang++
-        run: |
-          cmake -S . -B build-fuzz -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCAPSID_BUILD_WORKER=OFF \
-            -DCAPSID_BUILD_FUZZERS=ON \
-            -DCAPSID_USE_MIMALLOC=OFF
-
-      - name: Build fuzz harnesses
-        run: cmake --build build-fuzz --parallel 2
-
-      - name: Run bounded corpus gates
-        run: |
-          ctest --test-dir build-fuzz \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit fuzz-junit.xml \
-            -L fuzz
-
-      - name: Save fuzz evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - name: Fetch immutable original actual binaries and corpus
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           name: fuzz-hosted-evidence
-          if-no-files-found: error
-          path: build-fuzz/fuzz-junit.xml
-
-  posix-host-library:
-    runs-on: macos-15
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      # Keep the POSIX gate honest for the complete M1D Admin surface.  The
-      # transport and long-lived service are intentionally conditional on
-      # Boost, so relying on the runner image could silently skip their
-      # compilation (and miss Linux-only APIs in otherwise POSIX sources).
-      - name: Install macOS Host dependencies
-        run: brew install boost c-ares openssl@3.5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Configure distinct loopback peers for redirect contracts
+          run-id: 43358123744
+          repository: ErosZy/capsid
+          github-token: ${{ github.token }}
+          path: original-fuzz
+      - name: Compare optimization with all checks and budgets retained
         run: |
-          set -euo pipefail
-          sudo ifconfig lo0 alias 127.0.0.2 netmask 255.255.255.255
-          node --input-type=module - <<'JS'
-          import assert from 'node:assert/strict';
-          import net from 'node:net';
-          import {once} from 'node:events';
-          const servers=[];
-          try {
-            let port=0;
-            for(const host of ['127.0.0.1','127.0.0.2']) {
-              const server=net.createServer(socket=>socket.end(host));servers.push(server);
-              server.listen({host,port});await once(server,'listening');
-              assert.equal(server.address().address,host);port=server.address().port;
-            }
-            for(const host of ['127.0.0.1','127.0.0.2']) {
-              const client=net.createConnection({host,port});let body='';
-              for await(const bytes of client)body+=bytes.toString();
-              assert.equal(body,host,'distinct loopback peer receives the actual connection');
-            }
-            console.log(JSON.stringify({complete:true,loopbackPeers:2,samePort:true,actualRoundTrips:2}));
-          } finally {await Promise.all(servers.map(server=>new Promise(resolve=>server.close(resolve))));}
-          JS
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          python3 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the macOS configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-
-      # §12.5 macOS row: Host units plus the non-strict worker contracts.
-      # Linux-only strict-sandbox and managed-suite tests are not registered
-      # on macOS (they SKIP by absence, never FAIL), and the §12.3 fresh
-      # second build is excluded here to keep the job inside its time budget
-      # (the Release job runs it on Linux).
-      - name: Configure macOS host library and worker contracts
-        run: |
-          set -euo pipefail
-          node_binary=$(node -p 'process.execPath')
-          cmake -S . -B build-macos \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_BUILD_WORKER=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_HOST_TEST_NODE="${node_binary}" \
-            -DCAPSID_NODE_EXECUTABLE="${node_binary}"
-
-      - name: Build macOS Host, Admin transport, and unit gates
-        run: |
-          cmake --build build-macos --parallel 2
-          # Named targets make a missing/quietly skipped Boost-backed Admin
-          # surface an explicit configuration failure.
-          cmake --build build-macos --parallel 2 --target \
-            capsid-host \
-            test-host-admin-api \
-            test-host-admin-http \
-            test-host-admin-service
-
-      - name: Run POSIX host-side matrix
-        run: |
-          ctest --test-dir build-macos \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit macos-junit.xml \
-            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
-
-      - name: Save macOS evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import hashlib, json, os, re, shutil, subprocess, tarfile, time
+          
+          root = Path.cwd()
+          out = root / 'frame-o2-observations'
+          out.mkdir()
+          sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          source_commit = 'a86b58ed761304a8c1de7f47aa92d5e9967be5fa'
+          assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == source_commit
+          archive = next((root / 'original-fuzz').rglob('fuzz-replay-before.tar.gz'))
+          assert sha(archive) == '4cfaa77d0deb22fde4745527039e18f9b36ebd2c59aaf9f6a724da2dcd1f3479'
+          original = out / 'original'
+          original.mkdir()
+          with tarfile.open(archive, 'r:gz') as tar:
+              for member in tar.getmembers():
+                  assert (original / member.name).resolve().is_relative_to(original.resolve())
+              tar.extractall(original, filter='data')
+          old = original / 'build-fuzz/fuzz-websocket-frames'
+          gold = original / 'build-fuzz/fuzz/corpus/websocket_frames'
+          assert sha(old) == '3ca108061f689a2c518c644c2012baf466e72568a08c01f7a265dc93acd6f8a8'
+          guard_paths = ['tests/fuzz/fuzz_websocket_frames.cc', 'src/host/ws_codec.cc',
+                         'src/host/ws_stream.cc', 'src/protocol.cc']
+          guards = {p: sha(root / p) for p in guard_paths}
+          assert (root / guard_paths[0]).read_bytes() == (original / guard_paths[0]).read_bytes()
+          gold_hashes = {p.name: sha(p) for p in gold.iterdir() if p.is_file()}
+          assert len(gold_hashes) == 9
+          record = dict(complete=False, diagnosticOnly=True, rootIntegrated=False,
+                        createdUTC=datetime.now(timezone.utc).isoformat(), sourceCommit=source_commit,
+                        originalRun=43358123744, originalArtifact=14007486183,
+                        originalBinarySHA256=sha(old), sourceSHA256=guards,
+                        originalCorpusSHA256=gold_hashes, observations=[], formalPerformancePoints=0,
+                        originalBudgetsAndAllChecksRetained=True, fullV030GoalComplete=False)
+          def save():
+              (out / 'run.json').write_text(json.dumps(record, indent=2) + '\n')
+          def observe(label, command, timeout):
+              folder = out / label
+              folder.mkdir()
+              started = time.monotonic()
+              timedout = False
+              code = None
+              with (folder / 'stdout.log').open('xb') as stdout, (folder / 'stderr.log').open('xb') as stderr:
+                  try:
+                      code = subprocess.run(command, stdout=stdout, stderr=stderr, timeout=timeout).returncode
+                  except subprocess.TimeoutExpired:
+                      timedout = True
+              log = (folder / 'stderr.log').read_text(errors='replace')
+              row = dict(label=label, command=command, seconds=time.monotonic()-started,
+                         exitCode=code, timeout=timedout,
+                         completed10000=bool(re.search(r'Done 10000 runs in ', log)),
+                         fatalDiagnostic=bool(re.search(r'ERROR: (?:AddressSanitizer|LeakSanitizer)|runtime error:|WS_INVARIANT|SUMMARY:.*Sanitizer', log)),
+                         stdoutSHA256=sha(folder / 'stdout.log'), stderrSHA256=sha(folder / 'stderr.log'))
+              record['observations'].append(row)
+              save()
+              print(json.dumps(row), flush=True)
+              return row
+          save()
+          (out / 'machine.txt').write_text(subprocess.check_output(['lscpu'], text=True))
+          cmake = root / 'cmake/build_tests.cmake'
+          before = cmake.read_text()
+          anchor = '        # Compile every exercised project source with fuzzer/ASan/UBSan flags.'
+          assert before.count(anchor) == 1
+          after = before.replace(anchor,
+              '        # Keep full fuzz/ASan/UBSan instrumentation and every existing gate.\n'
+              '        target_compile_options(fuzz-websocket-frames PRIVATE -O2)\n' + anchor, 1)
+          cmake.write_text(after)
+          (out / 'build_tests.before.cmake').write_text(before)
+          (out / 'build_tests.proposal.cmake').write_text(after)
+          (out / 'proposal.diff').write_text(subprocess.check_output(['git', 'diff', '--', 'cmake/build_tests.cmake'], text=True))
+          build = root / 'build-fuzz-o2'
+          env = dict(os.environ, CC='clang', CXX='clang++')
+          configure = ['cmake', '-S', str(root), '-B', str(build), '-G', 'Ninja',
+                       '-DCMAKE_BUILD_TYPE=Debug', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
+                       '-DCAPSID_BUILD_WORKER=OFF', '-DCAPSID_BUILD_FUZZERS=ON', '-DCAPSID_USE_MIMALLOC=OFF']
+          result = subprocess.run(configure, capture_output=True, env=env, timeout=180)
+          (out / 'configure.stdout.log').write_bytes(result.stdout)
+          (out / 'configure.stderr.log').write_bytes(result.stderr)
+          assert result.returncode == 0, result.stderr[-2000:]
+          row = observe('build-all', ['cmake', '--build', str(build), '--parallel', '2'], 600)
+          assert row['exitCode'] == 0
+          compile_commands = json.loads((build / 'compile_commands.json').read_text())
+          frame_commands = [c for c in compile_commands if '/fuzz-websocket-frames.dir/' in c['command']]
+          assert len(frame_commands) == 4
+          for command in frame_commands:
+              options = command['command']
+              assert '-fsanitize=fuzzer,address,undefined' in options
+              assert '-fno-sanitize-recover=all' in options and '-fno-omit-frame-pointer' in options
+              assert options.rfind('-O2') > options.rfind('-O1')
+          record['optimizedCompileCommands'] = frame_commands
+          new = build / 'fuzz-websocket-frames'
+          record['optimizedBinarySHA256'] = sha(new)
+          save()
+          for index, seed in enumerate([2645387111, 1, 2192745715, 2]):
+              # Alternate order to expose host drift; each run starts from the same immutable nine inputs.
+              variants = [('o1-original', old), ('o2-proposal', new)]
+              if index % 2:
+                  variants.reverse()
+              for variant, binary in variants:
+                  label = f'{index}-{variant}-seed-{seed}'
+                  corpus = out / (label + '-corpus')
+                  shutil.copytree(gold, corpus)
+                  observe(label, [str(binary), str(corpus), '-runs=10000', '-max_len=65536',
+                                 '-timeout=2', '-rss_limit_mb=512', '-print_final_stats=1', '-seed='+str(seed)], 60)
+                  assert {p.name: sha(p) for p in gold.iterdir() if p.is_file()} == gold_hashes
+                  assert sha(old) == record['originalBinarySHA256']
+          registration = subprocess.check_output(['ctest', '--test-dir', str(build), '--show-only=json-v1'], text=True)
+          (out / 'registration.json').write_text(registration)
+          tests = [t for t in json.loads(registration)['tests'] if 'fuzz' in next((p['value'] for p in t.get('properties', []) if p['name'] == 'LABELS'), [])]
+          assert len(tests) == 9
+          record['allFuzzRegistrations'] = tests
+          suite = observe('original-nine-fuzz-ctest-gates', ['ctest', '--test-dir', str(build),
+              '--no-tests=error', '--output-on-failure', '--output-junit', str(out / 'fuzz-junit.xml'), '-L', 'fuzz'], 600)
+          assert all(sha(root / p) == h for p, h in guards.items())
+          for p in ['compile_commands.json', 'CMakeCache.txt', 'CTestTestfile.cmake']:
+              shutil.copy2(build / p, out / p)
+          for p in [new, root / 'tests/fuzz/fuzz_websocket_frames.cc']:
+              shutil.copy2(p, out / p.name)
+          record.update(complete=True, status='original-o1-and-private-o2-comparison-complete',
+                        allHarnessAndProductionSourceBytesUnchanged=True,
+                        allOriginalNineFuzzGatesPassed=suite['exitCode'] == 0,
+                        allProposalSeedsPassed=all(x['exitCode'] == 0 and x['completed10000'] and not x['fatalDiagnostic']
+                            for x in record['observations'] if 'o2-proposal' in x['label']))
+          save()
+          PY
+      - name: Archive comparison and failure evidence
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        run: |
+          tar -czf frame-o2-observations.tar.gz frame-o2-observations
+          sha256sum frame-o2-observations.tar.gz > frame-o2-observations.tar.gz.sha256
+      - name: Save private comparison
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: macos-host-library-evidence
+          name: frame-o2-observations
           if-no-files-found: error
           path: |
-            build-macos/macos-junit.xml
-            build-macos/Testing/Temporary/LastTest.log
-            build-macos/CMakeCache.txt
-
-  windows-host-library:
-    runs-on: windows-latest
-    # The measured serial Release matrix alone takes about 104 minutes.
-    # Allow dependency/build time without changing individual test budgets.
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Locate OpenSSL for WebSocket test certificates
-        shell: pwsh
-        run: |
-          $git_root = Split-Path (Split-Path (Get-Command git -ErrorAction Stop).Source)
-          $openssl_candidates = @(
-            (Join-Path $git_root 'mingw64/bin/openssl.exe'),
-            (Join-Path $git_root 'usr/bin/openssl.exe')
-          )
-          $openssl_fixture = $openssl_candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-          if (-not $openssl_fixture) { throw 'OpenSSL CLI for fixture certificates is missing' }
-          & $openssl_fixture version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          (Split-Path $openssl_fixture) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install locked independent WebSocket clients
-        shell: pwsh
-        run: |
-          $interop_root = Join-Path $env:RUNNER_TEMP 'capsid-ws-interop'
-          python tools/setup-ws-interop-python.py $interop_root
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "CAPSID_WS_INTEROP_PYTHON=$interop_root\Scripts\python.exe" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CAPSID_WS_INTEROP_NODE_PACKAGE=$interop_root\node-ws" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install the locked native Windows workerd reference
-        shell: pwsh
-        run: |
-          $reference_path = Join-Path $env:RUNNER_TEMP 'capsid-workerd-reference/workerd.exe'
-          node tools/workerd-reference.mjs install $reference_path
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "CAPSID_WORKERD_REF=$reference_path" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CAPSID_WORKERD_REQUIRED=1" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      # Ninja invokes `cl` via PATH, unlike the MSBuild generator that
-      # resolves the toolchain itself; without the VS developer
-      # environment CMake cannot find the MSVC compiler.
-      - name: Set up the MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (v1.13.0; default-branch commits carry no node_modules)
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the Windows configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-        shell: bash
-
-      # OpenSSL (static) and Boost.System/Asio (header-only) come from the
-      # runner's preinstalled vcpkg; the static triplet matches the /MT CRT
-      # policy pinned by the vendored txiki build. boost-asio is a separate
-      # port from boost-system (the Host data plane needs <boost/asio.hpp>).
-      - name: Install Windows build dependencies (vcpkg)
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
-        shell: pwsh
-
-      # §12.5 Windows row: Host units, non-strict worker contracts and the
-      # actual package contents/metadata/smoke/reproducibility gates.
-      # Platform-specific Linux tests retain their explicit registration or
-      # skip policy. Creating the Release archive alone does not validate it.
-      # Ninja keeps this single-config like every other job; the Visual
-      # Studio generator would default to Debug builds and require ctest
-      # -C <config>, which quietly "Not Run"s the whole matrix. Pin the
-      # compiler to cl: in a non-vcvars shell Ninja otherwise grabs mingw
-      # gcc off PATH, which cannot build the CRT/winsock port.
-      - name: Configure Windows host library and worker contracts
-        run: |
-          cmake -S . -B build-windows `
-            -G Ninja `
-            -DCMAKE_C_COMPILER=cl `
-            -DCMAKE_CXX_COMPILER=cl `
-            -DCMAKE_BUILD_TYPE=Release `
-              -DCAPSID_BUILD_HOST=ON `
-              -DCAPSID_BUILD_WORKER=ON `
-              -DCAPSID_STRICT_WARNINGS=ON `
-              -DCAPSID_USE_MIMALLOC=OFF `
-              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static
-        shell: pwsh
-
-      - name: Build Windows Host and worker contracts
-        shell: pwsh
-        run: |
-          # On failure, replay the build tail as ::error:: annotations so
-          # the actual compiler diagnostic is visible in the run summary
-          # (raw step logs need a signed-in viewer).
-          cmake --build build-windows --parallel 2 2>&1 | Tee-Object build-windows\build.log
-          if ($LASTEXITCODE -ne 0) {
-            # GitHub accepts only a small annotation set. Emit compiler and
-            # Ninja diagnostics first; annotating every normal tail line can
-            # exhaust that set before the actual error is reached.
-            Select-String -Path build-windows\build.log `
-              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
-              | Select-Object -First 20 `
-              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
-            Get-Content build-windows\build.log -Tail 60
-            exit 1
-          }
-          # The named gate mirrors the macOS job: a quietly skipped
-          # Boost-backed Host surface would fail this step explicitly.
-          cmake --build build-windows --parallel 2 --target capsid-host 2>&1 | Tee-Object build-windows\build.log
-          if ($LASTEXITCODE -ne 0) {
-            Select-String -Path build-windows\build.log `
-              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
-              | Select-Object -First 20 `
-              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
-            Get-Content build-windows\build.log -Tail 60
-            exit 1
-          }
-
-      - name: Run the native Windows workerd compatibility gate
-        shell: pwsh
-        run: |
-          node tools/run-workerd-ws-gate.mjs build-windows build-windows/workerd-compatibility
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Run Windows host-side matrix
-        run: |
-          $evidence_root = (Resolve-Path build-windows).Path
-          $ctest_log = Join-Path $evidence_root 'ctest.log'
-          $junit_path = Join-Path $evidence_root 'windows-junit.xml'
-          ctest --test-dir build-windows `
-            --parallel 1 `
-            --no-tests=error `
-            --output-on-failure `
-            --output-junit $junit_path `
-            -E '^wpt_conformance_not_configured$' `
-            2>&1 | Tee-Object -FilePath $ctest_log
-          $ctest_exit = $LASTEXITCODE
-          if ($ctest_exit -ne 0) {
-            Select-String -Path $ctest_log `
-              -Pattern '(\*\*\*Failed|\*\*\*Timeout|The following tests FAILED|^FAIL:)' `
-              -Context 0,15 | Select-Object -First 40 | ForEach-Object { "::error::$_" }
-            Get-Content $ctest_log -Tail 120
-            exit $ctest_exit
-          }
-        shell: pwsh
-
-      - name: Save Windows evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: windows-host-library-evidence
-          if-no-files-found: error
-          path: |
-            build-windows/windows-junit.xml
-            build-windows/ctest.log
-            build-windows/Testing/Temporary/LastTest.log
-            build-windows/workerd-compatibility/
-
-  hosted-evidence-index:
-    if: always()
-    needs:
-      - release-wpt-and-delegated-sandbox
-      - sanitizers
-      - fuzz
-      - posix-host-library
-      - windows-host-library
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    steps:
-      - name: Download all hosted evidence
-        continue-on-error: true
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          pattern: '*-evidence'
-          path: hosted-evidence/inputs
-
-      - name: Generate run and content index
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          set -euo pipefail
-          mkdir -p hosted-evidence/inputs
-          {
-            printf 'run_url=%s/%s/actions/runs/%s\n' \
-              "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
-            printf 'repository=%s\n' "${GITHUB_REPOSITORY}"
-            printf 'commit_sha=%s\n' "${GITHUB_SHA}"
-            printf 'ref=%s\n' "${GITHUB_REF}"
-            printf 'release=%s\n' "${RELEASE_RESULT}"
-            printf 'sanitizers=%s\n' "${SANITIZER_RESULT}"
-            printf 'fuzz=%s\n' "${FUZZ_RESULT}"
-            printf 'macos=%s\n' "${MACOS_RESULT}"
-            printf 'windows=%s\n' "${WINDOWS_RESULT}"
-          } > hosted-evidence/run.txt
-          # §12.5: the index also records the Release package identity —
-          # build ID, compatibility ID, package hash and SBOM hash — from
-          # the Release job's package-evidence.txt.
-          package_evidence=$(find hosted-evidence/inputs \
-            -name package-evidence.txt -print -quit)
-          if test -n "${package_evidence}"; then
-            cat "${package_evidence}" >> hosted-evidence/run.txt
-          fi
-          (
-            cd hosted-evidence
-            find inputs -type f -print0 |
-              sort -z |
-              xargs -0 -r sha256sum > sha256sums.txt
-            sha256sum sha256sums.txt |
-              awk '{print $1}' > evidence-tree.sha256
-          )
-
-      - name: Save hosted evidence index
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: hosted-evidence-index
-          if-no-files-found: error
-          path: |
-            hosted-evidence/run.txt
-            hosted-evidence/sha256sums.txt
-            hosted-evidence/evidence-tree.sha256
-
-      - name: Require every hosted job to pass
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          test "${RELEASE_RESULT}" = success
-          test "${SANITIZER_RESULT}" = success
-          test "${FUZZ_RESULT}" = success
-          test "${MACOS_RESULT}" = success
-          test "${WINDOWS_RESULT}" = success
+            frame-o2-observations.tar.gz
+            frame-o2-observations.tar.gz.sha256
