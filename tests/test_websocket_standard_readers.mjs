@@ -1,9 +1,10 @@
-import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import net from 'node:net';
+import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
 import {spawn,execFileSync} from 'node:child_process';import {randomUUID,createHash,X509Certificate} from 'node:crypto';
 import {fileURLToPath,pathToFileURL} from 'node:url';import {setTimeout as delay} from 'node:timers/promises';
 import {root as R,readLock,verifyBinary,verifyClient,fileDigest as sha} from '../tools/workerd-reference.mjs';
 import {responseSession} from './helpers/ws_response_client.mjs';
 import {startCapsid,stopCapsid} from './helpers/ws_host_backend.mjs';
+import {waitForWorkerdListen} from './helpers/workerd_listener_control.mjs';
 import {nativeReaderLifecyclePeer} from './helpers/ws_native_reader_lifecycle_peer.mjs';
 import {standardReaderCases,standardReaderShardNames,standardReaderShardCases,standardReaderInputPaths,validateStandardReaderReport} from '../tools/workerd-standard-reader-contract.mjs';
 const options=new Map();for(let i=2;i<process.argv.length;i+=2){assert.ok(['--mode','--host','--worker','--report','--openssl','--reference-from-env','--shard'].includes(process.argv[i])&&process.argv[i+1]&&!options.has(process.argv[i]));options.set(process.argv[i],process.argv[i+1]);}
@@ -52,11 +53,16 @@ async function poll(read,accept,milliseconds=3000){const end=performance.now()+m
 async function stopReference(backend){let timer,forced=false;if(backend.child.exitCode===null&&backend.child.signalCode===null)backend.child.kill('SIGTERM');
     try{await Promise.race([backend.closed,new Promise(resolve=>{timer=setTimeout(()=>{forced=true;backend.child.kill('SIGKILL');resolve();},2000);})]);await backend.closed;}finally{clearTimeout(timer);}return {code:backend.child.exitCode,signal:backend.child.signalCode,forced};}
 async function startReference(directory,kind){
-    const reserve=net.createServer();await new Promise(resolve=>reserve.listen(0,'127.0.0.1',resolve));const port=reserve.address().port;await new Promise(resolve=>reserve.close(resolve));
+    const deadline=performance.now()+10000;
     fs.copyFileSync(fixture,path.join(directory,'main.mjs'));fs.copyFileSync(ca,path.join(directory,'trust.pem'));const config=path.join(directory,'main.capnp');
-    fs.writeFileSync(config,`using Workerd = import "/workerd/workerd.capnp"; const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(lock.compatibility_date)},compatibilityFlags=${JSON.stringify(lock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")])),(name="internet",network=(allow=${JSON.stringify(kind==='redirect-https-denied'?['127.0.0.1/32','::1/128']:['local'])},tlsOptions=(trustBrowserCas=false,trustedCertificates=[embed "trust.pem"])))],sockets=[(name="http",address="127.0.0.1:${port}",http=(),service="main")]);`);
-    const child=spawn(host,['serve',config],{stdio:['ignore','pipe','pipe']});child.stdout.resume();let stderr='';child.stderr.on('data',data=>stderr+=data);const backend={child,port,stderr:()=>stderr,closed:new Promise(resolve=>child.once('close',resolve))};
-    try{const ready=await poll(async()=>{assert.ok(child.exitCode===null&&child.signalCode===null,stderr);try{const response=await fetch(`http://127.0.0.1:${port}/state`,{signal:AbortSignal.timeout(500)});return response.status===200&&await response.text();}catch{return false;}},Boolean,10000);assert.ok(ready.matched,stderr);return backend;}
+    fs.writeFileSync(config,`using Workerd = import "/workerd/workerd.capnp"; const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(lock.compatibility_date)},compatibilityFlags=${JSON.stringify(lock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")])),(name="internet",network=(allow=${JSON.stringify(kind==='redirect-https-denied'?['127.0.0.1/32','::1/128']:['local'])},tlsOptions=(trustBrowserCas=false,trustedCertificates=[embed "trust.pem"])))],sockets=[(name="http",address="127.0.0.1:0",http=(),service="main")]);`);
+    const child=spawn(host,['serve',config,'--control-fd=3'],{stdio:['ignore','pipe','pipe','pipe']});child.stdout.resume();let stderr='';child.stderr.on('data',data=>stderr+=data);const backend={child,port:null,stderr:()=>stderr,closed:new Promise(resolve=>child.once('close',resolve))};
+    try{
+        // Read the verified child's actual listener; an unrelated HTTP listener
+        // cannot establish this child's readiness. Both phases share the original10s budget.
+        backend.port=(await waitForWorkerdListen(child,Math.max(1,deadline-performance.now()))).port;
+        const port=backend.port;
+        const ready=await poll(async()=>{assert.ok(child.exitCode===null&&child.signalCode===null,stderr);try{const response=await fetch(`http://127.0.0.1:${port}/state`,{signal:AbortSignal.timeout(500)});return response.status===200&&await response.text();}catch{return false;}},Boolean,Math.max(0,deadline-performance.now()));assert.ok(ready.matched,stderr);return backend;}
     catch(error){await stopReference(backend);throw error;}
 }
 for(const kind of selectedCases){

@@ -19,6 +19,7 @@ export const standardReaderInputPaths=Object.freeze({
     envelopeContract:'tools/workerd-native-reader-lifecycle-contract.mjs',envelopeStateModel:'tools/workerd-reader-lifecycle-state.mjs',
     certificateContract:'tools/workerd-fetch-transition-contract.mjs',fields:'tools/workerd-native-fetch-contract.mjs',
     platform:'tools/workerd-platform.mjs',reference:'tools/workerd-reference.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
 });
 export function assertStandardReaderCase(value,mode) {
     assert.ok(standardReaderCases.includes(value.kind));
