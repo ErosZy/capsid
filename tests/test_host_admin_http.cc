@@ -340,7 +340,11 @@ std::string fragmented_exchange(
             }
             require(std::chrono::steady_clock::now() < deadline,
                     "Admin HTTP fragment was not consumed");
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // Keep FIONREAD as the per-fragment read barrier, but do not
+            // make every byte pay for a timer. Darwin may coalesce short
+            // sleeps enough to exhaust the real HTTP phase deadline before
+            // this fixture has delivered the bytes that exercise a limit.
+            std::this_thread::yield();
         }
         if (finished.load()) {
             break;
@@ -368,8 +372,10 @@ std::vector<std::string> byte_fragments(const std::string& bytes) {
 
 void require_json_http_response(const std::string& response,
                                 unsigned status) {
-    require(response_status(response) == status,
-            "Admin HTTP response returned the wrong status");
+    const unsigned actual_status = response_status(response);
+    require(actual_status == status,
+            "Admin HTTP response expected status " + std::to_string(status) +
+                ", got " + std::to_string(actual_status));
     require(response.find("\r\nContent-Type: application/json\r\n") !=
                 std::string::npos,
             "Admin HTTP response omitted its JSON content type");
