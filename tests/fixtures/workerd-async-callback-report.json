@@ -1,17 +1,17 @@
 {
   "schema": "capsid-async-callbacks-v1",
   "complete": true,
-  "runId": "f8f65075-6008-4ffd-b242-fe20c248d201",
+  "runId": "remaining-reference-listeners-43380637489",
   "mode": "reference",
   "family": "shared",
   "requestTimeoutMs": 10000,
   "sourceName": "main",
   "referenceLock": {
-    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
     "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
     "release_tag": "v1.20261010.1",
-    "binary": "workerd-windows-64",
-    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary": "workerd-linux-64",
+    "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
     "binary_version_string": "workerd 2026-10-10",
     "compatibility_date": "2026-08-20",
     "compatibility_flags": [],
@@ -21,38 +21,40 @@
       "node_version": "v24.14.0",
       "undici_version": "7.21.0"
     },
-    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
-    "release_asset": "workerd-windows-64.gz",
-    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
-    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+    "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+    "release_asset": "workerd-linux-64.gz",
+    "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+    "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
   },
   "client": {
     "node": "v24.14.0",
     "undici": "7.21.0"
   },
   "inputs": {
-    "runner": "1c80f1e352c981df6890b45ac93939050db999a81583cc6d6bff2c20c20d2194",
-    "fixture": "bb6f38a74691f90a98fef497d5a66f01a00870d598977e2814a3845d0cbe2d31",
-    "contract": "bbbefa0be6527ccfcc0b35490bb157cf69a5b4f7a996d2146b1f155f16091ca1",
+    "runner": "ef03964acdf44883970d36eba49917f96f78b530b1565afd7867899555ebe38b",
+    "fixture": "f225882820ad566522430874eb62b5aba6b6253b8153f71f82f146e7e4af8363",
+    "contract": "040c3299d958f6f6ee3f10f71a70ea791cf8a1f7c406001a15e9e1fa0e4e88e3",
     "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
-    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+    "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+    "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
   },
   "binaries": {
-    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "host": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
     "worker": null
   },
   "cases": [
     {
       "id": "timeout-throw",
-      "challenge": "a653a8ed-d7ca-4ee5-b4e0-2d08c44e2e98",
+      "challenge": "d976ce6a-116a-4bd2-a4fe-402447b7a515",
       "initialState": {
-        "realm": "66ebf644-3e6d-4d25-931a-9890bcb54499",
+        "realm": "4d079fad-cd09-4e96-ad1f-db87814dc3d8",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oo7MWYY/mv3a20lmFiVHzH8Q/PQ=",
-        "requestKey": "BQT4N6pSH5QCArhzazTnGQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: cD2m5mrog8Q9baxAfoyUe3LwPos=",
+        "requestKey": "R5sMyRavkqxd8zAbSTt56w==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -62,17 +64,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oo7MWYY/mv3a20lmFiVHzH8Q/PQ=",
-        "requestKey": "BQT4N6pSH5QCArhzazTnGQ==",
-        "rawTail": "gStxdWV1ZWQ6YTY1M2E4ZWQtZDdjYS00ZWU1LWI0ZTAtMmQwOGM0NGUyZTk4gSphZnRlcjphNjUzYThlZC1kN2NhLTRlZTUtYjRlMC0yZDA4YzQ0ZTJlOTiIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: cD2m5mrog8Q9baxAfoyUe3LwPos=",
+        "requestKey": "R5sMyRavkqxd8zAbSTt56w==",
+        "rawTail": "gStxdWV1ZWQ6ZDk3NmNlNmEtMTE2YS00YmQyLWE0ZmUtNDAyNDQ3YjdhNTE1gSphZnRlcjpkOTc2Y2U2YS0xMTZhLTRiZDItYTRmZS00MDI0NDdiN2E1MTWIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmE2NTNhOGVkLWQ3Y2EtNGVlNS1iNGUwLTJkMDhjNDRlMmU5OA=="
+            "payload": "cXVldWVkOmQ5NzZjZTZhLTExNmEtNGJkMi1hNGZlLTQwMjQ0N2I3YTUxNQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6YTY1M2E4ZWQtZDdjYS00ZWU1LWI0ZTAtMmQwOGM0NGUyZTk4"
+            "payload": "YWZ0ZXI6ZDk3NmNlNmEtMTE2YS00YmQyLWE0ZmUtNDAyNDQ3YjdhNTE1"
           },
           {
             "opcode": 8,
@@ -84,14 +86,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 73.29539999999997,
+      "elapsedMs": 64.87045799999999,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"66ebf644-3e6d-4d25-931a-9890bcb54499\",\"state\":{\"kind\":\"timeout-throw\",\"challenge\":\"a653a8ed-d7ca-4ee5-b4e0-2d08c44e2e98\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"4d079fad-cd09-4e96-ad1f-db87814dc3d8\",\"state\":{\"kind\":\"timeout-throw\",\"challenge\":\"d976ce6a-116a-4bd2-a4fe-402447b7a515\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "66ebf644-3e6d-4d25-931a-9890bcb54499",
+        "realm": "4d079fad-cd09-4e96-ad1f-db87814dc3d8",
         "state": {
           "kind": "timeout-throw",
-          "challenge": "a653a8ed-d7ca-4ee5-b4e0-2d08c44e2e98",
+          "challenge": "d976ce6a-116a-4bd2-a4fe-402447b7a515",
           "trace": [
             "message",
             "callback",
@@ -117,23 +119,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "interval-throw",
-      "challenge": "113ff0cb-d80f-4b82-9161-251d50c4486f",
+      "challenge": "e1f8ffb6-b1e2-44ce-99a6-ed50cd30d099",
       "initialState": {
-        "realm": "a2b0058f-c110-4885-85e4-cd32e9807d4b",
+        "realm": "de739488-fbed-495f-bd43-460cf76b37aa",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uoNCCSpva9xg/AHSGSUS3NGYYps=",
-        "requestKey": "ZPLQYTYoW0b9labn2ZcYhQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 6BDYGf+kdIaafyBKkCRjWkpLSmk=",
+        "requestKey": "DQGIeRKNcj9ukH60RO5sVA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -143,17 +145,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uoNCCSpva9xg/AHSGSUS3NGYYps=",
-        "requestKey": "ZPLQYTYoW0b9labn2ZcYhQ==",
-        "rawTail": "gStxdWV1ZWQ6MTEzZmYwY2ItZDgwZi00YjgyLTkxNjEtMjUxZDUwYzQ0ODZmgSphZnRlcjoxMTNmZjBjYi1kODBmLTRiODItOTE2MS0yNTFkNTBjNDQ4NmaIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 6BDYGf+kdIaafyBKkCRjWkpLSmk=",
+        "requestKey": "DQGIeRKNcj9ukH60RO5sVA==",
+        "rawTail": "gStxdWV1ZWQ6ZTFmOGZmYjYtYjFlMi00NGNlLTk5YTYtZWQ1MGNkMzBkMDk5gSphZnRlcjplMWY4ZmZiNi1iMWUyLTQ0Y2UtOTlhNi1lZDUwY2QzMGQwOTmIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjExM2ZmMGNiLWQ4MGYtNGI4Mi05MTYxLTI1MWQ1MGM0NDg2Zg=="
+            "payload": "cXVldWVkOmUxZjhmZmI2LWIxZTItNDRjZS05OWE2LWVkNTBjZDMwZDA5OQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6MTEzZmYwY2ItZDgwZi00YjgyLTkxNjEtMjUxZDUwYzQ0ODZm"
+            "payload": "YWZ0ZXI6ZTFmOGZmYjYtYjFlMi00NGNlLTk5YTYtZWQ1MGNkMzBkMDk5"
           },
           {
             "opcode": 8,
@@ -165,14 +167,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 85.90179999999998,
+      "elapsedMs": 53.38001600000007,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"a2b0058f-c110-4885-85e4-cd32e9807d4b\",\"state\":{\"kind\":\"interval-throw\",\"challenge\":\"113ff0cb-d80f-4b82-9161-251d50c4486f\",\"trace\":[\"message\",\"interval/1\",\"interval/2\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":2,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"de739488-fbed-495f-bd43-460cf76b37aa\",\"state\":{\"kind\":\"interval-throw\",\"challenge\":\"e1f8ffb6-b1e2-44ce-99a6-ed50cd30d099\",\"trace\":[\"message\",\"interval/1\",\"interval/2\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":2,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "a2b0058f-c110-4885-85e4-cd32e9807d4b",
+        "realm": "de739488-fbed-495f-bd43-460cf76b37aa",
         "state": {
           "kind": "interval-throw",
-          "challenge": "113ff0cb-d80f-4b82-9161-251d50c4486f",
+          "challenge": "e1f8ffb6-b1e2-44ce-99a6-ed50cd30d099",
           "trace": [
             "message",
             "interval/1",
@@ -199,23 +201,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "timeout-reject",
-      "challenge": "f4d71413-3b8d-4c12-ae99-8b55af00c141",
+      "challenge": "6c12f82e-4242-4501-b450-bb78568e6c18",
       "initialState": {
-        "realm": "1be4d30f-a01e-4106-97c4-634950e5b14a",
+        "realm": "b238843e-c73e-449b-acae-a27bb052401c",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FL7W02232e3WUB8O/lHybNjDhFs=",
-        "requestKey": "bM/GfvW1yHr7eys7wyLjLQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uan/X6uzh/H946aLQTj+nk4RQD8=",
+        "requestKey": "zXxkUEVHGsnAwQOK8r4h4Q==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -225,17 +227,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FL7W02232e3WUB8O/lHybNjDhFs=",
-        "requestKey": "bM/GfvW1yHr7eys7wyLjLQ==",
-        "rawTail": "gStxdWV1ZWQ6ZjRkNzE0MTMtM2I4ZC00YzEyLWFlOTktOGI1NWFmMDBjMTQxgSphZnRlcjpmNGQ3MTQxMy0zYjhkLTRjMTItYWU5OS04YjU1YWYwMGMxNDGIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uan/X6uzh/H946aLQTj+nk4RQD8=",
+        "requestKey": "zXxkUEVHGsnAwQOK8r4h4Q==",
+        "rawTail": "gStxdWV1ZWQ6NmMxMmY4MmUtNDI0Mi00NTAxLWI0NTAtYmI3ODU2OGU2YzE4gSphZnRlcjo2YzEyZjgyZS00MjQyLTQ1MDEtYjQ1MC1iYjc4NTY4ZTZjMTiIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmY0ZDcxNDEzLTNiOGQtNGMxMi1hZTk5LThiNTVhZjAwYzE0MQ=="
+            "payload": "cXVldWVkOjZjMTJmODJlLTQyNDItNDUwMS1iNDUwLWJiNzg1NjhlNmMxOA=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6ZjRkNzE0MTMtM2I4ZC00YzEyLWFlOTktOGI1NWFmMDBjMTQx"
+            "payload": "YWZ0ZXI6NmMxMmY4MmUtNDI0Mi00NTAxLWI0NTAtYmI3ODU2OGU2YzE4"
           },
           {
             "opcode": 8,
@@ -247,14 +249,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 66.42840000000001,
+      "elapsedMs": 62.86145199999987,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"1be4d30f-a01e-4106-97c4-634950e5b14a\",\"state\":{\"kind\":\"timeout-reject\",\"challenge\":\"f4d71413-3b8d-4c12-ae99-8b55af00c141\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"b238843e-c73e-449b-acae-a27bb052401c\",\"state\":{\"kind\":\"timeout-reject\",\"challenge\":\"6c12f82e-4242-4501-b450-bb78568e6c18\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "1be4d30f-a01e-4106-97c4-634950e5b14a",
+        "realm": "b238843e-c73e-449b-acae-a27bb052401c",
         "state": {
           "kind": "timeout-reject",
-          "challenge": "f4d71413-3b8d-4c12-ae99-8b55af00c141",
+          "challenge": "6c12f82e-4242-4501-b450-bb78568e6c18",
           "trace": [
             "message",
             "callback",
@@ -298,23 +300,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "timeout-async-reject",
-      "challenge": "b146a5c9-ce9c-4f97-ace7-e67a9bb043e7",
+      "challenge": "60b346db-7cb2-4978-bd97-719996b5ba34",
       "initialState": {
-        "realm": "d3af3f2c-0e45-424f-9e3c-5eb21faf4d5a",
+        "realm": "3a50e905-26c9-4eb5-8461-b3cbcd692f53",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WVPYjlhni7FwbEFMsms4NsN8VNQ=",
-        "requestKey": "xAr4J1Dsf/2jKebZeoj2Lw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8LKHmXzSDD7QhCSnYSAFzyHOCCI=",
+        "requestKey": "kdGK+xqEbEH0LwRfJ6W86g==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -324,17 +326,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WVPYjlhni7FwbEFMsms4NsN8VNQ=",
-        "requestKey": "xAr4J1Dsf/2jKebZeoj2Lw==",
-        "rawTail": "gStxdWV1ZWQ6YjE0NmE1YzktY2U5Yy00Zjk3LWFjZTctZTY3YTliYjA0M2U3gSphZnRlcjpiMTQ2YTVjOS1jZTljLTRmOTctYWNlNy1lNjdhOWJiMDQzZTeIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8LKHmXzSDD7QhCSnYSAFzyHOCCI=",
+        "requestKey": "kdGK+xqEbEH0LwRfJ6W86g==",
+        "rawTail": "gStxdWV1ZWQ6NjBiMzQ2ZGItN2NiMi00OTc4LWJkOTctNzE5OTk2YjViYTM0gSphZnRlcjo2MGIzNDZkYi03Y2IyLTQ5NzgtYmQ5Ny03MTk5OTZiNWJhMzSIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmIxNDZhNWM5LWNlOWMtNGY5Ny1hY2U3LWU2N2E5YmIwNDNlNw=="
+            "payload": "cXVldWVkOjYwYjM0NmRiLTdjYjItNDk3OC1iZDk3LTcxOTk5NmI1YmEzNA=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6YjE0NmE1YzktY2U5Yy00Zjk3LWFjZTctZTY3YTliYjA0M2U3"
+            "payload": "YWZ0ZXI6NjBiMzQ2ZGItN2NiMi00OTc4LWJkOTctNzE5OTk2YjViYTM0"
           },
           {
             "opcode": 8,
@@ -346,14 +348,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 64.01779999999985,
+      "elapsedMs": 62.413994,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"d3af3f2c-0e45-424f-9e3c-5eb21faf4d5a\",\"state\":{\"kind\":\"timeout-async-reject\",\"challenge\":\"b146a5c9-ce9c-4f97-ace7-e67a9bb043e7\",\"trace\":[\"message\",\"callback\",\"async\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/timeout-async-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"3a50e905-26c9-4eb5-8461-b3cbcd692f53\",\"state\":{\"kind\":\"timeout-async-reject\",\"challenge\":\"60b346db-7cb2-4978-bd97-719996b5ba34\",\"trace\":[\"message\",\"callback\",\"async\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/timeout-async-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "d3af3f2c-0e45-424f-9e3c-5eb21faf4d5a",
+        "realm": "3a50e905-26c9-4eb5-8461-b3cbcd692f53",
         "state": {
           "kind": "timeout-async-reject",
-          "challenge": "b146a5c9-ce9c-4f97-ace7-e67a9bb043e7",
+          "challenge": "60b346db-7cb2-4978-bd97-719996b5ba34",
           "trace": [
             "message",
             "callback",
@@ -398,23 +400,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "microtask-throw",
-      "challenge": "4211f269-2518-4b02-b9e5-2663436c9980",
+      "challenge": "6b63da82-ad93-4011-a288-f9fa59ed6284",
       "initialState": {
-        "realm": "61e2df65-18ab-40c7-8040-607b6db0feb3",
+        "realm": "16859d19-d286-4ec3-afa3-ebae3e184ab0",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: HJYEhtEEjwERhNum4Lhne3hM8oc=",
-        "requestKey": "TIfSw/s5SLCCeIHCJmIR/Q==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nhd4cWm51AMoPU0f6nwAS8hvaqo=",
+        "requestKey": "dfrxB/kMcs9RUx8iyk1zYg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -424,17 +426,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: HJYEhtEEjwERhNum4Lhne3hM8oc=",
-        "requestKey": "TIfSw/s5SLCCeIHCJmIR/Q==",
-        "rawTail": "gStxdWV1ZWQ6NDIxMWYyNjktMjUxOC00YjAyLWI5ZTUtMjY2MzQzNmM5OTgwgSphZnRlcjo0MjExZjI2OS0yNTE4LTRiMDItYjllNS0yNjYzNDM2Yzk5ODCIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nhd4cWm51AMoPU0f6nwAS8hvaqo=",
+        "requestKey": "dfrxB/kMcs9RUx8iyk1zYg==",
+        "rawTail": "gStxdWV1ZWQ6NmI2M2RhODItYWQ5My00MDExLWEyODgtZjlmYTU5ZWQ2Mjg0gSphZnRlcjo2YjYzZGE4Mi1hZDkzLTQwMTEtYTI4OC1mOWZhNTllZDYyODSIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjQyMTFmMjY5LTI1MTgtNGIwMi1iOWU1LTI2NjM0MzZjOTk4MA=="
+            "payload": "cXVldWVkOjZiNjNkYTgyLWFkOTMtNDAxMS1hMjg4LWY5ZmE1OWVkNjI4NA=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6NDIxMWYyNjktMjUxOC00YjAyLWI5ZTUtMjY2MzQzNmM5OTgw"
+            "payload": "YWZ0ZXI6NmI2M2RhODItYWQ5My00MDExLWEyODgtZjlmYTU5ZWQ2Mjg0"
           },
           {
             "opcode": 8,
@@ -446,14 +448,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 66.24710000000005,
+      "elapsedMs": 62.06295399999999,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"61e2df65-18ab-40c7-8040-607b6db0feb3\",\"state\":{\"kind\":\"microtask-throw\",\"challenge\":\"4211f269-2518-4b02-b9e5-2663436c9980\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"16859d19-d286-4ec3-afa3-ebae3e184ab0\",\"state\":{\"kind\":\"microtask-throw\",\"challenge\":\"6b63da82-ad93-4011-a288-f9fa59ed6284\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "61e2df65-18ab-40c7-8040-607b6db0feb3",
+        "realm": "16859d19-d286-4ec3-afa3-ebae3e184ab0",
         "state": {
           "kind": "microtask-throw",
-          "challenge": "4211f269-2518-4b02-b9e5-2663436c9980",
+          "challenge": "6b63da82-ad93-4011-a288-f9fa59ed6284",
           "trace": [
             "message",
             "callback",
@@ -497,23 +499,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "promise-throw",
-      "challenge": "909ef693-1a42-4904-8012-5e48fd9b6b39",
+      "challenge": "f17621c3-6e94-46a3-9637-4a591e99cf2e",
       "initialState": {
-        "realm": "9db9e4f2-01d4-4126-81c8-20a1873f4153",
+        "realm": "c67f86c6-c9c1-410e-a5da-2095e524073a",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gw172F+G9kEYHIFLJqOB5VDt4i4=",
-        "requestKey": "QhkvYgODm9yekzEYSk5DDg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 87+NZygzOG74rJ5HHWu8meWLQSc=",
+        "requestKey": "H5VIv/SfnNDtjsJo2HaPeA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -523,17 +525,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gw172F+G9kEYHIFLJqOB5VDt4i4=",
-        "requestKey": "QhkvYgODm9yekzEYSk5DDg==",
-        "rawTail": "gStxdWV1ZWQ6OTA5ZWY2OTMtMWE0Mi00OTA0LTgwMTItNWU0OGZkOWI2YjM5gSphZnRlcjo5MDllZjY5My0xYTQyLTQ5MDQtODAxMi01ZTQ4ZmQ5YjZiMzmIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 87+NZygzOG74rJ5HHWu8meWLQSc=",
+        "requestKey": "H5VIv/SfnNDtjsJo2HaPeA==",
+        "rawTail": "gStxdWV1ZWQ6ZjE3NjIxYzMtNmU5NC00NmEzLTk2MzctNGE1OTFlOTljZjJlgSphZnRlcjpmMTc2MjFjMy02ZTk0LTQ2YTMtOTYzNy00YTU5MWU5OWNmMmWIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjkwOWVmNjkzLTFhNDItNDkwNC04MDEyLTVlNDhmZDliNmIzOQ=="
+            "payload": "cXVldWVkOmYxNzYyMWMzLTZlOTQtNDZhMy05NjM3LTRhNTkxZTk5Y2YyZQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6OTA5ZWY2OTMtMWE0Mi00OTA0LTgwMTItNWU0OGZkOWI2YjM5"
+            "payload": "YWZ0ZXI6ZjE3NjIxYzMtNmU5NC00NmEzLTk2MzctNGE1OTFlOTljZjJl"
           },
           {
             "opcode": 8,
@@ -545,14 +547,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 71.33159999999998,
+      "elapsedMs": 63.18889799999988,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"9db9e4f2-01d4-4126-81c8-20a1873f4153\",\"state\":{\"kind\":\"promise-throw\",\"challenge\":\"909ef693-1a42-4904-8012-5e48fd9b6b39\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"c67f86c6-c9c1-410e-a5da-2095e524073a\",\"state\":{\"kind\":\"promise-throw\",\"challenge\":\"f17621c3-6e94-46a3-9637-4a591e99cf2e\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "9db9e4f2-01d4-4126-81c8-20a1873f4153",
+        "realm": "c67f86c6-c9c1-410e-a5da-2095e524073a",
         "state": {
           "kind": "promise-throw",
-          "challenge": "909ef693-1a42-4904-8012-5e48fd9b6b39",
+          "challenge": "f17621c3-6e94-46a3-9637-4a591e99cf2e",
           "trace": [
             "message",
             "callback",
@@ -596,23 +598,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "timeout-caught",
-      "challenge": "408c52b0-edcb-459c-bb4b-cefdfa12f90e",
+      "challenge": "9bd86923-3eaf-4730-b7f2-dcbf580ece70",
       "initialState": {
-        "realm": "a4fb7220-2b2e-477a-b8b4-c33148cd1a2c",
+        "realm": "1edd45b1-7e67-4189-85d5-d06fc32c7a3e",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EXksl3UbMiUjBaKH3DjvwI6baGA=",
-        "requestKey": "cvvcDfeYVF15YWPxAwk4ow==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tiNlWUndmtRk0A5AlHwNThhuzjE=",
+        "requestKey": "kOyJUEKwcsQJcY1ShuHOhw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -622,17 +624,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EXksl3UbMiUjBaKH3DjvwI6baGA=",
-        "requestKey": "cvvcDfeYVF15YWPxAwk4ow==",
-        "rawTail": "gStxdWV1ZWQ6NDA4YzUyYjAtZWRjYi00NTljLWJiNGItY2VmZGZhMTJmOTBlgSphZnRlcjo0MDhjNTJiMC1lZGNiLTQ1OWMtYmI0Yi1jZWZkZmExMmY5MGWIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tiNlWUndmtRk0A5AlHwNThhuzjE=",
+        "requestKey": "kOyJUEKwcsQJcY1ShuHOhw==",
+        "rawTail": "gStxdWV1ZWQ6OWJkODY5MjMtM2VhZi00NzMwLWI3ZjItZGNiZjU4MGVjZTcwgSphZnRlcjo5YmQ4NjkyMy0zZWFmLTQ3MzAtYjdmMi1kY2JmNTgwZWNlNzCIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjQwOGM1MmIwLWVkY2ItNDU5Yy1iYjRiLWNlZmRmYTEyZjkwZQ=="
+            "payload": "cXVldWVkOjliZDg2OTIzLTNlYWYtNDczMC1iN2YyLWRjYmY1ODBlY2U3MA=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6NDA4YzUyYjAtZWRjYi00NTljLWJiNGItY2VmZGZhMTJmOTBl"
+            "payload": "YWZ0ZXI6OWJkODY5MjMtM2VhZi00NzMwLWI3ZjItZGNiZjU4MGVjZTcw"
           },
           {
             "opcode": 8,
@@ -644,14 +646,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 65.54539999999997,
+      "elapsedMs": 63.34958400000005,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"a4fb7220-2b2e-477a-b8b4-c33148cd1a2c\",\"state\":{\"kind\":\"timeout-caught\",\"challenge\":\"408c52b0-edcb-459c-bb4b-cefdfa12f90e\",\"trace\":[\"message\",\"callback\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"1edd45b1-7e67-4189-85d5-d06fc32c7a3e\",\"state\":{\"kind\":\"timeout-caught\",\"challenge\":\"9bd86923-3eaf-4730-b7f2-dcbf580ece70\",\"trace\":[\"message\",\"callback\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "a4fb7220-2b2e-477a-b8b4-c33148cd1a2c",
+        "realm": "1edd45b1-7e67-4189-85d5-d06fc32c7a3e",
         "state": {
           "kind": "timeout-caught",
-          "challenge": "408c52b0-edcb-459c-bb4b-cefdfa12f90e",
+          "challenge": "9bd86923-3eaf-4730-b7f2-dcbf580ece70",
           "trace": [
             "message",
             "callback",
@@ -678,23 +680,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-handled",
-      "challenge": "9a4ec95b-e51b-489d-8035-daa8b08fa80b",
+      "challenge": "56507d29-4fdf-40c4-bf6b-c3641e6c5250",
       "initialState": {
-        "realm": "64f6c016-50ac-4879-a2ed-f07d495c1e38",
+        "realm": "d2db8914-f3f2-446d-83bf-fa99d0c64bf4",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Ea7i8P43CfNdKSHBK3V1rUomjYo=",
-        "requestKey": "s/D6qt/MTR9nqej+2Ztq/w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: h9s/VL8WwcpnCXkGz3rChu1qtZc=",
+        "requestKey": "qEyeZo2emWAC4iRgbfb0Yg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -704,17 +706,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Ea7i8P43CfNdKSHBK3V1rUomjYo=",
-        "requestKey": "s/D6qt/MTR9nqej+2Ztq/w==",
-        "rawTail": "gStxdWV1ZWQ6OWE0ZWM5NWItZTUxYi00ODlkLTgwMzUtZGFhOGIwOGZhODBigSphZnRlcjo5YTRlYzk1Yi1lNTFiLTQ4OWQtODAzNS1kYWE4YjA4ZmE4MGKIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: h9s/VL8WwcpnCXkGz3rChu1qtZc=",
+        "requestKey": "qEyeZo2emWAC4iRgbfb0Yg==",
+        "rawTail": "gStxdWV1ZWQ6NTY1MDdkMjktNGZkZi00MGM0LWJmNmItYzM2NDFlNmM1MjUwgSphZnRlcjo1NjUwN2QyOS00ZmRmLTQwYzQtYmY2Yi1jMzY0MWU2YzUyNTCIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjlhNGVjOTViLWU1MWItNDg5ZC04MDM1LWRhYThiMDhmYTgwYg=="
+            "payload": "cXVldWVkOjU2NTA3ZDI5LTRmZGYtNDBjNC1iZjZiLWMzNjQxZTZjNTI1MA=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6OWE0ZWM5NWItZTUxYi00ODlkLTgwMzUtZGFhOGIwOGZhODBi"
+            "payload": "YWZ0ZXI6NTY1MDdkMjktNGZkZi00MGM0LWJmNmItYzM2NDFlNmM1MjUw"
           },
           {
             "opcode": 8,
@@ -726,14 +728,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 71.95290000000023,
+      "elapsedMs": 62.7760330000001,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"64f6c016-50ac-4879-a2ed-f07d495c1e38\",\"state\":{\"kind\":\"rejection-handled\",\"challenge\":\"9a4ec95b-e51b-489d-8035-daa8b08fa80b\",\"trace\":[\"message\",\"callback\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"d2db8914-f3f2-446d-83bf-fa99d0c64bf4\",\"state\":{\"kind\":\"rejection-handled\",\"challenge\":\"56507d29-4fdf-40c4-bf6b-c3641e6c5250\",\"trace\":[\"message\",\"callback\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "64f6c016-50ac-4879-a2ed-f07d495c1e38",
+        "realm": "d2db8914-f3f2-446d-83bf-fa99d0c64bf4",
         "state": {
           "kind": "rejection-handled",
-          "challenge": "9a4ec95b-e51b-489d-8035-daa8b08fa80b",
+          "challenge": "56507d29-4fdf-40c4-bf6b-c3641e6c5250",
           "trace": [
             "message",
             "callback",
@@ -760,30 +762,30 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "http-timeout-throw",
-      "challenge": "60330a6b-03f4-456c-9d4b-b20b2c92eae8",
+      "challenge": "3694ebf0-198e-4e50-8c1c-212701ae51db",
       "initialState": {
-        "realm": "d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0",
+        "realm": "15589e8e-f748-49ea-b4c3-1ad07a8cad04",
         "state": null
       },
       "response": {
         "status": 200,
-        "text": "{\"realm\":\"d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0\",\"state\":{\"kind\":\"http-timeout-throw\",\"challenge\":\"60330a6b-03f4-456c-9d4b-b20b2c92eae8\",\"trace\":[\"http\",\"callback\",\"followup\",\"response\"],\"globalEvents\":[],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+        "text": "{\"realm\":\"15589e8e-f748-49ea-b4c3-1ad07a8cad04\",\"state\":{\"kind\":\"http-timeout-throw\",\"challenge\":\"3694ebf0-198e-4e50-8c1c-212701ae51db\",\"trace\":[\"http\",\"callback\",\"followup\",\"response\"],\"globalEvents\":[],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
       },
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0\",\"state\":{\"kind\":\"http-timeout-throw\",\"challenge\":\"60330a6b-03f4-456c-9d4b-b20b2c92eae8\",\"trace\":[\"http\",\"callback\",\"followup\",\"response\"],\"globalEvents\":[],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"15589e8e-f748-49ea-b4c3-1ad07a8cad04\",\"state\":{\"kind\":\"http-timeout-throw\",\"challenge\":\"3694ebf0-198e-4e50-8c1c-212701ae51db\",\"trace\":[\"http\",\"callback\",\"followup\",\"response\"],\"globalEvents\":[],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "d08cfc2a-ca62-4a0b-8211-5252ef2dc4d0",
+        "realm": "15589e8e-f748-49ea-b4c3-1ad07a8cad04",
         "state": {
           "kind": "http-timeout-throw",
-          "challenge": "60330a6b-03f4-456c-9d4b-b20b2c92eae8",
+          "challenge": "3694ebf0-198e-4e50-8c1c-212701ae51db",
           "trace": [
             "http",
             "callback",
@@ -799,30 +801,30 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "http-timeout-reject",
-      "challenge": "64fe73df-e564-4bf5-ad7d-0c5ae90c9836",
+      "challenge": "7316f93e-5892-441b-b020-852dab163127",
       "initialState": {
-        "realm": "cf66041e-e2bb-4005-a06e-f8e08b2acbe8",
+        "realm": "7623a93e-5b88-438e-b3de-df5cff399640",
         "state": null
       },
       "response": {
         "status": 200,
-        "text": "{\"realm\":\"cf66041e-e2bb-4005-a06e-f8e08b2acbe8\",\"state\":{\"kind\":\"http-timeout-reject\",\"challenge\":\"64fe73df-e564-4bf5-ad7d-0c5ae90c9836\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+        "text": "{\"realm\":\"7623a93e-5b88-438e-b3de-df5cff399640\",\"state\":{\"kind\":\"http-timeout-reject\",\"challenge\":\"7316f93e-5892-441b-b020-852dab163127\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
       },
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"cf66041e-e2bb-4005-a06e-f8e08b2acbe8\",\"state\":{\"kind\":\"http-timeout-reject\",\"challenge\":\"64fe73df-e564-4bf5-ad7d-0c5ae90c9836\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"7623a93e-5b88-438e-b3de-df5cff399640\",\"state\":{\"kind\":\"http-timeout-reject\",\"challenge\":\"7316f93e-5892-441b-b020-852dab163127\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-timeout-reject\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "cf66041e-e2bb-4005-a06e-f8e08b2acbe8",
+        "realm": "7623a93e-5b88-438e-b3de-df5cff399640",
         "state": {
           "kind": "http-timeout-reject",
-          "challenge": "64fe73df-e564-4bf5-ad7d-0c5ae90c9836",
+          "challenge": "7316f93e-5892-441b-b020-852dab163127",
           "trace": [
             "http",
             "callback",
@@ -856,30 +858,30 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "http-microtask-throw",
-      "challenge": "2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029",
+      "challenge": "83a6320a-d43d-4280-9be5-fbec807cc492",
       "initialState": {
-        "realm": "8e31b507-31a8-4a05-8999-1fca0d0105cf",
+        "realm": "4cd4cf15-527a-4067-a203-780c11440e1f",
         "state": null
       },
       "response": {
         "status": 200,
-        "text": "{\"realm\":\"8e31b507-31a8-4a05-8999-1fca0d0105cf\",\"state\":{\"kind\":\"http-microtask-throw\",\"challenge\":\"2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029\",\"trace\":[\"http\",\"callback\",\"global/error\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/http-microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+        "text": "{\"realm\":\"4cd4cf15-527a-4067-a203-780c11440e1f\",\"state\":{\"kind\":\"http-microtask-throw\",\"challenge\":\"83a6320a-d43d-4280-9be5-fbec807cc492\",\"trace\":[\"http\",\"callback\",\"global/error\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/http-microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
       },
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"8e31b507-31a8-4a05-8999-1fca0d0105cf\",\"state\":{\"kind\":\"http-microtask-throw\",\"challenge\":\"2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029\",\"trace\":[\"http\",\"callback\",\"global/error\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/http-microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"4cd4cf15-527a-4067-a203-780c11440e1f\",\"state\":{\"kind\":\"http-microtask-throw\",\"challenge\":\"83a6320a-d43d-4280-9be5-fbec807cc492\",\"trace\":[\"http\",\"callback\",\"global/error\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/http-microtask-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-microtask-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "8e31b507-31a8-4a05-8999-1fca0d0105cf",
+        "realm": "4cd4cf15-527a-4067-a203-780c11440e1f",
         "state": {
           "kind": "http-microtask-throw",
-          "challenge": "2dceaf5d-dddc-4b26-94c4-7fcf9b3b5029",
+          "challenge": "83a6320a-d43d-4280-9be5-fbec807cc492",
           "trace": [
             "http",
             "callback",
@@ -913,30 +915,30 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "http-promise-throw",
-      "challenge": "72903007-4432-4d0d-b56b-b6b8183a121c",
+      "challenge": "7f44d9b1-3c2d-4e00-969f-4cd5c30576f9",
       "initialState": {
-        "realm": "7805f13e-92af-49c7-b8a5-87a0dbdd1587",
+        "realm": "86ddd8d4-799d-4694-8413-3a0a14b4cd23",
         "state": null
       },
       "response": {
         "status": 200,
-        "text": "{\"realm\":\"7805f13e-92af-49c7-b8a5-87a0dbdd1587\",\"state\":{\"kind\":\"http-promise-throw\",\"challenge\":\"72903007-4432-4d0d-b56b-b6b8183a121c\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
+        "text": "{\"realm\":\"86ddd8d4-799d-4694-8413-3a0a14b4cd23\",\"state\":{\"kind\":\"http-promise-throw\",\"challenge\":\"7f44d9b1-3c2d-4e00-969f-4cd5c30576f9\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}"
       },
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"7805f13e-92af-49c7-b8a5-87a0dbdd1587\",\"state\":{\"kind\":\"http-promise-throw\",\"challenge\":\"72903007-4432-4d0d-b56b-b6b8183a121c\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"86ddd8d4-799d-4694-8413-3a0a14b4cd23\",\"state\":{\"kind\":\"http-promise-throw\",\"challenge\":\"7f44d9b1-3c2d-4e00-969f-4cd5c30576f9\",\"trace\":[\"http\",\"callback\",\"global/unhandledrejection\",\"followup\",\"response\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/http-promise-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "7805f13e-92af-49c7-b8a5-87a0dbdd1587",
+        "realm": "86ddd8d4-799d-4694-8413-3a0a14b4cd23",
         "state": {
           "kind": "http-promise-throw",
-          "challenge": "72903007-4432-4d0d-b56b-b6b8183a121c",
+          "challenge": "7f44d9b1-3c2d-4e00-969f-4cd5c30576f9",
           "trace": [
             "http",
             "callback",
@@ -970,23 +972,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "timeout-throw-microtask",
-      "challenge": "8684aa6f-cd6d-4659-aba8-68430d61e48a",
+      "challenge": "f0dbcb17-bbed-4ff5-94dd-226cb6912f39",
       "initialState": {
-        "realm": "bc608242-31db-4495-bdc7-da4e859ca987",
+        "realm": "1e0814f4-aef0-47af-bfeb-6985fe4b617b",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tIHFCq9sPMdwAZkeW7THrIoP9yE=",
-        "requestKey": "Ct5kg28in+WDxCmqVEDgbg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: TY/wUUOqdtXfVR84PBkmOclAB8o=",
+        "requestKey": "vTzlU4ZmSRVuRCZTG8T+Cg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -996,17 +998,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tIHFCq9sPMdwAZkeW7THrIoP9yE=",
-        "requestKey": "Ct5kg28in+WDxCmqVEDgbg==",
-        "rawTail": "gStxdWV1ZWQ6ODY4NGFhNmYtY2Q2ZC00NjU5LWFiYTgtNjg0MzBkNjFlNDhhgSphZnRlcjo4Njg0YWE2Zi1jZDZkLTQ2NTktYWJhOC02ODQzMGQ2MWU0OGGIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: TY/wUUOqdtXfVR84PBkmOclAB8o=",
+        "requestKey": "vTzlU4ZmSRVuRCZTG8T+Cg==",
+        "rawTail": "gStxdWV1ZWQ6ZjBkYmNiMTctYmJlZC00ZmY1LTk0ZGQtMjI2Y2I2OTEyZjM5gSphZnRlcjpmMGRiY2IxNy1iYmVkLTRmZjUtOTRkZC0yMjZjYjY5MTJmMzmIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjg2ODRhYTZmLWNkNmQtNDY1OS1hYmE4LTY4NDMwZDYxZTQ4YQ=="
+            "payload": "cXVldWVkOmYwZGJjYjE3LWJiZWQtNGZmNS05NGRkLTIyNmNiNjkxMmYzOQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6ODY4NGFhNmYtY2Q2ZC00NjU5LWFiYTgtNjg0MzBkNjFlNDhh"
+            "payload": "YWZ0ZXI6ZjBkYmNiMTctYmJlZC00ZmY1LTk0ZGQtMjI2Y2I2OTEyZjM5"
           },
           {
             "opcode": 8,
@@ -1018,14 +1020,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 64.38630000000012,
+      "elapsedMs": 62.773636000000806,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"bc608242-31db-4495-bdc7-da4e859ca987\",\"state\":{\"kind\":\"timeout-throw-microtask\",\"challenge\":\"8684aa6f-cd6d-4659-aba8-68430d61e48a\",\"trace\":[\"message\",\"callback\",\"nested\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"1e0814f4-aef0-47af-bfeb-6985fe4b617b\",\"state\":{\"kind\":\"timeout-throw-microtask\",\"challenge\":\"f0dbcb17-bbed-4ff5-94dd-226cb6912f39\",\"trace\":[\"message\",\"callback\",\"nested\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "bc608242-31db-4495-bdc7-da4e859ca987",
+        "realm": "1e0814f4-aef0-47af-bfeb-6985fe4b617b",
         "state": {
           "kind": "timeout-throw-microtask",
-          "challenge": "8684aa6f-cd6d-4659-aba8-68430d61e48a",
+          "challenge": "f0dbcb17-bbed-4ff5-94dd-226cb6912f39",
           "trace": [
             "message",
             "callback",
@@ -1052,23 +1054,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "interval-clear-throw",
-      "challenge": "da814ada-e792-476e-853e-219eea3e3bc5",
+      "challenge": "5d2c3022-dedd-4cce-a9e7-d772d4393161",
       "initialState": {
-        "realm": "56005929-243f-4abe-8485-b644757aeb8d",
+        "realm": "5775438e-854e-43bf-a405-e65adfbbe5c1",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KTRBKXl4HA1Dy3sqKgE2VNkIqd4=",
-        "requestKey": "njJTCKM/CK9KsNjsGn+i5A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 3/p0mbYmvHJEe7vIWGMkMF6s57A=",
+        "requestKey": "m3e3O6ZOhEEwgTS3FrlHTw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1078,17 +1080,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KTRBKXl4HA1Dy3sqKgE2VNkIqd4=",
-        "requestKey": "njJTCKM/CK9KsNjsGn+i5A==",
-        "rawTail": "gStxdWV1ZWQ6ZGE4MTRhZGEtZTc5Mi00NzZlLTg1M2UtMjE5ZWVhM2UzYmM1gSphZnRlcjpkYTgxNGFkYS1lNzkyLTQ3NmUtODUzZS0yMTllZWEzZTNiYzWIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 3/p0mbYmvHJEe7vIWGMkMF6s57A=",
+        "requestKey": "m3e3O6ZOhEEwgTS3FrlHTw==",
+        "rawTail": "gStxdWV1ZWQ6NWQyYzMwMjItZGVkZC00Y2NlLWE5ZTctZDc3MmQ0MzkzMTYxgSphZnRlcjo1ZDJjMzAyMi1kZWRkLTRjY2UtYTllNy1kNzcyZDQzOTMxNjGIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmRhODE0YWRhLWU3OTItNDc2ZS04NTNlLTIxOWVlYTNlM2JjNQ=="
+            "payload": "cXVldWVkOjVkMmMzMDIyLWRlZGQtNGNjZS1hOWU3LWQ3NzJkNDM5MzE2MQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6ZGE4MTRhZGEtZTc5Mi00NzZlLTg1M2UtMjE5ZWVhM2UzYmM1"
+            "payload": "YWZ0ZXI6NWQyYzMwMjItZGVkZC00Y2NlLWE5ZTctZDc3MmQ0MzkzMTYx"
           },
           {
             "opcode": 8,
@@ -1100,14 +1102,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 66.5043999999998,
+      "elapsedMs": 62.093361000000186,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"56005929-243f-4abe-8485-b644757aeb8d\",\"state\":{\"kind\":\"interval-clear-throw\",\"challenge\":\"da814ada-e792-476e-853e-219eea3e3bc5\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"5775438e-854e-43bf-a405-e65adfbbe5c1\",\"state\":{\"kind\":\"interval-clear-throw\",\"challenge\":\"5d2c3022-dedd-4cce-a9e7-d772d4393161\",\"trace\":[\"message\",\"callback\",\"followup\",\"socket/close\"],\"globalEvents\":[],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "56005929-243f-4abe-8485-b644757aeb8d",
+        "realm": "5775438e-854e-43bf-a405-e65adfbbe5c1",
         "state": {
           "kind": "interval-clear-throw",
-          "challenge": "da814ada-e792-476e-853e-219eea3e3bc5",
+          "challenge": "5d2c3022-dedd-4cce-a9e7-d772d4393161",
           "trace": [
             "message",
             "callback",
@@ -1133,23 +1135,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "microtask-primitive",
-      "challenge": "f08fdcb3-d22d-4fdd-b3b7-6fdcd9d320b0",
+      "challenge": "1b0b431d-6562-474a-9722-43c7b428950f",
       "initialState": {
-        "realm": "72b5c46f-32b8-41e1-99e6-e5709c5ddf34",
+        "realm": "428f6b5f-c802-40ed-b899-a00370e71d3e",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: a0y9ixXl48Dn4CHxE89qbpyLJzw=",
-        "requestKey": "OPEAmeQHZCRyvITpZkYIig==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9XFC9dDF/M6wV35ZTzc9cvXSYPo=",
+        "requestKey": "qr1Gk8uM0pbxdPNF69L8/g==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1159,17 +1161,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: a0y9ixXl48Dn4CHxE89qbpyLJzw=",
-        "requestKey": "OPEAmeQHZCRyvITpZkYIig==",
-        "rawTail": "gStxdWV1ZWQ6ZjA4ZmRjYjMtZDIyZC00ZmRkLWIzYjctNmZkY2Q5ZDMyMGIwgSphZnRlcjpmMDhmZGNiMy1kMjJkLTRmZGQtYjNiNy02ZmRjZDlkMzIwYjCIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9XFC9dDF/M6wV35ZTzc9cvXSYPo=",
+        "requestKey": "qr1Gk8uM0pbxdPNF69L8/g==",
+        "rawTail": "gStxdWV1ZWQ6MWIwYjQzMWQtNjU2Mi00NzRhLTk3MjItNDNjN2I0Mjg5NTBmgSphZnRlcjoxYjBiNDMxZC02NTYyLTQ3NGEtOTcyMi00M2M3YjQyODk1MGaIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmYwOGZkY2IzLWQyMmQtNGZkZC1iM2I3LTZmZGNkOWQzMjBiMA=="
+            "payload": "cXVldWVkOjFiMGI0MzFkLTY1NjItNDc0YS05NzIyLTQzYzdiNDI4OTUwZg=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6ZjA4ZmRjYjMtZDIyZC00ZmRkLWIzYjctNmZkY2Q5ZDMyMGIw"
+            "payload": "YWZ0ZXI6MWIwYjQzMWQtNjU2Mi00NzRhLTk3MjItNDNjN2I0Mjg5NTBm"
           },
           {
             "opcode": 8,
@@ -1181,14 +1183,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 64.44890000000032,
+      "elapsedMs": 62.9547649999995,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"72b5c46f-32b8-41e1-99e6-e5709c5ddf34\",\"state\":{\"kind\":\"microtask-primitive\",\"challenge\":\"f08fdcb3-d22d-4fdd-b3b7-6fdcd9d320b0\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught primitive/microtask-primitive\",\"name\":null,\"errorMessage\":null,\"promise\":null,\"valueType\":\"string\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"undefined\",\"lineno\":0,\"colno\":-1}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"428f6b5f-c802-40ed-b899-a00370e71d3e\",\"state\":{\"kind\":\"microtask-primitive\",\"challenge\":\"1b0b431d-6562-474a-9722-43c7b428950f\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught primitive/microtask-primitive\",\"name\":null,\"errorMessage\":null,\"promise\":null,\"valueType\":\"string\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"undefined\",\"lineno\":0,\"colno\":-1}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "72b5c46f-32b8-41e1-99e6-e5709c5ddf34",
+        "realm": "428f6b5f-c802-40ed-b899-a00370e71d3e",
         "state": {
           "kind": "microtask-primitive",
-          "challenge": "f08fdcb3-d22d-4fdd-b3b7-6fdcd9d320b0",
+          "challenge": "1b0b431d-6562-474a-9722-43c7b428950f",
           "trace": [
             "message",
             "callback",
@@ -1232,23 +1234,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "microtask-report-override",
-      "challenge": "b40d4bfa-f674-41d2-a5cc-11605b86249a",
+      "challenge": "361ce9c5-4ade-4b0a-8e4b-9f6288676e0d",
       "initialState": {
-        "realm": "23ecc625-f2a9-4344-93d0-d41977f63eeb",
+        "realm": "25ab8822-f912-4976-a4d8-be87a54529d6",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8dakUMI0vy47YfMbDhkh8le0x/E=",
-        "requestKey": "2BiRb6Z/nNninbwbJPMxNg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: S/1kXOFX6dfvUmBiXDrQJ+dfML8=",
+        "requestKey": "VW5BfJFWUvkzDGjWo/rZUQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1258,17 +1260,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 8dakUMI0vy47YfMbDhkh8le0x/E=",
-        "requestKey": "2BiRb6Z/nNninbwbJPMxNg==",
-        "rawTail": "gStxdWV1ZWQ6YjQwZDRiZmEtZjY3NC00MWQyLWE1Y2MtMTE2MDViODYyNDlhgSphZnRlcjpiNDBkNGJmYS1mNjc0LTQxZDItYTVjYy0xMTYwNWI4NjI0OWGIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: S/1kXOFX6dfvUmBiXDrQJ+dfML8=",
+        "requestKey": "VW5BfJFWUvkzDGjWo/rZUQ==",
+        "rawTail": "gStxdWV1ZWQ6MzYxY2U5YzUtNGFkZS00YjBhLThlNGItOWY2Mjg4Njc2ZTBkgSphZnRlcjozNjFjZTljNS00YWRlLTRiMGEtOGU0Yi05ZjYyODg2NzZlMGSIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmI0MGQ0YmZhLWY2NzQtNDFkMi1hNWNjLTExNjA1Yjg2MjQ5YQ=="
+            "payload": "cXVldWVkOjM2MWNlOWM1LTRhZGUtNGIwYS04ZTRiLTlmNjI4ODY3NmUwZA=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6YjQwZDRiZmEtZjY3NC00MWQyLWE1Y2MtMTE2MDViODYyNDlh"
+            "payload": "YWZ0ZXI6MzYxY2U5YzUtNGFkZS00YjBhLThlNGItOWY2Mjg4Njc2ZTBk"
           },
           {
             "opcode": 8,
@@ -1280,14 +1282,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 80.3172999999997,
+      "elapsedMs": 62.256970999999794,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"23ecc625-f2a9-4344-93d0-d41977f63eeb\",\"state\":{\"kind\":\"microtask-report-override\",\"challenge\":\"b40d4bfa-f674-41d2-a5cc-11605b86249a\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-report-override\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-report-override\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"25ab8822-f912-4976-a4d8-be87a54529d6\",\"state\":{\"kind\":\"microtask-report-override\",\"challenge\":\"361ce9c5-4ade-4b0a-8e4b-9f6288676e0d\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-report-override\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-report-override\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "23ecc625-f2a9-4344-93d0-d41977f63eeb",
+        "realm": "25ab8822-f912-4976-a4d8-be87a54529d6",
         "state": {
           "kind": "microtask-report-override",
-          "challenge": "b40d4bfa-f674-41d2-a5cc-11605b86249a",
+          "challenge": "361ce9c5-4ade-4b0a-8e4b-9f6288676e0d",
           "trace": [
             "message",
             "callback",
@@ -1331,23 +1333,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "microtask-error-listener-throw",
-      "challenge": "74e906a5-7d03-48c5-b257-021b609cafbc",
+      "challenge": "7a7f0824-fe0d-4dc6-8eed-ed95802bb041",
       "initialState": {
-        "realm": "5cae9e84-5ac4-49cf-ad32-4f1a1df82512",
+        "realm": "20127eb5-5a4a-4a8f-a4e5-f021110ec53f",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jEaPmwIGty+wnQR7lwB4md4xlMs=",
-        "requestKey": "G8/9dJevFazJ2copRYmwvg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KxeswREREksuOj5fUemGX+tXBa4=",
+        "requestKey": "HuPfklr18ZXqaJFOPyFLXQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1357,17 +1359,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jEaPmwIGty+wnQR7lwB4md4xlMs=",
-        "requestKey": "G8/9dJevFazJ2copRYmwvg==",
-        "rawTail": "gStxdWV1ZWQ6NzRlOTA2YTUtN2QwMy00OGM1LWIyNTctMDIxYjYwOWNhZmJjgSphZnRlcjo3NGU5MDZhNS03ZDAzLTQ4YzUtYjI1Ny0wMjFiNjA5Y2FmYmOIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: KxeswREREksuOj5fUemGX+tXBa4=",
+        "requestKey": "HuPfklr18ZXqaJFOPyFLXQ==",
+        "rawTail": "gStxdWV1ZWQ6N2E3ZjA4MjQtZmUwZC00ZGM2LThlZWQtZWQ5NTgwMmJiMDQxgSphZnRlcjo3YTdmMDgyNC1mZTBkLTRkYzYtOGVlZC1lZDk1ODAyYmIwNDGIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjc0ZTkwNmE1LTdkMDMtNDhjNS1iMjU3LTAyMWI2MDljYWZiYw=="
+            "payload": "cXVldWVkOjdhN2YwODI0LWZlMGQtNGRjNi04ZWVkLWVkOTU4MDJiYjA0MQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6NzRlOTA2YTUtN2QwMy00OGM1LWIyNTctMDIxYjYwOWNhZmJj"
+            "payload": "YWZ0ZXI6N2E3ZjA4MjQtZmUwZC00ZGM2LThlZWQtZWQ5NTgwMmJiMDQx"
           },
           {
             "opcode": 8,
@@ -1379,14 +1381,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 63.87010000000009,
+      "elapsedMs": 62.491657999999916,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"5cae9e84-5ac4-49cf-ad32-4f1a1df82512\",\"state\":{\"kind\":\"microtask-error-listener-throw\",\"challenge\":\"74e906a5-7d03-48c5-b257-021b609cafbc\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-error-listener-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-error-listener-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":true}}",
+      "stateText": "{\"realm\":\"20127eb5-5a4a-4a8f-a4e5-f021110ec53f\",\"state\":{\"kind\":\"microtask-error-listener-throw\",\"challenge\":\"7a7f0824-fe0d-4dc6-8eed-ed95802bb041\",\"trace\":[\"message\",\"callback\",\"global/error\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-error-listener-throw\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-error-listener-throw\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":true}}",
       "state": {
-        "realm": "5cae9e84-5ac4-49cf-ad32-4f1a1df82512",
+        "realm": "20127eb5-5a4a-4a8f-a4e5-f021110ec53f",
         "state": {
           "kind": "microtask-error-listener-throw",
-          "challenge": "74e906a5-7d03-48c5-b257-021b609cafbc",
+          "challenge": "7a7f0824-fe0d-4dc6-8eed-ed95802bb041",
           "trace": [
             "message",
             "callback",
@@ -1430,23 +1432,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "microtask-error-listener-close",
-      "challenge": "119b3fa9-3be3-4541-bccd-2fbd79557aba",
+      "challenge": "3d2e0739-825b-41b3-91a1-99be05887b4b",
       "initialState": {
-        "realm": "67686529-8e9f-4c16-b8c7-01e751609e59",
+        "realm": "21cf4be0-767e-4635-b825-a3b48ee3337f",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kQeiUVJhz6ApFMPizZiWHjITbXg=",
-        "requestKey": "5gwAmisz2kKMnrHX4L/n6Q==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ub7Na+oY77PeGJoLO1G3msynbTk=",
+        "requestKey": "Rb6Z2chDuUKSgWkNgjS7vw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1456,13 +1458,13 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kQeiUVJhz6ApFMPizZiWHjITbXg=",
-        "requestKey": "5gwAmisz2kKMnrHX4L/n6Q==",
-        "rawTail": "gStxdWV1ZWQ6MTE5YjNmYTktM2JlMy00NTQxLWJjY2QtMmZiZDc5NTU3YWJhiAoD6G9ic2VydmVy",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ub7Na+oY77PeGJoLO1G3msynbTk=",
+        "requestKey": "Rb6Z2chDuUKSgWkNgjS7vw==",
+        "rawTail": "gStxdWV1ZWQ6M2QyZTA3MzktODI1Yi00MWIzLTkxYTEtOTliZTA1ODg3YjRiiAoD6G9ic2VydmVy",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjExOWIzZmE5LTNiZTMtNDU0MS1iY2NkLTJmYmQ3OTU1N2FiYQ=="
+            "payload": "cXVldWVkOjNkMmUwNzM5LTgyNWItNDFiMy05MWExLTk5YmUwNTg4N2I0Yg=="
           },
           {
             "opcode": 8,
@@ -1474,14 +1476,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 17.784599999999955,
+      "elapsedMs": 1.3499289999999746,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"67686529-8e9f-4c16-b8c7-01e751609e59\",\"state\":{\"kind\":\"microtask-error-listener-close\",\"challenge\":\"119b3fa9-3be3-4541-bccd-2fbd79557aba\",\"trace\":[\"message\",\"callback\",\"global/error\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-error-listener-close\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-error-listener-close\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"21cf4be0-767e-4635-b825-a3b48ee3337f\",\"state\":{\"kind\":\"microtask-error-listener-close\",\"challenge\":\"3d2e0739-825b-41b3-91a1-99be05887b4b\",\"trace\":[\"message\",\"callback\",\"global/error\",\"socket/close\"],\"globalEvents\":[{\"type\":\"error\",\"trusted\":true,\"message\":\"Uncaught TypeError: async-callback/microtask-error-listener-close\",\"name\":\"TypeError\",\"errorMessage\":\"async-callback/microtask-error-listener-close\",\"promise\":null,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":\"main\",\"lineno\":4,\"colno\":90}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "67686529-8e9f-4c16-b8c7-01e751609e59",
+        "realm": "21cf4be0-767e-4635-b825-a3b48ee3337f",
         "state": {
           "kind": "microtask-error-listener-close",
-          "challenge": "119b3fa9-3be3-4541-bccd-2fbd79557aba",
+          "challenge": "3d2e0739-825b-41b3-91a1-99be05887b4b",
           "trace": [
             "message",
             "callback",
@@ -1524,23 +1526,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-listener-close",
-      "challenge": "81f560b7-3a9d-4274-8e9c-f00637830ff6",
+      "challenge": "1ae444a2-da89-43e3-8368-94e9ad08dcea",
       "initialState": {
-        "realm": "c80851ad-5cdc-40f0-b59c-628ced6f902b",
+        "realm": "19d698a0-4ca3-49e4-a2ed-acf03b106d5c",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: G06MFR2NtrYcwETJIj0wKa+oxmY=",
-        "requestKey": "DwwlLzwTsDBfSWsR/o458w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: +SqhtpqyQr/mW+6MWOcj0gkVBm8=",
+        "requestKey": "H+J6hzdxdLAd3aVWSw5XDQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1550,13 +1552,13 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: G06MFR2NtrYcwETJIj0wKa+oxmY=",
-        "requestKey": "DwwlLzwTsDBfSWsR/o458w==",
-        "rawTail": "gStxdWV1ZWQ6ODFmNTYwYjctM2E5ZC00Mjc0LThlOWMtZjAwNjM3ODMwZmY2iAoD6G9ic2VydmVy",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: +SqhtpqyQr/mW+6MWOcj0gkVBm8=",
+        "requestKey": "H+J6hzdxdLAd3aVWSw5XDQ==",
+        "rawTail": "gStxdWV1ZWQ6MWFlNDQ0YTItZGE4OS00M2UzLTgzNjgtOTRlOWFkMDhkY2VhiAoD6G9ic2VydmVy",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjgxZjU2MGI3LTNhOWQtNDI3NC04ZTljLWYwMDYzNzgzMGZmNg=="
+            "payload": "cXVldWVkOjFhZTQ0NGEyLWRhODktNDNlMy04MzY4LTk0ZTlhZDA4ZGNlYQ=="
           },
           {
             "opcode": 8,
@@ -1568,14 +1570,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 31.93000000000029,
+      "elapsedMs": 27.628881999999976,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"c80851ad-5cdc-40f0-b59c-628ced6f902b\",\"state\":{\"kind\":\"rejection-listener-close\",\"challenge\":\"81f560b7-3a9d-4274-8e9c-f00637830ff6\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-close\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"19d698a0-4ca3-49e4-a2ed-acf03b106d5c\",\"state\":{\"kind\":\"rejection-listener-close\",\"challenge\":\"1ae444a2-da89-43e3-8368-94e9ad08dcea\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-close\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "c80851ad-5cdc-40f0-b59c-628ced6f902b",
+        "realm": "19d698a0-4ca3-49e4-a2ed-acf03b106d5c",
         "state": {
           "kind": "rejection-listener-close",
-          "challenge": "81f560b7-3a9d-4274-8e9c-f00637830ff6",
+          "challenge": "1ae444a2-da89-43e3-8368-94e9ad08dcea",
           "trace": [
             "message",
             "callback",
@@ -1618,23 +1620,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-listener-send",
-      "challenge": "59e93176-c995-44bc-8eff-e1fd642b085c",
+      "challenge": "f4beb572-c589-4260-95c2-e3cf2f1c1f5c",
       "initialState": {
-        "realm": "e80831bc-7412-4f69-ba21-af0cd1c8cabe",
+        "realm": "6f5dae14-a773-43af-9556-33df55ad85d0",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: RBNPmkFdZH26s5KMxryDoKHEzQw=",
-        "requestKey": "z0noVoy2Diq/176gZAcR3w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: +hC9+xKIgEj3ELBjbVgvNgKRvko=",
+        "requestKey": "n2BVQVScyXgsVIz0ZCf1wg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1644,21 +1646,21 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: RBNPmkFdZH26s5KMxryDoKHEzQw=",
-        "requestKey": "z0noVoy2Diq/176gZAcR3w==",
-        "rawTail": "gStxdWV1ZWQ6NTllOTMxNzYtYzk5NS00NGJjLThlZmYtZTFmZDY0MmIwODVjgS1vYnNlcnZlZDo1OWU5MzE3Ni1jOTk1LTQ0YmMtOGVmZi1lMWZkNjQyYjA4NWOBKmFmdGVyOjU5ZTkzMTc2LWM5OTUtNDRiYy04ZWZmLWUxZmQ2NDJiMDg1Y4gGA+hkb25l",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: +hC9+xKIgEj3ELBjbVgvNgKRvko=",
+        "requestKey": "n2BVQVScyXgsVIz0ZCf1wg==",
+        "rawTail": "gStxdWV1ZWQ6ZjRiZWI1NzItYzU4OS00MjYwLTk1YzItZTNjZjJmMWMxZjVjgS1vYnNlcnZlZDpmNGJlYjU3Mi1jNTg5LTQyNjAtOTVjMi1lM2NmMmYxYzFmNWOBKmFmdGVyOmY0YmViNTcyLWM1ODktNDI2MC05NWMyLWUzY2YyZjFjMWY1Y4gGA+hkb25l",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjU5ZTkzMTc2LWM5OTUtNDRiYy04ZWZmLWUxZmQ2NDJiMDg1Yw=="
+            "payload": "cXVldWVkOmY0YmViNTcyLWM1ODktNDI2MC05NWMyLWUzY2YyZjFjMWY1Yw=="
           },
           {
             "opcode": 1,
-            "payload": "b2JzZXJ2ZWQ6NTllOTMxNzYtYzk5NS00NGJjLThlZmYtZTFmZDY0MmIwODVj"
+            "payload": "b2JzZXJ2ZWQ6ZjRiZWI1NzItYzU4OS00MjYwLTk1YzItZTNjZjJmMWMxZjVj"
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6NTllOTMxNzYtYzk5NS00NGJjLThlZmYtZTFmZDY0MmIwODVj"
+            "payload": "YWZ0ZXI6ZjRiZWI1NzItYzU4OS00MjYwLTk1YzItZTNjZjJmMWMxZjVj"
           },
           {
             "opcode": 8,
@@ -1670,14 +1672,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 76.94050000000061,
+      "elapsedMs": 61.916659999999865,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"e80831bc-7412-4f69-ba21-af0cd1c8cabe\",\"state\":{\"kind\":\"rejection-listener-send\",\"challenge\":\"59e93176-c995-44bc-8eff-e1fd642b085c\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-send\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"6f5dae14-a773-43af-9556-33df55ad85d0\",\"state\":{\"kind\":\"rejection-listener-send\",\"challenge\":\"f4beb572-c589-4260-95c2-e3cf2f1c1f5c\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-send\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "e80831bc-7412-4f69-ba21-af0cd1c8cabe",
+        "realm": "6f5dae14-a773-43af-9556-33df55ad85d0",
         "state": {
           "kind": "rejection-listener-send",
-          "challenge": "59e93176-c995-44bc-8eff-e1fd642b085c",
+          "challenge": "f4beb572-c589-4260-95c2-e3cf2f1c1f5c",
           "trace": [
             "message",
             "callback",
@@ -1721,23 +1723,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-late-handled-send",
-      "challenge": "570ae820-bf82-44c0-a3bb-bb673f426b08",
+      "challenge": "8f3fd387-96aa-4062-845f-f788e87cde01",
       "initialState": {
-        "realm": "3cbfae4d-41c0-4acf-8d88-232ed407e653",
+        "realm": "b67ff55b-cabc-404b-91b9-500335ea186c",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: GcUmv1Gz7HOCbLJ6Zy24QLjQYSc=",
-        "requestKey": "JVoQleSPk9V14B1e4u/soQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7U+iCY/fVdzESo4SiQsqYk41iH8=",
+        "requestKey": "RNm6v4KGa1RIEhytHW6eAA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1747,21 +1749,21 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: GcUmv1Gz7HOCbLJ6Zy24QLjQYSc=",
-        "requestKey": "JVoQleSPk9V14B1e4u/soQ==",
-        "rawTail": "gStxdWV1ZWQ6NTcwYWU4MjAtYmY4Mi00NGMwLWEzYmItYmI2NzNmNDI2YjA4gSxoYW5kbGVkOjU3MGFlODIwLWJmODItNDRjMC1hM2JiLWJiNjczZjQyNmIwOIEqYWZ0ZXI6NTcwYWU4MjAtYmY4Mi00NGMwLWEzYmItYmI2NzNmNDI2YjA4iAYD6GRvbmU=",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7U+iCY/fVdzESo4SiQsqYk41iH8=",
+        "requestKey": "RNm6v4KGa1RIEhytHW6eAA==",
+        "rawTail": "gStxdWV1ZWQ6OGYzZmQzODctOTZhYS00MDYyLTg0NWYtZjc4OGU4N2NkZTAxgSxoYW5kbGVkOjhmM2ZkMzg3LTk2YWEtNDA2Mi04NDVmLWY3ODhlODdjZGUwMYEqYWZ0ZXI6OGYzZmQzODctOTZhYS00MDYyLTg0NWYtZjc4OGU4N2NkZTAxiAYD6GRvbmU=",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjU3MGFlODIwLWJmODItNDRjMC1hM2JiLWJiNjczZjQyNmIwOA=="
+            "payload": "cXVldWVkOjhmM2ZkMzg3LTk2YWEtNDA2Mi04NDVmLWY3ODhlODdjZGUwMQ=="
           },
           {
             "opcode": 1,
-            "payload": "aGFuZGxlZDo1NzBhZTgyMC1iZjgyLTQ0YzAtYTNiYi1iYjY3M2Y0MjZiMDg="
+            "payload": "aGFuZGxlZDo4ZjNmZDM4Ny05NmFhLTQwNjItODQ1Zi1mNzg4ZTg3Y2RlMDE="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6NTcwYWU4MjAtYmY4Mi00NGMwLWEzYmItYmI2NzNmNDI2YjA4"
+            "payload": "YWZ0ZXI6OGYzZmQzODctOTZhYS00MDYyLTg0NWYtZjc4OGU4N2NkZTAx"
           },
           {
             "opcode": 8,
@@ -1773,14 +1775,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 246.16289999999935,
+      "elapsedMs": 229.3365899999999,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"3cbfae4d-41c0-4acf-8d88-232ed407e653\",\"state\":{\"kind\":\"rejection-late-handled-send\",\"challenge\":\"570ae820-bf82-44c0-a3bb-bb673f426b08\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"attach/before\",\"global/rejectionhandled\",\"attach/after\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-late-handled-send\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null},{\"type\":\"rejectionhandled\",\"trusted\":true,\"message\":null,\"name\":null,\"errorMessage\":null,\"promise\":true,\"valueType\":\"undefined\",\"sameValue\":false,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"b67ff55b-cabc-404b-91b9-500335ea186c\",\"state\":{\"kind\":\"rejection-late-handled-send\",\"challenge\":\"8f3fd387-96aa-4062-845f-f788e87cde01\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"attach/before\",\"global/rejectionhandled\",\"attach/after\",\"caught/TypeError\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-late-handled-send\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null},{\"type\":\"rejectionhandled\",\"trusted\":true,\"message\":null,\"name\":null,\"errorMessage\":null,\"promise\":true,\"valueType\":\"undefined\",\"sameValue\":false,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "3cbfae4d-41c0-4acf-8d88-232ed407e653",
+        "realm": "b67ff55b-cabc-404b-91b9-500335ea186c",
         "state": {
           "kind": "rejection-late-handled-send",
-          "challenge": "570ae820-bf82-44c0-a3bb-bb673f426b08",
+          "challenge": "8f3fd387-96aa-4062-845f-f788e87cde01",
           "trace": [
             "message",
             "callback",
@@ -1844,23 +1846,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-late-handled-close",
-      "challenge": "ae0e3f14-0cd9-41a2-be11-d7a6c32a65e9",
+      "challenge": "c1c72271-b9b7-4227-96b9-f0636da1b637",
       "initialState": {
-        "realm": "7ca2c133-f45d-4a88-b821-8e759ee8afd4",
+        "realm": "a0755ffb-9297-40d6-a563-003d2fe735cc",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gurXabw+pZg0Cdtui5Kr81na35Q=",
-        "requestKey": "M0eBtdsTj+7WL/CmJb1+kw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7cz0FWNnmMcJZHQPON9D+b51bHs=",
+        "requestKey": "q7eRuaTZQoVu7HrGCph88Q==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1870,13 +1872,13 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gurXabw+pZg0Cdtui5Kr81na35Q=",
-        "requestKey": "M0eBtdsTj+7WL/CmJb1+kw==",
-        "rawTail": "gStxdWV1ZWQ6YWUwZTNmMTQtMGNkOS00MWEyLWJlMTEtZDdhNmMzMmE2NWU5iAoD6G9ic2VydmVy",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7cz0FWNnmMcJZHQPON9D+b51bHs=",
+        "requestKey": "q7eRuaTZQoVu7HrGCph88Q==",
+        "rawTail": "gStxdWV1ZWQ6YzFjNzIyNzEtYjliNy00MjI3LTk2YjktZjA2MzZkYTFiNjM3iAoD6G9ic2VydmVy",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmFlMGUzZjE0LTBjZDktNDFhMi1iZTExLWQ3YTZjMzJhNjVlOQ=="
+            "payload": "cXVldWVkOmMxYzcyMjcxLWI5YjctNDIyNy05NmI5LWYwNjM2ZGExYjYzNw=="
           },
           {
             "opcode": 8,
@@ -1888,14 +1890,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 63.30459999999948,
+      "elapsedMs": 48.513278999999784,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"7ca2c133-f45d-4a88-b821-8e759ee8afd4\",\"state\":{\"kind\":\"rejection-late-handled-close\",\"challenge\":\"ae0e3f14-0cd9-41a2-be11-d7a6c32a65e9\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"attach/before\",\"global/rejectionhandled\",\"attach/after\",\"caught/TypeError\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-late-handled-close\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null},{\"type\":\"rejectionhandled\",\"trusted\":true,\"message\":null,\"name\":null,\"errorMessage\":null,\"promise\":true,\"valueType\":\"undefined\",\"sameValue\":false,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"a0755ffb-9297-40d6-a563-003d2fe735cc\",\"state\":{\"kind\":\"rejection-late-handled-close\",\"challenge\":\"c1c72271-b9b7-4227-96b9-f0636da1b637\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"attach/before\",\"global/rejectionhandled\",\"attach/after\",\"caught/TypeError\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-late-handled-close\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null},{\"type\":\"rejectionhandled\",\"trusted\":true,\"message\":null,\"name\":null,\"errorMessage\":null,\"promise\":true,\"valueType\":\"undefined\",\"sameValue\":false,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"observer\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "7ca2c133-f45d-4a88-b821-8e759ee8afd4",
+        "realm": "a0755ffb-9297-40d6-a563-003d2fe735cc",
         "state": {
           "kind": "rejection-late-handled-close",
-          "challenge": "ae0e3f14-0cd9-41a2-be11-d7a6c32a65e9",
+          "challenge": "c1c72271-b9b7-4227-96b9-f0636da1b637",
           "trace": [
             "message",
             "callback",
@@ -1958,23 +1960,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-listener-throw",
-      "challenge": "a1e4770b-82ab-4f38-ba26-3aa9092dfdb6",
+      "challenge": "846e0b5f-e0a8-4f3a-8e65-198fa4727bbf",
       "initialState": {
-        "realm": "5f82cd47-ce3c-40e5-b3d7-7cd7ea1bbad6",
+        "realm": "a5cbafe1-6d1a-4b44-9157-d20c04e3226d",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: p9DkOWT0QFNClp0XRiVLBSgCraU=",
-        "requestKey": "ALPRGsAJV2X55MZRfFN5LA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CKnkwNHtniccfUrVPrkvpKIZkbQ=",
+        "requestKey": "34nr0i1ImwJzoLKBiyAx1w==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1984,17 +1986,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: p9DkOWT0QFNClp0XRiVLBSgCraU=",
-        "requestKey": "ALPRGsAJV2X55MZRfFN5LA==",
-        "rawTail": "gStxdWV1ZWQ6YTFlNDc3MGItODJhYi00ZjM4LWJhMjYtM2FhOTA5MmRmZGI2gSphZnRlcjphMWU0NzcwYi04MmFiLTRmMzgtYmEyNi0zYWE5MDkyZGZkYjaIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CKnkwNHtniccfUrVPrkvpKIZkbQ=",
+        "requestKey": "34nr0i1ImwJzoLKBiyAx1w==",
+        "rawTail": "gStxdWV1ZWQ6ODQ2ZTBiNWYtZTBhOC00ZjNhLThlNjUtMTk4ZmE0NzI3YmJmgSphZnRlcjo4NDZlMGI1Zi1lMGE4LTRmM2EtOGU2NS0xOThmYTQ3MjdiYmaIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOmExZTQ3NzBiLTgyYWItNGYzOC1iYTI2LTNhYTkwOTJkZmRiNg=="
+            "payload": "cXVldWVkOjg0NmUwYjVmLWUwYTgtNGYzYS04ZTY1LTE5OGZhNDcyN2JiZg=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6YTFlNDc3MGItODJhYi00ZjM4LWJhMjYtM2FhOTA5MmRmZGI2"
+            "payload": "YWZ0ZXI6ODQ2ZTBiNWYtZTBhOC00ZjNhLThlNjUtMTk4ZmE0NzI3YmJm"
           },
           {
             "opcode": 8,
@@ -2006,14 +2008,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 62.509900000000926,
+      "elapsedMs": 62.08215999999993,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"5f82cd47-ce3c-40e5-b3d7-7cd7ea1bbad6\",\"state\":{\"kind\":\"rejection-listener-throw\",\"challenge\":\"a1e4770b-82ab-4f38-ba26-3aa9092dfdb6\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":true}}",
+      "stateText": "{\"realm\":\"a5cbafe1-6d1a-4b44-9157-d20c04e3226d\",\"state\":{\"kind\":\"rejection-listener-throw\",\"challenge\":\"846e0b5f-e0a8-4f3a-8e65-198fa4727bbf\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-throw\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":true}}",
       "state": {
-        "realm": "5f82cd47-ce3c-40e5-b3d7-7cd7ea1bbad6",
+        "realm": "a5cbafe1-6d1a-4b44-9157-d20c04e3226d",
         "state": {
           "kind": "rejection-listener-throw",
-          "challenge": "a1e4770b-82ab-4f38-ba26-3aa9092dfdb6",
+          "challenge": "846e0b5f-e0a8-4f3a-8e65-198fa4727bbf",
           "trace": [
             "message",
             "callback",
@@ -2057,23 +2059,23 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""
     },
     {
       "id": "rejection-listener-handle-next",
-      "challenge": "61c81797-d298-4d91-b410-f71a0f01e178",
+      "challenge": "3662cf74-c5a3-4f0d-a8c3-df7d03f4f8f5",
       "initialState": {
-        "realm": "9c2b555e-4a0a-41b1-9c4d-698372993013",
+        "realm": "4e78fb42-cbf6-4ffa-a76e-8ed13dc9c546",
         "state": null
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fnZrul8FKYdXGWcbhFy8Gyr4540=",
-        "requestKey": "2vm5mhtjMMmuhA/Ia8rZ5A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: LQL08/V8P11YP7QCLnMAE/XQhD0=",
+        "requestKey": "lnmxMnGa8HJs8PQQJ5kH+A==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2083,17 +2085,17 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fnZrul8FKYdXGWcbhFy8Gyr4540=",
-        "requestKey": "2vm5mhtjMMmuhA/Ia8rZ5A==",
-        "rawTail": "gStxdWV1ZWQ6NjFjODE3OTctZDI5OC00ZDkxLWI0MTAtZjcxYTBmMDFlMTc4gSphZnRlcjo2MWM4MTc5Ny1kMjk4LTRkOTEtYjQxMC1mNzFhMGYwMWUxNziIBgPoZG9uZQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: LQL08/V8P11YP7QCLnMAE/XQhD0=",
+        "requestKey": "lnmxMnGa8HJs8PQQJ5kH+A==",
+        "rawTail": "gStxdWV1ZWQ6MzY2MmNmNzQtYzVhMy00ZjBkLWE4YzMtZGY3ZDAzZjRmOGY1gSphZnRlcjozNjYyY2Y3NC1jNWEzLTRmMGQtYThjMy1kZjdkMDNmNGY4ZjWIBgPoZG9uZQ==",
         "frames": [
           {
             "opcode": 1,
-            "payload": "cXVldWVkOjYxYzgxNzk3LWQyOTgtNGQ5MS1iNDEwLWY3MWEwZjAxZTE3OA=="
+            "payload": "cXVldWVkOjM2NjJjZjc0LWM1YTMtNGYwZC1hOGMzLWRmN2QwM2Y0ZjhmNQ=="
           },
           {
             "opcode": 1,
-            "payload": "YWZ0ZXI6NjFjODE3OTctZDI5OC00ZDkxLWI0MTAtZjcxYTBmMDFlMTc4"
+            "payload": "YWZ0ZXI6MzY2MmNmNzQtYzVhMy00ZjBkLWE4YzMtZGY3ZDAzZjRmOGY1"
           },
           {
             "opcode": 8,
@@ -2105,14 +2107,14 @@
         "completion": "peer-ended",
         "closeReplySent": true
       },
-      "elapsedMs": 63.579499999999825,
+      "elapsedMs": 62.78603000000112,
       "stateStatus": 200,
-      "stateText": "{\"realm\":\"9c2b555e-4a0a-41b1-9c4d-698372993013\",\"state\":{\"kind\":\"rejection-listener-handle-next\",\"challenge\":\"61c81797-d298-4d91-b410-f71a0f01e178\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"other-caught/RangeError\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-handle-next\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
+      "stateText": "{\"realm\":\"4e78fb42-cbf6-4ffa-a76e-8ed13dc9c546\",\"state\":{\"kind\":\"rejection-listener-handle-next\",\"challenge\":\"3662cf74-c5a3-4f0d-a8c3-df7d03f4f8f5\",\"trace\":[\"message\",\"callback\",\"global/unhandledrejection\",\"other-caught/RangeError\",\"followup\",\"socket/close\"],\"globalEvents\":[{\"type\":\"unhandledrejection\",\"trusted\":true,\"message\":null,\"name\":\"TypeError\",\"errorMessage\":\"async-callback/rejection-listener-handle-next\",\"promise\":true,\"valueType\":\"object\",\"sameValue\":true,\"bubbles\":false,\"cancelable\":false,\"defaultPrevented\":false,\"filename\":null,\"lineno\":null,\"colno\":null}],\"socketEvents\":[{\"type\":\"close\",\"readyState\":3,\"code\":1000,\"reason\":\"done\",\"name\":null,\"message\":null,\"trusted\":true}],\"callbacks\":1,\"sum\":0,\"observerThrew\":false}}",
       "state": {
-        "realm": "9c2b555e-4a0a-41b1-9c4d-698372993013",
+        "realm": "4e78fb42-cbf6-4ffa-a76e-8ed13dc9c546",
         "state": {
           "kind": "rejection-listener-handle-next",
-          "challenge": "61c81797-d298-4d91-b410-f71a0f01e178",
+          "challenge": "3662cf74-c5a3-4f0d-a8c3-df7d03f4f8f5",
           "trace": [
             "message",
             "callback",
@@ -2157,8 +2159,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "",
       "stdout": ""

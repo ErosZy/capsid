@@ -1,3 +1,4 @@
+import {referenceBackendModes} from '../tools/workerd-platform.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -8,7 +9,7 @@ function matrix() {
     const reference = structuredClone(stored);
     const expected = {lock: reference.referenceLock, runId: reference.runId, inputs: reference.inputs,
         host: 'a'.repeat(64), worker: 'b'.repeat(64)};
-    const candidates = ['single-worker', 'static-pool'].map(mode => {
+    const candidates = referenceBackendModes(expected.lock).map(mode => {
         const report = structuredClone(reference);
         report.mode = mode; report.binaries = {host: expected.host, worker: expected.worker};
         for (const value of report.cases) value.shutdown = {code: 0, signal: null, forced: false};
@@ -23,7 +24,7 @@ function change(value, mutate, field = 'observed') {
 test('actual native workerd run satisfies the independent complete contract', () => {
     assert.deepEqual(validateCryptoReport(stored, 'reference'), {complete: true, cases: 42});
     const {reference, candidates, expected} = matrix();
-    assert.deepEqual(compareCryptoReports(reference, candidates, expected), {complete: true, casesPerBackend: 42, backends: 2});
+    assert.deepEqual(compareCryptoReports(reference, candidates, expected), {complete: true, casesPerBackend: 42, backends: candidates.length});
 });
 for (const kind of cryptoCases) for (const [name, mutate] of [
     ['lost completion', value => change(value, state => state.trace.splice(2, 1))],
@@ -71,4 +72,10 @@ for (const [name, mutate] of [
 ]) test('matrix rejects ' + name, () => {
     const value = matrix(); mutate(value);
     assert.throws(() => compareCryptoReports(value.reference, value.candidates, value.expected));
+});
+
+test('Linux validation rejects omission of managed from a verified healthy backend matrix', () => {
+    const m=matrix();assert.ok(referenceBackendModes(m.expected.lock).includes('managed'));
+    assert.doesNotThrow(()=>compareCryptoReports(m.reference,m.candidates,m.expected));
+    assert.throws(()=>compareCryptoReports(m.reference,m.candidates.filter(r=>r.mode!=='managed'),m.expected));
 });

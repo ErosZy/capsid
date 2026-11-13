@@ -1,3 +1,4 @@
+import {referenceBackendModes} from '../tools/workerd-platform.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ function matrix() {
     const reference = structuredClone(stored);
     const expected = {runId: reference.runId, lock: reference.referenceLock, inputs: reference.inputs,
         host: 'a'.repeat(64), worker: 'b'.repeat(64)};
-    const candidates = ['single-worker', 'static-pool'].map(mode => ({...structuredClone(reference), mode,
+    const candidates = referenceBackendModes(expected.lock).map(mode => ({...structuredClone(reference), mode,
         binaries: {host: expected.host, worker: expected.worker}, cases: reference.cases.map(value =>
             ({...structuredClone(value), shutdown: {code: 0, signal: null, forced: false}}))}));
     return {reference, candidates, expected};
@@ -23,7 +24,7 @@ test('literal seventeen-case owner inventory includes normal, closing and extern
 });
 test('actual stored native reference satisfies the absolute owner contracts', () => {
     const {reference, candidates, expected} = matrix();
-    assert.deepEqual(compareOwnerReports(reference, candidates, expected), {complete: true, casesPerBackend: 17, backends: 3});
+    assert.deepEqual(compareOwnerReports(reference, candidates, expected), {complete: true, casesPerBackend: 17, backends: 1 + candidates.length});
 });
 for (const [name, mutate, diagnostic] of [
     ['timer never fires on an open connection', value => {value.state.state.timerFired = 0;}, /complete lifecycle trace/],
@@ -82,4 +83,10 @@ test('owner report requires the complete supported backend matrix', () => {
     const {reference, candidates, expected} = matrix();
     assert.throws(() => compareOwnerReports(reference, candidates.slice(0, 1), expected));
     assert.equal(validateOwnerReport(reference, expected).length, 17);
+});
+
+test('Linux validation rejects omission of managed from a verified healthy backend matrix', () => {
+    const m=matrix();assert.ok(referenceBackendModes(m.expected.lock).includes('managed'));
+    assert.doesNotThrow(()=>compareOwnerReports(m.reference,m.candidates,m.expected));
+    assert.throws(()=>compareOwnerReports(m.reference,m.candidates.filter(r=>r.mode!=='managed'),m.expected));
 });

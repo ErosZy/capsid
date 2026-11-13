@@ -1,3 +1,4 @@
+import {referenceBackendModes} from '../tools/workerd-platform.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -5,13 +6,13 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {fetchResourceCases, assertFetchResourceCase, validateFetchResourceReport, compareFetchResourceReports} from '../tools/workerd-fetch-resource-contract.mjs';
 
-// Actual pinned Windows workerd output, replayed only to test this validator.
+// Actual pinned Linux workerd output, replayed only to test this validator.
 // Qualification always launches fresh native assets with current input hashes.
 const stored = JSON.parse(fs.readFileSync(new URL('./fixtures/workerd-fetch-resource-report.json', import.meta.url), 'utf8'));
 function matrix() {
     const reference = structuredClone(stored), expected = {runId: reference.runId, lock: reference.referenceLock,
         inputs: reference.inputs, host: 'a'.repeat(64), worker: 'b'.repeat(64)};
-    const candidates = ['single-worker', 'static-pool'].map(mode => ({...structuredClone(reference), mode,
+    const candidates = referenceBackendModes(expected.lock).map(mode => ({...structuredClone(reference), mode,
         binaries: {host: expected.host, worker: expected.worker}, cases: reference.cases.map(value => ({...structuredClone(value),
             shutdown: {code: 0, signal: null, forced: false}}))}));
     return {reference, candidates, expected};
@@ -41,7 +42,7 @@ test('literal fetch resource inventory covers cancellation stages, resource life
 });
 test('actual reference observations satisfy independent absolute resource contracts', () => {
     const {reference, candidates, expected} = matrix();
-    assert.deepEqual(compareFetchResourceReports(reference, candidates, expected), {complete: true, casesPerBackend: 32, backends: 3});
+    assert.deepEqual(compareFetchResourceReports(reference, candidates, expected), {complete: true, casesPerBackend: 32, backends: 1 + candidates.length});
     assert.equal(validateFetchResourceReport(reference, expected).length, 32);
 });
 for (const id of fetchResourceCases) for (const [name, mutate] of [
@@ -184,3 +185,9 @@ for (const args of [['--kinds', 'fetch-complete'], ['--mode'], ['--mode', 'singl
         assert.doesNotMatch(result.stderr, /MODULE_NOT_FOUND|Cannot find module|ENOENT|CAPSID_WORKERD_REF required/);
         assert.match(result.stderr, /AssertionError/);
     });
+
+test('Linux validation rejects omission of managed from a verified healthy backend matrix', () => {
+    const m=matrix();assert.ok(referenceBackendModes(m.expected.lock).includes('managed'));
+    assert.doesNotThrow(()=>compareFetchResourceReports(m.reference,m.candidates,m.expected));
+    assert.throws(()=>compareFetchResourceReports(m.reference,m.candidates.filter(r=>r.mode!=='managed'),m.expected));
+});

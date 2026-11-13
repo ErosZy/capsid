@@ -1,14 +1,14 @@
 {
   "schema": "capsid-websocket-owner-lifecycle-v1",
   "complete": true,
-  "runId": "1a69469f-0ab3-46fb-8b04-7345851e43c2",
+  "runId": "remaining-reference-listeners-43380637489",
   "mode": "reference",
   "referenceLock": {
-    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
     "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
     "release_tag": "v1.20261010.1",
-    "binary": "workerd-windows-64",
-    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary": "workerd-linux-64",
+    "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
     "binary_version_string": "workerd 2026-10-10",
     "compatibility_date": "2026-08-20",
     "compatibility_flags": [],
@@ -18,24 +18,26 @@
       "node_version": "v24.14.0",
       "undici_version": "7.21.0"
     },
-    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
-    "release_asset": "workerd-windows-64.gz",
-    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
-    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+    "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+    "release_asset": "workerd-linux-64.gz",
+    "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+    "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
   },
   "client": {
     "node": "v24.14.0",
     "undici": "7.21.0"
   },
   "inputs": {
-    "runner": "7a0353f9f07d39143e928d8d72dc3d4b281065497561603749d54ac87a34172b",
+    "runner": "3e4dc9629be14cc6aa0185783891e71522909155949a76a8457c996431eb3bb4",
     "fixture": "70172f47f9079256b4189ccfd34d8f8232f245a1af36a95e18064699606d6b61",
-    "contract": "cb7100d2f024cfe5734642140d1d2299d8d44618cf50fa2c5e0fa9592da4cdfe",
+    "contract": "2b4e3b11ca162c5ea3c6e45d2e82e4be818f94587db52373082010ccac66920c",
     "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
-    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+    "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+    "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
   },
   "binaries": {
-    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "host": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
     "worker": null
   },
   "cases": [
@@ -43,8 +45,8 @@
       "id": "live-one-shot",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WLXK7KGzCO7C3PpzzgVOxbyBj8c=",
-        "requestKey": "qDRYGPsCw2qRup8h2FmExA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: GSxRJW1uosdV1bM2N3hKgzjhn6U=",
+        "requestKey": "tL2wUHjIZjcbg0cAY1WU1Q==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -54,8 +56,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WLXK7KGzCO7C3PpzzgVOxbyBj8c=",
-        "requestKey": "qDRYGPsCw2qRup8h2FmExA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: GSxRJW1uosdV1bM2N3hKgzjhn6U=",
+        "requestKey": "tL2wUHjIZjcbg0cAY1WU1Q==",
         "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
         "frames": [
           {
@@ -99,8 +101,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -108,8 +110,8 @@
       "id": "live-interval",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vUhP7P1mNc7oOLMjiWAFcLzv0Yg=",
-        "requestKey": "JQzXdZX3uoXP70vfLSSoAg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: VRIjJlk4KVxTyoVGWOFUtN+WN+E=",
+        "requestKey": "fB/vF7NakyQN1cTglIXZrg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -119,8 +121,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vUhP7P1mNc7oOLMjiWAFcLzv0Yg=",
-        "requestKey": "JQzXdZX3uoXP70vfLSSoAg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: VRIjJlk4KVxTyoVGWOFUtN+WN+E=",
+        "requestKey": "fB/vF7NakyQN1cTglIXZrg==",
         "rawTail": "gQZxdWV1ZWSBB3RpbWVyLTGBB3RpbWVyLTKIBgPoZG9uZQ==",
         "frames": [
           {
@@ -169,8 +171,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -178,8 +180,8 @@
       "id": "close-with-ack",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: XGoPs3/6+bQYAWrMqbr06F7xRgE=",
-        "requestKey": "2XHVJBTyAHFbWOlHcsxNVg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qOesdFpMe04dogTMTimHQV1cuPI=",
+        "requestKey": "8d0qAKvwmjBK8/eHrrOCcQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -189,8 +191,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: XGoPs3/6+bQYAWrMqbr06F7xRgE=",
-        "requestKey": "2XHVJBTyAHFbWOlHcsxNVg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qOesdFpMe04dogTMTimHQV1cuPI=",
+        "requestKey": "8d0qAKvwmjBK8/eHrrOCcQ==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -228,8 +230,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -237,8 +239,8 @@
       "id": "close-delayed-ack",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mxfvZYjwvIa9c9i3CGmM2KN40W8=",
-        "requestKey": "WVgUahMUHksAIBdPVsrLpA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EzUUmtGwhG1UnhgUoG7/SKoCEyc=",
+        "requestKey": "iWnN9nX0zcoox2KfzL4yqQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -248,8 +250,8 @@
       },
       "beforeManualAck": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mxfvZYjwvIa9c9i3CGmM2KN40W8=",
-        "requestKey": "WVgUahMUHksAIBdPVsrLpA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EzUUmtGwhG1UnhgUoG7/SKoCEyc=",
+        "requestKey": "iWnN9nX0zcoox2KfzL4yqQ==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -273,8 +275,8 @@
       "manualCloseSent": true,
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mxfvZYjwvIa9c9i3CGmM2KN40W8=",
-        "requestKey": "WVgUahMUHksAIBdPVsrLpA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: EzUUmtGwhG1UnhgUoG7/SKoCEyc=",
+        "requestKey": "iWnN9nX0zcoox2KfzL4yqQ==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -314,8 +316,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -323,8 +325,8 @@
       "id": "error-timer-before",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ouPK1PV4IX95jNqnDKDFSsHMqWo=",
-        "requestKey": "LSPtdedS8yrhTIyyW10tIA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mpTaJ4pBS+A8q2h9zKXdDhj7vBw=",
+        "requestKey": "e1ZVIiW/PeNxdqlKa9KoMA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -334,8 +336,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ouPK1PV4IX95jNqnDKDFSsHMqWo=",
-        "requestKey": "LSPtdedS8yrhTIyyW10tIA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: mpTaJ4pBS+A8q2h9zKXdDhj7vBw=",
+        "requestKey": "e1ZVIiW/PeNxdqlKa9KoMA==",
         "rawTail": "gQZxdWV1ZWSBBGxhdGU=",
         "frames": [
           {
@@ -381,8 +383,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -390,8 +392,8 @@
       "id": "error-listener-timer",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MiMjmRrB7Ne3Z+Ek/d5MBYQRS3k=",
-        "requestKey": "NgphcPrJJSqh6WACf2fxyw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9okvFk/vJ2zdGJRpRLxLL11RL+Q=",
+        "requestKey": "e5Pg8L56+QlEEnqWqiix5Q==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -401,8 +403,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MiMjmRrB7Ne3Z+Ek/d5MBYQRS3k=",
-        "requestKey": "NgphcPrJJSqh6WACf2fxyw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9okvFk/vJ2zdGJRpRLxLL11RL+Q=",
+        "requestKey": "e5Pg8L56+QlEEnqWqiix5Q==",
         "rawTail": "gQZxdWV1ZWSBBGxhdGU=",
         "frames": [
           {
@@ -448,8 +450,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -457,8 +459,8 @@
       "id": "error-final-close-timer",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iD5f4pCff7qBxs539sfPfYVGniA=",
-        "requestKey": "ep8ZCGsOPf+P2NtRVSx+xA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: y6/0+kR50M6Dt5YKyARnq1s2s00=",
+        "requestKey": "ZME49FuQK4ku9JXTrQbhRA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -468,8 +470,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iD5f4pCff7qBxs539sfPfYVGniA=",
-        "requestKey": "ep8ZCGsOPf+P2NtRVSx+xA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: y6/0+kR50M6Dt5YKyARnq1s2s00=",
+        "requestKey": "ZME49FuQK4ku9JXTrQbhRA==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -515,8 +517,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -540,8 +542,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -549,8 +551,8 @@
       "id": "live-returned-then",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: NHsFw+gKc5v1IYw5Nviq61a56B4=",
-        "requestKey": "hKfLnWv6Oburw1bwo558nA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oL4r1OsD/qJUkbVcgdHqiSJm+48=",
+        "requestKey": "Erp7juqcOQqz8+6+GMU5dA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -560,8 +562,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: NHsFw+gKc5v1IYw5Nviq61a56B4=",
-        "requestKey": "hKfLnWv6Oburw1bwo558nA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oL4r1OsD/qJUkbVcgdHqiSJm+48=",
+        "requestKey": "Erp7juqcOQqz8+6+GMU5dA==",
         "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
         "frames": [
           {
@@ -607,8 +609,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -616,8 +618,8 @@
       "id": "live-detached-then",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tbclp7kJEcjgqlQXEZ9wvlvku0k=",
-        "requestKey": "L/mUJFqTPLahU2eJy2itlQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: H8slgVSo7cLKxSFEylmbMI28Css=",
+        "requestKey": "zw9VrUqK/1Bk1HH+4RyLiA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -627,8 +629,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: tbclp7kJEcjgqlQXEZ9wvlvku0k=",
-        "requestKey": "L/mUJFqTPLahU2eJy2itlQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: H8slgVSo7cLKxSFEylmbMI28Css=",
+        "requestKey": "zw9VrUqK/1Bk1HH+4RyLiA==",
         "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
         "frames": [
           {
@@ -674,8 +676,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -683,8 +685,8 @@
       "id": "close-returned-await",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kdxQPuTXB+3FrL6gkwYVIuwoKCE=",
-        "requestKey": "cEdJgO09lTXLX7mYC++v7A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jv1u7gs8Z5nXOJqG+cw0ZwFvV3o=",
+        "requestKey": "xSeBV923LgngcO9rgaJb6Q==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -694,8 +696,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kdxQPuTXB+3FrL6gkwYVIuwoKCE=",
-        "requestKey": "cEdJgO09lTXLX7mYC++v7A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jv1u7gs8Z5nXOJqG+cw0ZwFvV3o=",
+        "requestKey": "xSeBV923LgngcO9rgaJb6Q==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -733,8 +735,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -742,8 +744,8 @@
       "id": "close-detached-await",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vrwkDwo/2KczgLBD8pT+I2/jp1Q=",
-        "requestKey": "7Dx8C6swZnC34S492+Mg6g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Leiq8vk8clPxeIst7zqiZa70Hio=",
+        "requestKey": "uB2tkIMZgKOhIUq0ZuMg2A==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -753,8 +755,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vrwkDwo/2KczgLBD8pT+I2/jp1Q=",
-        "requestKey": "7Dx8C6swZnC34S492+Mg6g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Leiq8vk8clPxeIst7zqiZa70Hio=",
+        "requestKey": "uB2tkIMZgKOhIUq0ZuMg2A==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -792,8 +794,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -801,8 +803,8 @@
       "id": "close-external-returned",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jq6riTPHOun5q1pqfXzh7SxTaqc=",
-        "requestKey": "WCNC+y5T4C3uuKZTvUVWDg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zvAXB4pXi9EwQ9qYmKeN5qRlr8s=",
+        "requestKey": "8JHAEfzlgr51f4+NsrbA0g==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -812,8 +814,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jq6riTPHOun5q1pqfXzh7SxTaqc=",
-        "requestKey": "WCNC+y5T4C3uuKZTvUVWDg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zvAXB4pXi9EwQ9qYmKeN5qRlr8s=",
+        "requestKey": "8JHAEfzlgr51f4+NsrbA0g==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -855,8 +857,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at Object.fetch (main:15:62)\n"
     },
@@ -864,8 +866,8 @@
       "id": "close-external-detached",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1k8yDRsNOfFb/Wx2JT4jb9OhJXE=",
-        "requestKey": "Nf0Cei5qwuWm5Cy8565aow==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: JGc6Q2UkYo5RWp3sZn1m4p+J4jw=",
+        "requestKey": "6U54wiQq63KAuBNB4MUxSA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -875,8 +877,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1k8yDRsNOfFb/Wx2JT4jb9OhJXE=",
-        "requestKey": "Nf0Cei5qwuWm5Cy8565aow==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: JGc6Q2UkYo5RWp3sZn1m4p+J4jw=",
+        "requestKey": "6U54wiQq63KAuBNB4MUxSA==",
         "rawTail": "gQZxdWV1ZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -918,8 +920,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": "Warning: A promise was resolved or rejected from a different request context than the one it was created in. However, the creating request has already been completed or canceled. Continuations for that request are unlikely to run safely and have been canceled. If this behavior breaks your worker, consider setting the `no_handle_cross_request_promise_resolution` compatibility flag for your worker.\n    at <anonymous>\n    at Object.fetch (main:15:62)\n"
     },
@@ -927,8 +929,8 @@
       "id": "cross-clear",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jehpxwmih8aeNjC6lGRMQNJn9DY=",
-        "requestKey": "OBPcvcHMdXtrFB0N8Sh1DA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xSOxRTGMYapd5KEWhj24j6OHweE=",
+        "requestKey": "4GkZdtQRBDRsGkZ/Krn77w==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -942,8 +944,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jehpxwmih8aeNjC6lGRMQNJn9DY=",
-        "requestKey": "OBPcvcHMdXtrFB0N8Sh1DA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xSOxRTGMYapd5KEWhj24j6OHweE=",
+        "requestKey": "4GkZdtQRBDRsGkZ/Krn77w==",
         "rawTail": "gQZxdWV1ZWSBBXRpbWVyiAYD6GRvbmU=",
         "frames": [
           {
@@ -988,8 +990,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -997,8 +999,8 @@
       "id": "same-clear",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 2UdZ2hd2+jN0ZtxkwUzuwa24hB8=",
-        "requestKey": "/LwlQl/75z/m8sZlKPa9QA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: yspTATQt86cHF7vMGqQCi/r7YTg=",
+        "requestKey": "cscLXGkLbeS11mXC3urLIA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1008,8 +1010,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 2UdZ2hd2+jN0ZtxkwUzuwa24hB8=",
-        "requestKey": "/LwlQl/75z/m8sZlKPa9QA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: yspTATQt86cHF7vMGqQCi/r7YTg=",
+        "requestKey": "cscLXGkLbeS11mXC3urLIA==",
         "rawTail": "gQZxdWV1ZWSBB2NsZWFyZWSIBgPoZG9uZQ==",
         "frames": [
           {
@@ -1057,8 +1059,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
@@ -1066,8 +1068,8 @@
       "id": "half-open-close-await",
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oqjEPZWs0nJ+ZC0bfDJkGIXuCYI=",
-        "requestKey": "GMIDOp9rwqiU1YKqISY7NQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: HjHpCxLH7ntHBaONvmnAdqcvMdY=",
+        "requestKey": "QDuBZt7meBurISRM8SxiOw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1078,8 +1080,8 @@
       "manualCloseSent": true,
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oqjEPZWs0nJ+ZC0bfDJkGIXuCYI=",
-        "requestKey": "GMIDOp9rwqiU1YKqISY7NQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: HjHpCxLH7ntHBaONvmnAdqcvMdY=",
+        "requestKey": "QDuBZt7meBurISRM8SxiOw==",
         "rawTail": "gQZxdWV1ZWSBEGFmdGVyLXBlZXItY2xvc2WIBgPoZG9uZQ==",
         "frames": [
           {
@@ -1123,8 +1125,8 @@
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     }

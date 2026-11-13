@@ -1,9 +1,9 @@
 {
   "schema": "capsid-fetch-transition-reference-capture-v1",
-  "sourceReport": "upgrade53b-linux-reference.json",
-  "sourceReportSHA256": "47c11e5017194f273a72f855b61eebea767dfab54f091d684f425d131e88519a",
-  "rawBytes": 2800591,
-  "gzipSHA256": "7a896cf8373e433cdb49c509bd95dbc47313c5253205bce74303ccdbd4c00dc5",
+  "sourceReport": "fetch-transition-reference.json",
+  "sourceReportSHA256": "544daaaf4e4094c0aad1118333e9a7f5877bcfd94680f401e355fe2c30444d86",
+  "rawBytes": 2798131,
+  "gzipSHA256": "bdf9821ee7d60070e49760e3ca9455c215f404739eb64ec6e22462feacf6b5c6",
   "cases": 46,
   "platform": "linux",
   "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",

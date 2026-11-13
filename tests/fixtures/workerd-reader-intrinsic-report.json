@@ -1,7 +1,7 @@
 {
   "schema": "capsid-reference-sample-gzip-v1",
-  "bytes": 163128,
-  "sha256": "9908b3bcc64a737856cdaf237b7630efa5597edc68942a8fb287f8fcac3587dc",
-  "source": "upgrade58aat-reader-linux-reference.json",
+  "bytes": 163308,
+  "sha256": "9fb1e8426ae9f53f42b0e870a71d642097775e9aaab006962e6814647108dada",
+  "source": "reader-intrinsics-shared-reference.json",
   "scope": "Actual pinned Linux workerd, 40 reader-intrinsic cases; no synthetic observations"
 }

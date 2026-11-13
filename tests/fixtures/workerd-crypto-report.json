@@ -2,13 +2,13 @@
   "schema": "capsid-webcrypto-compat-v1",
   "complete": true,
   "mode": "reference",
-  "runId": "c78ff5bd-6894-4fb9-aea6-26e572de494b",
+  "runId": "remaining-reference-listeners-43380637489",
   "referenceLock": {
-    "$schema": "workerd WebSocket reference lock (v0.3.0 T04, native Windows x64)",
+    "$schema": "workerd WebSocket reference lock (v0.3.0 T04)",
     "source_commit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",
     "release_tag": "v1.20261010.1",
-    "binary": "workerd-windows-64",
-    "binary_sha256": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "binary": "workerd-linux-64",
+    "binary_sha256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
     "binary_version_string": "workerd 2026-10-10",
     "compatibility_date": "2026-08-20",
     "compatibility_flags": [],
@@ -18,38 +18,40 @@
       "node_version": "v24.14.0",
       "undici_version": "7.21.0"
     },
-    "notes": "Official Windows x64 asset of the same pinned source release/profile as the Linux lock. Executable and compressed digests were verified independently; neither Linux execution nor a matching version string qualifies this native asset.",
-    "release_asset": "workerd-windows-64.gz",
-    "release_asset_sha256": "8b9377af95e2649bb1d0ea20525ac31769f38c1d85f1b5922a3bbe0856462a82",
-    "provenance_url": "https://github.com/cloudflare/workerd/releases/expanded_assets/v1.20261010.1"
+    "notes": "Source is the commit resolved by the release tag. binary_sha256 hashes the decompressed executable; release_asset_sha256 hashes the official compressed asset. Node and its bundled undici are both pinned.",
+    "release_asset": "workerd-linux-64.gz",
+    "release_asset_sha256": "a4530a03ab3da1e1cb0173887133a720bd48cd236135990d7cbc561c16091530",
+    "provenance_url": "https://api.github.com/repos/cloudflare/workerd/git/ref/tags/v1.20261010.1"
   },
   "client": {
     "node": "v24.14.0",
     "undici": "7.21.0"
   },
   "inputs": {
-    "runner": "398898bda03209abafcd5462b12a281217121790ae1c1a89a2eb0444c92758ea",
+    "runner": "6154b8e7b631ed35551b605ae7c1275df17f3f5a2a31bcc722f074f559aed79e",
     "fixture": "c19b6092dcf3596039f241f70e8c87ff0305933c2cea91381ca62690db75114d",
-    "contract": "d872ab4af4f7c0d64db999ed100bf7669f12edfd6b54fdc0ae1ac6fabfbc991a",
+    "contract": "01e9d155f2cd727c288e75aba61836f18201c8ac220ae8c9e2fc03ed19f3f956",
     "hostBackend": "4d5e7ea8dbcc46e6dd11de04593d9e12b6e829a8ddc7546c2153a9e11e0509ad",
-    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be"
+    "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+    "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+    "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
   },
   "binaries": {
-    "host": "c8799724c4221af61dde76ed071aa5996b25c9bd5d247da94c166718cabe612a",
+    "host": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
     "worker": null
   },
   "cases": [
     {
       "kind": "crypto-digest-order",
-      "challenge": "26d6e642-23cc-47b5-943e-dccb155a2593",
+      "challenge": "a636bace-615f-48fd-9636-013999a84288",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"488a0ad1-c792-451c-98eb-0841c5e989bc\",\"state\":null}"
+        "text": "{\"realm\":\"e46b3026-0e81-4435-ac1c-14ec06eeccad\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: L4dFpAC7gq/3cjCtENzdGaIaJCk=",
-        "requestKey": "qFXzlm3EnI6QBQAQ4iAIyA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FohE5qqq/kq9seH7nqUCfAfULY4=",
+        "requestKey": "2iw6q6iptFxJegDxM1NPEg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -59,8 +61,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: L4dFpAC7gq/3cjCtENzdGaIaJCk=",
-        "requestKey": "qFXzlm3EnI6QBQAQ4iAIyA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: FohE5qqq/kq9seH7nqUCfAfULY4=",
+        "requestKey": "2iw6q6iptFxJegDxM1NPEg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -83,30 +85,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"488a0ad1-c792-451c-98eb-0841c5e989bc\",\"state\":{\"kind\":\"crypto-digest-order\",\"challenge\":\"26d6e642-23cc-47b5-943e-dccb155a2593\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"e46b3026-0e81-4435-ac1c-14ec06eeccad\",\"state\":{\"kind\":\"crypto-digest-order\",\"challenge\":\"a636bace-615f-48fd-9636-013999a84288\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"488a0ad1-c792-451c-98eb-0841c5e989bc\",\"state\":{\"kind\":\"crypto-digest-order\",\"challenge\":\"26d6e642-23cc-47b5-943e-dccb155a2593\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"e46b3026-0e81-4435-ac1c-14ec06eeccad\",\"state\":{\"kind\":\"crypto-digest-order\",\"challenge\":\"a636bace-615f-48fd-9636-013999a84288\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-close",
-      "challenge": "ec583199-6bfa-4831-9a8e-64505731beb4",
+      "challenge": "91083dd6-8723-487d-8f04-a9d8e0a32cc7",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"c4916095-ae31-4a93-9420-7e21923f73e2\",\"state\":null}"
+        "text": "{\"realm\":\"2e0fcbc0-1e2a-4f82-a5a7-224c17882ae5\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 58dRcApUcE6EBOG168VASd/LG+8=",
-        "requestKey": "4pp51KCp4DF9bXpEER+gnQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WgC+N52KsGjkiN7ZIPAzJiW0VjY=",
+        "requestKey": "il7FwC3MnSdWzN0vnxE06g==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -116,8 +118,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 58dRcApUcE6EBOG168VASd/LG+8=",
-        "requestKey": "4pp51KCp4DF9bXpEER+gnQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WgC+N52KsGjkiN7ZIPAzJiW0VjY=",
+        "requestKey": "il7FwC3MnSdWzN0vnxE06g==",
         "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
         "frames": [
           {
@@ -136,30 +138,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"c4916095-ae31-4a93-9420-7e21923f73e2\",\"state\":{\"kind\":\"crypto-digest-close\",\"challenge\":\"ec583199-6bfa-4831-9a8e-64505731beb4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"2e0fcbc0-1e2a-4f82-a5a7-224c17882ae5\",\"state\":{\"kind\":\"crypto-digest-close\",\"challenge\":\"91083dd6-8723-487d-8f04-a9d8e0a32cc7\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"c4916095-ae31-4a93-9420-7e21923f73e2\",\"state\":{\"kind\":\"crypto-digest-close\",\"challenge\":\"ec583199-6bfa-4831-9a8e-64505731beb4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"2e0fcbc0-1e2a-4f82-a5a7-224c17882ae5\",\"state\":{\"kind\":\"crypto-digest-close\",\"challenge\":\"91083dd6-8723-487d-8f04-a9d8e0a32cc7\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-import-order",
-      "challenge": "5ece22a4-732e-450b-be48-da308338a801",
+      "challenge": "22e0cebe-a809-4290-a14a-8ed7bc0bb7b3",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"7d7f4925-7fd4-4df5-ae82-1194ce54fac9\",\"state\":null}"
+        "text": "{\"realm\":\"b9418034-feb2-4e11-9c39-cef4853831a0\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7dPYvBV754wnwsT7eypYfhoCkyM=",
-        "requestKey": "zUYvjmZlqinX6tNEvLWIdQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: VRLCTBj8n8HOMDdGcH+SClvHG9k=",
+        "requestKey": "/NjrIo8TLHkZEpnqDni7cQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -169,8 +171,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 7dPYvBV754wnwsT7eypYfhoCkyM=",
-        "requestKey": "zUYvjmZlqinX6tNEvLWIdQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: VRLCTBj8n8HOMDdGcH+SClvHG9k=",
+        "requestKey": "/NjrIo8TLHkZEpnqDni7cQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -193,30 +195,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"7d7f4925-7fd4-4df5-ae82-1194ce54fac9\",\"state\":{\"kind\":\"crypto-import-order\",\"challenge\":\"5ece22a4-732e-450b-be48-da308338a801\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"b9418034-feb2-4e11-9c39-cef4853831a0\",\"state\":{\"kind\":\"crypto-import-order\",\"challenge\":\"22e0cebe-a809-4290-a14a-8ed7bc0bb7b3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"7d7f4925-7fd4-4df5-ae82-1194ce54fac9\",\"state\":{\"kind\":\"crypto-import-order\",\"challenge\":\"5ece22a4-732e-450b-be48-da308338a801\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"b9418034-feb2-4e11-9c39-cef4853831a0\",\"state\":{\"kind\":\"crypto-import-order\",\"challenge\":\"22e0cebe-a809-4290-a14a-8ed7bc0bb7b3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-import-close",
-      "challenge": "3742fc3a-5319-4f0b-a90a-c2b9041ac5db",
+      "challenge": "ea3daf8d-43e2-48fd-9787-7161e10e8334",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"99eabab8-62eb-40b8-a2fe-a21c44bf02a7\",\"state\":null}"
+        "text": "{\"realm\":\"3d2df637-d68b-4015-b3b8-5c69af0e1068\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WIAIwAwqvrj02LXHzwzgObV5C3M=",
-        "requestKey": "doL3apKtQMm6/4ogIHznFQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: NTsdn467e3K0sXEGbtOUv9dQixA=",
+        "requestKey": "HuP1lV2xZg91ZSJnntt5wg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -226,8 +228,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: WIAIwAwqvrj02LXHzwzgObV5C3M=",
-        "requestKey": "doL3apKtQMm6/4ogIHznFQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: NTsdn467e3K0sXEGbtOUv9dQixA=",
+        "requestKey": "HuP1lV2xZg91ZSJnntt5wg==",
         "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
         "frames": [
           {
@@ -246,30 +248,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"99eabab8-62eb-40b8-a2fe-a21c44bf02a7\",\"state\":{\"kind\":\"crypto-import-close\",\"challenge\":\"3742fc3a-5319-4f0b-a90a-c2b9041ac5db\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"3d2df637-d68b-4015-b3b8-5c69af0e1068\",\"state\":{\"kind\":\"crypto-import-close\",\"challenge\":\"ea3daf8d-43e2-48fd-9787-7161e10e8334\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"99eabab8-62eb-40b8-a2fe-a21c44bf02a7\",\"state\":{\"kind\":\"crypto-import-close\",\"challenge\":\"3742fc3a-5319-4f0b-a90a-c2b9041ac5db\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"3d2df637-d68b-4015-b3b8-5c69af0e1068\",\"state\":{\"kind\":\"crypto-import-close\",\"challenge\":\"ea3daf8d-43e2-48fd-9787-7161e10e8334\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-generate-order",
-      "challenge": "81dc265e-750c-45a2-a514-441ff03b1b45",
+      "challenge": "ca99888f-20f9-4bd6-b078-fa8254abd493",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"473917cb-f543-4e59-a14d-484309112e80\",\"state\":null}"
+        "text": "{\"realm\":\"9848b797-b8a2-49c2-980a-50b313ddf9e6\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YnWbsL7nwJTTwABdaiWvw6sqgag=",
-        "requestKey": "V04phqQ2e55oyNbYTL+eyA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: bosUk9BWKZCSe9sb1yTInNk6o1Y=",
+        "requestKey": "kHViCVmlF32puCa6G731Aw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -279,8 +281,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: YnWbsL7nwJTTwABdaiWvw6sqgag=",
-        "requestKey": "V04phqQ2e55oyNbYTL+eyA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: bosUk9BWKZCSe9sb1yTInNk6o1Y=",
+        "requestKey": "kHViCVmlF32puCa6G731Aw==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -303,30 +305,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"473917cb-f543-4e59-a14d-484309112e80\",\"state\":{\"kind\":\"crypto-generate-order\",\"challenge\":\"81dc265e-750c-45a2-a514-441ff03b1b45\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"9848b797-b8a2-49c2-980a-50b313ddf9e6\",\"state\":{\"kind\":\"crypto-generate-order\",\"challenge\":\"ca99888f-20f9-4bd6-b078-fa8254abd493\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"473917cb-f543-4e59-a14d-484309112e80\",\"state\":{\"kind\":\"crypto-generate-order\",\"challenge\":\"81dc265e-750c-45a2-a514-441ff03b1b45\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"9848b797-b8a2-49c2-980a-50b313ddf9e6\",\"state\":{\"kind\":\"crypto-generate-order\",\"challenge\":\"ca99888f-20f9-4bd6-b078-fa8254abd493\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-generate-close",
-      "challenge": "85499b5c-433e-4fe3-b710-0f282d74a885",
+      "challenge": "7f0cf3ab-1452-4441-a4f3-26adead3b0b4",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"63c4d306-39d3-4a16-9ddc-9daea058e733\",\"state\":null}"
+        "text": "{\"realm\":\"72767f9a-913f-4495-b39f-a60852c7f984\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wzNLovIcr8q9YFbkw57sibfHGj8=",
-        "requestKey": "gytny7VU2F9uUL/WHily2Q==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 4Bzz2ZIyrFjQ00ppaOSwPRTpKWg=",
+        "requestKey": "qeDEJn9LnMcWrJgEp/uMBw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -336,8 +338,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wzNLovIcr8q9YFbkw57sibfHGj8=",
-        "requestKey": "gytny7VU2F9uUL/WHily2Q==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 4Bzz2ZIyrFjQ00ppaOSwPRTpKWg=",
+        "requestKey": "qeDEJn9LnMcWrJgEp/uMBw==",
         "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
         "frames": [
           {
@@ -356,30 +358,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"63c4d306-39d3-4a16-9ddc-9daea058e733\",\"state\":{\"kind\":\"crypto-generate-close\",\"challenge\":\"85499b5c-433e-4fe3-b710-0f282d74a885\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"72767f9a-913f-4495-b39f-a60852c7f984\",\"state\":{\"kind\":\"crypto-generate-close\",\"challenge\":\"7f0cf3ab-1452-4441-a4f3-26adead3b0b4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"63c4d306-39d3-4a16-9ddc-9daea058e733\",\"state\":{\"kind\":\"crypto-generate-close\",\"challenge\":\"85499b5c-433e-4fe3-b710-0f282d74a885\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"72767f9a-913f-4495-b39f-a60852c7f984\",\"state\":{\"kind\":\"crypto-generate-close\",\"challenge\":\"7f0cf3ab-1452-4441-a4f3-26adead3b0b4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":512},\"usages\":[\"sign\"]},\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-export-order",
-      "challenge": "79f01a97-51b7-4177-80f7-01a418dd3ae8",
+      "challenge": "be1aa5b0-b90f-4f33-abd2-8eec8846952a",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"e9e519e7-9038-4230-a8df-cf164e8d6af1\",\"state\":null}"
+        "text": "{\"realm\":\"846c1f54-3c03-4d04-afa1-6b81cc4c8f51\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dyJ0dNWuLd1yYFU4U908rC19lgc=",
-        "requestKey": "SDpQIm7UjTKxP5cEzCs7mA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZOvmRrA47H9qKh6QqbiLllSJeKw=",
+        "requestKey": "XTswuVYUl4Ku99JTKwoGfg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -389,8 +391,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dyJ0dNWuLd1yYFU4U908rC19lgc=",
-        "requestKey": "SDpQIm7UjTKxP5cEzCs7mA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZOvmRrA47H9qKh6QqbiLllSJeKw=",
+        "requestKey": "XTswuVYUl4Ku99JTKwoGfg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -413,30 +415,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"e9e519e7-9038-4230-a8df-cf164e8d6af1\",\"state\":{\"kind\":\"crypto-export-order\",\"challenge\":\"79f01a97-51b7-4177-80f7-01a418dd3ae8\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"846c1f54-3c03-4d04-afa1-6b81cc4c8f51\",\"state\":{\"kind\":\"crypto-export-order\",\"challenge\":\"be1aa5b0-b90f-4f33-abd2-8eec8846952a\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"e9e519e7-9038-4230-a8df-cf164e8d6af1\",\"state\":{\"kind\":\"crypto-export-order\",\"challenge\":\"79f01a97-51b7-4177-80f7-01a418dd3ae8\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"846c1f54-3c03-4d04-afa1-6b81cc4c8f51\",\"state\":{\"kind\":\"crypto-export-order\",\"challenge\":\"be1aa5b0-b90f-4f33-abd2-8eec8846952a\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-export-close",
-      "challenge": "431f5ec8-ec7e-4fb9-a39d-780a50740ab2",
+      "challenge": "42cd2758-9cac-4f69-8919-b359fa87ebf3",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"c99445ff-36a2-413d-9a71-77a0c043666a\",\"state\":null}"
+        "text": "{\"realm\":\"ed0dc938-c725-435a-b584-d579e82c58d0\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ro5ieK0BZNBoi4U4kybiW97xhVk=",
-        "requestKey": "d+nfEIqyAlvQGbJQN6SR5w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Uv00X4GV0CHdivsqLEtk+pO+16w=",
+        "requestKey": "2JWg/M2dJx7P0sOfUk6/CA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -446,8 +448,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ro5ieK0BZNBoi4U4kybiW97xhVk=",
-        "requestKey": "d+nfEIqyAlvQGbJQN6SR5w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Uv00X4GV0CHdivsqLEtk+pO+16w=",
+        "requestKey": "2JWg/M2dJx7P0sOfUk6/CA==",
         "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
         "frames": [
           {
@@ -466,30 +468,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"c99445ff-36a2-413d-9a71-77a0c043666a\",\"state\":{\"kind\":\"crypto-export-close\",\"challenge\":\"431f5ec8-ec7e-4fb9-a39d-780a50740ab2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"ed0dc938-c725-435a-b584-d579e82c58d0\",\"state\":{\"kind\":\"crypto-export-close\",\"challenge\":\"42cd2758-9cac-4f69-8919-b359fa87ebf3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"c99445ff-36a2-413d-9a71-77a0c043666a\",\"state\":{\"kind\":\"crypto-export-close\",\"challenge\":\"431f5ec8-ec7e-4fb9-a39d-780a50740ab2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"ed0dc938-c725-435a-b584-d579e82c58d0\",\"state\":{\"kind\":\"crypto-export-close\",\"challenge\":\"42cd2758-9cac-4f69-8919-b359fa87ebf3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-order",
-      "challenge": "bb4d175b-bf92-4d25-9f87-1ec04854a258",
+      "challenge": "e993dd60-6c85-414c-a4a3-0ce22239a5e4",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"c1b88e80-0ec8-43b5-8434-c2593e0795a5\",\"state\":null}"
+        "text": "{\"realm\":\"08e2c3e5-4dcc-450d-a3b1-00323425951f\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vTcOPTjAKhgq21jT2x69YO4plkQ=",
-        "requestKey": "AF+UrwKfe0QdI2KNUNvw7w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: cPWWr1dsUsjR1sEb3nzWuA5fkFQ=",
+        "requestKey": "hzUyUPJ1zMG4YKZyaTvR6A==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -499,8 +501,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vTcOPTjAKhgq21jT2x69YO4plkQ=",
-        "requestKey": "AF+UrwKfe0QdI2KNUNvw7w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: cPWWr1dsUsjR1sEb3nzWuA5fkFQ=",
+        "requestKey": "hzUyUPJ1zMG4YKZyaTvR6A==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -523,30 +525,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"c1b88e80-0ec8-43b5-8434-c2593e0795a5\",\"state\":{\"kind\":\"crypto-sign-order\",\"challenge\":\"bb4d175b-bf92-4d25-9f87-1ec04854a258\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"08e2c3e5-4dcc-450d-a3b1-00323425951f\",\"state\":{\"kind\":\"crypto-sign-order\",\"challenge\":\"e993dd60-6c85-414c-a4a3-0ce22239a5e4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"c1b88e80-0ec8-43b5-8434-c2593e0795a5\",\"state\":{\"kind\":\"crypto-sign-order\",\"challenge\":\"bb4d175b-bf92-4d25-9f87-1ec04854a258\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"08e2c3e5-4dcc-450d-a3b1-00323425951f\",\"state\":{\"kind\":\"crypto-sign-order\",\"challenge\":\"e993dd60-6c85-414c-a4a3-0ce22239a5e4\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-close",
-      "challenge": "bad95ad9-eada-4b8d-87e6-900ca98f4075",
+      "challenge": "4a66b8b0-e4f8-47d4-a5da-7dc23edd056a",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"517f829a-6e49-47ec-86b9-cdf5ebaa41af\",\"state\":null}"
+        "text": "{\"realm\":\"a2f26a3d-b324-4c2d-8255-eda97f06a925\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Dbstt5ZtTZIWgqhulI7iiUpD2lM=",
-        "requestKey": "DifNtSle2g6vTajdI01Jng==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: PhYfuqQL6ZZkuZ7ZRebYNZqvwKI=",
+        "requestKey": "2hcMs0KwHsuaYkV5MqMPDg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -556,8 +558,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Dbstt5ZtTZIWgqhulI7iiUpD2lM=",
-        "requestKey": "DifNtSle2g6vTajdI01Jng==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: PhYfuqQL6ZZkuZ7ZRebYNZqvwKI=",
+        "requestKey": "2hcMs0KwHsuaYkV5MqMPDg==",
         "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
         "frames": [
           {
@@ -576,30 +578,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"517f829a-6e49-47ec-86b9-cdf5ebaa41af\",\"state\":{\"kind\":\"crypto-sign-close\",\"challenge\":\"bad95ad9-eada-4b8d-87e6-900ca98f4075\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"a2f26a3d-b324-4c2d-8255-eda97f06a925\",\"state\":{\"kind\":\"crypto-sign-close\",\"challenge\":\"4a66b8b0-e4f8-47d4-a5da-7dc23edd056a\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"517f829a-6e49-47ec-86b9-cdf5ebaa41af\",\"state\":{\"kind\":\"crypto-sign-close\",\"challenge\":\"bad95ad9-eada-4b8d-87e6-900ca98f4075\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"a2f26a3d-b324-4c2d-8255-eda97f06a925\",\"state\":{\"kind\":\"crypto-sign-close\",\"challenge\":\"4a66b8b0-e4f8-47d4-a5da-7dc23edd056a\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-verify-order",
-      "challenge": "a025635b-127e-4221-ba77-7255be40daa9",
+      "challenge": "bc15852e-0d11-4674-b45f-a1a35c049552",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"685e59e8-816a-4f44-9d97-8044bd3f1c3a\",\"state\":null}"
+        "text": "{\"realm\":\"92d48c4a-9d43-44fb-ab49-cdd4cac5bf2a\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: K0nDCPA8VTIqO0rN+R22Gnmgx4M=",
-        "requestKey": "PXJdh4US7l7BJCioozgjpg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rfr3VkQlvXALFFK8v8qeI5zkemM=",
+        "requestKey": "WuudHW3ZHIGC/hVZrN2qkg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -609,8 +611,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: K0nDCPA8VTIqO0rN+R22Gnmgx4M=",
-        "requestKey": "PXJdh4US7l7BJCioozgjpg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: rfr3VkQlvXALFFK8v8qeI5zkemM=",
+        "requestKey": "WuudHW3ZHIGC/hVZrN2qkg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -633,30 +635,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"685e59e8-816a-4f44-9d97-8044bd3f1c3a\",\"state\":{\"kind\":\"crypto-verify-order\",\"challenge\":\"a025635b-127e-4221-ba77-7255be40daa9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"92d48c4a-9d43-44fb-ab49-cdd4cac5bf2a\",\"state\":{\"kind\":\"crypto-verify-order\",\"challenge\":\"bc15852e-0d11-4674-b45f-a1a35c049552\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"685e59e8-816a-4f44-9d97-8044bd3f1c3a\",\"state\":{\"kind\":\"crypto-verify-order\",\"challenge\":\"a025635b-127e-4221-ba77-7255be40daa9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"92d48c4a-9d43-44fb-ab49-cdd4cac5bf2a\",\"state\":{\"kind\":\"crypto-verify-order\",\"challenge\":\"bc15852e-0d11-4674-b45f-a1a35c049552\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-verify-close",
-      "challenge": "5d16cda3-9c6d-4c01-8bf3-632d7969ddb0",
+      "challenge": "69788e42-a3ca-4696-b2c8-f5cc9390713b",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"e265ce4d-ba6c-4e02-9ab9-43bb9bd0c628\",\"state\":null}"
+        "text": "{\"realm\":\"3620ca36-f11c-4463-8b4c-585d1ec59355\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ur0XLoQML1/THzKwMC+ZO675/RA=",
-        "requestKey": "/1Gj2Edp6oX+3gyq2zfZkw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: INo/Io/aB07VKPsGwk3+YV9sGRQ=",
+        "requestKey": "1OOpuWa6nPjor05+Og9qUg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -666,8 +668,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ur0XLoQML1/THzKwMC+ZO675/RA=",
-        "requestKey": "/1Gj2Edp6oX+3gyq2zfZkw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: INo/Io/aB07VKPsGwk3+YV9sGRQ=",
+        "requestKey": "1OOpuWa6nPjor05+Og9qUg==",
         "rawTail": "gQdzdGFydGVkiAYD6GRvbmU=",
         "frames": [
           {
@@ -686,30 +688,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"e265ce4d-ba6c-4e02-9ab9-43bb9bd0c628\",\"state\":{\"kind\":\"crypto-verify-close\",\"challenge\":\"5d16cda3-9c6d-4c01-8bf3-632d7969ddb0\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"3620ca36-f11c-4463-8b4c-585d1ec59355\",\"state\":{\"kind\":\"crypto-verify-close\",\"challenge\":\"69788e42-a3ca-4696-b2c8-f5cc9390713b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"e265ce4d-ba6c-4e02-9ab9-43bb9bd0c628\",\"state\":{\"kind\":\"crypto-verify-close\",\"challenge\":\"5d16cda3-9c6d-4c01-8bf3-632d7969ddb0\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"3620ca36-f11c-4463-8b4c-585d1ec59355\",\"state\":{\"kind\":\"crypto-verify-close\",\"challenge\":\"69788e42-a3ca-4696-b2c8-f5cc9390713b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-data-copy",
-      "challenge": "2b11d177-1514-4a8e-999b-22aa4dcfcf91",
+      "challenge": "eb54e97e-4340-4f47-a8f1-8adf502535e2",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"6d77ee72-85af-4be4-9e1f-45953d2d9315\",\"state\":null}"
+        "text": "{\"realm\":\"42f34699-9201-42a3-8fd4-ef6eaf43fb75\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Bb7lQFrgVOWWHb5WCQRdgMC8xzQ=",
-        "requestKey": "IpyrN82T4qEiwWD02VeKTA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: f1KobDCNcbTn9fWDE5uwjReJol0=",
+        "requestKey": "kwjJlb+GcYmphxMiYpFeKA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -719,8 +721,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Bb7lQFrgVOWWHb5WCQRdgMC8xzQ=",
-        "requestKey": "IpyrN82T4qEiwWD02VeKTA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: f1KobDCNcbTn9fWDE5uwjReJol0=",
+        "requestKey": "kwjJlb+GcYmphxMiYpFeKA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -743,30 +745,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"6d77ee72-85af-4be4-9e1f-45953d2d9315\",\"state\":{\"kind\":\"crypto-digest-data-copy\",\"challenge\":\"2b11d177-1514-4a8e-999b-22aa4dcfcf91\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"42f34699-9201-42a3-8fd4-ef6eaf43fb75\",\"state\":{\"kind\":\"crypto-digest-data-copy\",\"challenge\":\"eb54e97e-4340-4f47-a8f1-8adf502535e2\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"6d77ee72-85af-4be4-9e1f-45953d2d9315\",\"state\":{\"kind\":\"crypto-digest-data-copy\",\"challenge\":\"2b11d177-1514-4a8e-999b-22aa4dcfcf91\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"42f34699-9201-42a3-8fd4-ef6eaf43fb75\",\"state\":{\"kind\":\"crypto-digest-data-copy\",\"challenge\":\"eb54e97e-4340-4f47-a8f1-8adf502535e2\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-view-copy",
-      "challenge": "30949547-e0c9-43a4-900d-281ef1459ce5",
+      "challenge": "7e16022d-0564-44c8-9ba5-965270ef419b",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"3dfd6381-261b-4742-8d07-98b5ba90a048\",\"state\":null}"
+        "text": "{\"realm\":\"feba13d1-7aab-4aad-8f4a-b16d60435af5\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vzO8PdpbSGoG345jrZR95bfLz6Y=",
-        "requestKey": "9e5s8mWO512uUHdrrVPDfw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oNeg7kXMRff/pb7YmFLhjY58o4k=",
+        "requestKey": "zWcNWh3HYxsMy87cT0b+XQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -776,8 +778,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: vzO8PdpbSGoG345jrZR95bfLz6Y=",
-        "requestKey": "9e5s8mWO512uUHdrrVPDfw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: oNeg7kXMRff/pb7YmFLhjY58o4k=",
+        "requestKey": "zWcNWh3HYxsMy87cT0b+XQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -800,30 +802,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"3dfd6381-261b-4742-8d07-98b5ba90a048\",\"state\":{\"kind\":\"crypto-digest-view-copy\",\"challenge\":\"30949547-e0c9-43a4-900d-281ef1459ce5\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"feba13d1-7aab-4aad-8f4a-b16d60435af5\",\"state\":{\"kind\":\"crypto-digest-view-copy\",\"challenge\":\"7e16022d-0564-44c8-9ba5-965270ef419b\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"3dfd6381-261b-4742-8d07-98b5ba90a048\",\"state\":{\"kind\":\"crypto-digest-view-copy\",\"challenge\":\"30949547-e0c9-43a4-900d-281ef1459ce5\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"feba13d1-7aab-4aad-8f4a-b16d60435af5\",\"state\":{\"kind\":\"crypto-digest-view-copy\",\"challenge\":\"7e16022d-0564-44c8-9ba5-965270ef419b\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-data-copy",
-      "challenge": "e7ab9c2a-0c68-4934-a199-7d3e21575b19",
+      "challenge": "3681baa6-ed93-4e05-ba59-87e1cfe3274c",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"ba6fd475-d22b-4e40-bf23-07ced7a60267\",\"state\":null}"
+        "text": "{\"realm\":\"ce193832-8ecc-4d82-ad53-993e97746366\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 07CqafmUX23CW1zBaCseGjvLbio=",
-        "requestKey": "Y+3wqkegiWA3PD7nGad0bQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jYdwxiUIUWNghGv0aGsg0fiPiYU=",
+        "requestKey": "x7G+Y3lVli2Eu9oDHd30mQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -833,8 +835,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 07CqafmUX23CW1zBaCseGjvLbio=",
-        "requestKey": "Y+3wqkegiWA3PD7nGad0bQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jYdwxiUIUWNghGv0aGsg0fiPiYU=",
+        "requestKey": "x7G+Y3lVli2Eu9oDHd30mQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -857,30 +859,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"ba6fd475-d22b-4e40-bf23-07ced7a60267\",\"state\":{\"kind\":\"crypto-sign-data-copy\",\"challenge\":\"e7ab9c2a-0c68-4934-a199-7d3e21575b19\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"ce193832-8ecc-4d82-ad53-993e97746366\",\"state\":{\"kind\":\"crypto-sign-data-copy\",\"challenge\":\"3681baa6-ed93-4e05-ba59-87e1cfe3274c\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"ba6fd475-d22b-4e40-bf23-07ced7a60267\",\"state\":{\"kind\":\"crypto-sign-data-copy\",\"challenge\":\"e7ab9c2a-0c68-4934-a199-7d3e21575b19\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"ce193832-8ecc-4d82-ad53-993e97746366\",\"state\":{\"kind\":\"crypto-sign-data-copy\",\"challenge\":\"3681baa6-ed93-4e05-ba59-87e1cfe3274c\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-verify-data-copy",
-      "challenge": "c7907963-7dcd-4937-b58d-a02880a162d4",
+      "challenge": "ad2e511c-a83f-4e74-99a8-9c3c0122f23a",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"dd0b5135-74eb-4f3a-b940-c15e54816266\",\"state\":null}"
+        "text": "{\"realm\":\"4b788f20-7c47-4405-a4ae-7b9f1c02df11\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0uzraohku2yl1/TGFU1dNmncwYw=",
-        "requestKey": "ETWgYMu3TJhspEH22sKkGA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Ig+bNGfxyHoshkP23jqUVcqB9gI=",
+        "requestKey": "lXNeXbacUVNIgwglQqNjhg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -890,8 +892,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0uzraohku2yl1/TGFU1dNmncwYw=",
-        "requestKey": "ETWgYMu3TJhspEH22sKkGA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Ig+bNGfxyHoshkP23jqUVcqB9gI=",
+        "requestKey": "lXNeXbacUVNIgwglQqNjhg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -914,30 +916,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"dd0b5135-74eb-4f3a-b940-c15e54816266\",\"state\":{\"kind\":\"crypto-verify-data-copy\",\"challenge\":\"c7907963-7dcd-4937-b58d-a02880a162d4\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"4b788f20-7c47-4405-a4ae-7b9f1c02df11\",\"state\":{\"kind\":\"crypto-verify-data-copy\",\"challenge\":\"ad2e511c-a83f-4e74-99a8-9c3c0122f23a\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"dd0b5135-74eb-4f3a-b940-c15e54816266\",\"state\":{\"kind\":\"crypto-verify-data-copy\",\"challenge\":\"c7907963-7dcd-4937-b58d-a02880a162d4\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"4b788f20-7c47-4405-a4ae-7b9f1c02df11\",\"state\":{\"kind\":\"crypto-verify-data-copy\",\"challenge\":\"ad2e511c-a83f-4e74-99a8-9c3c0122f23a\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-verify-signature-copy",
-      "challenge": "1f7c5784-da4e-4bb4-bc27-e62c61207481",
+      "challenge": "a0df3587-d892-4dec-b005-350a92fbcfae",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"17f4f066-62e4-4d58-bb96-dda31887b4c8\",\"state\":null}"
+        "text": "{\"realm\":\"cfd96e09-642f-4355-b8fb-67fe1c53d221\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0hyIF0SUMNmRIxQalr6MNLl4kP4=",
-        "requestKey": "jnTXRA9mnZNHLJzC3EeggQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ojnMwS4S2E9Hpf6E6Ovx2xwobAY=",
+        "requestKey": "EeaM9OyDvIGys/Im5WI2rA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -947,8 +949,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 0hyIF0SUMNmRIxQalr6MNLl4kP4=",
-        "requestKey": "jnTXRA9mnZNHLJzC3EeggQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ojnMwS4S2E9Hpf6E6Ovx2xwobAY=",
+        "requestKey": "EeaM9OyDvIGys/Im5WI2rA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -971,30 +973,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"17f4f066-62e4-4d58-bb96-dda31887b4c8\",\"state\":{\"kind\":\"crypto-verify-signature-copy\",\"challenge\":\"1f7c5784-da4e-4bb4-bc27-e62c61207481\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"cfd96e09-642f-4355-b8fb-67fe1c53d221\",\"state\":{\"kind\":\"crypto-verify-signature-copy\",\"challenge\":\"a0df3587-d892-4dec-b005-350a92fbcfae\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"17f4f066-62e4-4d58-bb96-dda31887b4c8\",\"state\":{\"kind\":\"crypto-verify-signature-copy\",\"challenge\":\"1f7c5784-da4e-4bb4-bc27-e62c61207481\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"cfd96e09-642f-4355-b8fb-67fe1c53d221\",\"state\":{\"kind\":\"crypto-verify-signature-copy\",\"challenge\":\"a0df3587-d892-4dec-b005-350a92fbcfae\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":true,\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-import-data-copy",
-      "challenge": "0a7f0bc0-44ea-47fc-b6f6-8e3350e1708d",
+      "challenge": "643540a0-4cda-4b76-bbe3-6b001bb32942",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"ee3ee99b-09ce-47f3-8a4c-4a2c36414018\",\"state\":null}"
+        "text": "{\"realm\":\"afce2f2b-a807-4cf4-a513-be4dde258078\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9iBUrY0hZMs5TtGvVoWAjlUjeeE=",
-        "requestKey": "SZs9JV5knlPW5BbwVK29OQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SZQ+i9387r9fXgKB6/TtetwmSB4=",
+        "requestKey": "toe+AIgoqjSJ7NN2OCgzlA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1004,8 +1006,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9iBUrY0hZMs5TtGvVoWAjlUjeeE=",
-        "requestKey": "SZs9JV5knlPW5BbwVK29OQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SZQ+i9387r9fXgKB6/TtetwmSB4=",
+        "requestKey": "toe+AIgoqjSJ7NN2OCgzlA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1028,30 +1030,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"ee3ee99b-09ce-47f3-8a4c-4a2c36414018\",\"state\":{\"kind\":\"crypto-import-data-copy\",\"challenge\":\"0a7f0bc0-44ea-47fc-b6f6-8e3350e1708d\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"],\"raw\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"afce2f2b-a807-4cf4-a513-be4dde258078\",\"state\":{\"kind\":\"crypto-import-data-copy\",\"challenge\":\"643540a0-4cda-4b76-bbe3-6b001bb32942\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"],\"raw\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"ee3ee99b-09ce-47f3-8a4c-4a2c36414018\",\"state\":{\"kind\":\"crypto-import-data-copy\",\"challenge\":\"0a7f0bc0-44ea-47fc-b6f6-8e3350e1708d\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"],\"raw\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
+        "text": "{\"realm\":\"afce2f2b-a807-4cf4-a513-be4dde258078\",\"state\":{\"kind\":\"crypto-import-data-copy\",\"challenge\":\"643540a0-4cda-4b76-bbe3-6b001bb32942\",\"trace\":[\"message\",\"before\",\"mutated\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":{\"type\":\"secret\",\"algorithm\":{\"name\":\"HMAC\",\"hash\":{\"name\":\"SHA-256\"},\"length\":256},\"usages\":[\"sign\"],\"raw\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},\"failure\":null,\"mutation\":{\"succeeded\":true,\"error\":null}}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-algorithm-getter",
-      "challenge": "1025af98-6ede-4198-a606-cfd9f2cdcf8e",
+      "challenge": "d443683a-06ca-4cae-8654-ca6a5992d1d5",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"754a52c0-0234-4db4-9bff-f3baac3f6bc8\",\"state\":null}"
+        "text": "{\"realm\":\"e9572f91-e2db-4671-879c-12496b522f3a\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fubQNgojQVuBiX2FMOUGP6t2mKk=",
-        "requestKey": "5g6UWlFonzW/XfpjoJlPYg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: hdZsDaw+Q5Mq9J6x2XC2/hKrSPo=",
+        "requestKey": "AwYSnEmLUMxsFVpYsqWvTw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1061,8 +1063,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: fubQNgojQVuBiX2FMOUGP6t2mKk=",
-        "requestKey": "5g6UWlFonzW/XfpjoJlPYg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: hdZsDaw+Q5Mq9J6x2XC2/hKrSPo=",
+        "requestKey": "AwYSnEmLUMxsFVpYsqWvTw==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1085,30 +1087,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"754a52c0-0234-4db4-9bff-f3baac3f6bc8\",\"state\":{\"kind\":\"crypto-digest-algorithm-getter\",\"challenge\":\"1025af98-6ede-4198-a606-cfd9f2cdcf8e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"e9572f91-e2db-4671-879c-12496b522f3a\",\"state\":{\"kind\":\"crypto-digest-algorithm-getter\",\"challenge\":\"d443683a-06ca-4cae-8654-ca6a5992d1d5\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"754a52c0-0234-4db4-9bff-f3baac3f6bc8\",\"state\":{\"kind\":\"crypto-digest-algorithm-getter\",\"challenge\":\"1025af98-6ede-4198-a606-cfd9f2cdcf8e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"e9572f91-e2db-4671-879c-12496b522f3a\",\"state\":{\"kind\":\"crypto-digest-algorithm-getter\",\"challenge\":\"d443683a-06ca-4cae-8654-ca6a5992d1d5\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":[159,100,167,71,225,185,127,19,31,171,182,180,71,41,108,155,111,2,1,231,159,179,197,53,110,108,119,232,155,106,128,106],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-throwing-getter",
-      "challenge": "24a42d11-951b-4528-b1b6-70f6a019ab24",
+      "challenge": "85f3df89-726d-4c0d-b2fc-5a20e2b80fd3",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"2f0292a9-c118-48e5-a602-ea5054e80029\",\"state\":null}"
+        "text": "{\"realm\":\"298e8c03-5bc9-42d0-a137-917fff41cdc7\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CkGQRk/r9Gop69gppQtatqH+X18=",
-        "requestKey": "FIvBewy30qu5QPTVJmGJgQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1KBaUg3U24MexXXgJ1ySc7dDmYE=",
+        "requestKey": "CzRnsLTGy2i7h11ukIgP3g==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1118,8 +1120,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: CkGQRk/r9Gop69gppQtatqH+X18=",
-        "requestKey": "FIvBewy30qu5QPTVJmGJgQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1KBaUg3U24MexXXgJ1ySc7dDmYE=",
+        "requestKey": "CzRnsLTGy2i7h11ukIgP3g==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1142,30 +1144,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"2f0292a9-c118-48e5-a602-ea5054e80029\",\"state\":{\"kind\":\"crypto-digest-throwing-getter\",\"challenge\":\"24a42d11-951b-4528-b1b6-70f6a019ab24\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"sameSentinel\":true},\"mutation\":null}}"
+        "text": "{\"realm\":\"298e8c03-5bc9-42d0-a137-917fff41cdc7\",\"state\":{\"kind\":\"crypto-digest-throwing-getter\",\"challenge\":\"85f3df89-726d-4c0d-b2fc-5a20e2b80fd3\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"sameSentinel\":true},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"2f0292a9-c118-48e5-a602-ea5054e80029\",\"state\":{\"kind\":\"crypto-digest-throwing-getter\",\"challenge\":\"24a42d11-951b-4528-b1b6-70f6a019ab24\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"sameSentinel\":true},\"mutation\":null}}"
+        "text": "{\"realm\":\"298e8c03-5bc9-42d0-a137-917fff41cdc7\",\"state\":{\"kind\":\"crypto-digest-throwing-getter\",\"challenge\":\"85f3df89-726d-4c0d-b2fc-5a20e2b80fd3\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":null,\"message\":null,\"sameSentinel\":true},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-invalid-data",
-      "challenge": "4ffbd6ec-d847-460f-8030-c238b975663c",
+      "challenge": "e3a80dd7-b972-44d6-b2b2-f3d6adc8ad21",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"759c460f-519f-4cc7-af15-cd45339b186f\",\"state\":null}"
+        "text": "{\"realm\":\"b4a47228-29b7-46ad-b5d6-18fa7c7bc179\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xXBMOaF7gHG1bzLzuetwOubfqf8=",
-        "requestKey": "N+c9H7XgcliHFfauM2zw0w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: daTnYBdDvdZu2BgqsC+buETIM1g=",
+        "requestKey": "a7xPtaQnwFuTFj5jBiMweA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1175,8 +1177,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xXBMOaF7gHG1bzLzuetwOubfqf8=",
-        "requestKey": "N+c9H7XgcliHFfauM2zw0w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: daTnYBdDvdZu2BgqsC+buETIM1g=",
+        "requestKey": "a7xPtaQnwFuTFj5jBiMweA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1199,30 +1201,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"759c460f-519f-4cc7-af15-cd45339b186f\",\"state\":{\"kind\":\"crypto-digest-invalid-data\",\"challenge\":\"4ffbd6ec-d847-460f-8030-c238b975663c\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'digest' on 'SubtleCrypto': parameter 2 is not of type 'BufferSource'.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"b4a47228-29b7-46ad-b5d6-18fa7c7bc179\",\"state\":{\"kind\":\"crypto-digest-invalid-data\",\"challenge\":\"e3a80dd7-b972-44d6-b2b2-f3d6adc8ad21\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'digest' on 'SubtleCrypto': parameter 2 is not of type 'BufferSource'.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"759c460f-519f-4cc7-af15-cd45339b186f\",\"state\":{\"kind\":\"crypto-digest-invalid-data\",\"challenge\":\"4ffbd6ec-d847-460f-8030-c238b975663c\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'digest' on 'SubtleCrypto': parameter 2 is not of type 'BufferSource'.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"b4a47228-29b7-46ad-b5d6-18fa7c7bc179\",\"state\":{\"kind\":\"crypto-digest-invalid-data\",\"challenge\":\"e3a80dd7-b972-44d6-b2b2-f3d6adc8ad21\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'digest' on 'SubtleCrypto': parameter 2 is not of type 'BufferSource'.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-invalid-name",
-      "challenge": "c1540e13-08f4-4b48-be94-7cbe0f89bdfb",
+      "challenge": "63e229f0-31cf-4669-aa8f-4b9d3571a650",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"e37fce71-fd76-4af1-9a89-4b826af621c1\",\"state\":null}"
+        "text": "{\"realm\":\"0131288b-a5a7-4b15-9f60-590dd68657dc\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Tl6DcIHo3M/sxPCMzfrTUB8vjWQ=",
-        "requestKey": "kg+ke1qnw94weiA6/K1JCg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jnM58vD2nJN3Bk47YsJTYigQgno=",
+        "requestKey": "4jnwfe9981RkeAEGjjL6xQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1232,8 +1234,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Tl6DcIHo3M/sxPCMzfrTUB8vjWQ=",
-        "requestKey": "kg+ke1qnw94weiA6/K1JCg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jnM58vD2nJN3Bk47YsJTYigQgno=",
+        "requestKey": "4jnwfe9981RkeAEGjjL6xQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1256,30 +1258,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"e37fce71-fd76-4af1-9a89-4b826af621c1\",\"state\":{\"kind\":\"crypto-digest-invalid-name\",\"challenge\":\"c1540e13-08f4-4b48-be94-7cbe0f89bdfb\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized or unimplemented digest algorithm requested.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"0131288b-a5a7-4b15-9f60-590dd68657dc\",\"state\":{\"kind\":\"crypto-digest-invalid-name\",\"challenge\":\"63e229f0-31cf-4669-aa8f-4b9d3571a650\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized or unimplemented digest algorithm requested.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"e37fce71-fd76-4af1-9a89-4b826af621c1\",\"state\":{\"kind\":\"crypto-digest-invalid-name\",\"challenge\":\"c1540e13-08f4-4b48-be94-7cbe0f89bdfb\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized or unimplemented digest algorithm requested.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"0131288b-a5a7-4b15-9f60-590dd68657dc\",\"state\":{\"kind\":\"crypto-digest-invalid-name\",\"challenge\":\"63e229f0-31cf-4669-aa8f-4b9d3571a650\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized or unimplemented digest algorithm requested.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-invalid-receiver",
-      "challenge": "08f90976-02ff-4e13-bad0-fd8f3da08100",
+      "challenge": "aae8cd71-ad89-4d26-90b0-6eb8bbcd5d59",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"4989e874-2c56-445b-87e3-03f879fce3ed\",\"state\":null}"
+        "text": "{\"realm\":\"1bf1986c-93e8-4a56-87d8-b9c857a9a813\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nNRx/zz5N0GAsnSy6kFAQ6ufodI=",
-        "requestKey": "FDpTIuu0nV+l6VluJbz0qA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 3Eh6zblrXBvcf0MPGtjnJVWYKVc=",
+        "requestKey": "WN1pzDXQ5skvMGA/AJQvKg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1289,8 +1291,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: nNRx/zz5N0GAsnSy6kFAQ6ufodI=",
-        "requestKey": "FDpTIuu0nV+l6VluJbz0qA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 3Eh6zblrXBvcf0MPGtjnJVWYKVc=",
+        "requestKey": "WN1pzDXQ5skvMGA/AJQvKg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1313,30 +1315,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"4989e874-2c56-445b-87e3-03f879fce3ed\",\"state\":{\"kind\":\"crypto-digest-invalid-receiver\",\"challenge\":\"08f90976-02ff-4e13-bad0-fd8f3da08100\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"1bf1986c-93e8-4a56-87d8-b9c857a9a813\",\"state\":{\"kind\":\"crypto-digest-invalid-receiver\",\"challenge\":\"aae8cd71-ad89-4d26-90b0-6eb8bbcd5d59\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"4989e874-2c56-445b-87e3-03f879fce3ed\",\"state\":{\"kind\":\"crypto-digest-invalid-receiver\",\"challenge\":\"08f90976-02ff-4e13-bad0-fd8f3da08100\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"1bf1986c-93e8-4a56-87d8-b9c857a9a813\",\"state\":{\"kind\":\"crypto-digest-invalid-receiver\",\"challenge\":\"aae8cd71-ad89-4d26-90b0-6eb8bbcd5d59\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-invalid-key",
-      "challenge": "1185f245-9135-4509-b545-9048f03ce7c6",
+      "challenge": "e0dec42b-adac-45bb-9c0b-c50565b1e02f",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"de932de1-1f82-434f-8980-8294ddaf7db2\",\"state\":null}"
+        "text": "{\"realm\":\"d712e470-f841-4d3b-9d24-5211a9497f24\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: M9lGgKvvpEGG5OupgPlOkSGEO6U=",
-        "requestKey": "fmtpKYiDBec6qbkpkhB6aw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dYmDJzIkwdHXLX3U1QIinzHG6Rg=",
+        "requestKey": "b4pNOqZiwWooVy9OYZ2lag==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1346,8 +1348,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: M9lGgKvvpEGG5OupgPlOkSGEO6U=",
-        "requestKey": "fmtpKYiDBec6qbkpkhB6aw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: dYmDJzIkwdHXLX3U1QIinzHG6Rg=",
+        "requestKey": "b4pNOqZiwWooVy9OYZ2lag==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1370,30 +1372,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"de932de1-1f82-434f-8980-8294ddaf7db2\",\"state\":{\"kind\":\"crypto-sign-invalid-key\",\"challenge\":\"1185f245-9135-4509-b545-9048f03ce7c6\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'sign' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"d712e470-f841-4d3b-9d24-5211a9497f24\",\"state\":{\"kind\":\"crypto-sign-invalid-key\",\"challenge\":\"e0dec42b-adac-45bb-9c0b-c50565b1e02f\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'sign' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"de932de1-1f82-434f-8980-8294ddaf7db2\",\"state\":{\"kind\":\"crypto-sign-invalid-key\",\"challenge\":\"1185f245-9135-4509-b545-9048f03ce7c6\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'sign' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"d712e470-f841-4d3b-9d24-5211a9497f24\",\"state\":{\"kind\":\"crypto-sign-invalid-key\",\"challenge\":\"e0dec42b-adac-45bb-9c0b-c50565b1e02f\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'sign' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-import-invalid-format",
-      "challenge": "3eb23691-4cb8-4dd9-9dff-1d1077adb01d",
+      "challenge": "d5633b6d-575d-4eff-8115-6de1031e4d6c",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"352649ba-ce91-4fb0-a248-e179a4966932\",\"state\":null}"
+        "text": "{\"realm\":\"306a299b-cd1c-466f-907a-572c24f265dc\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MklUhgL12y0k5YBokT/UkK4i9uU=",
-        "requestKey": "OnwCjau9zCGrSLWrC1rgdg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uFx2TDMjeGuPpch9WdFxh5nOjzw=",
+        "requestKey": "sKmDtc3HSWMD4t/l522BQA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1403,8 +1405,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: MklUhgL12y0k5YBokT/UkK4i9uU=",
-        "requestKey": "OnwCjau9zCGrSLWrC1rgdg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: uFx2TDMjeGuPpch9WdFxh5nOjzw=",
+        "requestKey": "sKmDtc3HSWMD4t/l522BQA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1427,30 +1429,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"352649ba-ce91-4fb0-a248-e179a4966932\",\"state\":{\"kind\":\"crypto-import-invalid-format\",\"challenge\":\"3eb23691-4cb8-4dd9-9dff-1d1077adb01d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized key import format \\\"missing\\\".\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"306a299b-cd1c-466f-907a-572c24f265dc\",\"state\":{\"kind\":\"crypto-import-invalid-format\",\"challenge\":\"d5633b6d-575d-4eff-8115-6de1031e4d6c\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized key import format \\\"missing\\\".\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"352649ba-ce91-4fb0-a248-e179a4966932\",\"state\":{\"kind\":\"crypto-import-invalid-format\",\"challenge\":\"3eb23691-4cb8-4dd9-9dff-1d1077adb01d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized key import format \\\"missing\\\".\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"306a299b-cd1c-466f-907a-572c24f265dc\",\"state\":{\"kind\":\"crypto-import-invalid-format\",\"challenge\":\"d5633b6d-575d-4eff-8115-6de1031e4d6c\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[\"algorithm.name\"],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"NotSupportedError\",\"message\":\"Unrecognized key import format \\\"missing\\\".\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-import-empty-usages",
-      "challenge": "bbecc5cc-c35f-403a-be03-8f3884b09fa2",
+      "challenge": "883bd6bb-fe0d-4e11-b959-d3062d081242",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"3441b6b0-29cc-4718-baeb-6e98bdf68e33\",\"state\":null}"
+        "text": "{\"realm\":\"544f3208-650a-4bb5-b846-d7f686c37c68\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kHXeSYx42ceh9ZKbDg/oLdP5Srk=",
-        "requestKey": "D3vSpmbirKHDBRh5TjYpQg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZCC9JpN2TS1r0VJvBOEdq2bnEGo=",
+        "requestKey": "O4RPJacXz3Mwb3NmD7mqTA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1460,8 +1462,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: kHXeSYx42ceh9ZKbDg/oLdP5Srk=",
-        "requestKey": "D3vSpmbirKHDBRh5TjYpQg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZCC9JpN2TS1r0VJvBOEdq2bnEGo=",
+        "requestKey": "O4RPJacXz3Mwb3NmD7mqTA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1484,30 +1486,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"3441b6b0-29cc-4718-baeb-6e98bdf68e33\",\"state\":{\"kind\":\"crypto-import-empty-usages\",\"challenge\":\"bbecc5cc-c35f-403a-be03-8f3884b09fa2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"544f3208-650a-4bb5-b846-d7f686c37c68\",\"state\":{\"kind\":\"crypto-import-empty-usages\",\"challenge\":\"883bd6bb-fe0d-4e11-b959-d3062d081242\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"3441b6b0-29cc-4718-baeb-6e98bdf68e33\",\"state\":{\"kind\":\"crypto-import-empty-usages\",\"challenge\":\"bbecc5cc-c35f-403a-be03-8f3884b09fa2\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"544f3208-650a-4bb5-b846-d7f686c37c68\",\"state\":{\"kind\":\"crypto-import-empty-usages\",\"challenge\":\"883bd6bb-fe0d-4e11-b959-d3062d081242\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-generate-zero-length",
-      "challenge": "f133fbe9-06bf-4675-93a6-6d3c4898ffc3",
+      "challenge": "22afcc19-d132-41bd-88a7-2b7aae634c02",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"b1053697-c7de-4683-875c-0648b7de52e0\",\"state\":null}"
+        "text": "{\"realm\":\"adb3666c-07f8-4cc1-85a6-0f07ea324380\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xPO371P2AItBn+zSewWMwumMaSg=",
-        "requestKey": "zQIxXkOxUhy5rkwlFtiQ+w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: AAfGp9gZGgJhRysnFQAC+v057t4=",
+        "requestKey": "Jx2wvIcNG0vlCRaVrvtyiQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1517,8 +1519,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: xPO371P2AItBn+zSewWMwumMaSg=",
-        "requestKey": "zQIxXkOxUhy5rkwlFtiQ+w==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: AAfGp9gZGgJhRysnFQAC+v057t4=",
+        "requestKey": "Jx2wvIcNG0vlCRaVrvtyiQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1541,30 +1543,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"b1053697-c7de-4683-875c-0648b7de52e0\",\"state\":{\"kind\":\"crypto-generate-zero-length\",\"challenge\":\"f133fbe9-06bf-4675-93a6-6d3c4898ffc3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"OperationError\",\"message\":\"HMAC key length must be a non-zero unsigned long integer (requested 0).\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"adb3666c-07f8-4cc1-85a6-0f07ea324380\",\"state\":{\"kind\":\"crypto-generate-zero-length\",\"challenge\":\"22afcc19-d132-41bd-88a7-2b7aae634c02\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"OperationError\",\"message\":\"HMAC key length must be a non-zero unsigned long integer (requested 0).\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"b1053697-c7de-4683-875c-0648b7de52e0\",\"state\":{\"kind\":\"crypto-generate-zero-length\",\"challenge\":\"f133fbe9-06bf-4675-93a6-6d3c4898ffc3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"OperationError\",\"message\":\"HMAC key length must be a non-zero unsigned long integer (requested 0).\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"adb3666c-07f8-4cc1-85a6-0f07ea324380\",\"state\":{\"kind\":\"crypto-generate-zero-length\",\"challenge\":\"22afcc19-d132-41bd-88a7-2b7aae634c02\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"OperationError\",\"message\":\"HMAC key length must be a non-zero unsigned long integer (requested 0).\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-export-invalid-key",
-      "challenge": "cfab32b3-8dae-4670-8a0c-93b0d56d75d5",
+      "challenge": "933d02c6-3aba-44de-be6d-887344ad8208",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"f463776c-9e18-444a-a8a6-16e728709376\",\"state\":null}"
+        "text": "{\"realm\":\"7571f195-dc68-4493-a489-781f03289c8c\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wSu3LpgqzLMw+wtRGk61Q4NffYQ=",
-        "requestKey": "9YZ/LmnYEHAjdtE4Nhk5ZA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9yx4mJfI/JltbJynTfPGC3mNPkY=",
+        "requestKey": "T7Vt9pg0Cb7zyr9/loczLA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1574,8 +1576,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: wSu3LpgqzLMw+wtRGk61Q4NffYQ=",
-        "requestKey": "9YZ/LmnYEHAjdtE4Nhk5ZA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9yx4mJfI/JltbJynTfPGC3mNPkY=",
+        "requestKey": "T7Vt9pg0Cb7zyr9/loczLA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1598,30 +1600,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"f463776c-9e18-444a-a8a6-16e728709376\",\"state\":{\"kind\":\"crypto-export-invalid-key\",\"challenge\":\"cfab32b3-8dae-4670-8a0c-93b0d56d75d5\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'exportKey' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"7571f195-dc68-4493-a489-781f03289c8c\",\"state\":{\"kind\":\"crypto-export-invalid-key\",\"challenge\":\"933d02c6-3aba-44de-be6d-887344ad8208\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'exportKey' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"f463776c-9e18-444a-a8a6-16e728709376\",\"state\":{\"kind\":\"crypto-export-invalid-key\",\"challenge\":\"cfab32b3-8dae-4670-8a0c-93b0d56d75d5\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'exportKey' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"7571f195-dc68-4493-a489-781f03289c8c\",\"state\":{\"kind\":\"crypto-export-invalid-key\",\"challenge\":\"933d02c6-3aba-44de-be6d-887344ad8208\",\"trace\":[\"message\",\"before\",\"after\",\"failure\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Failed to execute 'exportKey' on 'SubtleCrypto': parameter 2 is not of type 'CryptoKey'.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-sha1",
-      "challenge": "0091585f-1e43-4cf7-8a93-4cfd674e6179",
+      "challenge": "c966d19a-ccf6-4714-9965-e6f1f4847caa",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"f0d5f745-5602-476f-8793-803904f23400\",\"state\":null}"
+        "text": "{\"realm\":\"5fdd004c-1950-4ed1-9b67-58ed6c9954ca\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: sG+0rnylJFRBQZMhA7o6Uq7N5Qs=",
-        "requestKey": "p2+hDgETBFvmSm+0VJ65FA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZpZHE49uZeQNR3woK2LWzGwPrDA=",
+        "requestKey": "OmG6mYCBHlRIGke+g9VF0A==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1631,8 +1633,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: sG+0rnylJFRBQZMhA7o6Uq7N5Qs=",
-        "requestKey": "p2+hDgETBFvmSm+0VJ65FA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZpZHE49uZeQNR3woK2LWzGwPrDA=",
+        "requestKey": "OmG6mYCBHlRIGke+g9VF0A==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1655,30 +1657,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"f0d5f745-5602-476f-8793-803904f23400\",\"state\":{\"kind\":\"crypto-digest-sha1\",\"challenge\":\"0091585f-1e43-4cf7-8a93-4cfd674e6179\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[18,218,218,31,255,77,71,135,173,227,51,49,71,32,44,59,68,62,55,111],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"5fdd004c-1950-4ed1-9b67-58ed6c9954ca\",\"state\":{\"kind\":\"crypto-digest-sha1\",\"challenge\":\"c966d19a-ccf6-4714-9965-e6f1f4847caa\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[18,218,218,31,255,77,71,135,173,227,51,49,71,32,44,59,68,62,55,111],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"f0d5f745-5602-476f-8793-803904f23400\",\"state\":{\"kind\":\"crypto-digest-sha1\",\"challenge\":\"0091585f-1e43-4cf7-8a93-4cfd674e6179\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[18,218,218,31,255,77,71,135,173,227,51,49,71,32,44,59,68,62,55,111],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"5fdd004c-1950-4ed1-9b67-58ed6c9954ca\",\"state\":{\"kind\":\"crypto-digest-sha1\",\"challenge\":\"c966d19a-ccf6-4714-9965-e6f1f4847caa\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[18,218,218,31,255,77,71,135,173,227,51,49,71,32,44,59,68,62,55,111],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-sha384",
-      "challenge": "5454e8fa-2325-450e-9bee-eaba0045a42d",
+      "challenge": "974d1c08-7ba6-4985-b6db-70a1ec804f5e",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"327625c6-a0d3-467a-bb0d-26df7b547088\",\"state\":null}"
+        "text": "{\"realm\":\"37a9f007-54ff-4199-ba04-73e36b877cc6\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1DlBiWQDA13taM13XaVGnbm++3c=",
-        "requestKey": "54G3KBSdyarCAbkUKhpq2A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qD7eSE2l8OhE16rxgqDaDibHD/E=",
+        "requestKey": "8PuqDipbC8IzAZ3/fqSfpA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1688,8 +1690,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 1DlBiWQDA13taM13XaVGnbm++3c=",
-        "requestKey": "54G3KBSdyarCAbkUKhpq2A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qD7eSE2l8OhE16rxgqDaDibHD/E=",
+        "requestKey": "8PuqDipbC8IzAZ3/fqSfpA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1712,30 +1714,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"327625c6-a0d3-467a-bb0d-26df7b547088\",\"state\":{\"kind\":\"crypto-digest-sha384\",\"challenge\":\"5454e8fa-2325-450e-9bee-eaba0045a42d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[90,102,125,98,67,10,140,37,62,186,228,51,51,57,4,220,110,29,65,220,220,71,151,4,119,49,89,185,5,163,173,130,210,186,215,118,45,129,163,102,204,70,251,178,226,50,127,92],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"37a9f007-54ff-4199-ba04-73e36b877cc6\",\"state\":{\"kind\":\"crypto-digest-sha384\",\"challenge\":\"974d1c08-7ba6-4985-b6db-70a1ec804f5e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[90,102,125,98,67,10,140,37,62,186,228,51,51,57,4,220,110,29,65,220,220,71,151,4,119,49,89,185,5,163,173,130,210,186,215,118,45,129,163,102,204,70,251,178,226,50,127,92],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"327625c6-a0d3-467a-bb0d-26df7b547088\",\"state\":{\"kind\":\"crypto-digest-sha384\",\"challenge\":\"5454e8fa-2325-450e-9bee-eaba0045a42d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[90,102,125,98,67,10,140,37,62,186,228,51,51,57,4,220,110,29,65,220,220,71,151,4,119,49,89,185,5,163,173,130,210,186,215,118,45,129,163,102,204,70,251,178,226,50,127,92],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"37a9f007-54ff-4199-ba04-73e36b877cc6\",\"state\":{\"kind\":\"crypto-digest-sha384\",\"challenge\":\"974d1c08-7ba6-4985-b6db-70a1ec804f5e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[90,102,125,98,67,10,140,37,62,186,228,51,51,57,4,220,110,29,65,220,220,71,151,4,119,49,89,185,5,163,173,130,210,186,215,118,45,129,163,102,204,70,251,178,226,50,127,92],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-sha512",
-      "challenge": "b1698773-680d-499f-97e4-14d9332f50be",
+      "challenge": "e8f284ba-4b6e-46c0-b435-6e9e2e6fe3be",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"cd9abafe-5b17-4e33-81f7-3cd460a3deb9\",\"state\":null}"
+        "text": "{\"realm\":\"6b5b1ef3-f6e8-4e3c-9721-ed18b9532b62\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: LJdwL8twaEbYJO64Vu1frWxAN3I=",
-        "requestKey": "eV2uCqGeQVi0I8cFIesqew==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qMowmu15+cPIC4e4wj4rIEnmrHY=",
+        "requestKey": "DOSl7yYJ9o1p+Rx9bn5vxQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1745,8 +1747,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: LJdwL8twaEbYJO64Vu1frWxAN3I=",
-        "requestKey": "eV2uCqGeQVi0I8cFIesqew==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: qMowmu15+cPIC4e4wj4rIEnmrHY=",
+        "requestKey": "DOSl7yYJ9o1p+Rx9bn5vxQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1769,30 +1771,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"cd9abafe-5b17-4e33-81f7-3cd460a3deb9\",\"state\":{\"kind\":\"crypto-digest-sha512\",\"challenge\":\"b1698773-680d-499f-97e4-14d9332f50be\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[167,201,118,219,23,35,173,180,18,116,23,141,200,46,155,119,121,65,171,32,28,105,222,97,208,242,188,109,39,163,89,143,89,79,167,72,229,13,136,211,194,191,30,44,46,114,195,207,239,120,195,198,212,175,169,3,145,247,227,58,186,188,164,142],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"6b5b1ef3-f6e8-4e3c-9721-ed18b9532b62\",\"state\":{\"kind\":\"crypto-digest-sha512\",\"challenge\":\"e8f284ba-4b6e-46c0-b435-6e9e2e6fe3be\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[167,201,118,219,23,35,173,180,18,116,23,141,200,46,155,119,121,65,171,32,28,105,222,97,208,242,188,109,39,163,89,143,89,79,167,72,229,13,136,211,194,191,30,44,46,114,195,207,239,120,195,198,212,175,169,3,145,247,227,58,186,188,164,142],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"cd9abafe-5b17-4e33-81f7-3cd460a3deb9\",\"state\":{\"kind\":\"crypto-digest-sha512\",\"challenge\":\"b1698773-680d-499f-97e4-14d9332f50be\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[167,201,118,219,23,35,173,180,18,116,23,141,200,46,155,119,121,65,171,32,28,105,222,97,208,242,188,109,39,163,89,143,89,79,167,72,229,13,136,211,194,191,30,44,46,114,195,207,239,120,195,198,212,175,169,3,145,247,227,58,186,188,164,142],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"6b5b1ef3-f6e8-4e3c-9721-ed18b9532b62\",\"state\":{\"kind\":\"crypto-digest-sha512\",\"challenge\":\"e8f284ba-4b6e-46c0-b435-6e9e2e6fe3be\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[167,201,118,219,23,35,173,180,18,116,23,141,200,46,155,119,121,65,171,32,28,105,222,97,208,242,188,109,39,163,89,143,89,79,167,72,229,13,136,211,194,191,30,44,46,114,195,207,239,120,195,198,212,175,169,3,145,247,227,58,186,188,164,142],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-empty",
-      "challenge": "77bbd629-f668-470d-b8ad-4d1fce66b168",
+      "challenge": "1cd9e88d-b008-4531-a939-1c7ca98c1d25",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"4fa27984-5f9a-4a83-888c-663c28ee99fe\",\"state\":null}"
+        "text": "{\"realm\":\"2c91c3e2-4f53-434d-bdc0-0e75835d47da\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zQliSDY05e8XgSOqztjhT/E1KMI=",
-        "requestKey": "Nixlt6EuzslvqrNplGuzJA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: S1jiZbKtTGtpOhtE/Tyk+NSYmpQ=",
+        "requestKey": "NMirdSOI/QPZpn3AWsz/SQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1802,8 +1804,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: zQliSDY05e8XgSOqztjhT/E1KMI=",
-        "requestKey": "Nixlt6EuzslvqrNplGuzJA==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: S1jiZbKtTGtpOhtE/Tyk+NSYmpQ=",
+        "requestKey": "NMirdSOI/QPZpn3AWsz/SQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1826,30 +1828,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"4fa27984-5f9a-4a83-888c-663c28ee99fe\",\"state\":{\"kind\":\"crypto-digest-empty\",\"challenge\":\"77bbd629-f668-470d-b8ad-4d1fce66b168\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[227,176,196,66,152,252,28,20,154,251,244,200,153,111,185,36,39,174,65,228,100,155,147,76,164,149,153,27,120,82,184,85],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"2c91c3e2-4f53-434d-bdc0-0e75835d47da\",\"state\":{\"kind\":\"crypto-digest-empty\",\"challenge\":\"1cd9e88d-b008-4531-a939-1c7ca98c1d25\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[227,176,196,66,152,252,28,20,154,251,244,200,153,111,185,36,39,174,65,228,100,155,147,76,164,149,153,27,120,82,184,85],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"4fa27984-5f9a-4a83-888c-663c28ee99fe\",\"state\":{\"kind\":\"crypto-digest-empty\",\"challenge\":\"77bbd629-f668-470d-b8ad-4d1fce66b168\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[227,176,196,66,152,252,28,20,154,251,244,200,153,111,185,36,39,174,65,228,100,155,147,76,164,149,153,27,120,82,184,85],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"2c91c3e2-4f53-434d-bdc0-0e75835d47da\",\"state\":{\"kind\":\"crypto-digest-empty\",\"challenge\":\"1cd9e88d-b008-4531-a939-1c7ca98c1d25\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[227,176,196,66,152,252,28,20,154,251,244,200,153,111,185,36,39,174,65,228,100,155,147,76,164,149,153,27,120,82,184,85],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-sha1",
-      "challenge": "cba8d71d-80b8-4387-b562-179daa27dadc",
+      "challenge": "0d140af9-aa2f-47bd-b5dc-ca5ee546d3d7",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"9701e8f2-a7ed-4ee4-a27d-85ba037311d7\",\"state\":null}"
+        "text": "{\"realm\":\"14120514-89eb-4614-98a6-a03fcc53f416\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iPlHt49O4WBg4I2rHi+5MyUzbcY=",
-        "requestKey": "O775d31YsDY5Pz8uwXdMow==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: S5D1g/r+WykMF5hVn4lryH3pIu8=",
+        "requestKey": "btVW9quMRX+IlLqyyVHEOA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1859,8 +1861,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: iPlHt49O4WBg4I2rHi+5MyUzbcY=",
-        "requestKey": "O775d31YsDY5Pz8uwXdMow==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: S5D1g/r+WykMF5hVn4lryH3pIu8=",
+        "requestKey": "btVW9quMRX+IlLqyyVHEOA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1883,30 +1885,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"9701e8f2-a7ed-4ee4-a27d-85ba037311d7\",\"state\":{\"kind\":\"crypto-sign-sha1\",\"challenge\":\"cba8d71d-80b8-4387-b562-179daa27dadc\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[188,127,67,3,132,188,42,42,24,233,229,89,197,5,122,173,147,111,160,19],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"14120514-89eb-4614-98a6-a03fcc53f416\",\"state\":{\"kind\":\"crypto-sign-sha1\",\"challenge\":\"0d140af9-aa2f-47bd-b5dc-ca5ee546d3d7\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[188,127,67,3,132,188,42,42,24,233,229,89,197,5,122,173,147,111,160,19],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"9701e8f2-a7ed-4ee4-a27d-85ba037311d7\",\"state\":{\"kind\":\"crypto-sign-sha1\",\"challenge\":\"cba8d71d-80b8-4387-b562-179daa27dadc\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[188,127,67,3,132,188,42,42,24,233,229,89,197,5,122,173,147,111,160,19],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"14120514-89eb-4614-98a6-a03fcc53f416\",\"state\":{\"kind\":\"crypto-sign-sha1\",\"challenge\":\"0d140af9-aa2f-47bd-b5dc-ca5ee546d3d7\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[188,127,67,3,132,188,42,42,24,233,229,89,197,5,122,173,147,111,160,19],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-sha384",
-      "challenge": "0bb42121-5c91-48fe-a216-130ee7d44552",
+      "challenge": "b2280f9b-3acc-440c-a629-0a88a6d2f6f8",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"4b3331cf-4636-41a9-abf6-61637702d9f7\",\"state\":null}"
+        "text": "{\"realm\":\"a8a85399-a788-4027-b20c-c799d3e8d2aa\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /Ojmh37njzAPNisDsm62VQLBnqY=",
-        "requestKey": "gFLR4fnNztO8go2DvwrX8g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: r0t2Hx0UAdZZbKrxxTKC6eghQaE=",
+        "requestKey": "saad/rTgV3+sxhHVOjdaOw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1916,8 +1918,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /Ojmh37njzAPNisDsm62VQLBnqY=",
-        "requestKey": "gFLR4fnNztO8go2DvwrX8g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: r0t2Hx0UAdZZbKrxxTKC6eghQaE=",
+        "requestKey": "saad/rTgV3+sxhHVOjdaOw==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1940,30 +1942,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"4b3331cf-4636-41a9-abf6-61637702d9f7\",\"state\":{\"kind\":\"crypto-sign-sha384\",\"challenge\":\"0bb42121-5c91-48fe-a216-130ee7d44552\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[95,83,96,145,103,221,165,234,229,11,2,158,193,231,111,203,151,211,230,114,210,28,81,216,69,90,73,56,66,213,35,71,11,147,211,19,249,71,205,168,174,162,56,186,105,91,195,145],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"a8a85399-a788-4027-b20c-c799d3e8d2aa\",\"state\":{\"kind\":\"crypto-sign-sha384\",\"challenge\":\"b2280f9b-3acc-440c-a629-0a88a6d2f6f8\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[95,83,96,145,103,221,165,234,229,11,2,158,193,231,111,203,151,211,230,114,210,28,81,216,69,90,73,56,66,213,35,71,11,147,211,19,249,71,205,168,174,162,56,186,105,91,195,145],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"4b3331cf-4636-41a9-abf6-61637702d9f7\",\"state\":{\"kind\":\"crypto-sign-sha384\",\"challenge\":\"0bb42121-5c91-48fe-a216-130ee7d44552\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[95,83,96,145,103,221,165,234,229,11,2,158,193,231,111,203,151,211,230,114,210,28,81,216,69,90,73,56,66,213,35,71,11,147,211,19,249,71,205,168,174,162,56,186,105,91,195,145],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"a8a85399-a788-4027-b20c-c799d3e8d2aa\",\"state\":{\"kind\":\"crypto-sign-sha384\",\"challenge\":\"b2280f9b-3acc-440c-a629-0a88a6d2f6f8\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[95,83,96,145,103,221,165,234,229,11,2,158,193,231,111,203,151,211,230,114,210,28,81,216,69,90,73,56,66,213,35,71,11,147,211,19,249,71,205,168,174,162,56,186,105,91,195,145],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-sha512",
-      "challenge": "24b4e0ba-722e-45d1-bbbb-3eef17d6694b",
+      "challenge": "83110eb1-90a6-4b12-8137-b5d50ad015da",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"ce9704e5-79b2-4fed-9cd7-b92f5398dd00\",\"state\":null}"
+        "text": "{\"realm\":\"9fa385ea-51ad-4465-a2e4-29062ec1120e\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 5AokOw06HmDzaQ2hbA2skUWF3GM=",
-        "requestKey": "u/tvueA7USPpu6eYgpH8XQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jz/zk+KIlUlMxuFJhpCpavyij60=",
+        "requestKey": "7N1rB/B8FfxeJ7dWdxDJkg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -1973,8 +1975,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 5AokOw06HmDzaQ2hbA2skUWF3GM=",
-        "requestKey": "u/tvueA7USPpu6eYgpH8XQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Jz/zk+KIlUlMxuFJhpCpavyij60=",
+        "requestKey": "7N1rB/B8FfxeJ7dWdxDJkg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -1997,30 +1999,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"ce9704e5-79b2-4fed-9cd7-b92f5398dd00\",\"state\":{\"kind\":\"crypto-sign-sha512\",\"challenge\":\"24b4e0ba-722e-45d1-bbbb-3eef17d6694b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[122,91,205,3,198,210,104,93,89,175,84,187,170,48,169,249,165,36,220,193,19,153,105,230,39,215,130,231,74,223,2,132,27,214,132,236,117,212,74,22,70,197,192,136,109,60,161,147,166,178,110,60,127,208,45,106,43,157,211,133,31,147,204,103],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"9fa385ea-51ad-4465-a2e4-29062ec1120e\",\"state\":{\"kind\":\"crypto-sign-sha512\",\"challenge\":\"83110eb1-90a6-4b12-8137-b5d50ad015da\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[122,91,205,3,198,210,104,93,89,175,84,187,170,48,169,249,165,36,220,193,19,153,105,230,39,215,130,231,74,223,2,132,27,214,132,236,117,212,74,22,70,197,192,136,109,60,161,147,166,178,110,60,127,208,45,106,43,157,211,133,31,147,204,103],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"ce9704e5-79b2-4fed-9cd7-b92f5398dd00\",\"state\":{\"kind\":\"crypto-sign-sha512\",\"challenge\":\"24b4e0ba-722e-45d1-bbbb-3eef17d6694b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[122,91,205,3,198,210,104,93,89,175,84,187,170,48,169,249,165,36,220,193,19,153,105,230,39,215,130,231,74,223,2,132,27,214,132,236,117,212,74,22,70,197,192,136,109,60,161,147,166,178,110,60,127,208,45,106,43,157,211,133,31,147,204,103],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"9fa385ea-51ad-4465-a2e4-29062ec1120e\",\"state\":{\"kind\":\"crypto-sign-sha512\",\"challenge\":\"83110eb1-90a6-4b12-8137-b5d50ad015da\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[122,91,205,3,198,210,104,93,89,175,84,187,170,48,169,249,165,36,220,193,19,153,105,230,39,215,130,231,74,223,2,132,27,214,132,236,117,212,74,22,70,197,192,136,109,60,161,147,166,178,110,60,127,208,45,106,43,157,211,133,31,147,204,103],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-sign-empty",
-      "challenge": "f715a3f4-9114-4295-885a-da94adf0e29b",
+      "challenge": "f16b1aac-e511-45d7-8bfe-065ff29f547e",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"e0fa4ea2-6164-4877-9ec7-e4dd97cff204\",\"state\":null}"
+        "text": "{\"realm\":\"50090e17-1370-4a05-97f5-65504350eb30\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9HHIRfkqCRYlCjNrNBz2JvRtrHM=",
-        "requestKey": "e8EuDVB3h6p+8q7u56iksg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: QaIqiYy+lRXMKGR2WLVGdwTdvj4=",
+        "requestKey": "YBzZLKyLkGfk7WEZUH2VUg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2030,8 +2032,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 9HHIRfkqCRYlCjNrNBz2JvRtrHM=",
-        "requestKey": "e8EuDVB3h6p+8q7u56iksg==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: QaIqiYy+lRXMKGR2WLVGdwTdvj4=",
+        "requestKey": "YBzZLKyLkGfk7WEZUH2VUg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2054,30 +2056,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"e0fa4ea2-6164-4877-9ec7-e4dd97cff204\",\"state\":{\"kind\":\"crypto-sign-empty\",\"challenge\":\"f715a3f4-9114-4295-885a-da94adf0e29b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[182,19,103,154,8,20,217,236,119,47,149,215,120,195,95,197,255,22,151,196,147,113,86,83,198,199,18,20,66,146,197,173],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"50090e17-1370-4a05-97f5-65504350eb30\",\"state\":{\"kind\":\"crypto-sign-empty\",\"challenge\":\"f16b1aac-e511-45d7-8bfe-065ff29f547e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[182,19,103,154,8,20,217,236,119,47,149,215,120,195,95,197,255,22,151,196,147,113,86,83,198,199,18,20,66,146,197,173],\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"e0fa4ea2-6164-4877-9ec7-e4dd97cff204\",\"state\":{\"kind\":\"crypto-sign-empty\",\"challenge\":\"f715a3f4-9114-4295-885a-da94adf0e29b\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[182,19,103,154,8,20,217,236,119,47,149,215,120,195,95,197,255,22,151,196,147,113,86,83,198,199,18,20,66,146,197,173],\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"50090e17-1370-4a05-97f5-65504350eb30\",\"state\":{\"kind\":\"crypto-sign-empty\",\"challenge\":\"f16b1aac-e511-45d7-8bfe-065ff29f547e\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[182,19,103,154,8,20,217,236,119,47,149,215,120,195,95,197,255,22,151,196,147,113,86,83,198,199,18,20,66,146,197,173],\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-verify-wrong-signature",
-      "challenge": "3ca449fc-2265-4eee-b2c5-0944d73602aa",
+      "challenge": "f94e1ee7-9905-4f3d-9ffc-2319c33c9bd3",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"a1ddebcd-4569-47c4-a89f-5547572a4b03\",\"state\":null}"
+        "text": "{\"realm\":\"24910513-54ed-4851-8c04-1360015bbcae\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: I6+lm2ulNzJt3YOIFUxBu0vI+z4=",
-        "requestKey": "1aFoUubsscxI03jgY9oMDQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gYlkLOj6t2Rghs6tKLEkRQbXE20=",
+        "requestKey": "GYc01BOFyGkzBfJljhkPmg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2087,8 +2089,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: I6+lm2ulNzJt3YOIFUxBu0vI+z4=",
-        "requestKey": "1aFoUubsscxI03jgY9oMDQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: gYlkLOj6t2Rghs6tKLEkRQbXE20=",
+        "requestKey": "GYc01BOFyGkzBfJljhkPmg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2111,30 +2113,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"a1ddebcd-4569-47c4-a89f-5547572a4b03\",\"state\":{\"kind\":\"crypto-verify-wrong-signature\",\"challenge\":\"3ca449fc-2265-4eee-b2c5-0944d73602aa\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"24910513-54ed-4851-8c04-1360015bbcae\",\"state\":{\"kind\":\"crypto-verify-wrong-signature\",\"challenge\":\"f94e1ee7-9905-4f3d-9ffc-2319c33c9bd3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"a1ddebcd-4569-47c4-a89f-5547572a4b03\",\"state\":{\"kind\":\"crypto-verify-wrong-signature\",\"challenge\":\"3ca449fc-2265-4eee-b2c5-0944d73602aa\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"24910513-54ed-4851-8c04-1360015bbcae\",\"state\":{\"kind\":\"crypto-verify-wrong-signature\",\"challenge\":\"f94e1ee7-9905-4f3d-9ffc-2319c33c9bd3\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-verify-short-signature",
-      "challenge": "aec9caf7-82a8-4c91-9836-10f71ab16806",
+      "challenge": "e88f1d3d-2bd0-454b-9526-088be361a767",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"5f87a78c-9777-4954-bf20-a0870d2dc0c8\",\"state\":null}"
+        "text": "{\"realm\":\"c871fe84-02c6-4f63-bba3-5da6b24ffbb9\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Hpb18QU7pdVoiWfW+PanHkXpaE4=",
-        "requestKey": "jGM2puo0Smpg7uchQeZL1g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: q6Rsp+lzJwkkIrMB1nU1LS7Fm9s=",
+        "requestKey": "ESyx6ZMcBg49WNQAWMn9Jw==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2144,8 +2146,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: Hpb18QU7pdVoiWfW+PanHkXpaE4=",
-        "requestKey": "jGM2puo0Smpg7uchQeZL1g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: q6Rsp+lzJwkkIrMB1nU1LS7Fm9s=",
+        "requestKey": "ESyx6ZMcBg49WNQAWMn9Jw==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2168,30 +2170,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"5f87a78c-9777-4954-bf20-a0870d2dc0c8\",\"state\":{\"kind\":\"crypto-verify-short-signature\",\"challenge\":\"aec9caf7-82a8-4c91-9836-10f71ab16806\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"c871fe84-02c6-4f63-bba3-5da6b24ffbb9\",\"state\":{\"kind\":\"crypto-verify-short-signature\",\"challenge\":\"e88f1d3d-2bd0-454b-9526-088be361a767\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"5f87a78c-9777-4954-bf20-a0870d2dc0c8\",\"state\":{\"kind\":\"crypto-verify-short-signature\",\"challenge\":\"aec9caf7-82a8-4c91-9836-10f71ab16806\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
+        "text": "{\"realm\":\"c871fe84-02c6-4f63-bba3-5da6b24ffbb9\",\"state\":{\"kind\":\"crypto-verify-short-signature\",\"challenge\":\"e88f1d3d-2bd0-454b-9526-088be361a767\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":false,\"failure\":null,\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-generate-empty-usages",
-      "challenge": "3335cad8-fd41-42f8-a48e-d01012e1c20d",
+      "challenge": "0a8de4b7-dc92-4ed9-8895-4f53f37e7bbf",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"c540ebff-b0ea-4a56-b6f1-172a247d1eda\",\"state\":null}"
+        "text": "{\"realm\":\"e1da4953-43eb-4af1-979f-6dc289713758\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jUNnZ96E61SghrCjXiTUTcUy/RI=",
-        "requestKey": "HZ0QvrlnW+b5FPgtly2cUQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: PEI4Wf2R+iECVuXlxh7RV6XAHTk=",
+        "requestKey": "cNj3l5N17fIlUuT4+Zw+qA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2201,8 +2203,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: jUNnZ96E61SghrCjXiTUTcUy/RI=",
-        "requestKey": "HZ0QvrlnW+b5FPgtly2cUQ==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: PEI4Wf2R+iECVuXlxh7RV6XAHTk=",
+        "requestKey": "cNj3l5N17fIlUuT4+Zw+qA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2225,30 +2227,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"c540ebff-b0ea-4a56-b6f1-172a247d1eda\",\"state\":{\"kind\":\"crypto-generate-empty-usages\",\"challenge\":\"3335cad8-fd41-42f8-a48e-d01012e1c20d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"e1da4953-43eb-4af1-979f-6dc289713758\",\"state\":{\"kind\":\"crypto-generate-empty-usages\",\"challenge\":\"0a8de4b7-dc92-4ed9-8895-4f53f37e7bbf\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"c540ebff-b0ea-4a56-b6f1-172a247d1eda\",\"state\":{\"kind\":\"crypto-generate-empty-usages\",\"challenge\":\"3335cad8-fd41-42f8-a48e-d01012e1c20d\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"e1da4953-43eb-4af1-979f-6dc289713758\",\"state\":{\"kind\":\"crypto-generate-empty-usages\",\"challenge\":\"0a8de4b7-dc92-4ed9-8895-4f53f37e7bbf\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"failure\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"SyntaxError\",\"message\":\"Secret/private CryptoKeys must have at least one usage.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-digest-forged-receiver",
-      "challenge": "7dd29ce1-2f7a-44d8-8017-831c7df6bdaf",
+      "challenge": "d13f7175-5a78-4a00-af74-dad224287847",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"3a9946cd-bb99-4502-b237-10f32bd424e6\",\"state\":null}"
+        "text": "{\"realm\":\"247351e1-d82c-42c2-8148-11dbe2463658\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /2yIOJBrZ1YLaLiazSWFwycVjNw=",
-        "requestKey": "qm3VxoZIgkH/GtP3a71c+g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SwGuWwBdVzRb3rI0kzdxUAfy/uM=",
+        "requestKey": "Iw4ubJK6PTX9l1wwjeNuNA==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2258,8 +2260,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: /2yIOJBrZ1YLaLiazSWFwycVjNw=",
-        "requestKey": "qm3VxoZIgkH/GtP3a71c+g==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: SwGuWwBdVzRb3rI0kzdxUAfy/uM=",
+        "requestKey": "Iw4ubJK6PTX9l1wwjeNuNA==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2282,30 +2284,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"3a9946cd-bb99-4502-b237-10f32bd424e6\",\"state\":{\"kind\":\"crypto-digest-forged-receiver\",\"challenge\":\"7dd29ce1-2f7a-44d8-8017-831c7df6bdaf\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"247351e1-d82c-42c2-8148-11dbe2463658\",\"state\":{\"kind\":\"crypto-digest-forged-receiver\",\"challenge\":\"d13f7175-5a78-4a00-af74-dad224287847\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"3a9946cd-bb99-4502-b237-10f32bd424e6\",\"state\":{\"kind\":\"crypto-digest-forged-receiver\",\"challenge\":\"7dd29ce1-2f7a-44d8-8017-831c7df6bdaf\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
+        "text": "{\"realm\":\"247351e1-d82c-42c2-8148-11dbe2463658\",\"state\":{\"kind\":\"crypto-digest-forged-receiver\",\"challenge\":\"d13f7175-5a78-4a00-af74-dad224287847\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-key-map-prototype",
-      "challenge": "9c7eb7b7-58c0-41a4-9add-bc966cadc4b9",
+      "challenge": "f0de4574-e3d2-4440-9d7a-82b0a43469ef",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"0a23e7a3-fa2b-4175-9c93-7bd7b6b08798\",\"state\":null}"
+        "text": "{\"realm\":\"6f8199eb-51e4-4526-92cd-0813f874a38a\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ObQg8EFvCknrTXhU639crnGjB7o=",
-        "requestKey": "OzMPL8A2+Y+nJMKFQ+AAvw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: u02wRx00cEfP4ebOfkNZoI4V2xc=",
+        "requestKey": "bZEd/7xxsFWc0Ac36KBODg==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2315,8 +2317,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ObQg8EFvCknrTXhU639crnGjB7o=",
-        "requestKey": "OzMPL8A2+Y+nJMKFQ+AAvw==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: u02wRx00cEfP4ebOfkNZoI4V2xc=",
+        "requestKey": "bZEd/7xxsFWc0Ac36KBODg==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2339,30 +2341,30 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"0a23e7a3-fa2b-4175-9c93-7bd7b6b08798\",\"state\":{\"kind\":\"crypto-key-map-prototype\",\"challenge\":\"9c7eb7b7-58c0-41a4-9add-bc966cadc4b9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null,\"observations\":[]}}"
+        "text": "{\"realm\":\"6f8199eb-51e4-4526-92cd-0813f874a38a\",\"state\":{\"kind\":\"crypto-key-map-prototype\",\"challenge\":\"f0de4574-e3d2-4440-9d7a-82b0a43469ef\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null,\"observations\":[]}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"0a23e7a3-fa2b-4175-9c93-7bd7b6b08798\",\"state\":{\"kind\":\"crypto-key-map-prototype\",\"challenge\":\"9c7eb7b7-58c0-41a4-9add-bc966cadc4b9\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null,\"observations\":[]}}"
+        "text": "{\"realm\":\"6f8199eb-51e4-4526-92cd-0813f874a38a\",\"state\":{\"kind\":\"crypto-key-map-prototype\",\"challenge\":\"f0de4574-e3d2-4440-9d7a-82b0a43469ef\",\"trace\":[\"message\",\"before\",\"after\",\"microtask/1\",\"complete\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"promise\",\"result\":[38,139,163,78,3,187,178,115,213,108,69,167,60,134,90,11,188,234,40,240,169,131,248,110,158,145,86,161,39,120,119,242],\"failure\":null,\"mutation\":null,\"observations\":[]}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     },
     {
       "kind": "crypto-subtle-set-prototype",
-      "challenge": "e2f0e922-160e-495b-b0ad-f4734099d3c1",
+      "challenge": "a234b7b6-09f3-4e01-a31e-afc54ce282b1",
       "initial": {
         "status": 200,
-        "text": "{\"realm\":\"0e261437-f528-47c6-99bb-d145536ab675\",\"state\":null}"
+        "text": "{\"realm\":\"1078f3e4-b240-46ef-b2bd-f63392a32056\",\"state\":null}"
       },
       "headers": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZPVDMahOeTmd9iteyzOczOc9ujY=",
-        "requestKey": "skPcMB0fe8ylqXW01ozO9A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 71+EVMsSv6elIlBuUuqf3X29Djc=",
+        "requestKey": "PTtnebXyJDTkD5fQxXuHIQ==",
         "rawTail": "",
         "frames": [],
         "peerTerminated": false,
@@ -2372,8 +2374,8 @@
       },
       "wire": {
         "status": 101,
-        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: ZPVDMahOeTmd9iteyzOczOc9ujY=",
-        "requestKey": "skPcMB0fe8ylqXW01ozO9A==",
+        "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: 71+EVMsSv6elIlBuUuqf3X29Djc=",
+        "requestKey": "PTtnebXyJDTkD5fQxXuHIQ==",
         "rawTail": "gQdzdGFydGVkgQRkb25liAYD6GRvbmU=",
         "frames": [
           {
@@ -2396,16 +2398,16 @@
       },
       "atClose": {
         "status": 200,
-        "text": "{\"realm\":\"0e261437-f528-47c6-99bb-d145536ab675\",\"state\":{\"kind\":\"crypto-subtle-set-prototype\",\"challenge\":\"e2f0e922-160e-495b-b0ad-f4734099d3c1\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null,\"observations\":[]}}"
+        "text": "{\"realm\":\"1078f3e4-b240-46ef-b2bd-f63392a32056\",\"state\":{\"kind\":\"crypto-subtle-set-prototype\",\"challenge\":\"a234b7b6-09f3-4e01-a31e-afc54ce282b1\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null,\"observations\":[]}}"
       },
       "observed": {
         "status": 200,
-        "text": "{\"realm\":\"0e261437-f528-47c6-99bb-d145536ab675\",\"state\":{\"kind\":\"crypto-subtle-set-prototype\",\"challenge\":\"e2f0e922-160e-495b-b0ad-f4734099d3c1\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null,\"observations\":[]}}"
+        "text": "{\"realm\":\"1078f3e4-b240-46ef-b2bd-f63392a32056\",\"state\":{\"kind\":\"crypto-subtle-set-prototype\",\"challenge\":\"a234b7b6-09f3-4e01-a31e-afc54ce282b1\",\"trace\":[\"message\",\"before\",\"throw\",\"after\",\"microtask/1\",\"microtask/2\",\"microtask/3\",\"close\"],\"reads\":[],\"returned\":\"throw\",\"result\":null,\"failure\":{\"type\":\"object\",\"name\":\"TypeError\",\"message\":\"Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.\",\"sameSentinel\":false},\"mutation\":null,\"observations\":[]}}"
       },
       "shutdown": {
         "forced": false,
-        "code": null,
-        "signal": "SIGTERM"
+        "code": 0,
+        "signal": null
       },
       "stderr": ""
     }

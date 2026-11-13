@@ -1,9 +1,9 @@
 {
   "schema": "capsid-fetch-boundary-reference-capture-v1",
-  "sourceReport": "upgrade38t-reference-linux.json",
-  "sourceReportSHA256": "b45aa4777416958ead7e56dfc82e64db17c18c350ab00c963c41d8e6a3f095dc",
-  "rawBytes": 2751430,
-  "gzipSHA256": "804d88eea8b407e2b20cf7564a868631395218cd57de61f2559add8548347ed7",
+  "sourceReport": "fetch-boundary-reference.json",
+  "sourceReportSHA256": "c44dcfacde2ac682dc33bfbb75abe90a33a1f8d2e327210df61d7f08d745a2c7",
+  "rawBytes": 2749974,
+  "gzipSHA256": "ea093030f7e0bbe3dc88821755617c4302755bef9c73ce068baee3d476b7e492",
   "cases": 22,
   "platform": "linux",
   "sourceCommit": "8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f",

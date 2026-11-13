@@ -1,3 +1,4 @@
+import {referenceBackendModes} from '../tools/workerd-platform.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -5,13 +6,13 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {crossContextCases, assertCrossContextCase, validateCrossContextReport, compareCrossContextReports} from '../tools/workerd-cross-context-contract.mjs';
 
-// Actual Windows reference output is replayed only to test this validator.
+// Actual pinned reference output is replayed only to test this validator.
 // Platform gates must launch fresh pinned assets and bind current input hashes.
 const stored = JSON.parse(fs.readFileSync(new URL('./fixtures/workerd-cross-context-report.json', import.meta.url), 'utf8'));
 function matrix() {
     const reference = structuredClone(stored), expected = {runId: reference.runId, lock: reference.referenceLock,
         inputs: reference.inputs, host: 'a'.repeat(64), worker: 'b'.repeat(64)};
-    const candidates = ['single-worker','static-pool'].map(mode => ({...structuredClone(reference), mode,
+    const candidates = referenceBackendModes(expected.lock).map(mode => ({...structuredClone(reference), mode,
         binaries: {host: expected.host, worker: expected.worker}, cases: reference.cases.map(value => ({...structuredClone(value),
             shutdown: {code: 0, signal: null, forced: false}}))}));
     return {reference, candidates, expected};
@@ -34,7 +35,7 @@ test('literal cross-context inventory separates creation, following, settlement 
 });
 test('actual stored workerd observations meet independent absolute contracts', () => {
     const {reference, candidates, expected} = matrix();
-    assert.deepEqual(compareCrossContextReports(reference, candidates, expected), {complete: true, casesPerBackend: 26, backends: 3});
+    assert.deepEqual(compareCrossContextReports(reference, candidates, expected), {complete: true, casesPerBackend: 26, backends: 1 + candidates.length});
     assert.equal(validateCrossContextReport(reference, expected).length, 26);
 });
 for (const spec of crossContextCases) for (const [name, mutate] of [
@@ -94,4 +95,10 @@ for (const args of [
     assert.doesNotMatch(result.stderr, /MODULE_NOT_FOUND|Cannot find module/);
     assert.doesNotMatch(result.stderr, /ENOENT|CAPSID_WORKERD_REF required/);
     assert.match(result.stderr, /known cross-context option|unique valued cross-context option|CAPSID_WORKERD_REF required|AssertionError/);
+});
+
+test('Linux validation rejects omission of managed from a verified healthy backend matrix', () => {
+    const m=matrix();assert.ok(referenceBackendModes(m.expected.lock).includes('managed'));
+    assert.doesNotThrow(()=>compareCrossContextReports(m.reference,m.candidates,m.expected));
+    assert.throws(()=>compareCrossContextReports(m.reference,m.candidates.filter(r=>r.mode!=='managed'),m.expected));
 });

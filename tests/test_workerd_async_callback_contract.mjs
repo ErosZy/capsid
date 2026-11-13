@@ -1,3 +1,4 @@
+import {referenceBackendModes} from '../tools/workerd-platform.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -11,7 +12,7 @@ function matrix() {
     const reference = structuredClone(stored);
     const expected = {runId: reference.runId, lock: reference.referenceLock, inputs: reference.inputs,
         sourceNames: asyncSourceNames('file:///qualification/callbacks.mjs'), host: 'a'.repeat(64), worker: 'b'.repeat(64)};
-    const candidates = ['single-worker', 'static-pool'].map(mode => {
+    const candidates = referenceBackendModes(expected.lock).map(mode => {
         const report = structuredClone(reference); report.mode = mode; report.sourceName = expected.sourceNames[mode];
         report.binaries = {host: expected.host, worker: expected.worker};
         for (const value of report.cases) {
@@ -46,7 +47,7 @@ test('actual error source stays at line 4 column 90 with room for real Close ACK
 test('stored actual observations satisfy absolute contracts and the native matrix', () => {
     const {reference, candidates, budgets, expected} = matrix();
     assert.deepEqual(compareAsyncReports(reference, candidates, budgets, expected),
-        {complete: true, casesPerBackend: 24, backends: 3, budgetCasesPerBackend: 5, budgetBackends: 2});
+        {complete: true, casesPerBackend: 24, backends: 1 + candidates.length, budgetCasesPerBackend: 5, budgetBackends: budgets.length});
 });
 const rewrite = value => {value.stateText = JSON.stringify(value.state); if (value.response) value.response.text = value.stateText;};
 for (const [name, kind, mutate, diagnostic] of [
@@ -117,4 +118,11 @@ test('both shared and budget reports require every supported backend', () => {
     const m = matrix();
     assert.throws(() => compareAsyncReports(m.reference, m.candidates.slice(0, 1), m.budgets, m.expected), /complete async callback backend matrix/);
     assert.throws(() => compareAsyncReports(m.reference, m.candidates, m.budgets.slice(0, 1), m.expected), /complete async callback backend matrix/);
+});
+
+test('Linux callback validation requires managed callbacks and budgets in the healthy matrix', () => {
+    const m=matrix();assert.ok(referenceBackendModes(m.expected.lock).includes('managed'));
+    assert.doesNotThrow(()=>compareAsyncReports(m.reference,m.candidates,m.budgets,m.expected));
+    assert.throws(()=>compareAsyncReports(m.reference,m.candidates.filter(r=>r.mode!=='managed'),m.budgets,m.expected),/backend matrix/);
+    assert.throws(()=>compareAsyncReports(m.reference,m.candidates,m.budgets.filter(r=>r.mode!=='managed'),m.expected),/backend matrix/);
 });
