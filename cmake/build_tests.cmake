@@ -3064,6 +3064,14 @@ if(BUILD_TESTING)
                 benchmark_density_control PROPERTIES
                 LABELS "host;benchmark;evidence" TIMEOUT 30)
             add_test(
+                NAME benchmark_density_conditioning
+                COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_density_conditioning.py"
+                    --module "${CMAKE_CURRENT_SOURCE_DIR}/bench/density_conditioning.py")
+            set_tests_properties(
+                benchmark_density_conditioning PROPERTIES
+                LABELS "host;benchmark;evidence;lifecycle" TIMEOUT 30 RUN_SERIAL TRUE)
+            add_test(
                 NAME benchmark_density_producer
                 COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmark_density_lane.py"

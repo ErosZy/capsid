@@ -10,7 +10,8 @@ import signal
 import sys
 
 from density_control import DensitySearch
-from density_probe import DensityProbe, write_json
+from density_probe import write_json
+from density_conditioning import ConditionedDensityProbe as DensityProbe
 from measurement_runtime import ProbeError
 from perf_evidence import PROTOCOL, sha256, validate_lane
 

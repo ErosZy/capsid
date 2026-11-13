@@ -251,6 +251,20 @@ worker-local counters are sent through ordinary logs. No diagnostic data is
 added to public responses or production IPC. Dropped/malformed counter records
 fail coverage.
 
+The current `per-instance-waves-v2` protocol uses one request per worker/cell
+in every cold/warm conditioning wave. Capsid briefly pauses only its pinned
+worker children until the running Host has dispatched the complete wave, then
+resumes all of them before reading responses or sampling memory. workerd uses
+the same wave size through its per-cell sockets. The 300-second deadline,
+original request ceilings and fixed QPS protocol remain in force.
+
+The archive retains every dispatch/resume wave and signal record. Validation
+reparses exact response digests, request ordering, UUID/nonce business counters,
+readiness ordering, the pinned process membership and each individual PSS sum.
+Resealing altered summaries, incomplete waves or missing resumes does not make
+them acceptable. Synthetic validator fixtures and restricted observations
+remain separate from formal performance measurements.
+
 For a restricted Linux smoke using already generated fixtures:
 
 ```sh

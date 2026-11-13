@@ -23,6 +23,8 @@ lane = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lane)
 from measurement_runtime import ProbeError
 from perf_evidence import Archive, sha256
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'helpers'))
+from density_measurement_fixture import synthetic_density
 
 
 class PreflightTests(unittest.TestCase):
@@ -123,17 +125,10 @@ class ProducerTests(unittest.TestCase):
                 source = self.options["apps"] / f"app-{call['stack']}-{call['size']}.mjs"
                 data = source.read_bytes()
                 case.assertEqual(data, expected_inputs[source.name], "shared input mutation changed the active measurement")
-                file.write_bytes(data)
-                requests = 1 if call["phase"] == "cold" else 100
-                return {"stack": call["stack"], "size": call["size"], "phase": call["phase"], "count": call["count"],
-                        "unit": "workers" if call["stack"] == "capsid" else "cells", "status": "ok",
-                        "pss_readings_kb": [1024, 1024], "requestsPerWorker": {"synthetic-worker": requests},
-                        "probeDirectory": directory, "cleanup": {"ownedPidsRemaining": 0},
-                        "correctness": {"ok": True, "errors_as_success": False, "responses_checked": requests,
-                                        "errors": 0, "mismatches": 0, "timeouts": 0,
-                                        "warmupConcurrencyLimit": 128, "maximumWaveRequests": 1,
-                                        "maximumRequestsAllowed": 3200 if call["phase"] == "warm" else 64,
-                                        "coverageTimeoutSeconds": 300}}
+                row, _ = synthetic_density(self.options['out'], directory, call['stack'], call['size'],
+                    call['phase'], call['count'], probe_index=call['probe_index'], source=data.decode('utf-8'),
+                    final=call['final'], ports=call['ports'])
+                return row
         with patch.object(lane, "DensityProbe", SyntheticProbe):
             result = lane.run_lane(self.configuration)
         self.assertTrue(result["publicationEligible"], "contract fixture only, never an actual performance point")

@@ -13,6 +13,7 @@ import re
 from cold_control import checked_round as check_cold_round, identity as cold_identity
 from qps_control import checked_round as check_qps_round, checked_memory_pair, identity as qps_identity
 from measurement_runtime import ProbeError
+from density_evidence import DensityEvidenceError, validate_density_conditioning
 
 
 class EvidenceError(ValueError):
@@ -36,7 +37,9 @@ PROTOCOL = {
             "pssStableReads": 2, "pssMaxReads": 8, "pssIntervalSeconds": 1, "pssSettleSeconds": 1},
     "density": {"budgetMb": 2048, "warmRequests": 100, "stableReads": 2,
                 "verificationRetries": 2, "parallelRequests": 64,
-                "warmupConcurrencyPolicy": "pool-scaled-burst-v1", "warmupConcurrencyFactor": 128,
+                "warmupConcurrencyPolicy": "per-instance-waves-v2", "warmupConcurrencyFactor": 128,
+                "requestsPerInstancePerWave": 1, "capsidConditioning": "owned-worker-dispatch-v1",
+                "workerdConditioning": "targeted-cell-socket-v1",
                 "coldRequestFactor": 8, "warmRequestFactor": 32, "coverageTimeoutSeconds": 300},
 }
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -379,6 +382,10 @@ def validate_samples(archive, lane, record, summary):
              f"{key}: warmup request budget disagrees with protocol")
         need(verdicts[0].get("coverageTimeoutSeconds") == protocol["coverageTimeoutSeconds"],
              f"{key}: warmup deadline disagrees with protocol")
+        try:
+            validate_density_conditioning(archive, key, row, verdicts[0], protocol)
+        except DensityEvidenceError as exc:
+            raise EvidenceError(f"{key}: {exc}") from exc
         need(row.get("limit") in ("budget", "cap"), f"{key}: missing search limit status")
         cap = archive.manifest["protocol"]["caps"][key[0]]
         need(row["count"] <= cap and (row["limit"] != "cap" or row["count"] == cap),

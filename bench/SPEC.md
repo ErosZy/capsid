@@ -170,16 +170,33 @@ work; controller tests and restricted smoke do not qualify a performance point.
   per worker/cell; initialization, not static loading) and **warmed**
   (100 requests through each, then settle). A pool that dies under the
   warm-up is a failed probe, never a small reading.
-- **Conditioning concurrency:** density conditioning uses a recorded limit of
-  `max(64, 128 * pool_count)` and connected request waves, with all requests in a
-  large wave sent before response reads. This user-approved density protocol
-  change preserves production least-loaded/lowest-slot scheduling. Cold/warm
-  coverage still requires every worker to reach 1/100 requests. Cold permits
-  at most `max(64, 8 * count)` validated requests, warm permits at most
-  `max(64, 32 * count * 100)`, and both retain the 300-second deadline. These
-  explicit attempt bounds accommodate the production tie rule's uneven
-  distribution; they do not replace per-worker coverage. The clients finish before
-  settling and PSS sampling. QPS remains fixed at 64 connections/in-flight.
+- **Conditioning waves:** `per-instance-waves-v2` sends one real request to
+  every instance in each wave: one cold wave or 100 warm waves. The recorded
+  concurrency limit remains `max(64, 128 * pool_count)`; the actual wave has
+  `pool_count` requests and connection setup uses at most 64 clients. Production
+  least-loaded/lowest-slot scheduling is preserved. Cold retains the ceiling
+  `max(64, 8 * count)`, warm retains `max(64, 32 * count * 100)`, and conditioning
+  retains its 300-second deadline, including the complete dispatch barrier.
+- **Capsid dispatch barrier:** pause only the measured Host's worker children,
+  selected by executable and pinned PID/start identities. The Host remains
+  running. Send the wave through the original exact HTTP client, require the
+  service HTTP inflight gauge to reach `pool_count`, then resume every worker.
+  Every resume is attempted even if another fails; any failure rejects the
+  probe and the owner cleans its whole process tree. Every wave must record
+  one business execution on each original worker. workerd uses the same wave
+  size through its individual cell sockets. This changes density prewarm
+  execution timing; the clients finish before settling and PSS sampling.
+  QPS remains fixed at 64 connections/in-flight and the cold-start lane retains
+  its own original latency protocol.
+- **Conditioning evidence:** seal and revalidate launch ports/nonce, every
+  response row and exact body digest, continuous per-worker UUID counters,
+  READY-before-traffic ordering, every dispatch/resume wave, and actual resume
+  signal records. Every PSS attempt must contain the same pinned process set,
+  with positive individual readings adding up to its total. The final pair
+  must match those raw attempts and cleanup must retain every measured process
+  identity with zero remaining owned PIDs. A summary or resealed aggregate
+  cannot substitute for these records. Earlier burst archives do not acquire
+  the v2 protocol by changing their metadata.
 - **Warm-phase gating:** request failures are counted and fatal (a warm
   pass that cannot reach its targets understates a pool that is quietly
   shedding); the post-settle sample requires two consecutive **equal**

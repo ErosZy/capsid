@@ -140,9 +140,9 @@ def readable_manifest(manifest):
 
 def snapshot_runner(out, files=None):
     root = Path(__file__).resolve().parent
-    files = files or ("density-lane.sh", "density-lane.py", "density_control.py", "density_probe.py",
+    files = files or ("density-lane.sh", "density-lane.py", "density_control.py", "density_probe.py", "density_conditioning.py",
              "measurement_runtime.py", "perf_run.py", "gen-cold-start-apps.py",
-             "perf_evidence.py", "cold_control.py", "qps_control.py", "collect-perf-point.py")
+             "perf_evidence.py", "density_evidence.py", "cold_control.py", "qps_control.py", "collect-perf-point.py")
     inputs, archived = {}, {}
     for name in files:
         source = root / name

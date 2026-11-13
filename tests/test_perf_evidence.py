@@ -30,6 +30,7 @@ import perf_evidence as contract
 sys.path.insert(0, str(Path(__file__).resolve().parent / "helpers"))
 from cold_measurement_fixture import synthetic_round
 from qps_measurement_fixture import synthetic_memory
+from density_measurement_fixture import synthetic_density
 site_spec = importlib.util.spec_from_file_location("perf_site", args.collector.with_name("prepare-perf-site.py"))
 site = importlib.util.module_from_spec(site_spec)
 site_spec.loader.exec_module(site)
@@ -123,16 +124,15 @@ class Fixture:
                     record["phase"] = key[2]
                     unit = "workers" if stack == "capsid" else "cells"
                     lines.append(f"{stack} {value} {unit}=2 pss_mb=1.0 phase={key[2]} note=cap-reached")
-                    count = 100 if key[2] == "warm" else 1
-                    rows = [{"stack": stack, "size": value, "phase": key[2], "unit": unit,
-                             "count": 2, "status": "ok", "finalVerification": True,
-                             "pss_readings_kb": [1024, 1024],
-                             "requestsPerWorker": {"worker-1": count, "worker-2": count}, "limit": "cap"}]
-                    self.raw(path, record, f"raw.{index}.jsonl", rows)
-                    self.verdict(path, record, f"correctness.{index}.json", count * 2,
-                                 {"warmupConcurrencyLimit": 256, "maximumWaveRequests": 2,
-                                  "maximumRequestsAllowed": 6400 if key[2] == "warm" else 64,
-                                  "coverageTimeoutSeconds": 300})
+                    directory = f'density-probe-{index}'
+                    row, verdict = synthetic_density(path, directory, stack, value, key[2], 2,
+                                                     probe_index=index+1, write=self.write)
+                    wrapper = directory + ('/runtime/apps/orders/v1/bundle.mjs' if stack=='capsid' else '/runtime/bundle.mjs')
+                    fixture_id = 'density-' + directory
+                    m['fixtures'][fixture_id] = {'file': wrapper, 'sha256': digest((path/wrapper).read_bytes())}
+                    record['fixtures'].append(fixture_id)
+                    self.raw(path, record, f"raw.{index}.jsonl", [row])
+                    self.verdict(path, record, f"correctness.{index}.json", verdict['responses_checked'], verdict)
                 m["records"].append(record)
             if lane == "qps":
                 memory = {}
@@ -397,7 +397,8 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 f.mutate_json("density", name, lambda row: row.update({field: value}))
                 with self.assertRaisesRegex(contract.EvidenceError, "warmup"):
                     self.collect()
-        for field in ("warmupConcurrencyPolicy", "warmupConcurrencyFactor"):
+        for field in ("warmupConcurrencyPolicy", "warmupConcurrencyFactor", "requestsPerInstancePerWave",
+                      "capsidConditioning", "workerdConditioning"):
             with self.subTest(field=field), f.transaction():
                 del f.manifests["density"]["protocol"][field]
                 f.manifest("density")
@@ -422,6 +423,123 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 self.assertEqual(expected, probe.warmup_concurrency(count))
                 self.assertEqual(expected, max(protocol["parallelRequests"],
                                               count * protocol["warmupConcurrencyFactor"]))
+
+    def density_probe_record(self, stack='capsid', phase='cold'):
+        f = self.fixture
+        index, record = next((i,r) for i,r in enumerate(f.manifests['density']['records'])
+                             if r['stack']==stack and r['phase']==phase)
+        rows = [json.loads(line) for line in (f.paths['density']/record['samples'][0]).read_text().splitlines()]
+        return index, record, rows[0]
+
+    def mutate_density_jsonl(self, name, change):
+        f = self.fixture
+        path = f.paths['density']/name
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        change(rows)
+        f.write(path,b''.join(encoded(row) for row in rows))
+        f.seal('density')
+
+    def test_density_conditioning_summaries_cannot_replace_the_protocol(self):
+        f = self.fixture
+        _, record, _ = self.density_probe_record()
+        for field, value in (('conditioningMethod','old-burst'), ('conditioningWaves',True),
+                             ('conditioningWaves',2), ('conditioningSeconds',301),
+                             ('conditioningSeconds',0), ('externalWorkerExecutionBarrier',False),
+                             ('conditioningEvidence','../requests.jsonl'), ('barrierWaves',0),
+                             ('maximumWaveRequests',1)):
+            with self.subTest(field=field,value=value), f.transaction():
+                f.mutate_json('density',record['correctness'][0],lambda item:item.update({field:value}))
+                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                    self.collect()
+
+    def test_density_resealed_response_rows_are_independently_checked(self):
+        f = self.fixture
+        _, _, row = self.density_probe_record()
+        name = row['probeDirectory']+'/requests.jsonl'
+        for field, value in (('status',503),('ok',False),('bodySHA256','0'*64),
+                             ('sequence',True),('waveRequests',1),('port',1),
+                             ('warmupConcurrencyLimit',True),('externalWorkerExecutionBarrier',False)):
+            with self.subTest(field=field), f.transaction():
+                self.mutate_density_jsonl(name,lambda rows:rows[0].update({field:value}))
+                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                    self.collect()
+        with f.transaction():
+            self.mutate_density_jsonl(name,lambda rows:rows.pop())
+            with self.assertRaisesRegex(contract.EvidenceError,'raw response count'):
+                self.collect()
+
+    def test_density_resealed_barriers_require_dispatch_and_every_resume(self):
+        f = self.fixture
+        _, _, row = self.density_probe_record(phase='warm')
+        name = row['probeDirectory']+'/runtime/prewarm-barriers.jsonl'
+        changes = [
+            lambda rows: rows[0].update(rootPaused=True),
+            lambda rows: rows[0].update(observedHttpInflightBeforeResume=1),
+            lambda rows: rows[0].update(resumeSignalsIssued=1),
+            lambda rows: rows[0].update(resumeSignalsAttempted=True),
+            lambda rows: rows[0].update(resumeFailures=[{'message':'failed'}]),
+            lambda rows: rows[0].update(pauseSeconds=5),
+            lambda rows: rows[0].update(wave=2),
+            lambda rows: rows[0]['workers'][0].update(start=999999),
+            lambda rows: rows.pop(),
+        ]
+        for position, change in enumerate(changes):
+            with self.subTest(change=position), f.transaction():
+                self.mutate_density_jsonl(name,change)
+                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                    self.collect()
+
+    def test_density_resealed_pss_cannot_omit_processes_or_replace_the_samples(self):
+        f = self.fixture
+        index, _, _ = self.density_probe_record()
+        changes = [
+            lambda row: row['pssSamples'][0]['processes'].pop(),
+            lambda row: row['pssSamples'][0]['processes'][0].update(start=999999),
+            lambda row: row['pssSamples'][0]['processes'][0].update(pss_kb=True),
+            lambda row: row['pssSamples'][0]['processes'][0].update(pss_kb=999999),
+            lambda row: row.update(pssSamples=row['pssSamples'][:1]),
+            lambda row: row['readyProcesses'].pop(),
+            lambda row: row['readyProcesses'][0].update(state=None),
+        ]
+        for position, change in enumerate(changes):
+            with self.subTest(change=position), f.transaction():
+                f.mutate_raw('density',index,lambda rows:change(rows[0]))
+                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                    self.collect()
+
+    def test_density_business_logs_and_readiness_are_reparsed_after_resealing(self):
+        f = self.fixture
+        _, _, row = self.density_probe_record()
+        path = f.paths['density']/row['probeDirectory']/'stderr.log'
+        original = path.read_text().splitlines()
+        def wrong_nonce(lines):
+            value=json.loads(lines[-1].split('CAPSID_BENCH_DENSITY_V1 ',1)[1])
+            value['nonce']='f'*32
+            lines[-1]='CAPSID_BENCH_DENSITY_V1 '+json.dumps(value)
+        def repeated_counter(lines):
+            lines[-1]=lines[-2]
+        def early_request(lines):
+            lines.insert(1,lines.pop(2))
+        for name, change in [('wrong-nonce',wrong_nonce),('repeated-counter',repeated_counter),
+                             ('early-request',early_request),('missing-counter',lambda lines:lines.pop())]:
+            with self.subTest(change=name), f.transaction():
+                lines=list(original);change(lines)
+                f.write(path,('\n'.join(lines)+'\n').encode());f.seal('density')
+                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                    self.collect()
+
+    def test_density_coupled_cleanup_forgery_still_needs_the_actual_resume_log(self):
+        f = self.fixture
+        index, _, row = self.density_probe_record()
+        name = row['probeDirectory']+'/cleanup.json'
+        def remove_resumes(cleanup):
+            cleanup['signals']=[s for s in cleanup['signals'] if s['signal']!='SIGCONT']
+        with f.transaction():
+            f.mutate_json('density',name,remove_resumes)
+            changed=json.loads((f.paths['density']/name).read_text())
+            f.mutate_raw('density',index,lambda rows:rows[0].update(cleanup=changed))
+            with self.assertRaisesRegex(contract.EvidenceError,'actual signal log'):
+                self.collect()
 
     def test_qps_payload_claims_cannot_be_omitted_or_swapped(self):
         f = self.fixture

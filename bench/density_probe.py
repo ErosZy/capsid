@@ -212,11 +212,14 @@ class DensityProbe:
         # this is separate from the QPS lane's fixed 64 in-flight requests.
         return max(self.parallel, count * 128)
 
+    def initial_wave_requests(self, stack, count, maximum, concurrency):
+        return min(concurrency, maximum if count > self.parallel else max(1, count))
+
     def cover(self, tree, counter, stack, ports, count, target, nonce, output):
         deadline = time.monotonic() + self.coverage_timeout
         responses, maximum = 0, max(64, count * target * (32 if target > 1 else 8))
         concurrency = self.warmup_concurrency(count)
-        batch_limit = min(concurrency, maximum if count > self.parallel else max(1, count))
+        batch_limit = self.initial_wave_requests(stack, count, maximum, concurrency)
         maximum_wave = 0
         with ThreadPoolExecutor(max_workers=self.parallel) as executor:
             while not counter.coverage.complete(target):
