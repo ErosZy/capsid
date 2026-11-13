@@ -17,7 +17,9 @@ export const nativeReaderLifecycleInputPaths = Object.freeze({
     stateModel: 'tools/workerd-reader-lifecycle-state.mjs',
     certificateContract: 'tools/workerd-fetch-transition-contract.mjs',
     fields: 'tools/workerd-native-fetch-contract.mjs', platform: 'tools/workerd-platform.mjs',
-    reference: 'tools/workerd-reference.mjs'});
+    reference: 'tools/workerd-reference.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const payload = [0, 102, 105, 114, 115, 116];
 const bytes = value => {assert.equal(typeof value, 'string'); const result = Buffer.from(value, 'base64');

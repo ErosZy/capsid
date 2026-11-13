@@ -11,7 +11,9 @@ export const readerIntrinsicInputPaths = Object.freeze({runner: 'tests/test_webs
     fixture: 'tests/fixtures/workerd-reader-intrinsics.mjs', contract: 'tools/workerd-reader-intrinsic-contract.mjs',
     hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
     fields: 'tools/workerd-native-fetch-contract.mjs', platform: 'tools/workerd-platform.mjs',
-    reference: 'tools/workerd-reference.mjs'});
+    reference: 'tools/workerd-reference.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export function expectedReaderIntrinsicState(kind, challenge) {

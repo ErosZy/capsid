@@ -9,7 +9,9 @@ export const fetchBoundaryCases=Object.freeze(['tls-upgrade','tls-proxy','tls-ip
 export const fetchBoundaryInputPaths=Object.freeze({runner:'tests/test_websocket_fetch_boundaries.mjs',
     fixture:'tests/fixtures/workerd-fetch-boundary.mjs',upstream:'tests/helpers/ws_fetch_boundary_peer.mjs',
     controlPeer:'tests/helpers/ws_response_client.mjs',proxyPeer:'tests/helpers/ws_fetch_proxy_client.mjs',
-    hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-boundary-contract.mjs'});
+    hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-boundary-contract.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 const redirectError='Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge; use "manual" and check the response status code).';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');

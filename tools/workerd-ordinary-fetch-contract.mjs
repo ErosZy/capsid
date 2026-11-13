@@ -7,7 +7,9 @@ import {referenceBackendModes} from './workerd-platform.mjs';
 export const ordinaryFetchInputPaths = Object.freeze({runner: 'tests/test_websocket_ordinary_fetch.mjs',
     fixture: 'tests/fixtures/workerd-ordinary-fetch.mjs', contract: 'tools/workerd-ordinary-fetch-contract.mjs',
     referenceArchive: 'tests/fixtures/workerd-ordinary-fetch-report.json',
-    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs'});
+    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 export const ordinaryFetchShards = Object.freeze(['core', 'pipelines', 'gated', 'views', 'bodies']);
 const coreCases = Object.freeze([
     'ordinary-meta-fixed', 'ordinary-meta-chunked', 'ordinary-meta-empty', 'ordinary-meta-204',

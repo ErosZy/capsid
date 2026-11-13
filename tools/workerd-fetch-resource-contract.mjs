@@ -4,7 +4,9 @@ import {referenceBackendModes} from './workerd-platform.mjs';
 
 export const fetchResourceInputPaths = Object.freeze({runner: 'tests/test_websocket_fetch_resources.mjs',
     fixture: 'tests/fixtures/workerd-fetch-resources.mjs', contract: 'tools/workerd-fetch-resource-contract.mjs',
-    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs'});
+    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 export const fetchResourceCases = Object.freeze([
     'fetch-complete', 'fetch-close-pending', 'fetch-close-body', 'fetch-cancel-reader',
     ...['pre', 'live', 'body'].flatMap(stage => ['default', 'string', 'error', 'dom', 'null', 'number', 'object']

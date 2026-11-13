@@ -4,7 +4,9 @@ import {referenceBackendModes} from './workerd-platform.mjs';
 
 export const asyncInputPaths = Object.freeze({runner: 'tests/test_websocket_async_callbacks.mjs',
     fixture: 'tests/fixtures/workerd-async-callbacks.mjs', contract: 'tools/workerd-async-callback-contract.mjs',
-    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs'});
+    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 export const asyncKinds = Object.freeze(['timeout-throw', 'interval-throw', 'timeout-reject',
     'timeout-async-reject', 'microtask-throw', 'promise-throw', 'timeout-caught', 'rejection-handled',
     'http-timeout-throw', 'http-timeout-reject', 'http-microtask-throw', 'http-promise-throw',

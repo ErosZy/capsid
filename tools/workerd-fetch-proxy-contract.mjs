@@ -10,7 +10,9 @@ export const fetchProxyCases=Object.freeze(['direct','rewrap','upstream-first','
 export const fetchProxyInputPaths=Object.freeze({runner:'tests/test_websocket_fetch_proxy.mjs',
     fixture:'tests/fixtures/workerd-fetch-proxy.mjs',upstream:'tests/helpers/ws_fetch_proxy_peer.mjs',
     clientPeer:'tests/helpers/ws_fetch_proxy_client.mjs',hostBackend:'tests/helpers/ws_host_backend.mjs',
-    contract:'tools/workerd-fetch-proxy-contract.mjs'});
+    contract:'tools/workerd-fetch-proxy-contract.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const wireFields=['status','rawHeader','requestKey','rawTail','frames','peerTerminated','transportError','completion','closeReplySent'];

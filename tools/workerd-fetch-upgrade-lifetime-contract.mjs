@@ -7,7 +7,9 @@ export const fetchUpgradeLifetimeCases = Object.freeze(['close-pending','close-b
     'same-origin-parent-complete','same-origin-child-complete','await-open-parent','await-close-parent','await-abrupt-parent','await-abrupt-last','fetched-disconnect-close','await-deferred-abrupt-parent','await-deferred-abrupt-last']);
 export const fetchUpgradeLifetimeInputPaths = Object.freeze({runner:'tests/test_websocket_fetch_upgrade_lifetime.mjs',
     fixture:'tests/fixtures/workerd-fetch-upgrade-lifetime.mjs',upstream:'tests/helpers/ws_fetch_upgrade_lifetime_peer.mjs',
-    hostBackend:'tests/helpers/ws_host_backend.mjs',clientPeer:'tests/helpers/ws_response_client.mjs',contract:'tools/workerd-fetch-upgrade-lifetime-contract.mjs'});
+    hostBackend:'tests/helpers/ws_host_backend.mjs',clientPeer:'tests/helpers/ws_response_client.mjs',contract:'tools/workerd-fetch-upgrade-lifetime-contract.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const wireFields=['status','rawHeader','requestKey','rawTail','frames','peerTerminated','transportError','completion','closeReplySent'];
 function fields(value,keys,label) {assert.ok(value&&typeof value==='object',label);assert.deepEqual(Object.keys(value).sort(),[...keys].sort(),label);}

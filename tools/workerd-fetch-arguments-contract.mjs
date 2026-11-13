@@ -97,7 +97,9 @@ export const nativeArgumentInputPaths=Object.freeze({runner:'tests/test_websocke
     fixture:'tests/fixtures/workerd-fetch-arguments.mjs',upstream:'tests/helpers/ws_fetch_arguments_peer.mjs',
     upstreamBase:'tests/helpers/ws_fetch_transition_peer.mjs',controlPeer:'tests/helpers/ws_response_client.mjs',
     hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-arguments-contract.mjs',
-    nativeContract:'tools/workerd-native-fetch-contract.mjs',certificateContract:'tools/workerd-fetch-transition-contract.mjs'});
+    nativeContract:'tools/workerd-native-fetch-contract.mjs',certificateContract:'tools/workerd-fetch-transition-contract.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 export function assertNativeArgumentCase(value,mode,nonces=new Set()){
     assert.ok(nativeArgumentKinds.includes(value.kind));
     const state=JSON.parse(value.observed.text).state;

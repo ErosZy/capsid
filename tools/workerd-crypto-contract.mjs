@@ -6,6 +6,8 @@ export const cryptoInputPaths = Object.freeze({
     runner: 'tests/test_websocket_crypto.mjs', fixture: 'tests/fixtures/workerd-crypto.mjs',
     contract: 'tools/workerd-crypto-contract.mjs',
     hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
+
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
 });
 export const cryptoCases = Object.freeze([
     ...['digest', 'import', 'generate', 'export', 'sign', 'verify']

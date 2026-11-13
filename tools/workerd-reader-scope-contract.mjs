@@ -13,6 +13,8 @@ export const readerScopeInputPaths=Object.freeze({
     envelopeContract:'tools/workerd-native-reader-lifecycle-contract.mjs',envelopeStateModel:'tools/workerd-reader-lifecycle-state.mjs',
     certificateContract:'tools/workerd-fetch-transition-contract.mjs',fields:'tools/workerd-native-fetch-contract.mjs',
     platform:'tools/workerd-platform.mjs',reference:'tools/workerd-reference.mjs',
+
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
 });
 export function assertReaderScopeCase(value,mode){
     assert.ok(readerScopeCases.includes(value.kind));

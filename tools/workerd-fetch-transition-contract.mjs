@@ -7,7 +7,9 @@ export const fetchTransitionCases=Object.freeze(["tls-ipv6-upgrade", "tls-ipv6-p
     "tls-body-reader-probe-prototype-object", "tls-body-reader-probe-prototype-before-first", "tls-body-reader-probe-prototype-pending-two", "standard-reader-probe-prototype-pending-two",
     "tls-body-reader-probe-subclass-object", "tls-body-reader-probe-subclass-before-first", "tls-body-reader-probe-subclass-pending-two", "standard-reader-probe-subclass-pending-two",
     "tls-body-reader-probe-reflect-object", "tls-body-reader-probe-reflect-before-first", "tls-body-reader-probe-reflect-pending-two", "standard-reader-probe-reflect-pending-two"]);
-export const fetchTransitionInputPaths=Object.freeze({runner:'tests/test_websocket_fetch_transitions.mjs',fixture:'tests/fixtures/workerd-fetch-transitions.mjs',upstream:'tests/helpers/ws_fetch_transition_peer.mjs',controlPeer:'tests/helpers/ws_response_client.mjs',proxyPeer:'tests/helpers/ws_fetch_proxy_client.mjs',hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-transition-contract.mjs'});
+export const fetchTransitionInputPaths=Object.freeze({runner:'tests/test_websocket_fetch_transitions.mjs',fixture:'tests/fixtures/workerd-fetch-transitions.mjs',upstream:'tests/helpers/ws_fetch_transition_peer.mjs',controlPeer:'tests/helpers/ws_response_client.mjs',proxyPeer:'tests/helpers/ws_fetch_proxy_client.mjs',hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-transition-contract.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const accept=key=>createHash('sha1').update(key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');

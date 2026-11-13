@@ -11,7 +11,9 @@ export const nativeReaderInputPaths=Object.freeze({runner:'tests/test_websocket_
     fixture:'tests/fixtures/workerd-fetch-reader-shapes.mjs',upstream:'tests/helpers/ws_fetch_reader_peer.mjs',
     upstreamBase:'tests/helpers/ws_fetch_transition_peer.mjs',controlPeer:'tests/helpers/ws_response_client.mjs',
     hostBackend:'tests/helpers/ws_host_backend.mjs',contract:'tools/workerd-fetch-reader-contract.mjs',
-    nativeContract:'tools/workerd-native-fetch-contract.mjs',certificateContract:'tools/workerd-fetch-transition-contract.mjs'});
+    nativeContract:'tools/workerd-native-fetch-contract.mjs',certificateContract:'tools/workerd-fetch-transition-contract.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const bodies=new Map(),models=new Map();
 export function nativeReaderBody(length){

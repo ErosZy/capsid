@@ -4,7 +4,9 @@ import {referenceBackendModes} from './workerd-platform.mjs';
 
 export const crossContextInputPaths = Object.freeze({runner: 'tests/test_websocket_cross_context.mjs',
     fixture: 'tests/fixtures/workerd-cross-context.mjs', contract: 'tools/workerd-cross-context-contract.mjs',
-    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs'});
+    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 export const crossContextCases = Object.freeze([
     ['reaction-a-settle-b', [['a','create'],['a','attach'],['b','resolve']]],
     ['reaction-b-settle-a', [['a','create'],['b','attach'],['a','resolve']]],

@@ -4,7 +4,9 @@ import {referenceBackendModes} from './workerd-platform.mjs';
 
 export const ownerInputPaths = Object.freeze({runner: 'tests/test_websocket_owner_lifecycle.mjs',
     fixture: 'tests/fixtures/workerd-owner-lifecycle.mjs', contract: 'tools/workerd-owner-contract.mjs',
-    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs'});
+    hostBackend: 'tests/helpers/ws_host_backend.mjs', peer: 'tests/helpers/ws_response_client.mjs',
+    listenerControl:'tests/helpers/workerd_listener_control.mjs',listenerContract:'tools/workerd-fetch-byob-contract.mjs',
+});
 // Independent inventory: the HTTP detached-task policy is tested separately by
 // worker_terminal_continuation and must not be presented as a shared result.
 export const ownerKinds = Object.freeze(['live-one-shot', 'live-interval', 'close-with-ack',

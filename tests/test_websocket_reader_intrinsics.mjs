@@ -1,9 +1,9 @@
+import {waitForWorkerdListen} from './helpers/workerd_listener_control.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -41,18 +41,19 @@ if (destination) assert.ok(!fs.existsSync(destination), 'preserve existing async
 const save = () => {if (destination) fs.writeFileSync(destination, JSON.stringify(report, null, 2) + '\n');};
 save();
 async function startReference(directory) {
-    const listener = net.createServer();
-    await new Promise((resolve, reject) => {listener.once('error', reject); listener.listen(0, '127.0.0.1', resolve);});
-    const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
+    const deadline=performance.now()+10000;
     fs.copyFileSync(fixture, path.join(directory, 'main.mjs'));
     const config = path.join(directory, 'config.capnp');
     fs.writeFileSync(config, `using Workerd = import "/workerd/workerd.capnp";
-const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(lock.compatibility_date)},compatibilityFlags=${JSON.stringify(lock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")]))],sockets=[(name="http",address="127.0.0.1:${port}",http=(),service="main")]);`);
-    const child = spawn(reference, ['serve', config], {stdio: ['ignore', 'pipe', 'pipe']});
-    const backend = {child, port, closed: new Promise(resolve => child.once('close', resolve)), stderr: () => stderr};
+const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(lock.compatibility_date)},compatibilityFlags=${JSON.stringify(lock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")]))],sockets=[(name="http",address="127.0.0.1:0",http=(),service="main")]);`);
+    const child = spawn(reference, ['serve', config,'--control-fd=3'], {stdio:['ignore','pipe','pipe','pipe']});
+    const backend = {child, port:null, closed: new Promise(resolve => child.once('close', resolve)), stderr: () => stderr};
     let stderr = ''; child.stderr.on('data', data => stderr += data);
-    const deadline = performance.now() + 10000;
-    try {
+    
+    try{
+        backend.port=(await waitForWorkerdListen(child,Math.max(1,deadline-performance.now()))).port;
+        const port=backend.port;
+        
         for (;;) try {
             const response = await fetch(`http://127.0.0.1:${port}/state`, {signal: AbortSignal.timeout(500)});
             assert.equal(response.status, 200); await response.text(); return backend;
