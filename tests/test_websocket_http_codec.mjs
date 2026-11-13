@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { startCapsid, stopCapsid } from "./helpers/ws_host_backend.mjs";
+import { waitForWorkerdListen } from "./helpers/workerd_listener_control.mjs";
 import { responseSession } from "./helpers/ws_response_client.mjs";
 import { root, readLock, verifyBinary, verifyClient, fileDigest } from "../tools/workerd-reference.mjs";
 import { httpCodecCasesForShard, httpCodecInputPaths, validateHttpCodecReport, isHttpCodecPeerTerminal } from "../tools/workerd-http-codec-contract.mjs";
@@ -141,21 +142,20 @@ async function startCodecUpstream(id, challenge) {
   } };
 }
 async function startReference(directory) {
-  const listener = net.createServer();
-  await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
-  const port = listener.address().port;
-  await new Promise((resolve) => listener.close(resolve));
+  const deadline = performance.now() + 1e4;
   fs.copyFileSync(fixture, path.join(directory, "main.mjs"));
   const config = path.join(directory, "config.capnp");
   fs.writeFileSync(config, `using Workerd = import "/workerd/workerd.capnp";
-const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(lock.compatibility_date)},compatibilityFlags=${JSON.stringify(lock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")])),(name="internet",network=(allow=["local"]))],sockets=[(name="http",address="127.0.0.1:${port}",http=(),service="main")]);`);
-  const child = spawn(reference, ["serve", config], { stdio: ["ignore", "pipe", "pipe"] });
+const config :Workerd.Config = (services=[(name="main",worker=(compatibilityDate=${JSON.stringify(lock.compatibility_date)},compatibilityFlags=${JSON.stringify(lock.compatibility_flags)},modules=[(name="main",esModule=embed "main.mjs")])),(name="internet",network=(allow=["local"]))],sockets=[(name="http",address="127.0.0.1:0",http=(),service="main")]);`);
+  const child = spawn(reference, ["serve", config, "--control-fd=3"], { stdio: ["ignore", "pipe", "pipe", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (data) => stderr += data);
   child.stdout.resume();
-  const closed = new Promise((resolve) => child.once("close", resolve)), backend = { child, closed, port, stderr: () => stderr };
+  const closed = new Promise((resolve) => child.once("close", resolve)), backend = { child, closed, port: null, stderr: () => stderr };
   try {
-    const deadline = performance.now() + 1e4;
+    // Readiness belongs to this child, within the original10s startup budget.
+    backend.port = (await waitForWorkerdListen(child, Math.max(1, deadline - performance.now()))).port;
+    const port = backend.port;
     for (; ; ) try {
       const response = await fetch(`http://127.0.0.1:${port}/state`, { signal: AbortSignal.timeout(500) });
       assert.equal(response.status, 200);

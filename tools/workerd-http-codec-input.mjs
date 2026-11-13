@@ -26,6 +26,8 @@ const httpCodecInputPaths = Object.freeze({
   sourceModel: "tools/workerd-http-codec-input.mjs",
   referenceArchive: "tests/fixtures/workerd-http-codec-report.json",
   hostBackend: "tests/helpers/ws_host_backend.mjs",
+  listenerControl: "tests/helpers/workerd_listener_control.mjs",
+  listenerContract: "tools/workerd-fetch-byob-contract.mjs",
   peer: "tests/helpers/ws_response_client.mjs"
 });
 function gzip(bytes) {
