@@ -580,6 +580,33 @@ public:
     ~WinsockControl() { WSACleanup(); }
 };
 
+// The native failed-image API can initialize process-wide Windows handles,
+// independently of Capsid. Exercise that OS path before the product baseline,
+// and require two subsequent direct failures to return the same exact count.
+// No offset or tolerance is applied to any actual Capsid failure below.
+void validate_failed_process_controls(const TemporaryFixture& fixture) {
+    const std::wstring missing = fixture.directory + L"\\does-not-exist.exe";
+    DWORD previous = handle_count();
+    for (unsigned iteration = 0; iteration < 3; ++iteration) {
+        STARTUPINFOW startup = {};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process = {};
+        SetLastError(ERROR_SUCCESS);
+        const BOOL created = CreateProcessW(missing.c_str(), nullptr, nullptr, nullptr, FALSE,
+                                            CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+        const DWORD error = GetLastError();
+        require(!created && !process.hProcess && !process.hThread && error == ERROR_FILE_NOT_FOUND,
+                "native missing-image API control did not fail without a process");
+        require(own_children().empty(), "native failed-image control left an owned child");
+        const DWORD current = handle_count();
+        std::printf("WIN32_MISSING iteration=%u before=%lu after=%lu error=%lu\n", iteration,
+                    static_cast<unsigned long>(previous), static_cast<unsigned long>(current),
+                    static_cast<unsigned long>(error));
+        if (iteration != 0) require(current == previous, "native failed-image control handles accumulate");
+        previous = current;
+    }
+}
+
 void validate_network_controls() {
     DWORD previous = handle_count();
     for (unsigned iteration = 0; iteration < 3; ++iteration) {
@@ -684,6 +711,7 @@ int main(int argc, char** argv) {
         validate_observers(fixture);
         WinsockControl winsock;
         validate_network_controls();
+        validate_failed_process_controls(fixture);
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = argv[1];
