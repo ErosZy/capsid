@@ -3311,6 +3311,13 @@ if(BUILD_TESTING)
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_native_reader_lifecycle_contract.mjs")
             set_tests_properties(workerd_native_reader_lifecycle_contract_controls PROPERTIES
                 TIMEOUT 30 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+            if(UNIX)
+                add_test(NAME websocket_host_backend_startup_diagnostics
+                    COMMAND "${CAPSID_HOST_TEST_NODE}" --test
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ws_host_backend_diagnostics.mjs")
+                set_tests_properties(websocket_host_backend_startup_diagnostics PROPERTIES
+                    TIMEOUT 30 LABELS "host;websocket;lifecycle;test-control")
+            endif()
             add_test(NAME workerd_reader_scope_contract_controls
                 COMMAND "${CAPSID_HOST_TEST_NODE}" --test
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reader_scope_contract.mjs")

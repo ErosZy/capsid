@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {test, after} from 'node:test';
-import {serialize, deserialize} from 'node:v8';
 import {createHash} from 'node:crypto';
 import {bindingArgumentKinds, bindingArgumentRoutes, bindingArgumentViews, bindingArgumentMethods, bindingArgumentInputPaths,
     bindingArgumentPacket, bindingArgumentStateTemplate, expectedBindingArgumentEnvelope} from '../tools/binding-fetch-arguments-input.mjs';
@@ -10,13 +9,26 @@ import {assertBindingArgumentCase, validateBindingArgumentReport, loadBindingArg
 const freeze = value => {if (value && typeof value === 'object') {for (const child of Object.values(value)) freeze(child); Object.freeze(value);} return value;};
 const hash = value => createHash('sha256').update(value).digest('hex');
 const stdout = item => 'memoryLimit=0 actualFeatures=0 expectedFeatures=0\nBINDING_BODY '+JSON.stringify({state: item.state, calls: item.calls, wireTypes: item.wireTypes})+'\nBINDING_EXIT '+JSON.stringify(item.workerExit)+'\n';
-// Serialized construction inputs are shared only after deep freezing. Every
-// counterexample gets a fresh mutable graph and is validated independently.
-const sampleBytes = new WeakMap();
+// Cache only the lossless JSON encoding of deeply frozen construction inputs.
+// Check the round trip before using that encoding; each counterexample still
+// receives a fresh mutable graph and complete, independent validation.
+const sampleJSON = new WeakMap();
+function assertFrozenTree(value, seen = new Set()) {
+    if (!value || typeof value !== 'object') return;
+    assert.ok(Object.isFrozen(value), 'every construction input branch must be frozen');
+    assert.ok(!seen.has(value), 'construction samples must be trees without shared object identities');
+    seen.add(value);
+    for (const child of Object.values(value)) assertFrozenTree(child, seen);
+}
 function copySample(base) {
     assert.ok(Object.isFrozen(base), 'only immutable construction samples may be serialized once');
-    if (!sampleBytes.has(base)) sampleBytes.set(base, serialize(base));
-    return deserialize(sampleBytes.get(base));
+    if (!sampleJSON.has(base)) {
+        assertFrozenTree(base);
+        const encoded = JSON.stringify(base);
+        assert.deepEqual(JSON.parse(encoded), base, 'construction samples must round trip without losing values or types');
+        sampleJSON.set(base, encoded);
+    }
+    return JSON.parse(sampleJSON.get(base));
 }
 let rejected = 0;
 function sample(bodyKind, route, view, method) {
@@ -99,7 +111,7 @@ test('input templates are deeply immutable, sample copies independent and the32 
     for (const selection of selections.slice(1, 32)) bindingArgumentStateTemplate(...selection); assert.equal(bindingArgumentStateTemplate(...selections[0]), first);
     bindingArgumentStateTemplate(...selections[32]); assert.notEqual(bindingArgumentStateTemplate(...selections[0]), first);
 });
-test('serialized immutable samples produce independent complete mutable counterexamples', () => {
+test('lossless immutable samples produce independent complete mutable counterexamples', () => {
     const base = freeze(sample('raw', 'getReader', 'Float64Array', 'read'));
     const left = copySample(base), right = copySample(base);
     assert.deepEqual(left, structuredClone(base)); assert.deepEqual(right, structuredClone(base));
@@ -111,6 +123,13 @@ test('serialized immutable samples produce independent complete mutable countere
     assert.equal(right.state.rows[1].retry.backing[0], 1); assert.equal(base.state.rows[1].retry.backing[0], 1);
     assertBindingArgumentCase(right, 'raw', 'getReader', 'Float64Array', 'read');
     assert.throws(() => copySample(sample('raw', 'getReader', 'Float64Array', 'read')));
+    for (const value of [undefined, NaN, Infinity, -Infinity, -0, 1n, new Date(0), new Uint8Array(), Symbol('value')]) {
+        const input = freeze({value});
+        assert.throws(() => copySample(input), 'a non-lossless construction input must be rejected');
+    }
+    assert.throws(() => copySample(Object.freeze({branch: {value: 1}})), /every construction input branch must be frozen/);
+    const shared = freeze({value: 1});
+    assert.throws(() => copySample(freeze({left: shared, right: shared})), /without shared object identities/);
 });
 
 after(() => {assert.equal(rejected, 19189); console.log(JSON.stringify({complete: true, uniqueArgumentInputs: 10920, rejectedMutations: rejected}));});

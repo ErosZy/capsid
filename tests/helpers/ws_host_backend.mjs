@@ -27,11 +27,18 @@ export async function withCleanup(operation, cleanup) {
 
 async function admin(socketPath, target, body, method=body?'POST':'GET') {
     return new Promise((resolve,reject) => {
+        const fail=error=>{
+            const failure=new Error(`admin ${method} ${target}: ${error.message}`,{cause:error});
+            if(error.code!==undefined)failure.code=error.code;
+            failure.adminRequest={method,target};
+            reject(failure);
+        };
         const request=http.request({socketPath,path:target,method,headers:body?{'content-type':'application/json'}:{}},response => {
             const chunks=[]; response.on('data',c=>chunks.push(c));
-            response.on('end',()=>{try {const text=Buffer.concat(chunks).toString();resolve({status:response.statusCode,text,...(target==='/metrics'?{}:{json:JSON.parse(text)})});} catch(error){reject(error);}});
+            response.once('error',fail);
+            response.on('end',()=>{try {const text=Buffer.concat(chunks).toString();resolve({status:response.statusCode,text,...(target==='/metrics'?{}:{json:JSON.parse(text)})});} catch(error){fail(error);}});
         });
-        request.on('error',reject); request.end(body?JSON.stringify(body):undefined);
+        request.on('error',fail); request.end(body?JSON.stringify(body):undefined);
         request.setTimeout(5000,()=>request.destroy(new Error(`admin request deadline: ${target}`)));
     });
 }
@@ -112,7 +119,23 @@ export async function startCapsid(host,worker,bundle,dir,mode='single-worker',op
             const ready=JSON.parse(line);assert.equal(ready.schema,'capsid-host-ready-v1');port=ready.port;
         }
         return {child,port,stderr:()=>stderr,socketPath,admin:(target,body,method)=>admin(socketPath,target,body,method)};
-    } catch(error) {await stopCapsid(child);throw error;}
+    } catch(error) {
+        let shutdown,cleanupFailure;
+        try {shutdown=await stopCapsid(child);} catch(cleanupError) {cleanupFailure=cleanupError;}
+        const message=`host startup (${mode}): ${error.message}\n${stderr}`;
+        const failure=cleanupFailure
+            ?new AggregateError([error,cleanupFailure],`${message}; cleanup: ${cleanupFailure.message}`,{cause:error})
+            :new Error(message,{cause:error});
+        if(error.code!==undefined)failure.code=error.code;
+        // Callers have no backend on this path. Attach the evidence here, after
+        // cleanup, so their existing failureObservation capture can retain it.
+        failure.observation={phase:'capsid-startup',mode,pid:child.pid??null,
+            adminRequest:error.adminRequest??null,stderr,shutdown:shutdown??null,
+            failure:{name:error.name,message:error.message,code:error.code??null,
+                stack:error.stack??null,causeStack:error.cause?.stack??null},
+            cleanupFailure:cleanupFailure?.stack??null};
+        throw failure;
+    }
 }
 export function stopCapsid(child) {
     if(!stopRequests.has(child)) stopRequests.set(child,stopOnce(child));
