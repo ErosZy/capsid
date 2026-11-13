@@ -1,0 +1,663 @@
+{
+  "schema": "capsid-admin-http-incremental-component-review-v1",
+  "scope": "Local Linux WSL component regression, not full v0.3.0 qualification",
+  "inputSnapshot": "Uncommitted worktree after frozen candidate23; supporting archives from candidate23",
+  "sourceSHA256": {
+    "src/host/admin_http.cc": "5074199fa8a78aec7912c9ff1071cc2f46c8c4ebb748aec89b7c8cdde1c0f223",
+    "src/host/admin_http.h": "6f8296355109bef15856bf9c4a0a804b657122c8ae0f4b0b7654ab052741cf02",
+    "src/host/admin_api.cc": "a2dbc4fbe368eb6336354512d74e9a765bb09c5bbcb4d1d58d09ad4f05adf785",
+    "src/host/admin_service.cc": "6a6c8e90d5ff879a3cb2773aa3fe70cd548ba531761a61b6077e13496a7654c7",
+    "src/host/metrics.cc": "097559706ed446f5eaa34959e8295cdf8e0f0572429a29754a08a0f9cbe2a7d7",
+    "src/host/structured_log.cc": "21d6e795fe69f92644a2594d26a194582fd50c10753d938ecb63e05272117067",
+    "tests/test_host_admin_http.cc": "3dea286c168cebff5bf8a0259c3149e68d459eb2258268aef63e49eec29efd0f",
+    "tests/test_host_admin_service.cc": "4651122f9d9e38aa043621039a1a8841e7e95649dd69d8e847998071edf10a5f",
+    "cmake/build_tests.cmake": "0a6e8b36585f97c4de64547a86eaaf9adcbe620720f396610dc78fb18ec5a83f"
+  },
+  "behaviorChanges": [
+    "Preserve unconsumed Beast parser input across reads and parser elements",
+    "Check framing before enabling eager body parsing",
+    "Return once on malformed or oversized input; do not dispatch it",
+    "Bound pending wire metadata, including incomplete chunk extensions",
+    "Distinguish read errors from request deadlines"
+  ],
+  "finalResults": {
+    "baseline-stable": {
+      "passed": 16,
+      "failed": 5,
+      "skipped": 0,
+      "ctestExitCode": 8,
+      "junitSHA256": "2e2b1a5f67e91bf19334642cfcb6619e4cd8d14db8d87697ddf2ce53e2dd6ce7",
+      "builds": [
+        {
+          "kind": "http",
+          "binarySHA256": "cc750b40cd940f4849172a5a247e21f9c68cb187541e2d4703c15ee60c569138",
+          "command": [
+            "/usr/bin/clang++-18",
+            "-std=c++20",
+            "-O1",
+            "-g",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Werror",
+            "-pthread",
+            "-I/mnt/e/capsid/src",
+            "-I/mnt/e/capsid/include",
+            "-I/mnt/e/capsid/vendor/jansson/src",
+            "-I/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/include",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/test_host_admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/admin_api.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/metrics.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/structured_log.cc",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a",
+            "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+            "-ldl",
+            "-o",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/test-host-admin-http"
+          ]
+        },
+        {
+          "kind": "service",
+          "binarySHA256": "726be289383a70fa3fe24a6a3a4fe11d8b6773bac1ce2405cec0ef014c6dc132",
+          "command": [
+            "/usr/bin/clang++-18",
+            "-std=c++20",
+            "-O1",
+            "-g",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Werror",
+            "-pthread",
+            "-I/mnt/e/capsid/src",
+            "-I/mnt/e/capsid/include",
+            "-I/mnt/e/capsid/vendor/jansson/src",
+            "-I/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/include",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/test_host_admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/admin_api.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/metrics.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/structured_log.cc",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a",
+            "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+            "-ldl",
+            "-o",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/baseline-stable/test-host-admin-service"
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "name": "host_admin_http_authorized_round_trip",
+          "seconds": "0.0017823",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_fragmented_headers",
+          "seconds": "0.0069755",
+          "status": "failed"
+        },
+        {
+          "name": "host_admin_http_chunked_requests",
+          "seconds": "0.0021988",
+          "status": "failed"
+        },
+        {
+          "name": "host_admin_http_chunked_errors",
+          "seconds": "0.0022868",
+          "status": "failed"
+        },
+        {
+          "name": "host_admin_http_fragmented_limits",
+          "seconds": "0.0056429",
+          "status": "failed"
+        },
+        {
+          "name": "host_admin_http_buffer_boundaries",
+          "seconds": "0.0170846",
+          "status": "failed"
+        },
+        {
+          "name": "host_admin_http_peer_rejected_before_read",
+          "seconds": "0.0014302",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_framing_limits",
+          "seconds": "0.0015953",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_smuggling_rejected",
+          "seconds": "0.0013449",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_slow_header_timeout",
+          "seconds": "0.100706",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_slow_drip_deadlines",
+          "seconds": "0.243567",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_accepted_fd_remains_caller_owned",
+          "seconds": "0.0017432",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_closed_peer_does_not_raise_sigpipe",
+          "seconds": "0.0011133",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_multiple_connections",
+          "seconds": "0.0017965",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_idle_stop",
+          "seconds": "0.0015228",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_slow_client_stop",
+          "seconds": "0.0516929",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_preserves_replaced_path",
+          "seconds": "0.001763",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_stop_burst_is_nonblocking",
+          "seconds": "0.0056236",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_double_start_rejected",
+          "seconds": "0.0016311",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_stop_before_start_rejected",
+          "seconds": "0.0012547",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_start_stop_race",
+          "seconds": "0.0261586",
+          "status": "passed"
+        }
+      ]
+    },
+    "candidate-stable": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "ctestExitCode": 0,
+      "junitSHA256": "adcfdf7f5c0f3610481cd0939b905df807375a229c398851dfc534491dcdef8b",
+      "builds": [
+        {
+          "kind": "http",
+          "binarySHA256": "0eb03c82385def3f00a65580e712ed9ed53b873bdfb801d7bf973aeb97934fa3",
+          "command": [
+            "/usr/bin/clang++-18",
+            "-std=c++20",
+            "-O1",
+            "-g",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Werror",
+            "-pthread",
+            "-I/mnt/e/capsid/src",
+            "-I/mnt/e/capsid/include",
+            "-I/mnt/e/capsid/vendor/jansson/src",
+            "-I/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/include",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/test_host_admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/admin_api.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/metrics.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/structured_log.cc",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a",
+            "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+            "-ldl",
+            "-o",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/test-host-admin-http"
+          ]
+        },
+        {
+          "kind": "service",
+          "binarySHA256": "89210f769dde24cef7c44654f1e64ebb58f9451b6a77681c251642fcd4811627",
+          "command": [
+            "/usr/bin/clang++-18",
+            "-std=c++20",
+            "-O1",
+            "-g",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Werror",
+            "-pthread",
+            "-I/mnt/e/capsid/src",
+            "-I/mnt/e/capsid/include",
+            "-I/mnt/e/capsid/vendor/jansson/src",
+            "-I/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/include",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/test_host_admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/admin_api.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/metrics.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/structured_log.cc",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a",
+            "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+            "-ldl",
+            "-o",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/candidate-stable/test-host-admin-service"
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "name": "host_admin_http_authorized_round_trip",
+          "seconds": "0.001683",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_fragmented_headers",
+          "seconds": "0.146801",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_chunked_requests",
+          "seconds": "0.201011",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_chunked_errors",
+          "seconds": "0.255488",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_fragmented_limits",
+          "seconds": "0.275747",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_buffer_boundaries",
+          "seconds": "0.0289768",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_peer_rejected_before_read",
+          "seconds": "0.0015893",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_framing_limits",
+          "seconds": "0.0016097",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_smuggling_rejected",
+          "seconds": "0.0013571",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_slow_header_timeout",
+          "seconds": "0.10075",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_slow_drip_deadlines",
+          "seconds": "0.242988",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_accepted_fd_remains_caller_owned",
+          "seconds": "0.0016735",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_closed_peer_does_not_raise_sigpipe",
+          "seconds": "0.0011892",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_multiple_connections",
+          "seconds": "0.001723",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_idle_stop",
+          "seconds": "0.0013344",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_slow_client_stop",
+          "seconds": "0.0516971",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_preserves_replaced_path",
+          "seconds": "0.0017433",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_stop_burst_is_nonblocking",
+          "seconds": "0.0058987",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_double_start_rejected",
+          "seconds": "0.0016262",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_stop_before_start_rejected",
+          "seconds": "0.0011393",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_start_stop_race",
+          "seconds": "0.02631",
+          "status": "passed"
+        }
+      ]
+    },
+    "sanitizer-stable": {
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "ctestExitCode": 0,
+      "junitSHA256": "f254af129e3574c84a6452780ceefec2e11920c3f9e0d1b4cdafcadf42725238",
+      "builds": [
+        {
+          "kind": "http",
+          "binarySHA256": "400a17c782ec1fdf55294ab2bf8c38da515649d4a1118b4df29ced3dbd30603c",
+          "command": [
+            "/usr/bin/clang++-18",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+            "-fno-omit-frame-pointer",
+            "-std=c++20",
+            "-O1",
+            "-g",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Werror",
+            "-pthread",
+            "-I/mnt/e/capsid/src",
+            "-I/mnt/e/capsid/include",
+            "-I/mnt/e/capsid/vendor/jansson/src",
+            "-I/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/include",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/test_host_admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/admin_api.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/metrics.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/structured_log.cc",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a",
+            "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+            "-ldl",
+            "-o",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/test-host-admin-http"
+          ]
+        },
+        {
+          "kind": "service",
+          "binarySHA256": "dcbbdb14f2e5a8d23f7d0673a7c2f33aaaf071b7a5ca5044d840d20dcce79487",
+          "command": [
+            "/usr/bin/clang++-18",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+            "-fno-omit-frame-pointer",
+            "-std=c++20",
+            "-O1",
+            "-g",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Werror",
+            "-pthread",
+            "-I/mnt/e/capsid/src",
+            "-I/mnt/e/capsid/include",
+            "-I/mnt/e/capsid/vendor/jansson/src",
+            "-I/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/include",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/test_host_admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/admin_http.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/admin_api.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/admin_service.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/metrics.cc",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/structured_log.cc",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a",
+            "/usr/lib/x86_64-linux-gnu/libboost_system.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a",
+            "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a",
+            "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a",
+            "-ldl",
+            "-o",
+            "/root/capsid-verification-20261109/admin-http-incremental-20261113/sanitizer-stable/test-host-admin-service"
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "name": "host_admin_http_authorized_round_trip",
+          "seconds": "0.0080052",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_fragmented_headers",
+          "seconds": "0.154084",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_chunked_requests",
+          "seconds": "0.209593",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_chunked_errors",
+          "seconds": "0.264418",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_fragmented_limits",
+          "seconds": "0.284151",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_buffer_boundaries",
+          "seconds": "0.0356346",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_peer_rejected_before_read",
+          "seconds": "0.0072098",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_framing_limits",
+          "seconds": "0.0082399",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_smuggling_rejected",
+          "seconds": "0.0071284",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_slow_header_timeout",
+          "seconds": "0.106995",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_slow_drip_deadlines",
+          "seconds": "0.249403",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_accepted_fd_remains_caller_owned",
+          "seconds": "0.0074719",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_http_closed_peer_does_not_raise_sigpipe",
+          "seconds": "0.0068953",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_multiple_connections",
+          "seconds": "0.0082355",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_idle_stop",
+          "seconds": "0.0062959",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_slow_client_stop",
+          "seconds": "0.0572162",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_preserves_replaced_path",
+          "seconds": "0.0068442",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_stop_burst_is_nonblocking",
+          "seconds": "0.0118443",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_double_start_rejected",
+          "seconds": "0.0082615",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_stop_before_start_rejected",
+          "seconds": "0.0059336",
+          "status": "passed"
+        },
+        {
+          "name": "host_admin_service_start_stop_race",
+          "seconds": "0.0385269",
+          "status": "passed"
+        }
+      ]
+    }
+  },
+  "sanitizerScope": [
+    "src/host/admin_http.cc",
+    "src/host/admin_api.cc",
+    "src/host/admin_service.cc",
+    "src/host/metrics.cc",
+    "src/host/structured_log.cc"
+  ],
+  "sanitizerOptions": {
+    "ASAN_OPTIONS": null,
+    "UBSAN_OPTIONS": null,
+    "LSAN_OPTIONS": null
+  },
+  "supportingArchivesNotReinstrumented": true,
+  "archiveSHA256": {
+    "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_host_core.a": "d4ba876de3e252cf0fb090a701a914a223c539f3010c6e315e6cf71ba568e30e",
+    "/usr/lib/x86_64-linux-gnu/libboost_system.a": "a0ba0abec1e24efd2044148740d9195e7b8c5736938849b21ac58561b912cbe7",
+    "/root/capsid-verification-20261109/build-v030-production-final23-r1/libcapsid_runtime.a": "0e125513a361ea51cd9bbb0c55e96d999fcda5302b5c1933c22780ba667ea677",
+    "/root/capsid-verification-20261109/build-v030-production-final23-r1/vendor/jansson/libcapsid_jansson.a": "5ffdc053f58bc7c1b29c80c7c715f18d948960ce8e1fc60734eb689da73c4e6e",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a": "66c9e01d07c9d8dd98d117e19c304bf7a7e82888aa0361879433821785c113d9",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a": "980fe86a76599e8b1981d289ec498c5292ac0a4aa53ec43d8018ceac08dd6413",
+    "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a": "63940ed4380eb5f8f47993e72d4e872849774c214d6f68b31bcfc43e2eac5fb6"
+  },
+  "repeatedChecks": {
+    "configuration": "sanitizer-stable",
+    "selection": "host_admin_http_(fragmented|chunked|buffer)",
+    "repetitionsPerTest": 10,
+    "distinctTests": 5,
+    "executions": 50,
+    "failed": 0,
+    "skipped": 0,
+    "localLog": "E:/capsid/build-v030-dev/evidence/admin-http-incremental-20261113/repeat-sanitizer-stable.log",
+    "localJUnit": "E:/capsid/build-v030-dev/evidence/admin-http-incremental-20261113/repeat-sanitizer-stable.xml"
+  },
+  "retainedDevelopmentFailures": [
+    {
+      "phase": "baseline",
+      "description": "Original transport rejected four new first-round regressions; existing eight HTTP tests passed"
+    },
+    {
+      "phase": "baseline-r2",
+      "description": "Runner compilation mistakenly included an .h as a translation unit; no tests ran"
+    },
+    {
+      "phase": "baseline-r3/baseline-r4/baseline-stable",
+      "description": "Original transport failed all five new regressions; sixteen existing HTTP/service cases passed"
+    },
+    {
+      "phase": "candidate-r2",
+      "description": "20/21; oversized-metadata fixture sent bytes past the ceiling and its owning close reset the response"
+    },
+    {
+      "phase": "repeat-sanitizer",
+      "description": "WSL shell quoting rejected the command before CTest started"
+    },
+    {
+      "phase": "repeat-sanitizer-r2",
+      "description": "Repeated check exposed a fixture close race: early parser rejection could leave one in-flight write unread; failure retained"
+    }
+  ],
+  "fixtureCorrection": "After client SHUT_WR and the send barrier, the caller-owned fixture drains in-flight bytes before close, without refeeding the parser. Healthy requests must send every fragment; exact error status, response framing and no-dispatch assertions remain.",
+  "componentRegistrationDerivedFromProject": true,
+  "productionBuildRegistrationReplaced": false,
+  "rawEvidenceDirectory": "E:/capsid/build-v030-dev/evidence/admin-http-incremental-20261113",
+  "linuxComponentDirectory": "/root/capsid-verification-20261109/admin-http-incremental-20261113",
+  "limitations": [
+    "Supporting archives were reused, not fully rebuilt or reinstrumented",
+    "No macOS native, TSan or full project ALL/unfiltered suite for this modification",
+    "Candidate23 active queue remains its original frozen source, not this modification",
+    "No proof this parsing defect caused prior admin EPIPE/ECONNRESET",
+    "No fuzz timeout resolution or formal performance point"
+  ],
+  "fullV030GoalComplete": false,
+  "formalPerformancePoints": 0,
+  "noCommitPushOrRelease": true
+}

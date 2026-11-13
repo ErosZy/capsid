@@ -1,0 +1,14 @@
+{
+  "schema": "capsid-qualification-snapshot-index-v3",
+  "capturedUTC": "2026-11-13T15:18:02.617062+00:00",
+  "historicalDocumentSHA256": "6c58260456acae6cf2bda5c091b3624faf3d7fa8e6cb571de548bb70a27378e8",
+  "files": {
+    "qualification-before.md": {
+      "sha256": "6c58260456acae6cf2bda5c091b3624faf3d7fa8e6cb571de548bb70a27378e8",
+      "bytes": 66607
+    }
+  },
+  "originalFile": "docs/v0.3.0-current-qualification.md",
+  "preservedVerbatim": true,
+  "currentRequirementsNotWaived": true
+}

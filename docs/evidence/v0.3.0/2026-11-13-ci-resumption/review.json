@@ -1,0 +1,78 @@
+{
+  "schema": "capsid-v030-admin-ownership-review-v1",
+  "reviewedUTC": "2026-11-13T15:18:02.619060+00:00",
+  "status": "locally-validated-full-ci-preparation",
+  "fullV030GoalComplete": false,
+  "formalPerformancePoints": 0,
+  "remoteAuthorization": "User explicitly authorized an independent qualification branch and complete CI; main/tags/releases excluded",
+  "originalDiagnostic": {
+    "workflowRun": 43423254468,
+    "sourceCheckout": "ce35c1b933a9984802b07b401b65f9cc8e73f995",
+    "runs": 25,
+    "passed": 24,
+    "failed": 1,
+    "failure": "traced-7 ordinary-clone-after-read; host exited 66 after TSan close/accept FD-reuse race",
+    "confirmedMechanism": "finish_activation passed a borrowed App directory to an owning filesystem adapter; caller then closed the already released descriptor"
+  },
+  "sourceSHA256": {
+    "src/host/managed_host.cc": "90ddbfff9aec235da2384ab627438434fe0d03170ced93d5d63831fafa4e67b7",
+    "src/host/admin_http.cc": "5074199fa8a78aec7912c9ff1071cc2f46c8c4ebb748aec89b7c8cdde1c0f223",
+    "src/host/admin_http.h": "6f8296355109bef15856bf9c4a0a804b657122c8ae0f4b0b7654ab052741cf02",
+    "tests/test_host_managed_activation_fd.cc": "aa41011c941821b4f31d2a46e7bf65f56ed576bf87025867dcfed5944d1137a1",
+    "tests/test_host_admin_http.cc": "3dea286c168cebff5bf8a0259c3149e68d459eb2258268aef63e49eec29efd0f",
+    "cmake/build_tests.cmake": "665fe8925ed851fa6a11a68c20f9ede10987d09dc8063076a4c97292c9c75ca7"
+  },
+  "deterministicCloseReuse": {
+    "originalFailed": 4,
+    "candidatePassed": 4,
+    "scenarios": [
+      "host_managed_activation_fd_fresh",
+      "host_managed_activation_fd_replay",
+      "host_managed_activation_fd_persist_failure",
+      "host_managed_activation_fd_replay_persist_failure"
+    ],
+    "mechanism": "Linker close wrapper reuses the first released App-directory number as a live socket; exact single close and usable replacement stream required",
+    "originalRecordSHA256": "6d54b96ce4999c72681bf26cfdc7dbccad734d375d78636c113cf98f4c6c5c2d",
+    "candidateRecordSHA256": "6714c8f146dfe4f5f409ebe30c6129d1a2a35a4e449ed9cb37be7679a4df46e5"
+  },
+  "actualProjectDebug": {
+    "strictAllPassed": true,
+    "registered": 1124,
+    "selected": 167,
+    "passed": 167,
+    "failed": 0,
+    "skipped": 0,
+    "binarySHA256": {
+      "capsid-host": "11e1116f7bec868a39f1c781c71c5a289373b1e32d4384a50e1ccd5962962a9d",
+      "capsid-worker": "dfbfe3779361a3eb32ec66c153a41b3d872bc3d4d4fbcd9df3ec6bc6b714b98e",
+      "test-host-managed": "79b4593b989da847e64210c7f87f81fa8a51a06aac340720631d1ed1ba985851",
+      "test-host-managed-activation-fd": "b400dbffca5fe06797122999f630e75d2f364fe76814167effe8189c12659515",
+      "test-host-admin-http": "846a0bc332df06ca21f278835b756c6b4a805e2f830a944fa32999af0a749d43"
+    },
+    "sourceInputsUnchanged": true,
+    "firstRunnerFailures": [
+      "websocket_ordinary_fetch_core_managed",
+      "websocket_native_reader_lifecycle_managed"
+    ],
+    "firstRunnerCause": "Nested TMPDIR exceeded AF_UNIX sun_path; original failures retained, shorter native temporary root only",
+    "finalRecordSHA256": "a5bc5ecd45b0bdf886f89bba296547ab6508c4801983b1a45064cf2402a800d2",
+    "cleanReleaseOrWholeDependencySanitizerClaimed": false
+  },
+  "oldCandidate23Local": {
+    "registered": 1115,
+    "passed": 1109,
+    "failed": 6,
+    "skipped": 0,
+    "failures": "Five predeclared WPT differences plus documentation closure absent from the frozen snapshot",
+    "sourceOrArtifactsNotRewritten": true
+  },
+  "priorHttpComponent": {
+    "ordinaryPassed": 21,
+    "asanUbsanPassed": 21,
+    "repeatedNewCaseExecutions": 50,
+    "wholeCandidateSanitizerAcceptanceClaimed": false
+  },
+  "originalBudgetsAndChecksRetained": true,
+  "publicAbiChanged": false,
+  "rootMainCommittedOrPushed": false
+}

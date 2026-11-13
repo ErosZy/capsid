@@ -26,7 +26,10 @@ struct AdminHttpOptions {
 // global authorization is enforced (an unauthorized peer receives an
 // immediate JSON 403 even if it sent nothing), the request is framed by
 // the Boost.Beast HTTP/1 authority under the configured ceilings and
-// deadlines, dispatch goes through handle_admin_request, and one bounded
+// deadlines, independent of read boundaries (fixed-length and chunked
+// bodies). Unconsumed wire metadata is bounded by max(max_header_bytes,
+// 4096); an oversized unfinished chunk extension is a redacted 400.
+// Dispatch goes through handle_admin_request, and one bounded
 // JSON response with Content-Type, Content-Length and Connection: close
 // is written. A shutdown(fd, SHUT_RDWR) from another thread (service
 // stop) interrupts the read loops promptly instead of waiting out the

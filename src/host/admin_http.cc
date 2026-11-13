@@ -176,7 +176,7 @@ ssize_t read_until_deadline(
         if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             continue;
         }
-        return count;
+        return count < 0 ? -2 : count;
     }
 }
 
@@ -245,121 +245,89 @@ bool serve_accepted_admin_http_connection(
         }
         return true;
     };
-    // Feeds bytes to the Beast parser and maps its errors: body ceiling is
-    // a 413, every other real error (need_more is the normal "wait for
-    // more input" signal) is a 400. Returns false when a response was
-    // already written and the connection closed.
-    const auto feed = [&](const char* data, std::size_t size) -> bool {
-        beast::error_code parse_error;
-        (void) parser.put(boost::asio::buffer(data, size), parse_error);
-        if (parse_error == http::error::body_limit) {
-            return respond_and_close(413, "Payload Too Large",
-                                     "request body too large");
-        }
-        if (parse_error != http::error::need_more && parse_error) {
-            return respond_and_close(400, "Bad Request", "invalid request");
-        }
-        return true;
-    };
-
-    std::string header_bytes;
-    char buffer[4096];
-    const auto header_deadline =
-        std::chrono::steady_clock::now() +
+    // put() may stop at a parser-element boundary. In particular need_more
+    // can leave a partial request line, header, chunk header or trailer in
+    // the input. Retain that suffix and append the next read to it; never
+    // discard bytes merely because a read or parser element ended.
+    // Bound pending wire metadata as well as the decoded body. Beast's body
+    // limit does not bound an unfinished chunk extension.
+    beast::flat_buffer pending(
+        std::max<std::size_t>(options.api.max_header_bytes, 4096));
+    std::size_t header_bytes = 0;
+    bool header_checked = false;
+    auto deadline = std::chrono::steady_clock::now() +
         std::chrono::milliseconds(options.header_timeout_ms);
-    for (;;) {
-        const ssize_t count = read_until_deadline(
-            fd, buffer, sizeof(buffer), header_deadline);
-        if (count == -1) {
-            // Header deadline: the client sent partial or no headers.
-            return respond_and_close(408, "Request Timeout",
-                                     "request timeout");
-        }
-        if (count == -2) {
-            if (error != nullptr) {
-                *error = "admin connection poll failed";
-            }
-            return false;
-        }
-        if (count == 0) {
-            // EOF before the header completed.
-            if (error != nullptr) {
-                *error = "admin request ended before its header";
-            }
-            return false;
-        }
-        beast::error_code parse_error;
-        const std::size_t used =
-            parser.put(boost::asio::buffer(buffer,
-                                           static_cast<std::size_t>(count)),
-                       parse_error);
-        header_bytes.append(buffer, used);
-        if (parse_error == http::error::header_limit) {
-            return respond_and_close(431, "Request Header Fields Too Large",
-                                     "request header too large");
-        }
-        if (parse_error == http::error::body_limit) {
-            return respond_and_close(413, "Payload Too Large",
-                                     "request body too large");
-        }
-        if (parse_error != http::error::need_more && parse_error) {
-            return respond_and_close(400, "Bad Request", "invalid request");
-        }
-        if (parser.is_header_done()) {
-            // The parser stops exactly at the header boundary in this
-            // call; body bytes that arrived with the header tail are fed
-            // in a second pass before the body phase continues.
-            if (used < static_cast<std::size_t>(count)) {
-                if (!feed(buffer + used, static_cast<std::size_t>(count) - used)) {
-                    return true;
-                }
-            }
-            break;
-        }
-    }
-    // Ambiguous framing (both Content-Length and Transfer-Encoding) and a
-    // declared Content-Length beyond the body ceiling are rejected at the
-    // header boundary, before any further body byte is consumed.
-    const auto& header = parser.get().base();
-    const bool has_content_length =
-        header.find(http::field::content_length) != header.end();
-    const bool has_transfer_encoding =
-        header.find(http::field::transfer_encoding) != header.end();
-    if (has_content_length && has_transfer_encoding) {
-        return respond_and_close(400, "Bad Request", "invalid request");
-    }
-    if (parser.content_length().has_value() &&
-        *parser.content_length() > options.api.max_body_bytes) {
-        return respond_and_close(413, "Payload Too Large",
-                                 "request body too large");
-    }
-    // Body phase: keep feeding the parser until the request is complete.
-    const auto body_deadline =
-        std::chrono::steady_clock::now() +
-        std::chrono::milliseconds(options.body_timeout_ms);
     while (!parser.is_done()) {
+        if (pending.size() != 0) {
+            beast::error_code parse_error;
+            const std::size_t used = parser.put(pending.data(), parse_error);
+            if (!header_checked) {
+                header_bytes += used;
+            }
+            pending.consume(used);
+            if (parse_error == http::error::header_limit) {
+                return respond_and_close(431, "Request Header Fields Too Large",
+                                         "request header too large");
+            }
+            if (parse_error == http::error::body_limit) {
+                return respond_and_close(413, "Payload Too Large",
+                                         "request body too large");
+            }
+            if (parse_error && parse_error != http::error::need_more) {
+                return respond_and_close(400, "Bad Request", "invalid request");
+            }
+            if (!header_checked && parser.is_header_done()) {
+                // Keep eager parsing off until framing has been checked;
+                // no body byte may reach the dispatcher on an invalid header.
+                const auto& header = parser.get().base();
+                if (header.find(http::field::content_length) != header.end() &&
+                    header.find(http::field::transfer_encoding) != header.end()) {
+                    return respond_and_close(400, "Bad Request", "invalid request");
+                }
+                if (parser.content_length().has_value() &&
+                    *parser.content_length() > options.api.max_body_bytes) {
+                    return respond_and_close(413, "Payload Too Large",
+                                             "request body too large");
+                }
+                header_checked = true;
+                deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(options.body_timeout_ms);
+                parser.eager(true);
+            }
+            if (parser.is_done()) {
+                break;
+            }
+            if (!parse_error && used != 0 && pending.size() != 0) {
+                continue;
+            }
+        }
+        const std::size_t room = pending.max_size() - pending.size();
+        if (room == 0) {
+            return header_checked
+                ? respond_and_close(400, "Bad Request", "invalid request")
+                : respond_and_close(431, "Request Header Fields Too Large",
+                                    "request header too large");
+        }
+        const auto writable = pending.prepare(std::min<std::size_t>(4096, room));
         const ssize_t count = read_until_deadline(
-            fd, buffer, sizeof(buffer), body_deadline);
+            fd, static_cast<char*>(writable.data()), writable.size(), deadline);
         if (count == -1) {
-            return respond_and_close(408, "Request Timeout",
-                                     "request timeout");
+            return respond_and_close(408, "Request Timeout", "request timeout");
         }
         if (count == -2) {
             if (error != nullptr) {
-                *error = "admin connection poll failed";
+                *error = "admin connection read failed";
             }
             return false;
         }
         if (count == 0) {
-            // EOF before the declared body completed.
             if (error != nullptr) {
-                *error = "admin request ended before its body";
+                *error = header_checked ? "admin request ended before its body"
+                                        : "admin request ended before its header";
             }
             return false;
         }
-        if (!feed(buffer, static_cast<std::size_t>(count))) {
-            return true;
-        }
+        pending.commit(static_cast<std::size_t>(count));
     }
     http::request<http::string_body> request = parser.release();
     AdminRequest admin_request;
@@ -373,7 +341,7 @@ bool serve_accepted_admin_http_connection(
     }
     admin_request.content_type = std::move(content_type);
     admin_request.body = std::move(request.body());
-    admin_request.header_bytes = header_bytes.size();
+    admin_request.header_bytes = header_bytes;
     const AdminResponse response = handle_admin_request(
         options.api, peer, admin_request, backend);
     const std::string response_text = http_response_text(

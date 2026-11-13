@@ -63,6 +63,8 @@ Capsid documentation is organized around selection → integration → configura
 
 **v0.3.0 (FetchRPC v4 / WebSocket foundation)**
 
+- Current qualification, implementation progress, and remaining release gates:
+  [v0.3.0-current-qualification.md](v0.3.0-current-qualification.md)
 - Milestone plan:
   [v0.3.0-fetchrpc-v4-plan.md](v0.3.0-fetchrpc-v4-plan.md)
 - Implementation design and audit remediation:

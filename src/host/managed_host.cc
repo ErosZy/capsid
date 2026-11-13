@@ -710,9 +710,18 @@ void destroy_pool(const std::vector<capsid_worker*>& workers) {
 // redirect state I/O outside stateRoot.
 class PosixActiveStateFilesystem final : public ActiveStateFilesystem {
 public:
-    explicit PosixActiveStateFilesystem(int app_dir_fd)
-        : app_dir_fd_(app_dir_fd) {}
-    ~PosixActiveStateFilesystem() override { close(app_dir_fd_); }
+    enum class Ownership { kOwned, kBorrowed };
+    // Most callers transfer their opened App directory. Activation instead
+    // borrows the deploy operation's fd, which that operation closes once
+    // after finish_activation returns (including persist failure).
+    explicit PosixActiveStateFilesystem(
+        int app_dir_fd, Ownership ownership = Ownership::kOwned)
+        : app_dir_fd_(app_dir_fd), ownership_(ownership) {}
+    ~PosixActiveStateFilesystem() override {
+        if (ownership_ == Ownership::kOwned) {
+            close_managed_state_fd(app_dir_fd_);
+        }
+    }
     PosixActiveStateFilesystem(const PosixActiveStateFilesystem&) = delete;
     PosixActiveStateFilesystem& operator=(
         const PosixActiveStateFilesystem&) = delete;
@@ -907,6 +916,7 @@ public:
 
 private:
     int app_dir_fd_;
+    Ownership ownership_;
 };
 
 // §9.3 activation transaction tail, shared by every successful warm path
@@ -980,7 +990,8 @@ bool finish_activation(ManagedHostOptions* options, DeployOutcome* outcome,
     document.application = options->application;
     document.version = version;
     document.generation = generation_digest;
-    PosixActiveStateFilesystem filesystem(app_state_fd);
+    PosixActiveStateFilesystem filesystem(
+        app_state_fd, PosixActiveStateFilesystem::Ownership::kBorrowed);
     const ActiveStatePersistResult persisted = persist_active_state(
         document, outcome->operation_id, filesystem);
     if (!persisted.ok) {

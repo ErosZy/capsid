@@ -501,6 +501,11 @@ if(BUILD_TESTING)
             endif()
             foreach(CAPSID_ADMIN_HTTP_TEST_ID
                     host_admin_http_authorized_round_trip
+                    host_admin_http_fragmented_headers
+                    host_admin_http_chunked_requests
+                    host_admin_http_chunked_errors
+                    host_admin_http_fragmented_limits
+                    host_admin_http_buffer_boundaries
                     host_admin_http_peer_rejected_before_read
                     host_admin_http_framing_limits
                     host_admin_http_smuggling_rejected
@@ -908,6 +913,45 @@ if(BUILD_TESTING)
                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ipc-sync-response.js")
                 set_tests_properties(
                     "${CAPSID_MANAGED_TEST_ID}" PROPERTIES TIMEOUT 120)
+            endforeach()
+            # Reuse the released App directory number as a live Unix stream
+            # at the first close. A second close must not destroy that stream.
+            add_executable(test-host-managed-activation-fd
+                tests/test_host_managed_activation_fd.cc)
+            target_include_directories(test-host-managed-activation-fd PRIVATE
+                include src "${CAPSID_GENERATED_DIR}")
+            target_link_libraries(test-host-managed-activation-fd PRIVATE
+                capsid_runtime capsid_host_core capsid_jansson
+                OpenSSL::Crypto capsid_sanitizers)
+            target_link_options(test-host-managed-activation-fd PRIVATE
+                "-Wl,--wrap=close")
+            if(Boost_FOUND)
+                target_sources(test-host-managed-activation-fd PRIVATE
+                    src/host/single_worker_server.cc)
+                target_link_libraries(test-host-managed-activation-fd PRIVATE Boost::system)
+                if(CAPSID_STRICT_WARNINGS AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+                    target_compile_options(test-host-managed-activation-fd PRIVATE
+                        -Wno-maybe-uninitialized)
+                endif()
+            endif()
+            set_target_properties(test-host-managed-activation-fd PROPERTIES
+                CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                target_compile_options(test-host-managed-activation-fd PRIVATE
+                    -Wall -Wextra -Wpedantic -Werror)
+            endif()
+            add_dependencies(test-host-managed-activation-fd capsid-worker)
+            foreach(CAPSID_ACTIVATION_FD_TEST_ID
+                    host_managed_activation_fd_fresh
+                    host_managed_activation_fd_replay
+                    host_managed_activation_fd_persist_failure
+                    host_managed_activation_fd_replay_persist_failure)
+                add_test(NAME "${CAPSID_ACTIVATION_FD_TEST_ID}"
+                    COMMAND test-host-managed-activation-fd
+                        "${CAPSID_ACTIVATION_FD_TEST_ID}"
+                        $<TARGET_FILE:capsid-worker>)
+                set_tests_properties("${CAPSID_ACTIVATION_FD_TEST_ID}"
+                    PROPERTIES TIMEOUT 30)
             endforeach()
             if(CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_TSAN)
                 set_tests_properties(host_managed_recovery_rejects_oversized_snapshot

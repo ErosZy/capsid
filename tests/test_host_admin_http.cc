@@ -20,10 +20,12 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
@@ -33,6 +35,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -279,6 +282,90 @@ std::string drip_exchange(const capsid::host::AdminHttpOptions& options,
     return response;
 }
 
+// Wait for each fragment to leave the kernel receive queue before sending
+// the next. Unlike sleeps between writes, this forces separate transport
+// reads even on a busy runner. The accepted descriptor stays open until the
+// client finishes sending, including when the parser rejects a prefix.
+std::string fragmented_exchange(
+    const capsid::host::AdminHttpOptions& options,
+    FakeAdminBackend* backend, const std::vector<std::string>& fragments,
+    bool allow_early_response = false) {
+    int sockets[2] = {-1, -1};
+    require(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
+            "cannot create fragmented Admin HTTP fixture");
+    const struct timeval timeout = {2, 0};
+    require(setsockopt(sockets[1], SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                       sizeof(timeout)) == 0,
+            "cannot bound fragmented Admin HTTP receive");
+    std::atomic<bool> finished{false}, sent{false};
+    bool served = false;
+    std::string server_error;
+    std::thread server([&]() {
+        served = capsid::host::serve_accepted_admin_http_connection(
+            sockets[0], options, backend, &server_error);
+        finished.store(true);
+        while (!sent.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        // A rejection can race the next client write after FIONREAD became
+        // zero. The fixture owns this fd: discard those in-flight bytes only
+        // after SHUT_WR, without feeding them to the parser or dispatcher.
+        // Otherwise closing with unread bytes can reset a valid 400/413/431
+        // response. Backend and exact-response assertions remain unchanged.
+        char discarded[4096];
+        for (;;) {
+            const ssize_t count = recv(sockets[0], discarded,
+                                       sizeof(discarded), MSG_DONTWAIT);
+            if (count > 0 || (count < 0 && errno == EINTR)) {
+                continue;
+            }
+            require(count == 0 || errno == EAGAIN || errno == EWOULDBLOCK,
+                    "cannot finish fragmented Admin HTTP fixture");
+            break;
+        }
+        close(sockets[0]);
+    });
+    std::size_t fragments_sent = 0;
+    for (const auto& fragment : fragments) {
+        send_all(sockets[1], fragment);
+        ++fragments_sent;
+        const auto deadline = std::chrono::steady_clock::now() +
+            std::chrono::seconds(1);
+        for (;;) {
+            int available = -1;
+            require(ioctl(sockets[0], FIONREAD, &available) == 0,
+                    "cannot observe Admin HTTP fragment consumption");
+            if (available == 0 || finished.load()) {
+                break;
+            }
+            require(std::chrono::steady_clock::now() < deadline,
+                    "Admin HTTP fragment was not consumed");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (finished.load()) {
+            break;
+        }
+    }
+    require(allow_early_response || fragments_sent == fragments.size(),
+            "Admin HTTP accepted a request before all fragments were sent");
+    require(shutdown(sockets[1], SHUT_WR) == 0,
+            "cannot finish fragmented Admin HTTP request");
+    sent.store(true);
+    const std::string response = receive_to_eof(sockets[1]);
+    close(sockets[1]);
+    server.join();
+    require(served, "fragmented Admin HTTP connection failed: " + server_error);
+    return response;
+}
+
+std::vector<std::string> byte_fragments(const std::string& bytes) {
+    std::vector<std::string> fragments;
+    for (const char byte : bytes) {
+        fragments.emplace_back(1, byte);
+    }
+    return fragments;
+}
+
 void require_json_http_response(const std::string& response,
                                 unsigned status) {
     require(response_status(response) == status,
@@ -328,6 +415,135 @@ int main(int argc, char** argv) {
         require(response_body(response).find("op-http-1") !=
                     std::string::npos,
                 "Admin HTTP response omitted operation identity");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_fragmented_headers") {
+        FakeAdminBackend backend;
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: localhost\r\n"
+            "Content-Type: application/json\r\nContent-Length: " +
+            std::to_string(body.size()) + "\r\n\r\n" + body;
+        require_json_http_response(fragmented_exchange(
+            http_options(), &backend, byte_fragments(request)), 202);
+        require(backend.deploy_calls == 1 &&
+                    backend.last_application == "orders" &&
+                    backend.last_version == "v1",
+                "fragmented Admin request changed deploy dispatch");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_chunked_requests") {
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        // 0x1f == 31 bytes. The extension and trailer exercise structured
+        // elements which Beast may leave unconsumed even without need_more.
+        require(body.size() == 31, "chunk fixture length changed");
+        const std::string request =
+            "POST /v1/deploy HTTP/1.1\r\nHost: localhost\r\n"
+            "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n"
+            "10;part=first\r\n" + body.substr(0, 16) +
+            "\r\nf\r\n" + body.substr(16) + "\r\n0\r\nX-End: yes\r\n\r\n";
+        for (const bool fragmented : {false, true}) {
+            FakeAdminBackend backend;
+            const auto fragments = fragmented ? byte_fragments(request) :
+                std::vector<std::string>{request};
+            require_json_http_response(fragmented_exchange(
+                http_options(), &backend, fragments), 202);
+            require(backend.deploy_calls == 1 &&
+                        backend.last_application == "orders" &&
+                        backend.last_version == "v1",
+                    "chunked Admin request changed deploy dispatch");
+        }
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_chunked_errors") {
+        const std::string header =
+            "POST /v1/deploy HTTP/1.1\r\nHost: localhost\r\n"
+            "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n";
+        for (const bool fragmented : {false, true}) {
+            for (const auto& body : {std::string("Z\r\n"),
+                                    std::string("1\r\nx!\r\n0\r\n\r\n")}) {
+                FakeAdminBackend backend;
+                const auto fragments = fragmented ? byte_fragments(header + body) :
+                    std::vector<std::string>{header + body};
+                require_json_http_response(fragmented_exchange(
+                    http_options(), &backend, fragments, true), 400);
+                require(backend.total_calls() == 0,
+                        "invalid chunked Admin request reached the backend");
+            }
+        }
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_fragmented_limits") {
+        auto options = http_options();
+        options.api.max_header_bytes = 128;
+        options.api.max_body_bytes = 32;
+        FakeAdminBackend backend;
+        const std::string header =
+            "GET /v1/apps/orders HTTP/1.1\r\nX-Pad: " +
+            std::string(160, 'x') + "\r\n\r\n";
+        require_json_http_response(fragmented_exchange(
+            options, &backend, byte_fragments(header), true), 431);
+        const std::string chunked =
+            "POST /v1/deploy HTTP/1.1\r\n"
+            "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n"
+            "10\r\n" + std::string(16, 'x') + "\r\n11\r\n" +
+            std::string(17, 'x') + "\r\n0\r\n\r\n";
+        require_json_http_response(fragmented_exchange(
+            options, &backend, byte_fragments(chunked), true), 413);
+        require(backend.total_calls() == 0,
+                "fragmented Admin limit reached the backend");
+        std::cout << "PASS" << std::endl;
+        return 0;
+    }
+
+    if (mode == "host_admin_http_buffer_boundaries") {
+        auto options = http_options();
+        options.api.max_header_bytes = 8192;
+        options.api.max_body_bytes = 8192;
+        const std::string body = "{\"app\":\"orders\",\"version\":\"v1\"}";
+        const std::string header =
+            "POST /v1/deploy HTTP/1.1\r\nHost: localhost\r\nX-Pad: " +
+            std::string(5000, 'x') +
+            "\r\nContent-Type: application/json\r\nContent-Length: 8192\r\n\r\n";
+        const std::string request = header + body +
+            std::string(options.api.max_body_bytes - body.size(), ' ');
+        std::vector<std::string> fragments;
+        for (std::size_t offset = 0; offset < request.size(); offset += 997) {
+            fragments.push_back(request.substr(offset, 997));
+        }
+        FakeAdminBackend backend;
+        require_json_http_response(fragmented_exchange(
+            options, &backend, fragments), 202);
+        require(backend.deploy_calls == 1 &&
+                    backend.last_application == "orders" &&
+                    backend.last_version == "v1",
+                "Admin buffer boundary changed deploy dispatch");
+
+        // An unfinished chunk extension is not decoded body data; its
+        // storage must be bounded even though the body ceiling is not hit.
+        const std::string chunk_header =
+            "POST /v1/deploy HTTP/1.1\r\n"
+            "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n";
+        fragments = {chunk_header, "1;pad="};
+        for (unsigned index = 0; index < 7; ++index) {
+            fragments.push_back(std::string(512, 'x'));
+        }
+        // Stop exactly at the wire-metadata ceiling, without leaving extra
+        // unread bytes which would make a Unix close reset the response.
+        fragments.push_back(std::string(4096 - 6 - 7 * 512, 'x'));
+        FakeAdminBackend rejected;
+        require_json_http_response(fragmented_exchange(
+            http_options(), &rejected, fragments, true), 400);
+        require(rejected.total_calls() == 0,
+                "oversized Admin chunk metadata reached the backend");
         std::cout << "PASS" << std::endl;
         return 0;
     }

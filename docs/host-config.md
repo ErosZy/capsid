@@ -411,7 +411,13 @@ curl --unix-socket /run/capsid/admin.sock http://localhost/metrics
 
 All endpoint responses are bounded JSON/text; unknown paths return 404, non-deploy
 requests with a body return 400, wrong methods return 405, and unauthorized peers
-return 403.
+return 403. The HTTP/1 transport accepts fragmented headers and fixed-length or
+chunked request bodies, and sends one response with `Connection: close`.
+Header and decoded-body ceilings default to 64 KiB each; header and body phase
+deadlines do not restart on each fragment. Pending wire metadata is bounded by
+`max(max_header_bytes, 4096)` bytes, including unfinished chunk extensions.
+Invalid framing returns 400 without dispatch; header/body limit violations
+return 431/413 respectively.
 
 ## Request routing
 

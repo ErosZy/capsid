@@ -1,0 +1,96 @@
+{
+  "schema": "capsid-frame-prototype-rejection-v1",
+  "reviewedUTC": "2026-11-13T15:18:02.625074+00:00",
+  "rootProductionIntegrated": false,
+  "originalFuzzHarnessSHA256": "23c4787f71349e428b8ae8e6338a6b6032acc1d12672ceb799cc9138cc9da4b9",
+  "byteMaskModelCases": 287280,
+  "exactInputs": 165,
+  "immutableCallsPerVariant": 19800,
+  "originalOracleAndFatalFuzzerAsanUbsanRetained": true,
+  "original60Second512MiB2Second64KiBAnd10000UnitBudgetsRetained": true,
+  "fixedCpu": {
+    "groupRatios": [
+      0.4316326378929837,
+      0.43049907814426747,
+      0.4258094271588823
+    ],
+    "medianProposedOverBaseline": 0.43049907814426747
+  },
+  "randomSmoke": [
+    {
+      "label": "baseline-smoke-4191328252",
+      "exitCode": 0,
+      "seconds": 35.06268636299998,
+      "completed10000": true
+    },
+    {
+      "label": "candidate-smoke-4191328252",
+      "exitCode": 71,
+      "seconds": 4.080997706000005,
+      "completed10000": false
+    },
+    {
+      "label": "candidate-smoke-1",
+      "exitCode": 71,
+      "seconds": 4.082416104999993,
+      "completed10000": false
+    },
+    {
+      "label": "candidate-smoke-42",
+      "exitCode": 71,
+      "seconds": 5.085413504000002,
+      "completed10000": false
+    }
+  ],
+  "allocationCombination": [
+    {
+      "label": "original-fixed",
+      "exitCode": 0,
+      "seconds": 2.9752360000000007,
+      "requestedCalls": 660,
+      "completedCalls": 660,
+      "maximumRssKiB": 378444
+    },
+    {
+      "label": "word-only-fixed",
+      "exitCode": 0,
+      "seconds": 1.0680513999999999,
+      "requestedCalls": 660,
+      "completedCalls": 660,
+      "maximumRssKiB": 379260
+    },
+    {
+      "label": "combined-fixed",
+      "exitCode": 0,
+      "seconds": 1.1179656999999992,
+      "requestedCalls": 660,
+      "completedCalls": 660,
+      "maximumRssKiB": 402436
+    },
+    {
+      "label": "combined-smoke-4191328252",
+      "exitCode": 71,
+      "seconds": 4.0784991999999995,
+      "completed10000": false,
+      "reportedPeakRssMiB": 513
+    },
+    {
+      "label": "combined-smoke-1",
+      "exitCode": 71,
+      "seconds": 2.0709488999999976,
+      "completed10000": false,
+      "reportedPeakRssMiB": 522
+    },
+    {
+      "label": "combined-smoke-42",
+      "exitCode": 71,
+      "seconds": 4.078452000000002,
+      "completed10000": false,
+      "reportedPeakRssMiB": 528
+    }
+  ],
+  "decision": "Rejected for integration: all three proposed random seeds exceeded original RSS budget; fixture allocation combination also failed",
+  "sameSeedDoesNotImplySameMutations": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}
