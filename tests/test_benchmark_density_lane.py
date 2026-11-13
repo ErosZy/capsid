@@ -131,7 +131,7 @@ class ProducerTests(unittest.TestCase):
                         "probeDirectory": directory, "cleanup": {"ownedPidsRemaining": 0},
                         "correctness": {"ok": True, "errors_as_success": False, "responses_checked": requests,
                                         "errors": 0, "mismatches": 0, "timeouts": 0,
-                                        "warmupConcurrencyLimit": 64, "maximumWaveRequests": 1,
+                                        "warmupConcurrencyLimit": 128, "maximumWaveRequests": 1,
                                         "maximumRequestsAllowed": 3200 if call["phase"] == "warm" else 64,
                                         "coverageTimeoutSeconds": 300}}
         with patch.object(lane, "DensityProbe", SyntheticProbe):

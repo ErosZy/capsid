@@ -13,6 +13,17 @@
 /tests/fixtures/*.mjs -text
 /tests/fixtures/workerd-ws/*.mjs -text
 
+# Independent models and primary captures compare raw bytes, including the
+# original line endings. Their generators, JSON captures, stream bundle and
+# upstream patch/license must survive checkout without core.autocrlf changes.
+/tests/fixtures/** -text
+/tools/*.mjs -text
+/tools/*.py -text
+/tools/*.json -text
+/js/*.js -text
+/patches/web-streams/*.patch -text
+/licenses/web-streams-polyfill/LICENSE -text
+
 # Captured evidence and byte-preserved qualification archives bind raw SHA256.
 # Keep every dated artifact's bytes intact on native Windows checkouts.
 /docs/evidence/** -text
