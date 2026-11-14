@@ -40,6 +40,45 @@ def unique_pairs(pairs):
     return result
 
 
+def validate_network_startup(archive, directory, row, count, target):
+    network = archive.json(directory + '/network-startup.json')
+    require(isinstance(network, dict) and row.get('startupNetworkReadiness') == network,
+            'network startup summary disagrees with raw evidence')
+    require(network.get('method') == 'linux-conntrack-headroom-v1' and
+            integer(network.get('requiredConnections'), 'network required connections') == count * (target + 1),
+            'network headroom must cover every original request plus one wave')
+    require(number(network.get('startupTimeoutSeconds'), 'network startup timeout') == 120,
+            'network readiness cannot increase the original startup budget')
+    start = number(network.get('startMonotonic'), 'network startup start')
+    deadline = number(network.get('deadlineMonotonic'), 'network startup deadline')
+    admitted = number(network.get('admittedMonotonic'), 'network admission')
+    launched = number(network.get('launchStartedMonotonic'), 'network process launch')
+    ready = number(network.get('readyMonotonic'), 'network service ready')
+    require(deadline == start + 120 and start <= admitted <= launched <= ready < deadline,
+            'network wait and service startup must share the original absolute deadline')
+    readings = archive.jsonl(directory + '/network-headroom.jsonl')
+    require(len(readings) == integer(network.get('readings'), 'network reading count'),
+            'network readings missing or summary forged')
+    previous = start
+    for ordinal, reading in enumerate(readings, 1):
+        require(isinstance(reading, dict) and set(reading) == {'sequence', 'sampledMonotonic', 'maximum',
+                'current', 'requiredConnections', 'eligible'}, 'malformed network reading fields')
+        require(integer(reading.get('sequence'), 'network reading sequence') == ordinal,
+                'network reading sequence gap')
+        sampled = number(reading.get('sampledMonotonic'), 'network reading time')
+        require(previous <= sampled <= admitted, 'network reading outside its prelaunch interval')
+        previous = sampled
+        maximum = integer(reading.get('maximum'), 'network native capacity')
+        current = integer(reading.get('current'), 'network current connections', 0)
+        required = integer(reading.get('requiredConnections'), 'network planned connections')
+        require(required == count * (target + 1) and required <= maximum,
+                'network capacity cannot support the unchanged full coverage')
+        eligible = maximum - current >= required
+        require(reading.get('eligible') is eligible and eligible is (ordinal == len(readings)),
+                'network admission must follow actual available capacity, not a fixed hold')
+    require(previous == admitted, 'network admission time disagrees with its final raw reading')
+
+
 def validate_density_conditioning(archive, key, row, verdict, protocol):
     stack, size, phase = key
     count = row['count']
@@ -85,6 +124,7 @@ def validate_density_conditioning(archive, key, row, verdict, protocol):
     control_ready = {}
     expected_control_ports = {f's{i}': port for i, port in enumerate(ports)}
     if stack == 'workerd':
+        validate_network_startup(archive, directory, row, count, target)
         require(row.get('readiness') == {'method': 'workerd-control-listen-v1', 'sockets': count,
                                        'beforeTraffic': True, 'deadlineSeconds': 120},
                 'missing original-deadline workerd startup readiness')

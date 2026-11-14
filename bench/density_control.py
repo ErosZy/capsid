@@ -37,6 +37,50 @@ class Coverage:
             raise ProbeError("coverage-count", "worker request counters disagree with validated responses")
 
 
+def wait_network_headroom(required, deadline, output, *, read=None,
+                          clock=time.monotonic, pause=time.sleep):
+    """Wait on native conntrack headroom, consuming an existing startup deadline."""
+    if (type(required) is not int or required <= 0 or
+            type(deadline) not in (int, float) or not math.isfinite(deadline)):
+        raise ProbeError("network-capacity", "invalid connection tracking prerequisite")
+
+    if read is None:
+        def read():
+            values = []
+            for name in ("nf_conntrack_max", "nf_conntrack_count"):
+                with (Path("/proc/sys/net/netfilter") / name).open("rb") as stream:
+                    raw = stream.read(64)
+                if len(raw) >= 64 or not raw.strip().isdigit():
+                    raise ValueError("invalid bounded kernel counter")
+                values.append(int(raw))
+            return values
+
+    readings = 0
+    while True:
+        if clock() >= deadline:
+            raise ProbeError("readiness-timeout", "startup deadline exhausted before network readiness")
+        try:
+            maximum, current = read()
+        except (OSError, ValueError, TypeError) as exc:
+            raise ProbeError("network-capacity", "native connection tracking counters unavailable or malformed") from exc
+        if type(maximum) is not int or maximum <= 0 or type(current) is not int or current < 0:
+            raise ProbeError("network-capacity", "invalid native connection tracking counters")
+        sampled = clock()
+        if sampled >= deadline:
+            raise ProbeError("readiness-timeout", "startup deadline exhausted before network readiness")
+        readings += 1
+        eligible = maximum - current >= required
+        output.write(json.dumps(dict(sequence=readings, sampledMonotonic=sampled, maximum=maximum,
+                                     current=current, requiredConnections=required, eligible=eligible),
+                                allow_nan=False) + "\n")
+        output.flush()
+        if required > maximum:
+            raise ProbeError("network-capacity", "original request coverage exceeds native conntrack capacity")
+        if eligible:
+            return dict(readings=readings, admittedMonotonic=sampled)
+        pause(max(0, min(.05, deadline - clock())))
+
+
 class WorkerdReadyLog:
     """Bounded, incremental workerd control-FD events, not business requests."""
     def __init__(self, path, ports):

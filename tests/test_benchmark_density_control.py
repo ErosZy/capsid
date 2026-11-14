@@ -41,6 +41,74 @@ def result_for(call, pss=None):
             "cleanup": {"ownedPidsRemaining": 0}}
 
 
+class WorkerdNetworkHeadroomTests(unittest.TestCase):
+    def invoke(self, values, required=103424, deadline=120):
+        clock = SimpleNamespace(now=0.0)
+        calls, pauses = [], []
+        iterator = iter(values)
+        def read():
+            value = next(iterator)
+            calls.append(value)
+            return value
+        def pause(seconds):
+            pauses.append(seconds)
+            clock.now += seconds
+        output = io.StringIO()
+        return control.wait_network_headroom(required, deadline, output, read=read,
+                                             clock=lambda: clock.now, pause=pause), output, calls, pauses
+
+    def test_waits_for_actual_capacity_and_archives_each_reading(self):
+        result, output, calls, pauses = self.invoke([(262144, 230000), (262144, 150000)])
+        rows = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(calls, [(262144, 230000), (262144, 150000)])
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual([row['eligible'] for row in rows], [False, True])
+        self.assertEqual(result['readings'], 2)
+        self.assertEqual(result['admittedMonotonic'], rows[-1]['sampledMonotonic'])
+        self.assertTrue(all(row['requiredConnections'] == 103424 for row in rows))
+
+    def test_sufficient_capacity_never_inserts_an_arbitrary_hold(self):
+        result, _, calls, pauses = self.invoke([(262144, 0)])
+        self.assertEqual(result['readings'], 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(pauses, [])
+
+    def test_insufficient_native_maximum_fails_without_tuning_or_waiting(self):
+        with self.assertRaises(ProbeError) as raised:
+            self.invoke([(1024, 0)], required=1025)
+        self.assertEqual(raised.exception.code, 'network-capacity')
+
+    def test_network_wait_cannot_extend_the_absolute_deadline(self):
+        with self.assertRaises(ProbeError) as raised:
+            self.invoke([(262144, 262144)] * 3, deadline=.1)
+        self.assertEqual(raised.exception.code, 'readiness-timeout')
+
+    def test_bad_kernel_readings_fail_closed(self):
+        for value in [(True, 0), (0, 0), (1024, -1), (1024, False), ('1024', 0)]:
+            with self.subTest(value=value), self.assertRaises(ProbeError):
+                self.invoke([value], required=1)
+
+    def test_unreadable_or_malformed_kernel_counters_fail_closed(self):
+        for error in (OSError('unavailable kernel counter'), ValueError('malformed kernel counter')):
+            def read():
+                raise error
+            with self.subTest(error=type(error).__name__), self.assertRaises(ProbeError) as raised:
+                control.wait_network_headroom(1, 120, io.StringIO(), read=read, clock=lambda: 0)
+            self.assertEqual(raised.exception.code, 'network-capacity')
+
+    def test_service_readiness_cannot_restart_an_exhausted_shared_budget(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'control.log'
+            path.write_bytes(b'')
+            probe = DensityProbe(host=sys.executable, worker=sys.executable, workerd=sys.executable,
+                                 apps=temporary, out=temporary, cpuset='0')
+            with patch('density_probe.time.monotonic', return_value=200):
+                with self.assertRaises(ProbeError) as raised:
+                    probe.wait_ready(SimpleNamespace(), Path(temporary), 'workerd', [12345],
+                                     control_log=path, deadline=200)
+            self.assertEqual(raised.exception.code, 'readiness-timeout')
+
+
 class WorkerdStartupReadinessTests(unittest.TestCase):
     def test_incremental_events_require_every_exact_socket_and_port(self):
         with tempfile.TemporaryDirectory() as temporary:

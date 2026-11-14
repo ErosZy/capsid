@@ -86,4 +86,12 @@ def synthetic_density(root, directory, stack, size, phase, count, *, probe_index
                cleanup=cleanup,correctness=verdict,ports=ports,limit='cap')
     if stack == 'workerd':
         row['readiness'] = dict(method='workerd-control-listen-v1',sockets=count,beforeTraffic=True,deadlineSeconds=120)
+        network = dict(method='linux-conntrack-headroom-v1', requiredConnections=count*(target+1),
+                       startupTimeoutSeconds=120, startMonotonic=10, deadlineMonotonic=130,
+                       readings=1, admittedMonotonic=10.01, launchStartedMonotonic=10.02, readyMonotonic=10.03)
+        reading = dict(sequence=1, sampledMonotonic=10.01, maximum=1048576, current=0,
+                       requiredConnections=count*(target+1), eligible=True)
+        row['startupNetworkReadiness'] = network
+        write(root/directory/'network-startup.json', encoded(network))
+        write(root/directory/'network-headroom.jsonl', encoded(reading))
     return row, verdict

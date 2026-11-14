@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 
-from density_control import CounterLog, Coverage, MARKER, WorkerdReadyLog
+from density_control import CounterLog, Coverage, MARKER, WorkerdReadyLog, wait_network_headroom
 from measurement_runtime import OwnedProcess, ProbeError, stable_pss
 
 # gen-cold-start-apps.py's frozen seed=7 response. Check the generated app
@@ -199,8 +199,9 @@ class DensityProbe:
         (folder / "workerd.capnp").write_text("\n".join(config) + "\n", encoding="utf-8")
         return [str(self.workerd), "serve", str(folder / "workerd.capnp"), "--control-fd=1"]
 
-    def wait_ready(self, tree, folder, stack, ports, *, control_log=None):
-        deadline = time.monotonic() + self.startup_timeout
+    def wait_ready(self, tree, folder, stack, ports, *, control_log=None, deadline=None):
+        if deadline is None:
+            deadline = time.monotonic() + self.startup_timeout
         deployed = stack != "capsid"
         if stack == "workerd" and control_log is None:
             raise ProbeError("readiness-protocol", "workerd requires its owned startup control log")
@@ -308,6 +309,13 @@ class DensityProbe:
         nonce = uuid.uuid4().hex
         target = 1 if phase == "cold" else self.warm_requests
         tree, cleanup, result, failure = None, None, None, None
+        network = None
+        if stack == "workerd":
+            started = time.monotonic()
+            network = dict(method="linux-conntrack-headroom-v1", requiredConnections=count * (target + 1),
+                           startupTimeoutSeconds=self.startup_timeout, startMonotonic=started,
+                           deadlineMonotonic=started + self.startup_timeout)
+            write_json(archive / "network-startup.json", network)
         with tempfile.TemporaryDirectory(prefix="capsid-density-") as temp:
             folder = Path(temp)
             argv = self.prepare(folder, stack, size, count, ports, nonce)
@@ -318,9 +326,21 @@ class DensityProbe:
                        "warmupConcurrencyLimit": self.warmup_concurrency(count)})
             with (archive / "stderr.log").open("wb") as logs, (archive / "requests.jsonl").open("w", encoding="utf-8") as requests:
                 try:
+                    if network is not None:
+                        with (archive / "network-headroom.jsonl").open("w", encoding="utf-8") as evidence:
+                            network.update(wait_network_headroom(network["requiredConnections"],
+                                                                 network["deadlineMonotonic"], evidence))
+                        network["launchStartedMonotonic"] = time.monotonic()
+                        write_json(archive / "network-startup.json", network)
                     release_ports()
                     tree = OwnedProcess(["taskset", "-c", self.cpuset, *argv], stdout=logs)
-                    readiness = self.wait_ready(tree, folder, stack, ports, control_log=archive / "stderr.log")
+                    readiness = self.wait_ready(tree, folder, stack, ports, control_log=archive / "stderr.log",
+                                                deadline=network["deadlineMonotonic"] if network is not None else None)
+                    if network is not None:
+                        network["readyMonotonic"] = time.monotonic()
+                        write_json(archive / "network-startup.json", network)
+                        if network["readyMonotonic"] >= network["deadlineMonotonic"]:
+                            raise ProbeError("readiness-timeout", "network and service startup exceeded their shared deadline")
                     members = tree.pin_members()
                     if len(members) < (count + 1 if stack == "capsid" else 1):
                         raise ProbeError("pool-incomplete", "not all managed worker processes are observable")
@@ -337,6 +357,8 @@ class DensityProbe:
                               "readyProcesses": [asdict(p) for p in members.values()], "readiness": readiness,
                               "requestsPerWorker": coverage.counts, "correctness": correctness,
                               "probeDirectory": label}
+                    if network is not None:
+                        result["startupNetworkReadiness"] = network
                 except BaseException as exc:
                     failure = exc
                 finally:

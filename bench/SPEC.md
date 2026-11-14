@@ -231,6 +231,18 @@ work; controller tests and restricted smoke do not qualify a performance point.
   LISTEN ownership alone is insufficient. The same absolute 120-second startup
   deadline applies. No HTTP request, prewarming, fixed sleep or larger request
   deadline substitutes for this control-channel readiness proof.
+  Before launching workerd, readonly Linux conntrack snapshots must show room
+  for all original per-cell requests plus one wave: count * (target + 1), where
+  target is 1 cold or 100 warm. Existing tracked connections from earlier probes
+  may expire naturally; the controller does not tune sysctls, flush tables,
+  change connection reuse, prewarm, retry business requests or reduce coverage.
+  This state-based wait and service initialization share the same original
+  120-second absolute startup deadline, starting before fixture preparation;
+  the service-ready phase cannot restart that budget. Missing/malformed counters,
+  insufficient native capacity or deadline expiry fail closed. Sealed raw
+  network-headroom readings and startup/launch/readiness timestamps are
+  independently rechecked, including actual admission and the shared deadline.
+
 
 `density-lane.sh` now execs `density-lane.py`, using injectable control and
 process/PSS helpers. Formal mode requires clean measured-build/session metadata

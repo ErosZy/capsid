@@ -556,6 +556,36 @@ class PerformanceEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(contract.EvidenceError, 'startup readiness'):
                 self.collect()
 
+    def test_workerd_network_headroom_and_shared_deadline_are_reparsed(self):
+        f = self.fixture
+        index, _, row = self.density_probe_record(stack='workerd')
+        directory = row['probeDirectory']
+        for case in ('missing-summary', 'unsafe-capacity', 'extended-deadline', 'early-launch',
+                     'late-service', 'missing-reading', 'forged-summary', 'wrong-admission'):
+            with self.subTest(case=case), f.transaction():
+                network = json.loads((f.paths['density']/directory/'network-startup.json').read_text())
+                readings = [json.loads(v) for v in (f.paths['density']/directory/'network-headroom.jsonl').read_text().splitlines()]
+                if case == 'unsafe-capacity':
+                    readings[0]['current'] = readings[0]['maximum']
+                elif case == 'extended-deadline':
+                    network['deadlineMonotonic'] = 240
+                elif case == 'early-launch':
+                    network['launchStartedMonotonic'] = 10
+                elif case == 'late-service':
+                    network['readyMonotonic'] = 131
+                elif case == 'missing-reading':
+                    readings.clear()
+                elif case == 'forged-summary':
+                    network['readings'] = 2
+                elif case == 'wrong-admission':
+                    network['admittedMonotonic'] = 10.005
+                f.write(f.paths['density']/directory/'network-startup.json', encoded(network))
+                f.write(f.paths['density']/directory/'network-headroom.jsonl', b''.join(encoded(v) for v in readings))
+                f.mutate_raw('density', index, lambda rows: rows[0].pop('startupNetworkReadiness') if case == 'missing-summary'
+                             else rows[0].update(startupNetworkReadiness=network))
+                with self.assertRaisesRegex(contract.EvidenceError, 'network'):
+                    self.collect()
+
     def test_density_coupled_cleanup_forgery_still_needs_the_actual_resume_log(self):
         f = self.fixture
         index, _, row = self.density_probe_record()
