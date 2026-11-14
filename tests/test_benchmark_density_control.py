@@ -8,6 +8,7 @@ import socketserver
 import io
 import json
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,86 @@ def result_for(call, pss=None):
             "correctness": {"ok": True, "errors_as_success": False, "responses_checked": count * target,
                             "errors": 0, "mismatches": 0, "timeouts": 0},
             "cleanup": {"ownedPidsRemaining": 0}}
+
+
+class WorkerdStartupReadinessTests(unittest.TestCase):
+    def test_incremental_events_require_every_exact_socket_and_port(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'control.log'
+            path.write_bytes(b'')
+            reader = control.WorkerdReadyLog(path, [12345, 12346])
+            first = b'{"event":"listen","socket":"s0","port":12345}\n'
+            second = b'{"event":"listen","socket":"s1","port":12346}\n'
+            for byte in first + second[:-1]:
+                with path.open('ab') as stream:
+                    stream.write(bytes([byte]))
+                self.assertFalse(reader.poll())
+            with path.open('ab') as stream:
+                stream.write(b'\n')
+            self.assertTrue(reader.poll())
+            self.assertEqual(reader.seen, {'s0': 12345, 's1': 12346})
+
+    def test_malformed_repeated_and_wrong_identity_events_fail_closed(self):
+        valid = b'{"event":"listen","socket":"s0","port":12345}\n'
+        cases = [b'not json\n', b'{"event":"listen","event":"listen","socket":"s0","port":12345}\n',
+                 valid + valid, b'{"event":"listen","socket":"s1","port":12345}\n',
+                 b'{"event":"listen","socket":"s0","port":12346}\n',
+                 b'{"event":"listen","socket":"s0","port":true}\n',
+                 b'{"event":"other","socket":"s0","port":12345}\n',
+                 b'{"event":"listen","socket":"s0","port":12345,"extra":0}\n']
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'control.log'
+            for raw in cases:
+                with self.subTest(raw=raw):
+                    path.write_bytes(raw)
+                    with self.assertRaises(ProbeError):
+                        control.WorkerdReadyLog(path, [12345]).poll()
+
+    def test_unterminated_control_data_is_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'control.log'
+            path.write_bytes(b'x' * 4097)
+            with self.assertRaises(ProbeError) as raised:
+                control.WorkerdReadyLog(path, [12345]).poll()
+            self.assertEqual(raised.exception.code, 'readiness-limit')
+
+    def test_actual_listening_socket_is_not_application_readiness(self):
+        # This is a controller fixture, not a performance or process-PSS sample.
+        with tempfile.TemporaryDirectory() as temporary, socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            path = Path(temporary) / 'control.log'
+            path.write_bytes(b'')
+            probe = DensityProbe(host=sys.executable, worker=sys.executable, workerd=sys.executable,
+                                 apps=temporary, out=temporary, cpuset='0')
+            tree = SimpleNamespace(alive=lambda: True, listeners_owned=lambda ports: ports == [port])
+            entered = threading.Event()
+            original = control.WorkerdReadyLog.poll
+            def observed(reader):
+                entered.set()
+                return original(reader)
+            with patch.object(control.WorkerdReadyLog, 'poll', observed), ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(probe.wait_ready, tree, Path(temporary), 'workerd', [port], control_log=path)
+                try:
+                    self.assertTrue(entered.wait(timeout=1))
+                    self.assertFalse(future.done())
+                finally:
+                    path.write_text(json.dumps({'event': 'listen', 'socket': 's0', 'port': port}) + '\n')
+                ready = future.result(timeout=2)
+                self.assertEqual(ready, {'method': 'workerd-control-listen-v1', 'sockets': 1,
+                                        'beforeTraffic': True, 'deadlineSeconds': 120})
+
+    def test_missing_events_do_not_extend_the_absolute_startup_deadline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'control.log'
+            path.write_bytes(b'')
+            probe = DensityProbe(host=sys.executable, worker=sys.executable, workerd=sys.executable,
+                                 apps=temporary, out=temporary, cpuset='0', startup_timeout=.02)
+            tree = SimpleNamespace(alive=lambda: True, listeners_owned=lambda ports: True)
+            with self.assertRaises(ProbeError) as raised:
+                probe.wait_ready(tree, Path(temporary), 'workerd', [12345], control_log=path)
+            self.assertEqual(raised.exception.code, 'readiness-timeout')
 
 
 class LoopbackHTTPServer(http.server.ThreadingHTTPServer):

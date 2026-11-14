@@ -528,6 +528,34 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
                     self.collect()
 
+    def test_workerd_startup_control_events_are_independently_reparsed(self):
+        f = self.fixture
+        index, _, row = self.density_probe_record(stack='workerd')
+        path = f.paths['density']/row['probeDirectory']/'stderr.log'
+        original = path.read_text().splitlines()
+        def wrong_port(lines):
+            value = json.loads(lines[0]); value['port'] += 1
+            lines[0] = json.dumps(value)
+        def wrong_socket(lines):
+            value = json.loads(lines[0]); value['socket'] = 's999'
+            lines[0] = json.dumps(value)
+        def early_business(lines):
+            lines.insert(0, lines.pop(2))
+        changes = [('missing', lambda lines: lines.pop(0)),
+                   ('repeated', lambda lines: lines.insert(0, lines[0])),
+                   ('wrong-port', wrong_port), ('wrong-socket', wrong_socket),
+                   ('early-business', early_business)]
+        for name, change in changes:
+            with self.subTest(change=name), f.transaction():
+                lines = list(original); change(lines)
+                f.write(path, ('\n'.join(lines)+'\n').encode()); f.seal('density')
+                with self.assertRaisesRegex(contract.EvidenceError, 'conditioning'):
+                    self.collect()
+        with f.transaction():
+            f.mutate_raw('density', index, lambda rows: rows[0]['readiness'].update(sockets=1))
+            with self.assertRaisesRegex(contract.EvidenceError, 'startup readiness'):
+                self.collect()
+
     def test_density_coupled_cleanup_forgery_still_needs_the_actual_resume_log(self):
         f = self.fixture
         index, _, row = self.density_probe_record()

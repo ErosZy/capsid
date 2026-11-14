@@ -82,6 +82,15 @@ def validate_density_conditioning(archive, key, row, verdict, protocol):
         require(type(request.get('port')) is int and request['port'] == ports[(position - 1) % len(ports)], 'wrong cell socket')
         require(request.get('externalWorkerExecutionBarrier', False) is (stack == 'capsid'), 'raw barrier kind mismatch')
     counts, records, ready, first_ready = {}, 0, 0, None
+    control_ready = {}
+    expected_control_ports = {f's{i}': port for i, port in enumerate(ports)}
+    if stack == 'workerd':
+        require(row.get('readiness') == {'method': 'workerd-control-listen-v1', 'sockets': count,
+                                       'beforeTraffic': True, 'deadlineSeconds': 120},
+                'missing original-deadline workerd startup readiness')
+        command = launch.get('command')
+        require(isinstance(command, list) and command.count('--control-fd=1') == 1,
+                'workerd must expose its actual startup control events')
     log = archive.sealed(directory + '/stderr.log')
     decoder = json.JSONDecoder(object_pairs_hook=unique_pairs)
     for line in log.read_text(encoding='utf-8').splitlines():
@@ -91,11 +100,22 @@ def validate_density_conditioning(archive, key, row, verdict, protocol):
             outer = None
         if isinstance(outer, dict) and outer.get('event') == 'worker_ready':
             ready += 1
+        if stack == 'workerd' and isinstance(outer, dict) and 'event' in outer:
+            require(set(outer) == {'event', 'socket', 'port'} and outer['event'] == 'listen',
+                    'unexpected workerd startup event')
+            name = outer['socket']
+            require(isinstance(name, str) and name in expected_control_ports and name not in control_ready and
+                    type(outer['port']) is int and outer['port'] == expected_control_ports[name],
+                    'repeated or wrong-identity workerd startup event')
+            require(records == 0, 'workerd startup event follows business traffic')
+            control_ready[name] = outer['port']
         message = outer.get('message', '') if isinstance(outer, dict) else line
         if not isinstance(message, str) or 'CAPSID_BENCH_DENSITY_V1 ' not in message:
             continue
         if first_ready is None:
             first_ready = ready
+        if stack == 'workerd':
+            require(len(control_ready) == count, 'business traffic preceded complete workerd startup')
         payload = message.split('CAPSID_BENCH_DENSITY_V1 ', 1)[1]
         try:
             value, end = decoder.raw_decode(payload)
@@ -120,6 +140,8 @@ def validate_density_conditioning(archive, key, row, verdict, protocol):
     require(records == len(requests) and counts == row['requestsPerWorker'], 'business logs disagree with responses and coverage')
     if stack == 'capsid':
         require(ready == first_ready == count, 'all READY events must precede the first business request')
+    else:
+        require(len(control_ready) == count, 'missing complete workerd control-FD readiness events')
     ready_processes = row.get('readyProcesses')
     require(isinstance(ready_processes, list) and ready_processes, 'missing pinned readiness membership')
     members = {identity(item) for item in ready_processes}

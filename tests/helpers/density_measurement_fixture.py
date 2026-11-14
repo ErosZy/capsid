@@ -39,12 +39,15 @@ def synthetic_density(root, directory, stack, size, phase, count, *, probe_index
                   phase=phase, count=count, ports=ports, nonce=nonce,
                   mode='managed' if stack=='capsid' else 'workerd',
                   configuredParallelRequests=64, warmupConcurrencyLimit=concurrency)
+    if stack == 'workerd':
+        launch['command'].append('--control-fd=1')
     write(root/directory/'launch.json', encoded(launch))
     if source is None:
         source = "export default { fetch() { return new Response('synthetic fixture only'); } };\n"
     wrapper = 'runtime/apps/orders/v1/bundle.mjs' if stack=='capsid' else 'runtime/bundle.mjs'
     write(root/directory/wrapper, instrument_fixture(source, nonce).encode())
-    logs = [json.dumps(dict(event='worker_ready',pid=p['pid'])) for p in ready[1:]] if stack=='capsid' else []
+    logs = ([json.dumps(dict(event='worker_ready',pid=p['pid'])) for p in ready[1:]] if stack=='capsid'
+            else [json.dumps(dict(event='listen',socket=f's{i}',port=port)) for i,port in enumerate(ports)])
     requests, barriers, signals = [], [], []
     body_sha = hashlib.sha256(b'{"status":"ok","total":2039,"count":16}').hexdigest()
     workers = [dict(pid=p['pid'],start=p['start']) for p in ready[1:]]
@@ -81,4 +84,6 @@ def synthetic_density(root, directory, stack, size, phase, count, *, probe_index
                pssSamples=[copy.deepcopy(sample),copy.deepcopy(sample)],readyProcesses=ready,
                requestsPerWorker={worker:target for worker in worker_ids},probeDirectory=directory,
                cleanup=cleanup,correctness=verdict,ports=ports,limit='cap')
+    if stack == 'workerd':
+        row['readiness'] = dict(method='workerd-control-listen-v1',sockets=count,beforeTraffic=True,deadlineSeconds=120)
     return row, verdict

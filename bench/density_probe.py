@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 
-from density_control import CounterLog, Coverage, MARKER
+from density_control import CounterLog, Coverage, MARKER, WorkerdReadyLog
 from measurement_runtime import OwnedProcess, ProbeError, stable_pss
 
 # gen-cold-start-apps.py's frozen seed=7 response. Check the generated app
@@ -197,11 +197,14 @@ class DensityProbe:
         config += [f'const w{i} :Workerd.Worker = (compatibilityDate = "2026-08-20", '
                    'modules = [(name = "main", esModule = embed "bundle.mjs")]);' for i in range(count)]
         (folder / "workerd.capnp").write_text("\n".join(config) + "\n", encoding="utf-8")
-        return [str(self.workerd), "serve", str(folder / "workerd.capnp")]
+        return [str(self.workerd), "serve", str(folder / "workerd.capnp"), "--control-fd=1"]
 
-    def wait_ready(self, tree, folder, stack, ports):
+    def wait_ready(self, tree, folder, stack, ports, *, control_log=None):
         deadline = time.monotonic() + self.startup_timeout
         deployed = stack != "capsid"
+        if stack == "workerd" and control_log is None:
+            raise ProbeError("readiness-protocol", "workerd requires its owned startup control log")
+        control = WorkerdReadyLog(control_log, ports) if stack == "workerd" else None
         while time.monotonic() < deadline:
             if not tree.alive():
                 raise ProbeError("process-exited", "density serving process exited before readiness")
@@ -218,8 +221,13 @@ class DensityProbe:
                 else:
                     time.sleep(.05)
                     continue
-            if deployed and tree.listeners_owned(ports):
-                return
+            # workerd binds sockets before initializing services. Its control-FD
+            # listen events occur only after that initialization, without an HTTP
+            # request or prewarming. Keep the same absolute startup deadline.
+            if deployed and (control is None or control.poll()) and tree.listeners_owned(ports):
+                return ({"method": "workerd-control-listen-v1", "sockets": len(ports),
+                         "beforeTraffic": True, "deadlineSeconds": self.startup_timeout}
+                        if control is not None else None)
             time.sleep(.05)
         raise ProbeError("readiness-timeout", "density pool did not become ready within its deadline")
 
@@ -312,7 +320,7 @@ class DensityProbe:
                 try:
                     release_ports()
                     tree = OwnedProcess(["taskset", "-c", self.cpuset, *argv], stdout=logs)
-                    self.wait_ready(tree, folder, stack, ports)
+                    readiness = self.wait_ready(tree, folder, stack, ports, control_log=archive / "stderr.log")
                     members = tree.pin_members()
                     if len(members) < (count + 1 if stack == "capsid" else 1):
                         raise ProbeError("pool-incomplete", "not all managed worker processes are observable")
@@ -326,7 +334,7 @@ class DensityProbe:
                     result = {"stack": stack, "size": size, "phase": phase, "count": count, "status": "ok",
                               "unit": "workers" if stack == "capsid" else "cells", "finalVerification": final,
                               "pss_readings_kb": sampled["pss_readings_kb"], "pssSamples": sampled["samples"],
-                              "readyProcesses": [asdict(p) for p in members.values()],
+                              "readyProcesses": [asdict(p) for p in members.values()], "readiness": readiness,
                               "requestsPerWorker": coverage.counts, "correctness": correctness,
                               "probeDirectory": label}
                 except BaseException as exc:

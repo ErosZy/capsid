@@ -225,7 +225,12 @@ work; controller tests and restricted smoke do not qualify a performance point.
   not evidence of graceful product shutdown. Readiness requires real application
   readiness (e.g. celld
   accepts TCP before the app exists — a lesson recorded here after a
-  503 storm produced flat lines).
+  503 storm produced flat lines). workerd also binds sockets before building
+  its services. Its `--control-fd=1` `listen` events must identify every
+  configured socket and exact port before the first business request; raw OS
+  LISTEN ownership alone is insufficient. The same absolute 120-second startup
+  deadline applies. No HTTP request, prewarming, fixed sleep or larger request
+  deadline substitutes for this control-channel readiness proof.
 
 `density-lane.sh` now execs `density-lane.py`, using injectable control and
 process/PSS helpers. Formal mode requires clean measured-build/session metadata

@@ -1,6 +1,7 @@
 """Injectable density search and per-worker coverage, shared by real lanes/tests."""
 import json
 import math
+from pathlib import Path
 import time
 
 from measurement_runtime import PortAllocator, ProbeError
@@ -34,6 +35,49 @@ class Coverage:
                              expectedWorkers=self.workers, minimum=minimum, observed=self.counts)
         if sum(self.counts.values()) != responses:
             raise ProbeError("coverage-count", "worker request counters disagree with validated responses")
+
+
+class WorkerdReadyLog:
+    """Bounded, incremental workerd control-FD events, not business requests."""
+    def __init__(self, path, ports):
+        if (not ports or len(set(ports)) != len(ports) or
+                any(type(port) is not int or not 0 < port < 65536 for port in ports)):
+            raise ProbeError("readiness-protocol", "unique positive workerd ports are required")
+        self.path = Path(path)
+        self.expected = {f"s{i}": port for i, port in enumerate(ports)}
+        self.seen, self.offset, self.pending = {}, 0, b""
+        self.maximum_bytes = max(4096, 512 * len(ports))
+
+    def poll(self):
+        def fields(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise ProbeError("readiness-format", "duplicate workerd control field")
+                value[key] = item
+            return value
+
+        with self.path.open("rb") as stream:
+            stream.seek(self.offset)
+            data = stream.read(self.maximum_bytes - self.offset + 1)
+            self.offset = stream.tell()
+        if self.offset > self.maximum_bytes:
+            raise ProbeError("readiness-limit", "workerd startup control log exceeds its bound")
+        self.pending += data
+        lines = self.pending.split(b"\n")
+        self.pending = lines.pop()
+        for raw in lines:
+            try:
+                value = json.loads(raw, object_pairs_hook=fields)
+            except (ValueError, UnicodeError) as exc:
+                raise ProbeError("readiness-format", "malformed workerd control event") from exc
+            if (not isinstance(value, dict) or set(value) != {"event", "socket", "port"} or
+                    value["event"] != "listen" or not isinstance(value["socket"], str) or
+                    value["socket"] not in self.expected or type(value["port"]) is not int or
+                    value["port"] != self.expected[value["socket"]] or value["socket"] in self.seen):
+                raise ProbeError("readiness-identity", "unexpected, repeated or wrong-port workerd listen event")
+            self.seen[value["socket"]] = value["port"]
+        return not self.pending and self.seen == self.expected
 
 
 class CounterLog:
