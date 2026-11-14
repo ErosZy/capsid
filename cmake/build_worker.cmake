@@ -98,6 +98,7 @@ if(CAPSID_BUILD_WORKER)
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/src/*"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/tests/fixtures/*"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/wamr/*"
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/miniz/*"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/libwebsockets/include/*"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/libwebsockets/lib/*"
     )

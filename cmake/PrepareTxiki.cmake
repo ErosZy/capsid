@@ -12,7 +12,7 @@ file(COPY
 file(COPY "${CAPSID_VENDOR_SOURCE}/src" DESTINATION "${CAPSID_VENDOR_OVERLAY}")
 file(COPY "${CAPSID_VENDOR_SOURCE}/tests/fixtures" DESTINATION "${CAPSID_VENDOR_OVERLAY}/tests")
 # Dependencies are mostly immutable and can stay symlinked. libwebsockets,
-# WAMR, quickjs, and mbedtls are patched by the restricted runtime overlay,
+# WAMR, quickjs, mbedtls, and miniz are patched by the restricted runtime overlay,
 # however, so they need copy-on-write storage. Patching through a symlink
 # would either fail or silently dirty the vendor submodule.
 file(MAKE_DIRECTORY "${CAPSID_VENDOR_OVERLAY}/deps")
@@ -23,7 +23,8 @@ foreach(CAPSID_VENDOR_DEP IN LISTS CAPSID_VENDOR_DEPS)
     if(NOT CAPSID_VENDOR_DEP STREQUAL "libwebsockets"
        AND NOT CAPSID_VENDOR_DEP STREQUAL "wamr"
        AND NOT CAPSID_VENDOR_DEP STREQUAL "quickjs"
-       AND NOT CAPSID_VENDOR_DEP STREQUAL "mbedtls")
+       AND NOT CAPSID_VENDOR_DEP STREQUAL "mbedtls"
+       AND NOT CAPSID_VENDOR_DEP STREQUAL "miniz")
         if(WIN32)
             # Windows without Developer Mode cannot create symlinks, and
             # CMake's COPY_ON_ERROR fallback does not populate directories;
@@ -43,7 +44,7 @@ foreach(CAPSID_VENDOR_DEP IN LISTS CAPSID_VENDOR_DEPS)
     endif()
 endforeach()
 
-# WAMR, quickjs, and mbedtls are copied as a unit because patches may span
+# WAMR, quickjs, mbedtls, and miniz are copied as a unit because patches may span
 # their loaders, runtimes, and public headers over time. Keeping the whole
 # dependency private to the overlay also makes vendor-clean checks
 # unambiguous.
@@ -51,6 +52,7 @@ file(COPY
     "${CAPSID_VENDOR_SOURCE}/deps/wamr"
     "${CAPSID_VENDOR_SOURCE}/deps/quickjs"
     "${CAPSID_VENDOR_SOURCE}/deps/mbedtls"
+    "${CAPSID_VENDOR_SOURCE}/deps/miniz"
     DESTINATION "${CAPSID_VENDOR_OVERLAY}/deps"
 )
 

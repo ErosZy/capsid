@@ -45,6 +45,12 @@ configure_file(
 
 get_filename_component(
     CAPSID_REAL_OVERLAY "${CAPSID_TXIKI_OVERLAY_STAMP}" DIRECTORY)
+# The gzip patch changes miniz. Its overlay must own the dependency instead
+# of patching a link into the immutable vendor checkout on POSIX platforms.
+if(NOT IS_DIRECTORY "${CAPSID_REAL_OVERLAY}/deps/miniz"
+   OR IS_SYMLINK "${CAPSID_REAL_OVERLAY}/deps/miniz")
+    message(FATAL_ERROR "patched miniz overlay requires private copy-on-write storage")
+endif()
 set(CAPSID_TAMPERED_OVERLAY
     "${CAPSID_TEST_WORK_DIR}/tampered-overlay")
 file(REMOVE_RECURSE "${CAPSID_TAMPERED_OVERLAY}")

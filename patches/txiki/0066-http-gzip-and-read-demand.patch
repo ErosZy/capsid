@@ -597,3 +597,21 @@
          };
  
          client.oncomplete = (error, reason) => {
+diff --git a/deps/miniz/miniz.c b/deps/miniz/miniz.c
+--- a/deps/miniz/miniz.c
++++ b/deps/miniz/miniz.c
+@@ -2788,6 +2788,14 @@
+                         }
+                         continue;
+                     }
++                    else if (dist == 1)
++                    {
++                        /* A distance-one match repeats the preceding byte.
++                           The boundary/wrap path above remains unchanged. */
++                        TINFL_MEMSET(pOut_buf_cur, *pSrc, counter);
++                        pOut_buf_cur += counter;
++                        continue;
++                    }
+ #if MINIZ_USE_UNALIGNED_LOADS_AND_STORES
+                     else if ((counter >= 9) && (counter <= dist))
+                     {

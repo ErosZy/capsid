@@ -57,6 +57,8 @@ set(CAPSID_REQUIRED_DEPENDENCIES
     "${CAPSID_TXIKI_VENDOR}/src/js/polyfills/wasm.js"
     "${CAPSID_TXIKI_VENDOR}/tests/fixtures/hello.txt"
     "${CAPSID_TXIKI_VENDOR}/deps/wamr/core/iwasm/interpreter/wasm_loader.c"
+    "${CAPSID_TXIKI_VENDOR}/deps/miniz/miniz.c"
+    "${CAPSID_TXIKI_VENDOR}/deps/miniz/miniz.h"
     "${CAPSID_TXIKI_VENDOR}/deps/libwebsockets/include/libwebsockets/lws-network-helper.h"
     ${CAPSID_TXIKI_PATCHES})
 if(CAPSID_WPT_MANIFEST)
