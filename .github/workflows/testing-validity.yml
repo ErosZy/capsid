@@ -1,1112 +1,134 @@
-name: Testing validity
-
-on:
-  pull_request:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
-  workflow_call:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: testing-validity-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  release-wpt-and-delegated-sandbox:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Set up Deno
-        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
-        with:
-          deno-version: v2.x
-
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          # Hosted probes verified this Ubuntu mirror while the ubuntu.com
-          # domains failed DNS. Preserve suites, components and Signed-By.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic
-          /usr/bin/openssl version
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-
-      - name: Require actual Linux perf counters for evidence controls
-        run: python3 -B tools/setup-hosted-perf.py
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          /usr/bin/python3.12 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Check out the manifest-pinned WPT revision
-        env:
-          WPT_DIRECTORY: ${{ runner.temp }}/wpt
-        run: |
-          set -euo pipefail
-          repository=$(node -p \
-            "require('./tests/wpt/manifest.json').repository")
-          commit=$(node -p \
-            "require('./tests/wpt/manifest.json').commit")
-          git init "${WPT_DIRECTORY}"
-          git -C "${WPT_DIRECTORY}" remote add origin "${repository}"
-          git -C "${WPT_DIRECTORY}" fetch --depth=1 origin "${commit}"
-          git -C "${WPT_DIRECTORY}" checkout --detach FETCH_HEAD
-          test "$(git -C "${WPT_DIRECTORY}" rev-parse HEAD)" = "${commit}"
-
-      # capsid-bytecode-compile and the Host trust chain require OpenSSL
-      # >= 3.5. ubuntu-24.04 supplies 3.0, so the Release build must use the
-      # same pinned provider source as the sanitizer Host build.
-      - name: Build OpenSSL 3.5 for Release
-        run: |
-          set -euo pipefail
-          # Built in the runner temp dir: extracting the tarball inside the
-          # workspace dirties the checkout and trips the Release
-          # clean-worktree identity gate.
-          cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider openssl --source "$PWD" | tee "${evidence}/openssl-source.json"
-          ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm
-          make -j2
-          sudo make install_sw
-
-      - name: Build c-ares 1.34.5 for Release
-        run: |
-          set -euo pipefail
-          cd "${RUNNER_TEMP}"
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          curl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013
-          echo "cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz" | sha256sum -c -
-          tar xzf capsid-cares.tar.gz
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider cares --source "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" | tee "${evidence}/cares-source.json"
-          cmake -S "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" -B "${RUNNER_TEMP}/capsid-cares-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \
-            -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF
-          cmake --build "${RUNNER_TEMP}/capsid-cares-build" --parallel 2 --verbose
-          sudo cmake --install "${RUNNER_TEMP}/capsid-cares-build"
-          cp "${RUNNER_TEMP}/capsid-cares-build/compile_commands.json" "${evidence}/cares-compile-commands.json"
-
-      - name: Configure Release/LTO with WPT and benchmarks
-        env:
-          WPT_DIRECTORY: ${{ runner.temp }}/wpt
-        run: |
-          cmake -S . -B build-validity -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_USE_MIMALLOC=OFF \
-            -DCAPSID_BUILD_BENCHMARKS=ON \
-            -DCAPSID_GENERATE_LINK_MAP=ON \
-            -DCMAKE_PREFIX_PATH=/opt/openssl35 \
-            -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include \
-            -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \
-            -DCAPSID_SANDBOX_PROFILE=production \
-            -DCAPSID_WPT_ROOT="${WPT_DIRECTORY}"
-
-      - name: Build
-        run: cmake --build build-validity --parallel 2
-
-      - name: Require complete workerd WebSocket comparison
-        run: |
-          node tools/run-workerd-ws-gate.mjs \
-            build-validity build-validity/workerd-ws-evidence
-
-      - name: Run the complete ordinary-host matrix
-        id: ordinary_host
-        # The raw step retains its failure outcome and exit code. The next
-        # mandatory acceptance step permits only the exact locked profile.
-        continue-on-error: true
-        run: |
-          rm -f build-validity/ordinary-host-exit-code.txt
-          ctest --test-dir build-validity --no-tests=error --show-only=json-v1 \
-            > build-validity/ordinary-host-registration.json
-          ordinary_ctest_status=0
-          ctest --test-dir build-validity \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit ordinary-host-junit.xml \
-            --parallel 2 || ordinary_ctest_status=$?
-          printf '%s\n' "${ordinary_ctest_status}" > build-validity/ordinary-host-exit-code.txt
-          exit "${ordinary_ctest_status}"
-        # The worker_package_contents / smoke / reproducibility gates run in
-        # this full matrix (spec §12.3/§12.4): the archive is built, the
-        # package smoke consumes it, and a second fresh build must reproduce
-        # the identity and manifest.
-
-      - name: Audit the versioned workerd profile without changing standard results
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          evidence=build-validity/workerd-wpt-profile-evidence
-          mkdir -p "${evidence}"
-          cp build-validity/Testing/Temporary/LastTest.log "${evidence}/ordinary-LastTest.log"
-          cp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
-          cp build-validity/ordinary-host-exit-code.txt "${evidence}/ordinary-exit-code.txt"
-          node tools/run_workerd_wpt_context.mjs \
-            --build build-validity \
-            --registration build-validity/ordinary-host-registration.json \
-            --output "${evidence}/context"
-          node tools/workerd-wpt-acceptance.mjs audit \
-            --ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
-            --ordinary-outcome '${{ steps.ordinary_host.outcome }}' \
-            --last-test "${evidence}/ordinary-LastTest.log" \
-            --junit "${evidence}/ordinary-junit.xml" \
-            --registration build-validity/ordinary-host-registration.json \
-            --gate build-validity/workerd-ws-evidence \
-            --context "${evidence}/context/context.json" \
-            --build build-validity --wpt-root "${RUNNER_TEMP}/wpt" \
-            --output "${evidence}/profile-audit.json" \
-            --acceptance-output "${evidence}/compatibility-acceptance.json"
-
-      # The ordinary matrix runs unprivileged, so the sandbox tests skip
-      # (exit 77: namespaces/cgroups need privileges). Run them again under
-      # root so they execute instead of skipping — cgroup v2 and network
-      # namespace additionally run inside the delegated-sandbox container
-      # below, this step covers the native namespace probe.
-      - name: Run the privileged sandbox matrix
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          # Binding §7.9: a sandbox test that skips (77) under root is a
-          # failure in the Hosted Validity workflow — the delegated
-          # environment must actually execute every profile probe.
-          sudo ctest --test-dir build-validity \
-            --no-tests=error \
-            --output-on-failure \
-            -L sandbox 2>&1 | tee build-validity/sandbox-run.log
-          if grep -q "Skipped" build-validity/sandbox-run.log; then
-            echo "::error::a sandbox test skipped under root; Binding §7.9 "\
-                 "requires every probe to execute"
-            exit 1
-          fi
-
-      - name: Record package evidence (build ID, compatibility ID, package and SBOM hashes)
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          archive=$(ls -t build-validity/capsid-*.tar.gz | head -1)
-          test -f "${archive}"
-          package_sha256=$(sha256sum "${archive}" | awk '{print $1}')
-          build_info=build-validity/generated/build-info.txt
-          build_id=$(sed -n 's/^buildId=//p' "${build_info}")
-          compatibility_id=$(sed -n 's/^compatibilityId=//p' "${build_info}")
-          test -n "${build_id}"
-          test -n "${compatibility_id}"
-          staging=$(mktemp -d)
-          tar xzf "${archive}" -C "${staging}"
-          sbom=$(find "${staging}" -name SBOM.spdx.json -print -quit)
-          test -n "${sbom}"
-          sbom_sha256=$(sha256sum "${sbom}" | awk '{print $1}')
-          {
-            printf 'build_id=%s\n' "${build_id}"
-            printf 'compatibility_id=%s\n' "${compatibility_id}"
-            printf 'package_archive=%s\n' "$(basename "${archive}")"
-            printf 'package_sha256=%s\n' "${package_sha256}"
-            printf 'sbom_sha256=%s\n' "${sbom_sha256}"
-          } > build-validity/package-evidence.txt
-          cat build-validity/package-evidence.txt
-
-      - name: Generate txiki.js upgrade gate report
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          evidence=build-validity/workerd-wpt-profile-evidence
-          cmp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
-          python3 tools/generate-txiki-upgrade-report.py \
-            --source-root . \
-            --build-dir build-validity \
-            --junit "${evidence}/ordinary-junit.xml" \
-            --baseline docs/txiki-upgrade-baseline.json \
-            --node-executable "$(node -p 'process.execPath')" \
-            --workerd-python "${CAPSID_WS_INTEROP_PYTHON}" \
-            --workerd-acceptance "${evidence}/compatibility-acceptance.json" \
-            --workerd-last-test "${evidence}/ordinary-LastTest.log" \
-            --workerd-registration build-validity/ordinary-host-registration.json \
-            --workerd-gate build-validity/workerd-ws-evidence \
-            --workerd-context "${evidence}/context/context.json" \
-            --workerd-wpt-root "${RUNNER_TEMP}/wpt" \
-            --workerd-ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
-            --output-json build-validity/txiki-upgrade-report.json \
-            --output-md build-validity/txiki-upgrade-report.md
-
-      - name: Require delegated cgroup v2 and network namespace passes
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          docker run --rm \
-            --privileged \
-            --cgroupns=private \
-            -e CAPSID_DELEGATED_SANDBOX_CONTAINER=1 \
-            -v "${GITHUB_WORKSPACE}:/repo:ro" \
-            -v "${GITHUB_WORKSPACE}/build-validity:/build:ro" \
-            --entrypoint /bin/bash \
-            ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 \
-            /repo/scripts/run-delegated-sandbox-tests.sh /build
-
-      - name: Archive workerd execution evidence
-        if: always()
-        run: |
-          set -euo pipefail
-          if [ -d build-validity/workerd-ws-evidence ]; then
-            tar -czf build-validity/workerd-ws-evidence.tar.gz -C build-validity workerd-ws-evidence
-            sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256
-          fi
-
-      - name: Save hosted Release evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: release-wpt-hosted-evidence
-          if-no-files-found: error
-          path: |
-            build-validity/ordinary-host-junit.xml
-            build-validity/ordinary-host-registration.json
-            build-validity/ordinary-host-exit-code.txt
-            build-validity/workerd-wpt-profile-evidence/
-            build-validity/workerd-ws-evidence.tar.gz
-            build-validity/workerd-ws-evidence.tar.gz.sha256
-            build-validity/bench/build-metadata.json
-            build-validity/txiki-upgrade-report.json
-            build-validity/txiki-upgrade-report.md
-            build-validity/package-evidence.txt
-            build-perf-prerequisite/evidence/
-            build-validity/generated/build-info.txt
-            build-validity/capsid-*.tar.gz
-            ${{ runner.temp }}/capsid-native-provider-evidence/
-
-  sanitizers:
-    runs-on: ubuntu-24.04
-    # The measured TSan matrix alone takes over 60 minutes, before provider
-    # and product builds. Keep individual CTest timeouts unchanged.
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        # The packaging gates (worker_package_*) are the Release row's
-        # responsibility (§12.5): under sanitizers the instrumented worker
-        # links a dynamic libasan/libtsan, which the package smoke's
-        # undeclared-dependency scan would reject, and the §12.3 second
-        # fresh build would duplicate a full sanitizer build.
-        include:
-          - name: asan
-            cmake_flag: CAPSID_ENABLE_ASAN
-            build_host: 1
-            ctest_parallel: 2
-            ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$
-          - name: ubsan
-            cmake_flag: CAPSID_ENABLE_UBSAN
-            build_host: 1
-            ctest_parallel: 2
-            ctest_exclude: '^(wpt_conformance_not_configured|worker_package_.*)$'
-          - name: tsan
-            cmake_flag: CAPSID_ENABLE_TSAN
-            compiler: clang
-            build_host: 1
-            # TSan's shadow allocator runs out of mmap space under
-            # -j2 (observed: "ThreadSanitizer: out of memory ... Failed
-            # to mmap" on the hosted runner); the matrix runs serially.
-            ctest_parallel: 1
-            # Clang and GCC select the existing TSan test-driver wait
-            # scale. Run all native managed checks; an unsupported finite
-            # RLIMIT_AS probe reports its explicit CTest skip code.
-            ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Install build and locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          # Match the Release dependency transport and reject stale indexes.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
-          # included, arch-suffixed) that the clang-based tsan matrix entry
-          # links against.
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv linux-tools-generic
-          /usr/bin/openssl version
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-
-      - name: Require actual Linux perf counters for evidence controls
-        run: python3 -B tools/setup-hosted-perf.py
-
-      - name: Install locked independent clients and reference for sanitizers
-        run: |
-          set -euo pipefail
-          /usr/bin/python3.12 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker-side bytecode compiler and the Host both require OpenSSL
-      # >= 3.5. Every sanitizer entry therefore provisions the same pinned
-      # provider, even when that matrix entry does not build capsid-host.
-      - name: Build OpenSSL 3.5 for sanitizer targets
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            asan) sanitizer=address ;;
-            ubsan) sanitizer=undefined ;;
-            tsan) sanitizer=thread ;;
-            *) echo "Unknown sanitizer matrix entry" >&2; exit 1 ;;
-          esac
-          compiler=cc
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler=clang
-          fi
-          sanitizer_flags="-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all"
-          # Built in the runner temp dir: extracting the tarball inside the
-          # workspace dirties the checkout and trips the build-identity
-          # clean-worktree gate.
-          cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider openssl --source "$PWD" | tee "${evidence}/openssl-source.json"
-          # Match the Capsid compiler/runtime and instrument the provider's C
-          # implementation, including paths normally implemented in assembly.
-          CC="${compiler}" CFLAGS="${sanitizer_flags}" CXXFLAGS="${sanitizer_flags}" LDFLAGS="-fsanitize=${sanitizer}" \
-            ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm
-          make -j2
-          sudo make install_sw
-
-      - name: Build c-ares 1.34.5 for sanitizer targets
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            asan) sanitizer=address ;;
-            ubsan) sanitizer=undefined ;;
-            tsan) sanitizer=thread ;;
-            *) echo "Unknown sanitizer matrix entry" >&2; exit 1 ;;
-          esac
-          compiler=cc
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler=clang
-          fi
-          sanitizer_flags="-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all"
-          cd "${RUNNER_TEMP}"
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          curl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013
-          echo "cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz" | sha256sum -c -
-          tar xzf capsid-cares.tar.gz
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider cares --source "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" | tee "${evidence}/cares-source.json"
-          cmake -S "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" -B "${RUNNER_TEMP}/capsid-cares-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER="${compiler}" \
-            -DCMAKE_C_FLAGS="${sanitizer_flags}" \
-            -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${sanitizer}" \
-            -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \
-            -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF
-          cmake --build "${RUNNER_TEMP}/capsid-cares-build" --parallel 2 --verbose
-          sudo cmake --install "${RUNNER_TEMP}/capsid-cares-build"
-          cp "${RUNNER_TEMP}/capsid-cares-build/compile_commands.json" "${evidence}/cares-compile-commands.json"
-
-      - name: Configure ${{ matrix.name }}
-        run: |
-          compiler_args=()
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler_args=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
-          fi
-          host_args=(-DCMAKE_PREFIX_PATH=/opt/openssl35 -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include)
-          if [ "${{ matrix.build_host }}" = "1" ]; then
-            host_args+=(-DCAPSID_BUILD_HOST=ON)
-          fi
-          cmake -S . -B "build-${{ matrix.name }}" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -D${{ matrix.cmake_flag }}=ON \
-            -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \
-            -DCAPSID_SANDBOX_PROFILE=sanitizer \
-            -DCAPSID_USE_MIMALLOC=OFF \
-            -DCAPSID_BUILD_BENCHMARKS=ON \
-            "${compiler_args[@]}" "${host_args[@]}"
-
-      - name: Build ${{ matrix.name }}
-        run: |
-          cmake --build "build-${{ matrix.name }}" --parallel 2
-
-      - name: Record original ASan RSS results
-        id: asan_rss_raw
-        if: matrix.name == 'asan'
-        continue-on-error: true
-        env:
-          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: |
-          set -euo pipefail
-          rm -f build-asan/asan-rss-raw-exit-code.txt build-asan/asan-rss-raw-junit.xml build-asan/asan-rss-raw-LastTest.log
-          rm -f build-asan/asan-memory-registration.json build-asan/asan-memory-acceptance.json
-          rm -f build-asan/asan-memory-replacement-recursion.json build-asan/asan-memory-reclamation-idle.json
-          ctest --test-dir build-asan --no-tests=error --show-only=json-v1 > build-asan/asan-memory-registration.json
-          asan_rss_status=0
-          ctest --test-dir build-asan \
-            --no-tests=error --output-on-failure \
-            --output-junit asan-rss-raw-junit.xml --parallel 1 \
-            -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || asan_rss_status=$?
-          printf '%s\n' "${asan_rss_status}" > build-asan/asan-rss-raw-exit-code.txt
-          cp build-asan/Testing/Temporary/LastTest.log build-asan/asan-rss-raw-LastTest.log
-          exit "${asan_rss_status}"
-
-      - name: Record original TSan RSS results
-        id: tsan_rss_raw
-        if: matrix.name == 'tsan'
-        continue-on-error: true
-        env:
-          TSAN_OPTIONS: halt_on_error=1:exitcode=66
-        run: |
-          set -euo pipefail
-          rm -f build-tsan/tsan-rss-raw-exit-code.txt build-tsan/tsan-rss-raw-junit.xml build-tsan/tsan-rss-raw-LastTest.log
-          rm -f build-tsan/tsan-memory-registration.json build-tsan/tsan-memory-acceptance.json
-          rm -f build-tsan/tsan-memory-replacement-recursion.json build-tsan/tsan-memory-reclamation-idle.json
-          ctest --test-dir build-tsan --no-tests=error --show-only=json-v1 > build-tsan/tsan-memory-registration.json
-          tsan_rss_status=0
-          ctest --test-dir build-tsan \
-            --no-tests=error --output-on-failure \
-            --output-junit tsan-rss-raw-junit.xml --parallel 1 \
-            -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || tsan_rss_status=$?
-          printf '%s\n' "${tsan_rss_status}" > build-tsan/tsan-rss-raw-exit-code.txt
-          cp build-tsan/Testing/Temporary/LastTest.log build-tsan/tsan-rss-raw-LastTest.log
-          exit "${tsan_rss_status}"
-
-      - name: Run ${{ matrix.name }} matrix
-        env:
-          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-          TSAN_OPTIONS: halt_on_error=1
-          CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-${{ matrix.name }}/matrix-case-reports
-        run: |
-          mkdir -p "${CAPSID_WS_REPORT_DIR}"
-          ctest --test-dir "build-${{ matrix.name }}" \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit "${{ matrix.name }}-junit.xml" \
-            --parallel ${{ matrix.ctest_parallel }} \
-            -E '${{ matrix.ctest_exclude }}'
-
-      - name: Require separate ASan memory acceptance
-        if: ${{ !cancelled() && matrix.name == 'asan' && steps.asan_rss_raw.outcome != 'skipped' }}
-        run: |
-          python3 -B tools/asan-memory-acceptance.py \
-            --registration build-asan/asan-memory-registration.json \
-            --raw-junit build-asan/asan-rss-raw-junit.xml \
-            --raw-last-test build-asan/asan-rss-raw-LastTest.log \
-            --raw-exit-code build-asan/asan-rss-raw-exit-code.txt \
-            --raw-outcome '${{ steps.asan_rss_raw.outcome }}' \
-            --matrix-junit build-asan/asan-junit.xml \
-            --resource-report-root build-asan \
-            --output build-asan/asan-memory-acceptance.json
-
-      - name: Require separate TSan memory acceptance
-        if: ${{ !cancelled() && matrix.name == 'tsan' && steps.tsan_rss_raw.outcome != 'skipped' }}
-        run: |
-          python3 -B tools/asan-memory-acceptance.py --sanitizer tsan \
-            --registration build-tsan/tsan-memory-registration.json \
-            --raw-junit build-tsan/tsan-rss-raw-junit.xml \
-            --raw-last-test build-tsan/tsan-rss-raw-LastTest.log \
-            --raw-exit-code build-tsan/tsan-rss-raw-exit-code.txt \
-            --raw-outcome '${{ steps.tsan_rss_raw.outcome }}' \
-            --matrix-junit build-tsan/tsan-junit.xml \
-            --resource-report-root build-tsan \
-            --output build-tsan/tsan-memory-acceptance.json
-
-      - name: Archive sanitizer driver reports preserving original names
-        if: always()
-        env:
-          REPORT_DIRECTORY: build-${{ matrix.name }}/matrix-case-reports
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib,json,os,tarfile
-          report=Path(os.environ['REPORT_DIRECTORY'])
-          report.parent.mkdir(parents=True,exist_ok=True)
-          archive=report.parent/(report.name+'.tar.gz')
-          with tarfile.open(archive,'w:gz',dereference=False) as output:
-              if report.exists():output.add(report,arcname=report.name)
-          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
-          archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
-          print(json.dumps(dict(complete=True,sourceDirectory=str(report),sourceExists=report.exists(),
-              archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))
-          PY
-
-      - name: Save sanitizer evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: ${{ matrix.name }}-hosted-evidence
-          if-no-files-found: error
-          path: |
-            build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
-            build-${{ matrix.name }}/matrix-case-reports.tar.gz
-            build-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256
-            build-${{ matrix.name }}/Testing/Temporary/LastTest.log
-            build-perf-prerequisite/evidence/
-            build-asan/asan-rss-raw-junit.xml
-            build-asan/asan-rss-raw-LastTest.log
-            build-asan/asan-rss-raw-exit-code.txt
-            build-asan/asan-memory-*.json
-            build-tsan/tsan-rss-raw-junit.xml
-            build-tsan/tsan-rss-raw-LastTest.log
-            build-tsan/tsan-rss-raw-exit-code.txt
-            build-tsan/tsan-memory-*.json
-            ${{ runner.temp }}/capsid-native-provider-evidence/
-
-  fuzz:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Install Clang and Ninja
-        run: |
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
-
-      - name: Configure fuzz harnesses
-        env:
-          CC: clang
-          CXX: clang++
-        run: |
-          cmake -S . -B build-fuzz -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCAPSID_BUILD_WORKER=OFF \
-            -DCAPSID_BUILD_FUZZERS=ON \
-            -DCAPSID_USE_MIMALLOC=OFF
-
-      - name: Build fuzz harnesses
-        run: cmake --build build-fuzz --parallel 2
-
-      - name: Run bounded corpus gates
-        run: |
-          ctest --test-dir build-fuzz \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit fuzz-junit.xml \
-            -L fuzz
-
-      - name: Save fuzz evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: fuzz-hosted-evidence
-          if-no-files-found: error
-          path: build-fuzz/fuzz-junit.xml
-
-  posix-host-library:
-    runs-on: macos-15
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      # Keep the POSIX gate honest for the complete M1D Admin surface.  The
-      # transport and long-lived service are intentionally conditional on
-      # Boost, so relying on the runner image could silently skip their
-      # compilation (and miss Linux-only APIs in otherwise POSIX sources).
-      - name: Install macOS Host dependencies
-        run: brew install boost c-ares openssl@3.5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Configure distinct loopback peers for redirect contracts
-        run: |
-          set -euo pipefail
-          sudo ifconfig lo0 alias 127.0.0.2 netmask 255.255.255.255
-          node --input-type=module - <<'JS'
-          import assert from 'node:assert/strict';
-          import net from 'node:net';
-          import {once} from 'node:events';
-          const servers=[];
-          try {
-            let port=0;
-            for(const host of ['127.0.0.1','127.0.0.2']) {
-              const server=net.createServer(socket=>socket.end(host));servers.push(server);
-              server.listen({host,port});await once(server,'listening');
-              assert.equal(server.address().address,host);port=server.address().port;
-            }
-            for(const host of ['127.0.0.1','127.0.0.2']) {
-              const client=net.createConnection({host,port});let body='';
-              for await(const bytes of client)body+=bytes.toString();
-              assert.equal(body,host,'distinct loopback peer receives the actual connection');
-            }
-            console.log(JSON.stringify({complete:true,loopbackPeers:2,samePort:true,actualRoundTrips:2}));
-          } finally {await Promise.all(servers.map(server=>new Promise(resolve=>server.close(resolve))));}
-          JS
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          python3 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the macOS configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-
-      # §12.5 macOS row: Host units plus the non-strict worker contracts.
-      # Linux-only strict-sandbox and managed-suite tests are not registered
-      # on macOS (they SKIP by absence, never FAIL), and the §12.3 fresh
-      # second build is excluded here to keep the job inside its time budget
-      # (the Release job runs it on Linux).
-      - name: Configure macOS host library and worker contracts
-        run: |
-          set -euo pipefail
-          node_binary=$(node -p 'process.execPath')
-          cmake -S . -B build-macos \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_BUILD_WORKER=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_HOST_TEST_NODE="${node_binary}" \
-            -DCAPSID_NODE_EXECUTABLE="${node_binary}"
-
-      - name: Build macOS Host, Admin transport, and unit gates
-        run: |
-          cmake --build build-macos --parallel 2
-          # Named targets make a missing/quietly skipped Boost-backed Admin
-          # surface an explicit configuration failure.
-          cmake --build build-macos --parallel 2 --target \
-            capsid-host \
-            test-host-admin-api \
-            test-host-admin-http \
-            test-host-admin-service
-
-      - name: Run POSIX host-side matrix
-        run: |
-          ctest --test-dir build-macos \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit macos-junit.xml \
-            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
-
-      - name: Save macOS evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: macos-host-library-evidence
-          if-no-files-found: error
-          path: |
-            build-macos/macos-junit.xml
-            build-macos/Testing/Temporary/LastTest.log
-            build-macos/CMakeCache.txt
-
-  windows-host-library:
-    runs-on: windows-latest
-    # The measured serial Release matrix alone takes about 104 minutes.
-    # Allow dependency/build time without changing individual test budgets.
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Locate OpenSSL for WebSocket test certificates
-        shell: pwsh
-        run: |
-          $git_root = Split-Path (Split-Path (Get-Command git -ErrorAction Stop).Source)
-          $openssl_candidates = @(
-            (Join-Path $git_root 'mingw64/bin/openssl.exe'),
-            (Join-Path $git_root 'usr/bin/openssl.exe')
-          )
-          $openssl_fixture = $openssl_candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-          if (-not $openssl_fixture) { throw 'OpenSSL CLI for fixture certificates is missing' }
-          & $openssl_fixture version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          (Split-Path $openssl_fixture) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install locked independent WebSocket clients
-        shell: pwsh
-        run: |
-          $interop_root = Join-Path $env:RUNNER_TEMP 'capsid-ws-interop'
-          python tools/setup-ws-interop-python.py $interop_root
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "CAPSID_WS_INTEROP_PYTHON=$interop_root\Scripts\python.exe" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CAPSID_WS_INTEROP_NODE_PACKAGE=$interop_root\node-ws" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install the locked native Windows workerd reference
-        shell: pwsh
-        run: |
-          $reference_path = Join-Path $env:RUNNER_TEMP 'capsid-workerd-reference/workerd.exe'
-          node tools/workerd-reference.mjs install $reference_path
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "CAPSID_WORKERD_REF=$reference_path" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CAPSID_WORKERD_REQUIRED=1" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      # Ninja invokes `cl` via PATH, unlike the MSBuild generator that
-      # resolves the toolchain itself; without the VS developer
-      # environment CMake cannot find the MSVC compiler.
-      - name: Set up the MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (v1.13.0; default-branch commits carry no node_modules)
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the Windows configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-        shell: bash
-
-      # OpenSSL (static) and Boost.System/Asio (header-only) come from the
-      # runner's preinstalled vcpkg; the static triplet matches the /MT CRT
-      # policy pinned by the vendored txiki build. boost-asio is a separate
-      # port from boost-system (the Host data plane needs <boost/asio.hpp>).
-      - name: Install Windows build dependencies (vcpkg)
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
-        shell: pwsh
-
-      # §12.5 Windows row: Host units, non-strict worker contracts and the
-      # actual package contents/metadata/smoke/reproducibility gates.
-      # Platform-specific Linux tests retain their explicit registration or
-      # skip policy. Creating the Release archive alone does not validate it.
-      # Ninja keeps this single-config like every other job; the Visual
-      # Studio generator would default to Debug builds and require ctest
-      # -C <config>, which quietly "Not Run"s the whole matrix. Pin the
-      # compiler to cl: in a non-vcvars shell Ninja otherwise grabs mingw
-      # gcc off PATH, which cannot build the CRT/winsock port.
-      - name: Configure Windows host library and worker contracts
-        run: |
-          cmake -S . -B build-windows `
-            -G Ninja `
-            -DCMAKE_C_COMPILER=cl `
-            -DCMAKE_CXX_COMPILER=cl `
-            -DCMAKE_BUILD_TYPE=Release `
-              -DCAPSID_BUILD_HOST=ON `
-              -DCAPSID_BUILD_WORKER=ON `
-              -DCAPSID_STRICT_WARNINGS=ON `
-              -DCAPSID_USE_MIMALLOC=OFF `
-              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static
-        shell: pwsh
-
-      - name: Build Windows Host and worker contracts
-        shell: pwsh
-        run: |
-          # On failure, replay the build tail as ::error:: annotations so
-          # the actual compiler diagnostic is visible in the run summary
-          # (raw step logs need a signed-in viewer).
-          cmake --build build-windows --parallel 2 2>&1 | Tee-Object build-windows\build.log
-          if ($LASTEXITCODE -ne 0) {
-            # GitHub accepts only a small annotation set. Emit compiler and
-            # Ninja diagnostics first; annotating every normal tail line can
-            # exhaust that set before the actual error is reached.
-            Select-String -Path build-windows\build.log `
-              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
-              | Select-Object -First 20 `
-              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
-            Get-Content build-windows\build.log -Tail 60
-            exit 1
+{
+  "name": "Native v0.3.0 dependency-complete frozen three-lane qualification",
+  "on": {
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "${{ github.workflow }}-${{ github.ref }}",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "native-formal-performance": {
+      "name": "Native four-CPU formal measurements (not WPT conformance)",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 360,
+      "steps": [
+        {
+          "name": "Check out recursively pinned sources",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+            "submodules": "recursive",
+            "fetch-tags": true,
+            "persist-credentials": false
           }
-          # The named gate mirrors the macOS job: a quietly skipped
-          # Boost-backed Host surface would fail this step explicitly.
-          cmake --build build-windows --parallel 2 --target capsid-host 2>&1 | Tee-Object build-windows\build.log
-          if ($LASTEXITCODE -ne 0) {
-            Select-String -Path build-windows\build.log `
-              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
-              | Select-Object -First 20 `
-              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
-            Get-Content build-windows\build.log -Tail 60
-            exit 1
+        },
+        {
+          "name": "Require the native four-CPU measurement prerequisite before preparation",
+          "run": "python3 - <<'PY'\nimport os,platform\nassert platform.system()=='Linux' and 'microsoft' not in platform.release().lower()\nassert len(os.sched_getaffinity(0))>=4, 'the original formal protocol requires four available CPUs; no two-CPU fallback'\nprint({'nativeLinux':True,'availableCpus':sorted(os.sched_getaffinity(0))})\nPY\n"
+        },
+        {
+          "name": "Set up Node.js",
+          "uses": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "with": {
+            "node-version": "24.14.0"
           }
-
-      - name: Run the native Windows workerd compatibility gate
-        shell: pwsh
-        run: |
-          node tools/run-workerd-ws-gate.mjs build-windows build-windows/workerd-compatibility
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Run Windows host-side matrix
-        run: |
-          $evidence_root = (Resolve-Path build-windows).Path
-          $ctest_log = Join-Path $evidence_root 'ctest.log'
-          $junit_path = Join-Path $evidence_root 'windows-junit.xml'
-          ctest --test-dir build-windows `
-            --parallel 1 `
-            --no-tests=error `
-            --output-on-failure `
-            --output-junit $junit_path `
-            -E '^wpt_conformance_not_configured$' `
-            2>&1 | Tee-Object -FilePath $ctest_log
-          $ctest_exit = $LASTEXITCODE
-          if ($ctest_exit -ne 0) {
-            Select-String -Path $ctest_log `
-              -Pattern '(\*\*\*Failed|\*\*\*Timeout|The following tests FAILED|^FAIL:)' `
-              -Context 0,15 | Select-Object -First 40 | ForEach-Object { "::error::$_" }
-            Get-Content $ctest_log -Tail 120
-            exit $ctest_exit
+        },
+        {
+          "name": "Install and verify locked workerd reference",
+          "run": "set -euo pipefail\nreference=\"${RUNNER_TEMP}/capsid-workerd/workerd\"\nnode tools/workerd-reference.mjs install \"${reference}\"\nprintf 'CAPSID_WORKERD_REF=%s\\n' \"${reference}\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Set up Go",
+          "uses": "actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
+          "with": {
+            "go-version": "1.22.12"
           }
-        shell: pwsh
-
-      - name: Save Windows evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: windows-host-library-evidence
-          if-no-files-found: error
-          path: |
-            build-windows/windows-junit.xml
-            build-windows/ctest.log
-            build-windows/Testing/Temporary/LastTest.log
-            build-windows/workerd-compatibility/
-
-  hosted-evidence-index:
-    if: always()
-    needs:
-      - release-wpt-and-delegated-sandbox
-      - sanitizers
-      - fuzz
-      - posix-host-library
-      - windows-host-library
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    steps:
-      - name: Download all hosted evidence
-        continue-on-error: true
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          pattern: '*-evidence'
-          path: hosted-evidence/inputs
-
-      - name: Generate run and content index
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          set -euo pipefail
-          mkdir -p hosted-evidence/inputs
-          {
-            printf 'run_url=%s/%s/actions/runs/%s\n' \
-              "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
-            printf 'repository=%s\n' "${GITHUB_REPOSITORY}"
-            printf 'commit_sha=%s\n' "${GITHUB_SHA}"
-            printf 'ref=%s\n' "${GITHUB_REF}"
-            printf 'release=%s\n' "${RELEASE_RESULT}"
-            printf 'sanitizers=%s\n' "${SANITIZER_RESULT}"
-            printf 'fuzz=%s\n' "${FUZZ_RESULT}"
-            printf 'macos=%s\n' "${MACOS_RESULT}"
-            printf 'windows=%s\n' "${WINDOWS_RESULT}"
-          } > hosted-evidence/run.txt
-          # §12.5: the index also records the Release package identity —
-          # build ID, compatibility ID, package hash and SBOM hash — from
-          # the Release job's package-evidence.txt.
-          package_evidence=$(find hosted-evidence/inputs \
-            -name package-evidence.txt -print -quit)
-          if test -n "${package_evidence}"; then
-            cat "${package_evidence}" >> hosted-evidence/run.txt
-          fi
-          (
-            cd hosted-evidence
-            find inputs -type f -print0 |
-              sort -z |
-              xargs -0 -r sha256sum > sha256sums.txt
-            sha256sum sha256sums.txt |
-              awk '{print $1}' > evidence-tree.sha256
-          )
-
-      - name: Save hosted evidence index
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: hosted-evidence-index
-          if-no-files-found: error
-          path: |
-            hosted-evidence/run.txt
-            hosted-evidence/sha256sums.txt
-            hosted-evidence/evidence-tree.sha256
-
-      - name: Require every hosted job to pass
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          test "${RELEASE_RESULT}" = success
-          test "${SANITIZER_RESULT}" = success
-          test "${FUZZ_RESULT}" = success
-          test "${MACOS_RESULT}" = success
-          test "${WINDOWS_RESULT}" = success
+        },
+        {
+          "name": "Set up Deno",
+          "uses": "denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed",
+          "with": {
+            "deno-version": "v2.9.8"
+          }
+        },
+        {
+          "name": "Install build dependencies",
+          "run": "set -euo pipefail\n# Hosted probes verified this Ubuntu mirror while the ubuntu.com\n# domains failed DNS. Preserve suites, components and Signed-By.\nsudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources\napt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)\nsudo apt-get \"${apt_network[@]}\" update --error-on=any\nsudo apt-get \"${apt_network[@]}\" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic nginx php8.3-fpm php8.3-cli composer unzip\n/usr/bin/openssl version\n# The vendor audit's expected tag must match cmake/build_tests.cmake\n# (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.\ngit -C vendor/txiki.js fetch --depth=1 origin \\\n  refs/tags/v26.6.0:refs/tags/v26.6.0\nfor directory in \\\n  vendor/txiki.js \\\n  examples/hono-reference \\\n  examples/itty-router-reference \\\n  examples/h3-v2-reference \\\n  examples/elysia-reference\ndo\n  npm ci --ignore-scripts --prefix \"${directory}\"\ndone\n"
+        },
+        {
+          "name": "Require actual Linux perf counters for evidence controls",
+          "run": "python3 -B tools/setup-hosted-perf.py"
+        },
+        {
+          "name": "Install locked independent WebSocket clients",
+          "run": "set -euo pipefail\n/usr/bin/python3.12 tools/setup-ws-interop-python.py \"${RUNNER_TEMP}/capsid-ws-python\"\nprintf 'CAPSID_WS_INTEROP_PYTHON=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/bin/python\" >> \"${GITHUB_ENV}\"\nprintf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/node-ws\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Check out the manifest-pinned WPT revision",
+          "env": {
+            "WPT_DIRECTORY": "${{ runner.temp }}/wpt"
+          },
+          "run": "set -euo pipefail\nrepository=$(node -p \\\n  \"require('./tests/wpt/manifest.json').repository\")\ncommit=$(node -p \\\n  \"require('./tests/wpt/manifest.json').commit\")\ngit init \"${WPT_DIRECTORY}\"\ngit -C \"${WPT_DIRECTORY}\" remote add origin \"${repository}\"\ngit -C \"${WPT_DIRECTORY}\" fetch --depth=1 origin \"${commit}\"\ngit -C \"${WPT_DIRECTORY}\" checkout --detach FETCH_HEAD\ntest \"$(git -C \"${WPT_DIRECTORY}\" rev-parse HEAD)\" = \"${commit}\"\n"
+        },
+        {
+          "name": "Build OpenSSL 3.5 for Release",
+          "run": "set -euo pipefail\n# Built in the runner temp dir: extracting the tarball inside the\n# workspace dirties the checkout and trips the Release\n# clean-worktree identity gate.\ncd \"${RUNNER_TEMP}\"\necho \"a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz\" > openssl.sha256\ncurl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz\nsha256sum -c openssl.sha256\ntar xzf openssl-3.5.7.tar.gz\ncd openssl-3.5.7\nevidence=\"${RUNNER_TEMP}/capsid-native-provider-evidence\"\nmkdir -p \"${evidence}\"\npython3 \"${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py\" \\\n  --provider openssl --source \"$PWD\" | tee \"${evidence}/openssl-source.json\"\n./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm\nmake -j2\nsudo make install_sw\n"
+        },
+        {
+          "name": "Build c-ares 1.34.5 for Release",
+          "run": "set -euo pipefail\ncd \"${RUNNER_TEMP}\"\nevidence=\"${RUNNER_TEMP}/capsid-native-provider-evidence\"\nmkdir -p \"${evidence}\"\ncurl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013\necho \"cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz\" | sha256sum -c -\ntar xzf capsid-cares.tar.gz\npython3 \"${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py\" \\\n  --provider cares --source \"${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013\" | tee \"${evidence}/cares-source.json\"\ncmake -S \"${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013\" -B \"${RUNNER_TEMP}/capsid-cares-build\" -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Release \\\n  -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \\\n  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \\\n  -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \\\n  -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF\ncmake --build \"${RUNNER_TEMP}/capsid-cares-build\" --parallel 2 --verbose\nsudo cmake --install \"${RUNNER_TEMP}/capsid-cares-build\"\ncp \"${RUNNER_TEMP}/capsid-cares-build/compile_commands.json\" \"${evidence}/cares-compile-commands.json\"\n"
+        },
+        {
+          "name": "Configure Release/LTO with WPT and benchmarks",
+          "env": {
+            "WPT_DIRECTORY": "${{ runner.temp }}/wpt"
+          },
+          "run": "cmake -S . -B build-validity -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Release \\\n  -DCAPSID_BUILD_HOST=ON \\\n  -DCAPSID_ENABLE_LTO=ON \\\n  -DCAPSID_USE_MIMALLOC=OFF \\\n  -DCAPSID_BUILD_BENCHMARKS=ON \\\n  -DCAPSID_GENERATE_LINK_MAP=ON \\\n  -DCMAKE_PREFIX_PATH=/opt/openssl35 \\\n  -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include \\\n  -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \\\n  -DCAPSID_SANDBOX_PROFILE=production \\\n  -DCAPSID_WPT_ROOT=\"${WPT_DIRECTORY}\"\n"
+        },
+        {
+          "name": "Build",
+          "run": "cmake --build build-validity --parallel 2"
+        },
+        {
+          "name": "Preserve complete production build and registration identities",
+          "run": "ninja -C build-validity -t commands > build-validity/full-build-commands.txt\nctest --test-dir build-validity --show-only=json-v1 > build-validity/full-registration.json\n"
+        },
+        {
+          "name": "Install the original eleven-package PHP fixture lock before any observation",
+          "run": "set -euo pipefail\nmkdir -p build-validity/formal-session-evidence\npython3 -B - <<'PY'\nfrom pathlib import Path\nimport base64,hashlib\ndata=base64.b64decode('ewogICAgIl9yZWFkbWUiOiBbCiAgICAgICAgIlRoaXMgZmlsZSBsb2NrcyB0aGUgZGVwZW5kZW5jaWVzIG9mIHlvdXIgcHJvamVjdCB0byBhIGtub3duIHN0YXRlIiwKICAgICAgICAiUmVhZCBtb3JlIGFib3V0IGl0IGF0IGh0dHBzOi8vZ2V0Y29tcG9zZXIub3JnL2RvYy8wMS1iYXNpYy11c2FnZS5tZCNpbnN0YWxsaW5nLWRlcGVuZGVuY2llcyIsCiAgICAgICAgIlRoaXMgZmlsZSBpcyBAZ2VuZXJhdGVkIGF1dG9tYXRpY2FsbHkiCiAgICBdLAogICAgImNvbnRlbnQtaGFzaCI6ICJmNjg2NDhkOWNlOWY5NzNhNzQyNjk0MWJjM2YyYzg4OSIsCiAgICAicGFja2FnZXMiOiBbCiAgICAgICAgewogICAgICAgICAgICAibmFtZSI6ICJmaWcvaHR0cC1tZXNzYWdlLXV0aWwiLAogICAgICAgICAgICAidmVyc2lvbiI6ICIxLjEuNSIsCiAgICAgICAgICAgICJzb3VyY2UiOiB7CiAgICAgICAgICAgICAgICAidHlwZSI6ICJnaXQiLAogICAgICAgICAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcGhwLWZpZy9odHRwLW1lc3NhZ2UtdXRpbC5naXQiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICI5ZDk0ZGMwMTU0MjMwYWMzOWU1YmY4OTM5OGIzMjRhODZmNjNmNzY1IgogICAgICAgICAgICB9LAogICAgICAgICAgICAiZGlzdCI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogInppcCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvcGhwLWZpZy9odHRwLW1lc3NhZ2UtdXRpbC96aXBiYWxsLzlkOTRkYzAxNTQyMzBhYzM5ZTViZjg5Mzk4YjMyNGE4NmY2M2Y3NjUiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICI5ZDk0ZGMwMTU0MjMwYWMzOWU1YmY4OTM5OGIzMjRhODZmNjNmNzY1IiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJwaHAiOiAiXjUuMyB8fCBeNy4wIHx8IF44LjAiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJzdWdnZXN0IjogewogICAgICAgICAgICAgICAgInBzci9odHRwLW1lc3NhZ2UiOiAiVGhlIHBhY2thZ2UgY29udGFpbmluZyB0aGUgUFNSLTcgaW50ZXJmYWNlcyIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInR5cGUiOiAibGlicmFyeSIsCiAgICAgICAgICAgICJleHRyYSI6IHsKICAgICAgICAgICAgICAgICJicmFuY2gtYWxpYXMiOiB7CiAgICAgICAgICAgICAgICAgICAgImRldi1tYXN0ZXIiOiAiMS4xLngtZGV2IgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9LAogICAgICAgICAgICAiYXV0b2xvYWQiOiB7CiAgICAgICAgICAgICAgICAicHNyLTQiOiB7CiAgICAgICAgICAgICAgICAgICAgIkZpZ1xcSHR0cFxcTWVzc2FnZVxcIjogInNyYy8iCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJub3RpZmljYXRpb24tdXJsIjogImh0dHBzOi8vcGFja2FnaXN0Lm9yZy9kb3dubG9hZHMvIiwKICAgICAgICAgICAgImxpY2Vuc2UiOiBbCiAgICAgICAgICAgICAgICAiTUlUIgogICAgICAgICAgICBdLAogICAgICAgICAgICAiYXV0aG9ycyI6IFsKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAibmFtZSI6ICJQSFAtRklHIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly93d3cucGhwLWZpZy5vcmcvIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICBdLAogICAgICAgICAgICAiZGVzY3JpcHRpb24iOiAiVXRpbGl0eSBjbGFzc2VzIGFuZCBjb25zdGFudHMgZm9yIHVzZSB3aXRoIFBTUi03IChwc3IvaHR0cC1tZXNzYWdlKSIsCiAgICAgICAgICAgICJrZXl3b3JkcyI6IFsKICAgICAgICAgICAgICAgICJodHRwIiwKICAgICAgICAgICAgICAgICJodHRwLW1lc3NhZ2UiLAogICAgICAgICAgICAgICAgInBzciIsCiAgICAgICAgICAgICAgICAicHNyLTciLAogICAgICAgICAgICAgICAgInJlcXVlc3QiLAogICAgICAgICAgICAgICAgInJlc3BvbnNlIgogICAgICAgICAgICBdLAogICAgICAgICAgICAic3VwcG9ydCI6IHsKICAgICAgICAgICAgICAgICJpc3N1ZXMiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvaHR0cC1tZXNzYWdlLXV0aWwvaXNzdWVzIiwKICAgICAgICAgICAgICAgICJzb3VyY2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvaHR0cC1tZXNzYWdlLXV0aWwvdHJlZS8xLjEuNSIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInRpbWUiOiAiMjAyMC0xMS0yNFQyMjowMjoxMiswMDowMCIKICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICAgIm5hbWUiOiAibmlraWMvZmFzdC1yb3V0ZSIsCiAgICAgICAgICAgICJ2ZXJzaW9uIjogIjEuMy4xIiwKICAgICAgICAgICAgInNvdXJjZSI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogImdpdCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9uaWtpYy9GYXN0Um91dGUuZ2l0IiwKICAgICAgICAgICAgICAgICJyZWZlcmVuY2UiOiAiNzQ3NjY4NGYzOWJiOTEyNGIzYmU2OWVkM2Q4NGI2NjcyMzkyMDI5OCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgImRpc3QiOiB7CiAgICAgICAgICAgICAgICAidHlwZSI6ICJ6aXAiLAogICAgICAgICAgICAgICAgInVybCI6ICJodHRwczovL2FwaS5naXRodWIuY29tL3JlcG9zL25pa2ljL0Zhc3RSb3V0ZS96aXBiYWxsLzc0NzY2ODRmMzliYjkxMjRiM2JlNjllZDNkODRiNjY3MjM5MjAyOTgiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICI3NDc2Njg0ZjM5YmI5MTI0YjNiZTY5ZWQzZDg0YjY2NzIzOTIwMjk4IiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJwaHAiOiAiPj01LjQuMCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInJlcXVpcmUtZGV2IjogewogICAgICAgICAgICAgICAgInBocHVuaXQvcGhwdW5pdCI6ICJeNC44LjM1fH41LjciCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJ0eXBlIjogImxpYnJhcnkiLAogICAgICAgICAgICAiYXV0b2xvYWQiOiB7CiAgICAgICAgICAgICAgICAiZmlsZXMiOiBbCiAgICAgICAgICAgICAgICAgICAgInNyYy9mdW5jdGlvbnMucGhwIgogICAgICAgICAgICAgICAgXSwKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiRmFzdFJvdXRlXFwiOiAic3JjLyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSwKICAgICAgICAgICAgIm5vdGlmaWNhdGlvbi11cmwiOiAiaHR0cHM6Ly9wYWNrYWdpc3Qub3JnL2Rvd25sb2Fkcy8iLAogICAgICAgICAgICAibGljZW5zZSI6IFsKICAgICAgICAgICAgICAgICJCU0QtMy1DbGF1c2UiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJhdXRob3JzIjogWwogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJuYW1lIjogIk5pa2l0YSBQb3BvdiIsCiAgICAgICAgICAgICAgICAgICAgImVtYWlsIjogIm5pa2ljQHBocC5uZXQiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICJGYXN0IHJlcXVlc3Qgcm91dGVyIGZvciBQSFAiLAogICAgICAgICAgICAia2V5d29yZHMiOiBbCiAgICAgICAgICAgICAgICAicm91dGVyIiwKICAgICAgICAgICAgICAgICJyb3V0aW5nIgogICAgICAgICAgICBdLAogICAgICAgICAgICAic3VwcG9ydCI6IHsKICAgICAgICAgICAgICAgICJpc3N1ZXMiOiAiaHR0cHM6Ly9naXRodWIuY29tL25pa2ljL0Zhc3RSb3V0ZS9pc3N1ZXMiLAogICAgICAgICAgICAgICAgInNvdXJjZSI6ICJodHRwczovL2dpdGh1Yi5jb20vbmlraWMvRmFzdFJvdXRlL3RyZWUvMS4zLjEiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJ0aW1lIjogIjIwMjYtMDctMDlUMTk6Mzg6NDcrMDA6MDAiCiAgICAgICAgfSwKICAgICAgICB7CiAgICAgICAgICAgICJuYW1lIjogInBzci9jb250YWluZXIiLAogICAgICAgICAgICAidmVyc2lvbiI6ICIyLjAuMiIsCiAgICAgICAgICAgICJzb3VyY2UiOiB7CiAgICAgICAgICAgICAgICAidHlwZSI6ICJnaXQiLAogICAgICAgICAgICAgICAgInVybCI6ICJodHRwczovL2dpdGh1Yi5jb20vcGhwLWZpZy9jb250YWluZXIuZ2l0IiwKICAgICAgICAgICAgICAgICJyZWZlcmVuY2UiOiAiYzcxZWNjNTZkZmU1NDFkYmQ5MGM1MzYwNDc0ZmJjNDA1ZjhkNTk2MyIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgImRpc3QiOiB7CiAgICAgICAgICAgICAgICAidHlwZSI6ICJ6aXAiLAogICAgICAgICAgICAgICAgInVybCI6ICJodHRwczovL2FwaS5naXRodWIuY29tL3JlcG9zL3BocC1maWcvY29udGFpbmVyL3ppcGJhbGwvYzcxZWNjNTZkZmU1NDFkYmQ5MGM1MzYwNDc0ZmJjNDA1ZjhkNTk2MyIsCiAgICAgICAgICAgICAgICAicmVmZXJlbmNlIjogImM3MWVjYzU2ZGZlNTQxZGJkOTBjNTM2MDQ3NGZiYzQwNWY4ZDU5NjMiLAogICAgICAgICAgICAgICAgInNoYXN1bSI6ICIiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJyZXF1aXJlIjogewogICAgICAgICAgICAgICAgInBocCI6ICI+PTcuNC4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidHlwZSI6ICJsaWJyYXJ5IiwKICAgICAgICAgICAgImV4dHJhIjogewogICAgICAgICAgICAgICAgImJyYW5jaC1hbGlhcyI6IHsKICAgICAgICAgICAgICAgICAgICAiZGV2LW1hc3RlciI6ICIyLjAueC1kZXYiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiUHNyXFxDb250YWluZXJcXCI6ICJzcmMvIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9LAogICAgICAgICAgICAibm90aWZpY2F0aW9uLXVybCI6ICJodHRwczovL3BhY2thZ2lzdC5vcmcvZG93bmxvYWRzLyIsCiAgICAgICAgICAgICJsaWNlbnNlIjogWwogICAgICAgICAgICAgICAgIk1JVCIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgImF1dGhvcnMiOiBbCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAiUEhQLUZJRyIsCiAgICAgICAgICAgICAgICAgICAgImhvbWVwYWdlIjogImh0dHBzOi8vd3d3LnBocC1maWcub3JnLyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgXSwKICAgICAgICAgICAgImRlc2NyaXB0aW9uIjogIkNvbW1vbiBDb250YWluZXIgSW50ZXJmYWNlIChQSFAgRklHIFBTUi0xMSkiLAogICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvY29udGFpbmVyIiwKICAgICAgICAgICAgImtleXdvcmRzIjogWwogICAgICAgICAgICAgICAgIlBTUi0xMSIsCiAgICAgICAgICAgICAgICAiY29udGFpbmVyIiwKICAgICAgICAgICAgICAgICJjb250YWluZXItaW50ZXJmYWNlIiwKICAgICAgICAgICAgICAgICJjb250YWluZXItaW50ZXJvcCIsCiAgICAgICAgICAgICAgICAicHNyIgogICAgICAgICAgICBdLAogICAgICAgICAgICAic3VwcG9ydCI6IHsKICAgICAgICAgICAgICAgICJpc3N1ZXMiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvY29udGFpbmVyL2lzc3VlcyIsCiAgICAgICAgICAgICAgICAic291cmNlIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2NvbnRhaW5lci90cmVlLzIuMC4yIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidGltZSI6ICIyMDIxLTExLTA1VDE2OjQ3OjAwKzAwOjAwIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAibmFtZSI6ICJwc3IvaHR0cC1mYWN0b3J5IiwKICAgICAgICAgICAgInZlcnNpb24iOiAiMS4xLjAiLAogICAgICAgICAgICAic291cmNlIjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiZ2l0IiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvaHR0cC1mYWN0b3J5LmdpdCIsCiAgICAgICAgICAgICAgICAicmVmZXJlbmNlIjogIjJiNDc2NWZkZGZlM2I1MDhhYzYyZjgyOWU4NTJiMTUwMWQzZjZlOGEiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJkaXN0IjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiemlwIiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9waHAtZmlnL2h0dHAtZmFjdG9yeS96aXBiYWxsLzJiNDc2NWZkZGZlM2I1MDhhYzYyZjgyOWU4NTJiMTUwMWQzZjZlOGEiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICIyYjQ3NjVmZGRmZTNiNTA4YWM2MmY4MjllODUyYjE1MDFkM2Y2ZThhIiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJwaHAiOiAiPj03LjEiLAogICAgICAgICAgICAgICAgInBzci9odHRwLW1lc3NhZ2UiOiAiXjEuMCB8fCBeMi4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidHlwZSI6ICJsaWJyYXJ5IiwKICAgICAgICAgICAgImV4dHJhIjogewogICAgICAgICAgICAgICAgImJyYW5jaC1hbGlhcyI6IHsKICAgICAgICAgICAgICAgICAgICAiZGV2LW1hc3RlciI6ICIxLjAueC1kZXYiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiUHNyXFxIdHRwXFxNZXNzYWdlXFwiOiAic3JjLyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSwKICAgICAgICAgICAgIm5vdGlmaWNhdGlvbi11cmwiOiAiaHR0cHM6Ly9wYWNrYWdpc3Qub3JnL2Rvd25sb2Fkcy8iLAogICAgICAgICAgICAibGljZW5zZSI6IFsKICAgICAgICAgICAgICAgICJNSVQiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJhdXRob3JzIjogWwogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJuYW1lIjogIlBIUC1GSUciLAogICAgICAgICAgICAgICAgICAgICJob21lcGFnZSI6ICJodHRwczovL3d3dy5waHAtZmlnLm9yZy8iCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICJQU1ItMTc6IENvbW1vbiBpbnRlcmZhY2VzIGZvciBQU1ItNyBIVFRQIG1lc3NhZ2UgZmFjdG9yaWVzIiwKICAgICAgICAgICAgImtleXdvcmRzIjogWwogICAgICAgICAgICAgICAgImZhY3RvcnkiLAogICAgICAgICAgICAgICAgImh0dHAiLAogICAgICAgICAgICAgICAgIm1lc3NhZ2UiLAogICAgICAgICAgICAgICAgInBzciIsCiAgICAgICAgICAgICAgICAicHNyLTE3IiwKICAgICAgICAgICAgICAgICJwc3ItNyIsCiAgICAgICAgICAgICAgICAicmVxdWVzdCIsCiAgICAgICAgICAgICAgICAicmVzcG9uc2UiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJzdXBwb3J0IjogewogICAgICAgICAgICAgICAgInNvdXJjZSI6ICJodHRwczovL2dpdGh1Yi5jb20vcGhwLWZpZy9odHRwLWZhY3RvcnkiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJ0aW1lIjogIjIwMjQtMDQtMTVUMTI6MDY6MTQrMDA6MDAiCiAgICAgICAgfSwKICAgICAgICB7CiAgICAgICAgICAgICJuYW1lIjogInBzci9odHRwLW1lc3NhZ2UiLAogICAgICAgICAgICAidmVyc2lvbiI6ICIyLjAiLAogICAgICAgICAgICAic291cmNlIjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiZ2l0IiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvaHR0cC1tZXNzYWdlLmdpdCIsCiAgICAgICAgICAgICAgICAicmVmZXJlbmNlIjogIjQwMmQzNWJjYjkyYzcwYzAyNmQxYTZhOTg4M2YwNmIyZWFkMjNkNzEiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJkaXN0IjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiemlwIiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9waHAtZmlnL2h0dHAtbWVzc2FnZS96aXBiYWxsLzQwMmQzNWJjYjkyYzcwYzAyNmQxYTZhOTg4M2YwNmIyZWFkMjNkNzEiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICI0MDJkMzViY2I5MmM3MGMwMjZkMWE2YTk4ODNmMDZiMmVhZDIzZDcxIiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJwaHAiOiAiXjcuMiB8fCBeOC4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidHlwZSI6ICJsaWJyYXJ5IiwKICAgICAgICAgICAgImV4dHJhIjogewogICAgICAgICAgICAgICAgImJyYW5jaC1hbGlhcyI6IHsKICAgICAgICAgICAgICAgICAgICAiZGV2LW1hc3RlciI6ICIyLjAueC1kZXYiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiUHNyXFxIdHRwXFxNZXNzYWdlXFwiOiAic3JjLyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSwKICAgICAgICAgICAgIm5vdGlmaWNhdGlvbi11cmwiOiAiaHR0cHM6Ly9wYWNrYWdpc3Qub3JnL2Rvd25sb2Fkcy8iLAogICAgICAgICAgICAibGljZW5zZSI6IFsKICAgICAgICAgICAgICAgICJNSVQiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJhdXRob3JzIjogWwogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJuYW1lIjogIlBIUC1GSUciLAogICAgICAgICAgICAgICAgICAgICJob21lcGFnZSI6ICJodHRwczovL3d3dy5waHAtZmlnLm9yZy8iCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICJDb21tb24gaW50ZXJmYWNlIGZvciBIVFRQIG1lc3NhZ2VzIiwKICAgICAgICAgICAgImhvbWVwYWdlIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2h0dHAtbWVzc2FnZSIsCiAgICAgICAgICAgICJrZXl3b3JkcyI6IFsKICAgICAgICAgICAgICAgICJodHRwIiwKICAgICAgICAgICAgICAgICJodHRwLW1lc3NhZ2UiLAogICAgICAgICAgICAgICAgInBzciIsCiAgICAgICAgICAgICAgICAicHNyLTciLAogICAgICAgICAgICAgICAgInJlcXVlc3QiLAogICAgICAgICAgICAgICAgInJlc3BvbnNlIgogICAgICAgICAgICBdLAogICAgICAgICAgICAic3VwcG9ydCI6IHsKICAgICAgICAgICAgICAgICJzb3VyY2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvaHR0cC1tZXNzYWdlL3RyZWUvMi4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidGltZSI6ICIyMDIzLTA0LTA0VDA5OjU0OjUxKzAwOjAwIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAibmFtZSI6ICJwc3IvaHR0cC1zZXJ2ZXItaGFuZGxlciIsCiAgICAgICAgICAgICJ2ZXJzaW9uIjogIjEuMC4yIiwKICAgICAgICAgICAgInNvdXJjZSI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogImdpdCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2h0dHAtc2VydmVyLWhhbmRsZXIuZ2l0IiwKICAgICAgICAgICAgICAgICJyZWZlcmVuY2UiOiAiODRjNGZiNjYxNzliZTRjYWFmOGU5N2JkMjM5MjAzMjQ1MzAyZTdkNCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgImRpc3QiOiB7CiAgICAgICAgICAgICAgICAidHlwZSI6ICJ6aXAiLAogICAgICAgICAgICAgICAgInVybCI6ICJodHRwczovL2FwaS5naXRodWIuY29tL3JlcG9zL3BocC1maWcvaHR0cC1zZXJ2ZXItaGFuZGxlci96aXBiYWxsLzg0YzRmYjY2MTc5YmU0Y2FhZjhlOTdiZDIzOTIwMzI0NTMwMmU3ZDQiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICI4NGM0ZmI2NjE3OWJlNGNhYWY4ZTk3YmQyMzkyMDMyNDUzMDJlN2Q0IiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJwaHAiOiAiPj03LjAiLAogICAgICAgICAgICAgICAgInBzci9odHRwLW1lc3NhZ2UiOiAiXjEuMCB8fCBeMi4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidHlwZSI6ICJsaWJyYXJ5IiwKICAgICAgICAgICAgImV4dHJhIjogewogICAgICAgICAgICAgICAgImJyYW5jaC1hbGlhcyI6IHsKICAgICAgICAgICAgICAgICAgICAiZGV2LW1hc3RlciI6ICIxLjAueC1kZXYiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiUHNyXFxIdHRwXFxTZXJ2ZXJcXCI6ICJzcmMvIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9LAogICAgICAgICAgICAibm90aWZpY2F0aW9uLXVybCI6ICJodHRwczovL3BhY2thZ2lzdC5vcmcvZG93bmxvYWRzLyIsCiAgICAgICAgICAgICJsaWNlbnNlIjogWwogICAgICAgICAgICAgICAgIk1JVCIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgImF1dGhvcnMiOiBbCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAiUEhQLUZJRyIsCiAgICAgICAgICAgICAgICAgICAgImhvbWVwYWdlIjogImh0dHBzOi8vd3d3LnBocC1maWcub3JnLyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgXSwKICAgICAgICAgICAgImRlc2NyaXB0aW9uIjogIkNvbW1vbiBpbnRlcmZhY2UgZm9yIEhUVFAgc2VydmVyLXNpZGUgcmVxdWVzdCBoYW5kbGVyIiwKICAgICAgICAgICAgImtleXdvcmRzIjogWwogICAgICAgICAgICAgICAgImhhbmRsZXIiLAogICAgICAgICAgICAgICAgImh0dHAiLAogICAgICAgICAgICAgICAgImh0dHAtaW50ZXJvcCIsCiAgICAgICAgICAgICAgICAicHNyIiwKICAgICAgICAgICAgICAgICJwc3ItMTUiLAogICAgICAgICAgICAgICAgInBzci03IiwKICAgICAgICAgICAgICAgICJyZXF1ZXN0IiwKICAgICAgICAgICAgICAgICJyZXNwb25zZSIsCiAgICAgICAgICAgICAgICAic2VydmVyIgogICAgICAgICAgICBdLAogICAgICAgICAgICAic3VwcG9ydCI6IHsKICAgICAgICAgICAgICAgICJzb3VyY2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvaHR0cC1zZXJ2ZXItaGFuZGxlci90cmVlLzEuMC4yIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidGltZSI6ICIyMDIzLTA0LTEwVDIwOjA2OjIwKzAwOjAwIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAibmFtZSI6ICJwc3IvaHR0cC1zZXJ2ZXItbWlkZGxld2FyZSIsCiAgICAgICAgICAgICJ2ZXJzaW9uIjogIjEuMC4yIiwKICAgICAgICAgICAgInNvdXJjZSI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogImdpdCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2h0dHAtc2VydmVyLW1pZGRsZXdhcmUuZ2l0IiwKICAgICAgICAgICAgICAgICJyZWZlcmVuY2UiOiAiYzE0ODFmNzQ3ZGFhYTZhMDc4Mjc3NWNkNmE4YzI2YTFiZjRhMzgyOSIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgImRpc3QiOiB7CiAgICAgICAgICAgICAgICAidHlwZSI6ICJ6aXAiLAogICAgICAgICAgICAgICAgInVybCI6ICJodHRwczovL2FwaS5naXRodWIuY29tL3JlcG9zL3BocC1maWcvaHR0cC1zZXJ2ZXItbWlkZGxld2FyZS96aXBiYWxsL2MxNDgxZjc0N2RhYWE2YTA3ODI3NzVjZDZhOGMyNmExYmY0YTM4MjkiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICJjMTQ4MWY3NDdkYWFhNmEwNzgyNzc1Y2Q2YThjMjZhMWJmNGEzODI5IiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJwaHAiOiAiPj03LjAiLAogICAgICAgICAgICAgICAgInBzci9odHRwLW1lc3NhZ2UiOiAiXjEuMCB8fCBeMi4wIiwKICAgICAgICAgICAgICAgICJwc3IvaHR0cC1zZXJ2ZXItaGFuZGxlciI6ICJeMS4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidHlwZSI6ICJsaWJyYXJ5IiwKICAgICAgICAgICAgImV4dHJhIjogewogICAgICAgICAgICAgICAgImJyYW5jaC1hbGlhcyI6IHsKICAgICAgICAgICAgICAgICAgICAiZGV2LW1hc3RlciI6ICIxLjAueC1kZXYiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiUHNyXFxIdHRwXFxTZXJ2ZXJcXCI6ICJzcmMvIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9LAogICAgICAgICAgICAibm90aWZpY2F0aW9uLXVybCI6ICJodHRwczovL3BhY2thZ2lzdC5vcmcvZG93bmxvYWRzLyIsCiAgICAgICAgICAgICJsaWNlbnNlIjogWwogICAgICAgICAgICAgICAgIk1JVCIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgImF1dGhvcnMiOiBbCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAiUEhQLUZJRyIsCiAgICAgICAgICAgICAgICAgICAgImhvbWVwYWdlIjogImh0dHBzOi8vd3d3LnBocC1maWcub3JnLyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgXSwKICAgICAgICAgICAgImRlc2NyaXB0aW9uIjogIkNvbW1vbiBpbnRlcmZhY2UgZm9yIEhUVFAgc2VydmVyLXNpZGUgbWlkZGxld2FyZSIsCiAgICAgICAgICAgICJrZXl3b3JkcyI6IFsKICAgICAgICAgICAgICAgICJodHRwIiwKICAgICAgICAgICAgICAgICJodHRwLWludGVyb3AiLAogICAgICAgICAgICAgICAgIm1pZGRsZXdhcmUiLAogICAgICAgICAgICAgICAgInBzciIsCiAgICAgICAgICAgICAgICAicHNyLTE1IiwKICAgICAgICAgICAgICAgICJwc3ItNyIsCiAgICAgICAgICAgICAgICAicmVxdWVzdCIsCiAgICAgICAgICAgICAgICAicmVzcG9uc2UiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJzdXBwb3J0IjogewogICAgICAgICAgICAgICAgImlzc3VlcyI6ICJodHRwczovL2dpdGh1Yi5jb20vcGhwLWZpZy9odHRwLXNlcnZlci1taWRkbGV3YXJlL2lzc3VlcyIsCiAgICAgICAgICAgICAgICAic291cmNlIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2h0dHAtc2VydmVyLW1pZGRsZXdhcmUvdHJlZS8xLjAuMiIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInRpbWUiOiAiMjAyMy0wNC0xMVQwNjoxNDo0NyswMDowMCIKICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICAgIm5hbWUiOiAicHNyL2xvZyIsCiAgICAgICAgICAgICJ2ZXJzaW9uIjogIjMuMC4yIiwKICAgICAgICAgICAgInNvdXJjZSI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogImdpdCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2xvZy5naXQiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICJmMTZlMWQ1ODYzZTM3ZjhkOGMyYTAxNzE5ZjViMzRiYWEyYjcxNGQzIgogICAgICAgICAgICB9LAogICAgICAgICAgICAiZGlzdCI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogInppcCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvcGhwLWZpZy9sb2cvemlwYmFsbC9mMTZlMWQ1ODYzZTM3ZjhkOGMyYTAxNzE5ZjViMzRiYWEyYjcxNGQzIiwKICAgICAgICAgICAgICAgICJyZWZlcmVuY2UiOiAiZjE2ZTFkNTg2M2UzN2Y4ZDhjMmEwMTcxOWY1YjM0YmFhMmI3MTRkMyIsCiAgICAgICAgICAgICAgICAic2hhc3VtIjogIiIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInJlcXVpcmUiOiB7CiAgICAgICAgICAgICAgICAicGhwIjogIj49OC4wLjAiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJ0eXBlIjogImxpYnJhcnkiLAogICAgICAgICAgICAiZXh0cmEiOiB7CiAgICAgICAgICAgICAgICAiYnJhbmNoLWFsaWFzIjogewogICAgICAgICAgICAgICAgICAgICJkZXYtbWFzdGVyIjogIjMueC1kZXYiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiUHNyXFxMb2dcXCI6ICJzcmMiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJub3RpZmljYXRpb24tdXJsIjogImh0dHBzOi8vcGFja2FnaXN0Lm9yZy9kb3dubG9hZHMvIiwKICAgICAgICAgICAgImxpY2Vuc2UiOiBbCiAgICAgICAgICAgICAgICAiTUlUIgogICAgICAgICAgICBdLAogICAgICAgICAgICAiYXV0aG9ycyI6IFsKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAibmFtZSI6ICJQSFAtRklHIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly93d3cucGhwLWZpZy5vcmcvIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICBdLAogICAgICAgICAgICAiZGVzY3JpcHRpb24iOiAiQ29tbW9uIGludGVyZmFjZSBmb3IgbG9nZ2luZyBsaWJyYXJpZXMiLAogICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3BocC1maWcvbG9nIiwKICAgICAgICAgICAgImtleXdvcmRzIjogWwogICAgICAgICAgICAgICAgImxvZyIsCiAgICAgICAgICAgICAgICAicHNyIiwKICAgICAgICAgICAgICAgICJwc3ItMyIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgInN1cHBvcnQiOiB7CiAgICAgICAgICAgICAgICAic291cmNlIjogImh0dHBzOi8vZ2l0aHViLmNvbS9waHAtZmlnL2xvZy90cmVlLzMuMC4yIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidGltZSI6ICIyMDI0LTA5LTExVDEzOjE3OjUzKzAwOjAwIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAibmFtZSI6ICJyYWxvdXBoaWUvZ2V0YWxsaGVhZGVycyIsCiAgICAgICAgICAgICJ2ZXJzaW9uIjogIjMuMC4zIiwKICAgICAgICAgICAgInNvdXJjZSI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogImdpdCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vZ2l0aHViLmNvbS9yYWxvdXBoaWUvZ2V0YWxsaGVhZGVycy5naXQiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICIxMjBiNjA1ZGZlYjk5NjgwOGMzMWI2NDc3MjkwYTcxNGQzNTZlODIyIgogICAgICAgICAgICB9LAogICAgICAgICAgICAiZGlzdCI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogInppcCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvcmFsb3VwaGllL2dldGFsbGhlYWRlcnMvemlwYmFsbC8xMjBiNjA1ZGZlYjk5NjgwOGMzMWI2NDc3MjkwYTcxNGQzNTZlODIyIiwKICAgICAgICAgICAgICAgICJyZWZlcmVuY2UiOiAiMTIwYjYwNWRmZWI5OTY4MDhjMzFiNjQ3NzI5MGE3MTRkMzU2ZTgyMiIsCiAgICAgICAgICAgICAgICAic2hhc3VtIjogIiIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInJlcXVpcmUiOiB7CiAgICAgICAgICAgICAgICAicGhwIjogIj49NS42IgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZS1kZXYiOiB7CiAgICAgICAgICAgICAgICAicGhwLWNvdmVyYWxscy9waHAtY292ZXJhbGxzIjogIl4yLjEiLAogICAgICAgICAgICAgICAgInBocHVuaXQvcGhwdW5pdCI6ICJeNSB8fCBeNi41IgogICAgICAgICAgICB9LAogICAgICAgICAgICAidHlwZSI6ICJsaWJyYXJ5IiwKICAgICAgICAgICAgImF1dG9sb2FkIjogewogICAgICAgICAgICAgICAgImZpbGVzIjogWwogICAgICAgICAgICAgICAgICAgICJzcmMvZ2V0YWxsaGVhZGVycy5waHAiCiAgICAgICAgICAgICAgICBdCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJub3RpZmljYXRpb24tdXJsIjogImh0dHBzOi8vcGFja2FnaXN0Lm9yZy9kb3dubG9hZHMvIiwKICAgICAgICAgICAgImxpY2Vuc2UiOiBbCiAgICAgICAgICAgICAgICAiTUlUIgogICAgICAgICAgICBdLAogICAgICAgICAgICAiYXV0aG9ycyI6IFsKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAibmFtZSI6ICJSYWxwaCBLaGF0dGFyIiwKICAgICAgICAgICAgICAgICAgICAiZW1haWwiOiAicmFscGgua2hhdHRhckBnbWFpbC5jb20iCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICJBIHBvbHlmaWxsIGZvciBnZXRhbGxoZWFkZXJzLiIsCiAgICAgICAgICAgICJzdXBwb3J0IjogewogICAgICAgICAgICAgICAgImlzc3VlcyI6ICJodHRwczovL2dpdGh1Yi5jb20vcmFsb3VwaGllL2dldGFsbGhlYWRlcnMvaXNzdWVzIiwKICAgICAgICAgICAgICAgICJzb3VyY2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3JhbG91cGhpZS9nZXRhbGxoZWFkZXJzL3RyZWUvZGV2ZWxvcCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInRpbWUiOiAiMjAxOS0wMy0wOFQwODo1NTozNyswMDowMCIKICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICAgIm5hbWUiOiAic2xpbS9wc3I3IiwKICAgICAgICAgICAgInZlcnNpb24iOiAiMS44LjAiLAogICAgICAgICAgICAic291cmNlIjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiZ2l0IiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3NsaW1waHAvU2xpbS1Qc3I3LmdpdCIsCiAgICAgICAgICAgICAgICAicmVmZXJlbmNlIjogIjc2ZTdlM2IxY2RmZDU4M2U5MDM1YzRjOTY2YzA4ZTAxZTQ1Y2U5NTkiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJkaXN0IjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiemlwIiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9zbGltcGhwL1NsaW0tUHNyNy96aXBiYWxsLzc2ZTdlM2IxY2RmZDU4M2U5MDM1YzRjOTY2YzA4ZTAxZTQ1Y2U5NTkiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICI3NmU3ZTNiMWNkZmQ1ODNlOTAzNWM0Yzk2NmMwOGUwMWU0NWNlOTU5IiwKICAgICAgICAgICAgICAgICJzaGFzdW0iOiAiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAicmVxdWlyZSI6IHsKICAgICAgICAgICAgICAgICJmaWcvaHR0cC1tZXNzYWdlLXV0aWwiOiAiXjEuMS41IiwKICAgICAgICAgICAgICAgICJwaHAiOiAiXjguMCIsCiAgICAgICAgICAgICAgICAicHNyL2h0dHAtZmFjdG9yeSI6ICJeMS4xIiwKICAgICAgICAgICAgICAgICJwc3IvaHR0cC1tZXNzYWdlIjogIl4xLjAgfHwgXjIuMCIsCiAgICAgICAgICAgICAgICAicmFsb3VwaGllL2dldGFsbGhlYWRlcnMiOiAiXjMuMCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInByb3ZpZGUiOiB7CiAgICAgICAgICAgICAgICAicHNyL2h0dHAtZmFjdG9yeS1pbXBsZW1lbnRhdGlvbiI6ICJeMS4wIiwKICAgICAgICAgICAgICAgICJwc3IvaHR0cC1tZXNzYWdlLWltcGxlbWVudGF0aW9uIjogIl4xLjAgfHwgXjIuMCIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInJlcXVpcmUtZGV2IjogewogICAgICAgICAgICAgICAgImFkcmlhbnN1dGVyL3BocC1hdXRvbG9hZC1vdmVycmlkZSI6ICJeMS41fHwgXjIuMCIsCiAgICAgICAgICAgICAgICAiZXh0LWpzb24iOiAiKiIsCiAgICAgICAgICAgICAgICAiaHR0cC1pbnRlcm9wL2h0dHAtZmFjdG9yeS10ZXN0cyI6ICJeMS4wIHx8IF4yLjAiLAogICAgICAgICAgICAgICAgInBocC1odHRwL3BzcjctaW50ZWdyYXRpb24tdGVzdHMiOiAiXjEuNSIsCiAgICAgICAgICAgICAgICAicGhwc3Rhbi9waHBzdGFuIjogIl4yLjEiLAogICAgICAgICAgICAgICAgInBocHVuaXQvcGhwdW5pdCI6ICJeOS42IHx8IF4xMCIsCiAgICAgICAgICAgICAgICAic3F1aXpsYWJzL3BocF9jb2Rlc25pZmZlciI6ICJeMy4xMyIKICAgICAgICAgICAgfSwKICAgICAgICAgICAgInR5cGUiOiAibGlicmFyeSIsCiAgICAgICAgICAgICJhdXRvbG9hZCI6IHsKICAgICAgICAgICAgICAgICJwc3ItNCI6IHsKICAgICAgICAgICAgICAgICAgICAiU2xpbVxcUHNyN1xcIjogInNyYyIKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSwKICAgICAgICAgICAgIm5vdGlmaWNhdGlvbi11cmwiOiAiaHR0cHM6Ly9wYWNrYWdpc3Qub3JnL2Rvd25sb2Fkcy8iLAogICAgICAgICAgICAibGljZW5zZSI6IFsKICAgICAgICAgICAgICAgICJNSVQiCiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJhdXRob3JzIjogWwogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJuYW1lIjogIkpvc2ggTG9ja2hhcnQiLAogICAgICAgICAgICAgICAgICAgICJlbWFpbCI6ICJoZWxsb0Bqb3NobG9ja2hhcnQuY29tIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly9qb3NobG9ja2hhcnQuY29tIgogICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAibmFtZSI6ICJBbmRyZXcgU21pdGgiLAogICAgICAgICAgICAgICAgICAgICJlbWFpbCI6ICJhLnNtaXRoQHNpbGVudHdvcmtzLmNvLnVrIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly9zaWxlbnR3b3Jrcy5jby51ayIKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAiUm9iIEFsbGVuIiwKICAgICAgICAgICAgICAgICAgICAiZW1haWwiOiAicm9iQGFrcmFiYXQuY29tIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly9ha3JhYmF0LmNvbSIKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAiUGllcnJlIEJlcnViZSIsCiAgICAgICAgICAgICAgICAgICAgImVtYWlsIjogInBpZXJyZUBsZ3NlLmNvbSIsCiAgICAgICAgICAgICAgICAgICAgImhvbWVwYWdlIjogImh0dHBzOi8vd3d3Lmxnc2UuY29tIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICBdLAogICAgICAgICAgICAiZGVzY3JpcHRpb24iOiAiU3RyaWN0IFBTUi03IGltcGxlbWVudGF0aW9uIiwKICAgICAgICAgICAgImhvbWVwYWdlIjogImh0dHBzOi8vd3d3LnNsaW1mcmFtZXdvcmsuY29tIiwKICAgICAgICAgICAgImtleXdvcmRzIjogWwogICAgICAgICAgICAgICAgImh0dHAiLAogICAgICAgICAgICAgICAgInBzci03IiwKICAgICAgICAgICAgICAgICJwc3I3IgogICAgICAgICAgICBdLAogICAgICAgICAgICAic3VwcG9ydCI6IHsKICAgICAgICAgICAgICAgICJpc3N1ZXMiOiAiaHR0cHM6Ly9naXRodWIuY29tL3NsaW1waHAvU2xpbS1Qc3I3L2lzc3VlcyIsCiAgICAgICAgICAgICAgICAic291cmNlIjogImh0dHBzOi8vZ2l0aHViLmNvbS9zbGltcGhwL1NsaW0tUHNyNy90cmVlLzEuOC4wIgogICAgICAgICAgICB9LAogICAgICAgICAgICAidGltZSI6ICIyMDI1LTExLTAyVDE3OjUxOjE5KzAwOjAwIgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAibmFtZSI6ICJzbGltL3NsaW0iLAogICAgICAgICAgICAidmVyc2lvbiI6ICI0LjE1LjMiLAogICAgICAgICAgICAic291cmNlIjogewogICAgICAgICAgICAgICAgInR5cGUiOiAiZ2l0IiwKICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9naXRodWIuY29tL3NsaW1waHAvU2xpbS5naXQiLAogICAgICAgICAgICAgICAgInJlZmVyZW5jZSI6ICIzNjc1YmY2YmFhYzY2YjA3MDMyNTc1YjdiZWY0MjAwYjYwYjc5NzRiIgogICAgICAgICAgICB9LAogICAgICAgICAgICAiZGlzdCI6IHsKICAgICAgICAgICAgICAgICJ0eXBlIjogInppcCIsCiAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3Mvc2xpbXBocC9TbGltL3ppcGJhbGwvMzY3NWJmNmJhYWM2NmIwNzAzMjU3NWI3YmVmNDIwMGI2MGI3OTc0YiIsCiAgICAgICAgICAgICAgICAicmVmZXJlbmNlIjogIjM2NzViZjZiYWFjNjZiMDcwMzI1NzViN2JlZjQyMDBiNjBiNzk3NGIiLAogICAgICAgICAgICAgICAgInNoYXN1bSI6ICIiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJyZXF1aXJlIjogewogICAgICAgICAgICAgICAgImV4dC1qc29uIjogIioiLAogICAgICAgICAgICAgICAgIm5pa2ljL2Zhc3Qtcm91dGUiOiAiXjEuMyIsCiAgICAgICAgICAgICAgICAicGhwIjogIn43LjQuMCB8fCB+OC4wLjAgfHwgfjguMS4wIHx8IH44LjIuMCB8fCB+OC4zLjAgfHwgfjguNC4wIHx8IH44LjUuMCIsCiAgICAgICAgICAgICAgICAicHNyL2NvbnRhaW5lciI6ICJeMS4wIHx8IF4yLjAiLAogICAgICAgICAgICAgICAgInBzci9odHRwLWZhY3RvcnkiOiAiXjEuMSIsCiAgICAgICAgICAgICAgICAicHNyL2h0dHAtbWVzc2FnZSI6ICJeMS4xIHx8IF4yLjAiLAogICAgICAgICAgICAgICAgInBzci9odHRwLXNlcnZlci1oYW5kbGVyIjogIl4xLjAiLAogICAgICAgICAgICAgICAgInBzci9odHRwLXNlcnZlci1taWRkbGV3YXJlIjogIl4xLjAiLAogICAgICAgICAgICAgICAgInBzci9sb2ciOiAiXjEuMSB8fCBeMi4wIHx8IF4zLjAiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJyZXF1aXJlLWRldiI6IHsKICAgICAgICAgICAgICAgICJhZHJpYW5zdXRlci9waHAtYXV0b2xvYWQtb3ZlcnJpZGUiOiAiXjEuNCB8fCBeMiIsCiAgICAgICAgICAgICAgICAiZXh0LXNpbXBsZXhtbCI6ICIqIiwKICAgICAgICAgICAgICAgICJndXp6bGVodHRwL3BzcjciOiAiXjIuNiIsCiAgICAgICAgICAgICAgICAiaHR0cHNvZnQvaHR0cC1tZXNzYWdlIjogIl4xLjEiLAogICAgICAgICAgICAgICAgImh0dHBzb2Z0L2h0dHAtc2VydmVyLXJlcXVlc3QiOiAiXjEuMSIsCiAgICAgICAgICAgICAgICAibGFtaW5hcy9sYW1pbmFzLWRpYWN0b3JvcyI6ICJeMi4xNyB8fCBeMyIsCiAgICAgICAgICAgICAgICAibnlob2xtL3BzcjciOiAiXjEuOCIsCiAgICAgICAgICAgICAgICAibnlob2xtL3Bzcjctc2VydmVyIjogIl4xLjEiLAogICAgICAgICAgICAgICAgInBocHNwZWMvcHJvcGhlY3kiOiAiXjEuMTkiLAogICAgICAgICAgICAgICAgInBocHNwZWMvcHJvcGhlY3ktcGhwdW5pdCI6ICJeMi4xIiwKICAgICAgICAgICAgICAgICJwaHBzdGFuL3BocHN0YW4iOiAiXjEgfHwgXjIiLAogICAgICAgICAgICAgICAgInBocHVuaXQvcGhwdW5pdCI6ICJeOS42IHx8IF4xMCB8fCBeMTEgfHwgXjEyIiwKICAgICAgICAgICAgICAgICJzbGltL2h0dHAiOiAiXjEuMyIsCiAgICAgICAgICAgICAgICAic2xpbS9wc3I3IjogIl4xLjYiLAogICAgICAgICAgICAgICAgInNxdWl6bGFicy9waHBfY29kZXNuaWZmZXIiOiAiXjMuMTAiLAogICAgICAgICAgICAgICAgInZpbWVvL3BzYWxtIjogIl41IHx8IF42IgogICAgICAgICAgICB9LAogICAgICAgICAgICAic3VnZ2VzdCI6IHsKICAgICAgICAgICAgICAgICJleHQtc2ltcGxleG1sIjogIk5lZWRlZCB0byBzdXBwb3J0IFhNTCBmb3JtYXQgaW4gQm9keVBhcnNpbmdNaWRkbGV3YXJlIiwKICAgICAgICAgICAgICAgICJleHQteG1sIjogIk5lZWRlZCB0byBzdXBwb3J0IFhNTCBmb3JtYXQgaW4gQm9keVBhcnNpbmdNaWRkbGV3YXJlIiwKICAgICAgICAgICAgICAgICJwaHAtZGkvcGhwLWRpIjogIlBIUC1ESSBpcyB0aGUgcmVjb21tZW5kZWQgY29udGFpbmVyIGxpYnJhcnkgdG8gYmUgdXNlZCB3aXRoIFNsaW0iLAogICAgICAgICAgICAgICAgInNsaW0vcHNyNyI6ICJTbGltIFBTUi03IGltcGxlbWVudGF0aW9uLiBTZWUgaHR0cHM6Ly93d3cuc2xpbWZyYW1ld29yay5jb20vZG9jcy92NC9zdGFydC9pbnN0YWxsYXRpb24uaHRtbCBmb3IgbW9yZSBpbmZvcm1hdGlvbi4iCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJ0eXBlIjogImxpYnJhcnkiLAogICAgICAgICAgICAiYXV0b2xvYWQiOiB7CiAgICAgICAgICAgICAgICAicHNyLTQiOiB7CiAgICAgICAgICAgICAgICAgICAgIlNsaW1cXCI6ICJTbGltIgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9LAogICAgICAgICAgICAibm90aWZpY2F0aW9uLXVybCI6ICJodHRwczovL3BhY2thZ2lzdC5vcmcvZG93bmxvYWRzLyIsCiAgICAgICAgICAgICJsaWNlbnNlIjogWwogICAgICAgICAgICAgICAgIk1JVCIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgImF1dGhvcnMiOiBbCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgIm5hbWUiOiAiSm9zaCBMb2NraGFydCIsCiAgICAgICAgICAgICAgICAgICAgImVtYWlsIjogImhlbGxvQGpvc2hsb2NraGFydC5jb20iLAogICAgICAgICAgICAgICAgICAgICJob21lcGFnZSI6ICJodHRwczovL2pvc2hsb2NraGFydC5jb20iCiAgICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJuYW1lIjogIkFuZHJldyBTbWl0aCIsCiAgICAgICAgICAgICAgICAgICAgImVtYWlsIjogImEuc21pdGhAc2lsZW50d29ya3MuY28udWsiLAogICAgICAgICAgICAgICAgICAgICJob21lcGFnZSI6ICJodHRwczovL3NpbGVudHdvcmtzLmNvLnVrIgogICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAibmFtZSI6ICJSb2IgQWxsZW4iLAogICAgICAgICAgICAgICAgICAgICJlbWFpbCI6ICJyb2JAYWtyYWJhdC5jb20iLAogICAgICAgICAgICAgICAgICAgICJob21lcGFnZSI6ICJodHRwczovL2FrcmFiYXQuY29tIgogICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAibmFtZSI6ICJQaWVycmUgQmVydWJlIiwKICAgICAgICAgICAgICAgICAgICAiZW1haWwiOiAicGllcnJlQGxnc2UuY29tIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cHM6Ly93d3cubGdzZS5jb20iCiAgICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJuYW1lIjogIkdhYnJpZWwgTWFucmlja3MiLAogICAgICAgICAgICAgICAgICAgICJlbWFpbCI6ICJnbWFucmlja3NAbWUuY29tIiwKICAgICAgICAgICAgICAgICAgICAiaG9tZXBhZ2UiOiAiaHR0cDovL2dhYnJpZWxtYW5yaWNrcy5jb20iCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIF0sCiAgICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICJTbGltIGlzIGEgUEhQIG1pY3JvIGZyYW1ld29yayB0aGF0IGhlbHBzIHlvdSBxdWlja2x5IHdyaXRlIHNpbXBsZSB5ZXQgcG93ZXJmdWwgd2ViIGFwcGxpY2F0aW9ucyBhbmQgQVBJcyIsCiAgICAgICAgICAgICJob21lcGFnZSI6ICJodHRwczovL3d3dy5zbGltZnJhbWV3b3JrLmNvbSIsCiAgICAgICAgICAgICJrZXl3b3JkcyI6IFsKICAgICAgICAgICAgICAgICJhcGkiLAogICAgICAgICAgICAgICAgImZyYW1ld29yayIsCiAgICAgICAgICAgICAgICAibWljcm8iLAogICAgICAgICAgICAgICAgInJvdXRlciIKICAgICAgICAgICAgXSwKICAgICAgICAgICAgInN1cHBvcnQiOiB7CiAgICAgICAgICAgICAgICAiZG9jcyI6ICJodHRwczovL3d3dy5zbGltZnJhbWV3b3JrLmNvbS9kb2NzL3Y0LyIsCiAgICAgICAgICAgICAgICAiZm9ydW0iOiAiaHR0cHM6Ly9kaXNjb3Vyc2Uuc2xpbWZyYW1ld29yay5jb20vIiwKICAgICAgICAgICAgICAgICJpcmMiOiAiaXJjOi8vaXJjLmZyZWVub2RlLm5ldDo2NjY3L3NsaW1waHAiLAogICAgICAgICAgICAgICAgImlzc3VlcyI6ICJodHRwczovL2dpdGh1Yi5jb20vc2xpbXBocC9TbGltL2lzc3VlcyIsCiAgICAgICAgICAgICAgICAicnNzIjogImh0dHBzOi8vd3d3LnNsaW1mcmFtZXdvcmsuY29tL2Jsb2cvZmVlZC5yc3MiLAogICAgICAgICAgICAgICAgInNsYWNrIjogImh0dHBzOi8vc2xpbXBocC5zbGFjay5jb20vIiwKICAgICAgICAgICAgICAgICJzb3VyY2UiOiAiaHR0cHM6Ly9naXRodWIuY29tL3NsaW1waHAvU2xpbSIsCiAgICAgICAgICAgICAgICAid2lraSI6ICJodHRwczovL2dpdGh1Yi5jb20vc2xpbXBocC9TbGltL3dpa2kiCiAgICAgICAgICAgIH0sCiAgICAgICAgICAgICJmdW5kaW5nIjogWwogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgICJ1cmwiOiAiaHR0cHM6Ly9vcGVuY29sbGVjdGl2ZS5jb20vc2xpbXBocCIsCiAgICAgICAgICAgICAgICAgICAgInR5cGUiOiAib3Blbl9jb2xsZWN0aXZlIgogICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAidXJsIjogImh0dHBzOi8vdGlkZWxpZnQuY29tL2Z1bmRpbmcvZ2l0aHViL3BhY2thZ2lzdC9zbGltL3NsaW0iLAogICAgICAgICAgICAgICAgICAgICJ0eXBlIjogInRpZGVsaWZ0IgogICAgICAgICAgICAgICAgfQogICAgICAgICAgICBdLAogICAgICAgICAgICAidGltZSI6ICIyMDI2LTA5LTAxVDE3OjExOjA1KzAwOjAwIgogICAgICAgIH0KICAgIF0sCiAgICAicGFja2FnZXMtZGV2IjogW10sCiAgICAiYWxpYXNlcyI6IFtdLAogICAgIm1pbmltdW0tc3RhYmlsaXR5IjogInN0YWJsZSIsCiAgICAic3RhYmlsaXR5LWZsYWdzIjoge30sCiAgICAicHJlZmVyLXN0YWJsZSI6IGZhbHNlLAogICAgInByZWZlci1sb3dlc3QiOiBmYWxzZSwKICAgICJwbGF0Zm9ybSI6IHt9LAogICAgInBsYXRmb3JtLWRldiI6IHt9LAogICAgInBsdWdpbi1hcGktdmVyc2lvbiI6ICIyLjkuMCIKfQo=')\nassert hashlib.sha256(data).hexdigest()=='82d919d5df1d22a232394711e53f3b1804768a9395e009075346949372c02eba'\np=Path('bench/bench-apps/php-slim/composer.lock');assert not p.exists();p.write_bytes(data)\nPY\ngit check-ignore -q -- bench/bench-apps/php-slim/composer.lock\ncomposer --version > build-validity/formal-session-evidence/reference-composer-version.txt\ncomposer --working-dir=bench/bench-apps/php-slim install --no-interaction --no-plugins --no-scripts --no-progress --prefer-dist > build-validity/formal-session-evidence/reference-composer-install.stdout.log 2> build-validity/formal-session-evidence/reference-composer-install.stderr.log\npython3 -B - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,subprocess\np=Path('bench/bench-apps/php-slim/composer.lock')\nassert hashlib.sha256(p.read_bytes()).hexdigest()=='82d919d5df1d22a232394711e53f3b1804768a9395e009075346949372c02eba'\nassert p.with_name('vendor').joinpath('autoload.php').is_file()\nassert not subprocess.check_output(['git','status','--porcelain']).strip()\nr=dict(complete=True,composerLockSHA256='82d919d5df1d22a232394711e53f3b1804768a9395e009075346949372c02eba',packageVersions=[dict(name=p['name'],version=p['version']) for p in json.loads(p.read_bytes())['packages']],sourceOrProtocolNotModified=True)\nPath('build-validity/formal-session-evidence/reference-php-installation.json').write_text(json.dumps(r,indent=2)+'\\n')\nPY\n"
+        },
+        {
+          "name": "Prepare all reference dependencies before observing a quiet session",
+          "run": "set -euo pipefail\nvenv=\"${RUNNER_TEMP}/capsid-formal-python\"\npython3 -m venv \"${venv}\"\n\"${venv}/bin/python\" -m pip install fastapi==0.115.6 uvicorn==0.34.0 Flask==3.1.0 gunicorn==26.2.0\nmkdir -p build-validity/formal-session-evidence\n\"${venv}/bin/python\" -m pip freeze --all > build-validity/formal-session-evidence/reference-python-freeze.txt\n\"${venv}/bin/python\" -I -B -m gunicorn --version > build-validity/formal-session-evidence/reference-gunicorn-version.txt\n\"${venv}/bin/python\" -I -B -m gunicorn --help > build-validity/formal-session-evidence/reference-gunicorn-help.txt\ngrep -F -- \"--control-socket PATH\" build-validity/formal-session-evidence/reference-gunicorn-help.txt\nprintf 'CAPSID_PERF_NODE=%s\\n' \"$(node -p 'process.execPath')\" >> \"${GITHUB_ENV}\"\nprintf 'CAPSID_PERF_DENO=%s\\n' \"$(command -v deno)\" >> \"${GITHUB_ENV}\"\nprintf 'CAPSID_PERF_PYTHON=%s\\n' \"${venv}/bin/python\" >> \"${GITHUB_ENV}\"\n# These are the new disposable runner's package services, not production.\n# No unknown process is killed to manufacture a quiet observation.\nsudo systemctl stop nginx.service php8.3-fpm.service\nsudo systemctl stop apt-daily.timer apt-daily-upgrade.timer\n"
+        },
+        {
+          "name": "Prepare the original v0.2.2 binaries and independently identified observer",
+          "run": "set -euo pipefail\nsudo env PATH=\"$PATH\" RUNNER_TEMP=\"$RUNNER_TEMP\" GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=Never \\\n  GITHUB_RUN_ID=\"$GITHUB_RUN_ID\" GITHUB_RUN_ATTEMPT=\"$GITHUB_RUN_ATTEMPT\" \\\n  CAPSID_WORKERD_REF=\"$CAPSID_WORKERD_REF\" \\\n  CAPSID_WS_INTEROP_PYTHON=\"$CAPSID_WS_INTEROP_PYTHON\" CAPSID_WS_INTEROP_NODE_PACKAGE=\"$CAPSID_WS_INTEROP_NODE_PACKAGE\" \\\n  CAPSID_PERF_NODE=\"$CAPSID_PERF_NODE\" CAPSID_PERF_DENO=\"$CAPSID_PERF_DENO\" CAPSID_PERF_PYTHON=\"$CAPSID_PERF_PYTHON\" \\\n  python3 -B - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,os,re,shlex,subprocess,sys,time,traceback\nassert sys.platform=='linux' and 'microsoft' not in os.uname().release.lower()\nroot=Path.cwd();build=root/'build-validity';out=build/'formal-session-evidence';out.mkdir(parents=True,exist_ok=True)\nsource=Path(os.environ['RUNNER_TEMP'])/'capsid-baseline-v022-source'\nbaseline=Path(os.environ['RUNNER_TEMP'])/'capsid-baseline-v022-build'\nsha=lambda p:hashlib.sha256(Path(p).read_bytes()).hexdigest()\nr=dict(complete=False,status='preparing-original-v022',sourceTag='v0.2.2',sourceCommit='aef602081134d6e87fd141a5693bbbb7c9ad7f2e',\n    sourceRoot=str(source),build=str(baseline),measurementToolSourceCommit='be19fc0848c9b9640e618743a9c45dc26894a31a',\n    formalBaselinePointNotClaimed=True,commands=[])\ndef save():(out/'baseline-preparation.json').write_text(json.dumps(r,indent=2)+'\\n')\ndef run(name,args,cwd=root,timeout=1800):\n start=time.monotonic();p=subprocess.run(list(map(str,args)),cwd=cwd,capture_output=True,timeout=timeout)\n so=out/('baseline-'+name+'.stdout.log');se=out/('baseline-'+name+'.stderr.log');so.write_bytes(p.stdout);se.write_bytes(p.stderr)\n r['commands'].append(dict(label=name,command=list(map(str,args)),exitCode=p.returncode,seconds=time.monotonic()-start,\n  stdoutSHA256=sha(so),stderrSHA256=sha(se)));save();assert p.returncode==0,(name,p.stderr[-1200:])\n return p.stdout\ntry:\n assert not source.exists() and not baseline.exists()\n run('clone',['git','clone','--depth=1','--branch','v0.2.2','--recurse-submodules','--shallow-submodules','https://github.com/ErosZy/capsid.git',source])\n assert run('identity',['git','-C',source,'rev-parse','HEAD']).decode().strip()==r['sourceCommit']\n run('vendor-tag',['git','-C',source/'vendor/txiki.js','fetch','--depth=1','origin','refs/tags/v26.6.0:refs/tags/v26.6.0'])\n for rel in ['vendor/txiki.js','examples/hono-reference','examples/itty-router-reference','examples/h3-v2-reference','examples/elysia-reference']:\n  if (source/rel/'package-lock.json').is_file():run('npm-'+rel.replace('/','-'),['npm','ci','--ignore-scripts','--prefix',source/rel])\n args=['cmake','-S',source,'-B',baseline,'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DBUILD_TESTING=OFF',\n  '-DCAPSID_BUILD_HOST=ON','-DCAPSID_BUILD_WORKER=ON','-DCAPSID_ENABLE_LTO=ON','-DCAPSID_USE_MIMALLOC=OFF',\n  '-DCMAKE_PREFIX_PATH=/opt/openssl35','-DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include']\n run('configure',args);run('build',['cmake','--build',baseline,'--parallel','2'])\n # The frozen new C-ABI observer is a separate measurement tool, linked to\n # the original baseline runtime. Never label its source as the old tag.\n entries=json.loads((build/'compile_commands.json').read_text())\n entry=next(c for c in entries if c['file'].endswith('/bench/cold-start.cc'))\n cmd=shlex.split(entry['command']);original_object=cmd[cmd.index('-o')+1]\n obj=out/'baseline-cold-observer.o';binary=out/'baseline-cold-observer'\n cmd[cmd.index('-o')+1]=str(obj)\n include='-I'+str(root/'include');assert include in cmd\n cmd[cmd.index(include)]='-I'+str(source/'include')\n if '-MF' in cmd:cmd[cmd.index('-MF')+1]=str(out/'baseline-cold-observer.d')\n # Keep the legacy ABI header and all response assertions. The newer observer\n # recognizes the current public Upgrade bit; the old runtime never emits it.\n current_header=root/'include/capsid/runtime.h';legacy_header=source/'include/capsid/runtime.h'\n flag=re.search(r'(?m)^#define CAPSID_RESPONSE_HEAD_FLAG_UPGRADE (\\d+u)\\s*$',current_header.read_text())\n assert flag and flag[1]=='32u' and 'CAPSID_RESPONSE_HEAD_FLAG_UPGRADE' not in legacy_header.read_text()\n cmd.append('-DCAPSID_RESPONSE_HEAD_FLAG_UPGRADE='+flag[1])\n r['observerLegacyHeaderCompatibility']=dict(flag='CAPSID_RESPONSE_HEAD_FLAG_UPGRADE',value=flag[1],\n  currentPublicHeaderSHA256=sha(current_header),legacyPublicHeaderSHA256=sha(legacy_header),\n  exactPublicFlagRetainedNotZeroed=True,allResponseAssertionsUnchanged=True,originalRuntimeNotModified=True)\n save()\n run('observer-compile',cmd,cwd=Path(entry['directory']))\n commands=run('observer-link-command',['ninja','-C',build,'-t','commands','cold-start']).decode().splitlines()\n line=next(line for line in reversed(commands) if original_object in line and ' -o cold-start ' in line)\n link=shlex.split(line)\n if link[:2]==[':','&&']:link=link[2:]\n if link[-2:]==['&&',':']:link=link[:-2]\n assert not any(x in link for x in ['&&',';','|'])\n link[link.index(original_object)]=str(obj);link[link.index('-o')+1]=str(binary)\n assert link.count('libcapsid_runtime.a')==1\n link[link.index('libcapsid_runtime.a')]=str(baseline/'libcapsid_runtime.a')\n for i,value in enumerate(link):\n  if value=='vendor/jansson/libcapsid_jansson.a':link[i]=str(baseline/value)\n run('observer-link',link,cwd=build)\n names={'host':baseline/'capsid-host','worker':baseline/'capsid-worker','compiler':baseline/'capsid-bytecode-compile','cold':binary}\n r.update(complete=True,status='original-v022-and-separate-observer-ready',\n  binaries={k:dict(path=str(p),sha256=sha(p)) for k,p in names.items()},\n  originalRootStatus=run('original-source-status',['git','-C',source,'status','--porcelain']).decode(),\n  observerSourceSHA256=sha(root/'bench/cold-start.cc'),observerHeaderSHA256=sha(root/'bench/cold_start_measurement.h'),\n  baselineHeaderSHA256=sha(source/'include/capsid/runtime.h'),baselineRuntimeSHA256=sha(baseline/'libcapsid_runtime.a'))\n save();print(json.dumps(dict(complete=True,status=r['status'],formalBaselinePointNotClaimed=True)))\nexcept BaseException:\n r.update(status='baseline-preparation-failed',error=traceback.format_exc());save()\n # Preserve this actual prerequisite failure while allowing the independent\n # candidate lanes to collect useful data. The final controller refuses to\n # claim that a missing baseline comparison completed the full goal.\n print(json.dumps(dict(complete=False,status=r['status'],formalBaselinePointNotClaimed=True)))\n\nPY\n"
+        },
+        {
+          "name": "Execute one observed-quiet native session with original three-lane contracts",
+          "run": "set -euo pipefail\nsudo env PATH=\"$PATH\" RUNNER_TEMP=\"$RUNNER_TEMP\" GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=Never \\\n  GITHUB_RUN_ID=\"$GITHUB_RUN_ID\" GITHUB_RUN_ATTEMPT=\"$GITHUB_RUN_ATTEMPT\" \\\n  CAPSID_WORKERD_REF=\"$CAPSID_WORKERD_REF\" \\\n  CAPSID_WS_INTEROP_PYTHON=\"$CAPSID_WS_INTEROP_PYTHON\" CAPSID_WS_INTEROP_NODE_PACKAGE=\"$CAPSID_WS_INTEROP_NODE_PACKAGE\" \\\n  CAPSID_PERF_NODE=\"$CAPSID_PERF_NODE\" CAPSID_PERF_DENO=\"$CAPSID_PERF_DENO\" CAPSID_PERF_PYTHON=\"$CAPSID_PERF_PYTHON\" \\\n  python3 -B - <<'PY'\nfrom pathlib import Path\nfrom datetime import datetime,timezone\nimport hashlib,json,os,re,resource,shutil,subprocess,sys,time,traceback\nassert sys.platform=='linux' and 'microsoft' not in os.uname().release.lower()\nassert os.geteuid()==0,'use the dedicated runner root context for actual namespace prerequisites'\nroot=Path.cwd();build=root/'build-validity';out=build/'formal-session-evidence';out.mkdir(parents=True,exist_ok=True)\nsha=lambda p:hashlib.sha256(Path(p).read_bytes()).hexdigest()\ncommit='be19fc0848c9b9640e618743a9c45dc26894a31a'\nsession='native-v030-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT']\nr=dict(complete=False,status='preparing-native-session',session=session,productCheckout=commit,commands=[],quietWindows=[],\n formalPerformancePoints=0,fullV030GoalComplete=False,baselineObservationIsNotAFormalHistoricalPoint=True)\ndef save():(out/'session.json').write_text(json.dumps(r,indent=2)+'\\n')\ndef run(label,args,timeout=1800,check=True):\n start=time.monotonic();p=subprocess.run(list(map(str,args)),cwd=root,capture_output=True,timeout=timeout)\n so=out/(label+'.stdout.log');se=out/(label+'.stderr.log');so.write_bytes(p.stdout);se.write_bytes(p.stderr)\n row=dict(label=label,command=list(map(str,args)),exitCode=p.returncode,seconds=time.monotonic()-start,\n  stdoutSHA256=sha(so),stderrSHA256=sha(se));r['commands'].append(row);save()\n if check:assert p.returncode==0,(label,p.stderr[-1500:])\n return p\n\ndef idle_snapshot():\n values=[int(v) for v in Path('/proc/stat').read_text().splitlines()[0].split()[1:9]]\n return dict(total=sum(values),idle=values[3]+values[4],steal=values[7])\ndef quiet(label):\n before=idle_snapshot();start=time.monotonic();time.sleep(30);after=idle_snapshot()\n total=after['total']-before['total'];assert total>0\n busy=1-(after['idle']-before['idle'])/total;steal=(after['steal']-before['steal'])/total\n row=dict(label=label,seconds=time.monotonic()-start,before=before,after=after,busyFraction=busy,stealFraction=steal,\n  observedQuiet=busy<=0.05 and steal<=0.01,scope='dedicated hosted native-Linux guest; physical-host isolation not claimed')\n r['quietWindows'].append(row);save();assert row['observedQuiet'],'native guest did not meet quiet prerequisites'\n\ndef git(*args):return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()\ntry:\n # Trust only the exact pinned checkout and its pinned submodule directories,\n # not a wildcard safe.directory or any other machine's working tree.\n pending=[root];seen=set()\n while pending:\n  directory=pending.pop()\n  if directory in seen:continue\n  seen.add(directory);assert directory.is_relative_to(root)\n  subprocess.run(['git','config','--global','--add','safe.directory',str(directory)],check=True)\n  modules=directory/'.gitmodules'\n  if modules.exists():\n   p=subprocess.run(['git','config','--file',str(modules),'--get-regexp',r'^submodule\\..*\\.path$'],capture_output=True,text=True)\n   assert p.returncode in (0,1)\n   pending.extend((directory/line.split(None,1)[1]).resolve() for line in p.stdout.splitlines())\n assert git('rev-parse','HEAD')==commit and git('rev-parse','HEAD^{tree}')=='dd0e4e8fd4454180df0e3917ffd473b7c9d7a588'\n assert not git('status','--porcelain')\n available=sorted(os.sched_getaffinity(0));before=resource.getrlimit(resource.RLIMIT_NOFILE)\n r['nativePrerequisite']=dict(availableCpus=available,nofileBefore=list(before),hardLimitNotRaised=True);save()\n assert len(available)>=4,'four available execution CPUs remain mandatory'\n # sudo resets the disposable runner's soft limit. Prepare the benchmark\n # process before any observation; never change the inherited hard limit.\n target=min(65536,before[1] if before[1]!=resource.RLIM_INFINITY else 65536)\n assert target>=8192,'existing hard descriptor limit cannot support the original density protocol'\n if before[0]!=resource.RLIM_INFINITY and before[0]<target:\n  resource.setrlimit(resource.RLIMIT_NOFILE,(target,before[1]))\n after=resource.getrlimit(resource.RLIMIT_NOFILE)\n r['nativePrerequisite']['nofileAfter']=list(after);save()\n assert after[1]==before[1] and (after[0]==resource.RLIM_INFINITY or after[0]>=8192)\n selected=sorted(os.sched_getaffinity(0))[:4];cpuset=','.join(map(str,selected))\n assert shutil.disk_usage(root).free>=8*1024**3,'formal archives need original raw search records, not disk-pressure truncation'\n info=(build/'generated/build-info.txt').read_text();assert 'commit='+commit in info and 'treeClean=true' in info\n for field in ('cmakeBuildType=Release','lto=ON','asan=OFF','ubsan=OFF','tsan=OFF','sandbox_profile=production'):assert field in info\n commands=json.loads((build/'compile_commands.json').read_text())\n runtime=[c for c in commands if 'CMakeFiles/capsid_runtime.dir/' in c['command']]\n assert len(runtime)==12 and all('-flto' in c['command'] for c in runtime)\n node=Path(os.environ['CAPSID_PERF_NODE']);deno=Path(os.environ['CAPSID_PERF_DENO']);workerd=Path(os.environ['CAPSID_WORKERD_REF'])\n python=Path(os.environ['CAPSID_PERF_PYTHON']);php=Path('/usr/sbin/php-fpm8.3');nginx=Path('/usr/sbin/nginx')\n paths={'capsid-host':build/'capsid-host','capsid-worker':build/'capsid-worker','cold-start':build/'cold-start',\n  'capsid-bytecode-compile':build/'capsid-bytecode-compile','loadgen':build/'benchmark-tools/loadgen',\n  'node':node,'deno':deno,'workerd':workerd,'python':python,'php-fpm':php,'nginx':nginx}\n assert all(p.is_file() and os.access(p,os.X_OK) for p in paths.values())\n lock=json.loads((root/'tests/fixtures/workerd-ws/reference-lock.json').read_text());assert sha(workerd)==lock['binary_sha256']\n assert run('node-version',[node,'--version']).stdout.strip()==b'v24.14.0'\n deno_version=run('deno-version',[deno,'--version']).stdout.decode();assert deno_version.startswith('deno 2.9.8 ')\n pyversion=run('python-version',[python,'-I','-c','import platform;print(platform.python_version())']).stdout.decode().strip()\n phpversion=run('php-version',[php,'--version']).stdout.decode();ng=run('nginx-version',[nginx,'-v']).stderr.decode()\n phpv=re.search(r'PHP (\\d+\\.\\d+\\.\\d+)',phpversion)[1];ngv=re.search(r'nginx/(\\d+\\.\\d+\\.\\d+)',ng)[1]\n run('distribution-packages',['dpkg-query','-W','-f=${Package} ${Version} ${Source}\\n','python3.12','nginx','php8.3-fpm'])\n sys.path.insert(0,str(root/'bench'))\n from perf_run import machine_identity\n binaries={k:dict(commit=commit,tag='',version='0.3.0',sha256=sha(p)) for k,p in paths.items() if k.startswith('capsid-') or k in ('cold-start','loadgen')}\n for name,version,tag,revision in [('node','24.14.0','v24.14.0',''),('deno','2.9.8','v2.9.8',''),\n  ('workerd',lock['binary_version_string'],lock['release_tag'],lock['source_commit']),\n  ('python',pyversion,'v'+pyversion,''),('php-fpm',phpv,'php-'+phpv,''),('nginx',ngv,'release-'+ngv,'')]:\n  binaries[name]=dict(commit=revision,tag=tag,version=version,sha256=sha(paths[name]))\n r.update(machine=machine_identity(),cpuSet=selected,buildInfoSHA256=sha(build/'generated/build-info.txt'),\n  actualBuildRuntimeLtoUnits=12,binaries=binaries,distributionPatchesRecordedSeparately=True,\n  baselinePreparation=json.loads((out/'baseline-preparation.json').read_text()))\n save()\n # These actual root probes precede the quiet session. A prerequisite skip\n # cannot be converted to sandbox qualification.\n p=run('native-strict-prerequisites',['ctest','--test-dir',build,'--parallel','1','--no-tests=error','-L','sandbox',\n  '--output-on-failure','--output-junit',out/'strict-prerequisites.xml'])\n import xml.etree.ElementTree as E\n cases=list(E.parse(out/'strict-prerequisites.xml').iter('testcase'))\n assert cases and all(c.find(t) is None for c in cases for t in ('failure','error','skipped'))\n r['strictPrerequisiteCasesPassed']=len(cases)\n perf=json.loads((root/'build-perf-prerequisite/evidence/prerequisite.json').read_text())\n assert perf['actualCountersPassed']\n run('native-software-counters',[perf['selectedActualPerf'],'stat','-e','task-clock,context-switches,cpu-migrations,page-faults','true'])\n apps=build/'formal-cold-apps';assert not apps.exists()\n run('frozen-fixtures',[sys.executable,'-B',root/'bench/gen-cold-start-apps.py',apps])\n baseargs=['--repo',root,'--cpuset',cpuset]\n common={'cold':['--worker',paths['capsid-worker'],'--cold',paths['cold-start'],'--compiler',paths['capsid-bytecode-compile'],\n  '--node',node,'--deno',deno,'--workerd',workerd,'--apps',apps,'--sizes','10k','100k','1m','--rounds','5','--warm','50'],\n  'qps':['--host',paths['capsid-host'],'--worker',paths['capsid-worker'],'--loadgen',paths['loadgen'],'--workerd',workerd,\n  '--python',python,'--php-fpm',php,'--nginx',nginx,'--apps',root/'bench/bench-apps','--rounds','5','--warmup','5','--duration','15',\n  '--connections','64','--inflight','64','--trickle-seconds','15','--trickle-rate','10','--request-timeout-ms','30000'],\n  'density':['--host',paths['capsid-host'],'--worker',paths['capsid-worker'],'--workerd',workerd,'--apps',apps,\n  '--sizes','10k','100k','1m','--budget-mb','2048','--max-workers','4096','--max-cells','16384','--warm-requests','100','--parallel','64']}\n r['densitySearchCaps']=dict(capsid=4096,workerd=16384,memoryBudgetMiB=2048,internalCoverageDeadlineSeconds=300,\n  configuredSearchCapIsNotTheMeasurementBudget=True,capOnlyResultsCannotQualifyFillToBudget=True)\n scripts={'cold':'cold-start.py','qps':'qps-lane.py','density':'density-lane.py'}\n # Exercise all real reference stacks and both density backends before the\n # quiet session. These shorter observations can never replace formal data.\n preflight_qps=list(common['qps'])\n for key,value in {'--rounds':'1','--warmup':'1','--duration':'1','--connections':'2','--inflight':'2','--trickle-seconds':'1'}.items():\n  preflight_qps[preflight_qps.index(key)+1]=value\n preflight_qps+=['--workloads','matrix-json-1k']\n run('preflight-all-five-qps-stacks',[sys.executable,'-B',root/'bench/qps-lane.py',*baseargs,'--observation',\n  '--out',root/'bench/results'/(session+'-preflight-qps'),*preflight_qps],timeout=600)\n preflight_density=list(common['density'])\n for key,value in {'--max-workers':'1','--max-cells':'1'}.items():\n  preflight_density[preflight_density.index(key)+1]=value\n sizes=preflight_density.index('--sizes');del preflight_density[sizes+2:sizes+4]\n run('preflight-both-density-backends',[sys.executable,'-B',root/'bench/density-lane.py',*baseargs,'--observation',\n  '--out',root/'bench/results'/(session+'-preflight-density'),*preflight_density],timeout=600)\n r['shortPrerequisiteObservationsNeverFormalPerformancePoints']=True;save()\n quiet('before-formal-session')\n metadata=dict(schema=1,session=session,quietSession=True,sourceRoot=str(root),origin=dict(commit=commit,tag='',version='0.3.0',release='v0.3.0',clean=True),\n  machine=machine_identity(),binaries=binaries)\n meta=out/'actual-run-metadata.json';meta.write_text(json.dumps(metadata,indent=2)+'\\n')\n directories={}\n for lane in ('cold','qps','density'):\n  if lane!='cold':quiet('between-formal-'+lane)\n  directory=root/'bench/results'/(session+'-'+lane);directories[lane]=str(directory)\n  r.update(status='formal-'+lane+'-running',formalDirectories=directories);save()\n  run('formal-'+lane,[sys.executable,'-B',root/'bench'/scripts[lane],*baseargs,'--metadata',meta,'--out',directory,*common[lane]],timeout=5*60*60)\n  envelope=json.loads((directory/'lane.json').read_text());assert envelope['status']=='complete' and envelope['session']==session\n  if lane=='density':\n   final=[json.loads((directory/rec['samples'][0]).read_text()) for rec in envelope['records']]\n   r['densityFinalLimits']=[dict(stack=x['stack'],size=x['size'],phase=x['phase'],limit=x['limit'],count=x['count']) for x in final]\n   save();assert len(final)==12 and all(x['limit']=='budget' for x in final),'a cap-only lower bound cannot qualify the required fill-to-budget maximum'\n quiet('after-formal-session')\n run('formal-collector-check',[sys.executable,'-B',root/'bench/collect-perf-point.py','--cold-start',directories['cold'],\n  '--qps',directories['qps'],'--density',directories['density'],'--version','0.3.0','--release','v0.3.0',\n  '--generated-at',datetime.now(timezone.utc).isoformat(),'--check'])\n r.update(candidateThreeLaneArchiveValidated=True,formalPerformancePoints=1,status='baseline-comparison-pending');save()\n baseline=r['baselinePreparation'];assert baseline['complete'],'candidate archives retained; original baseline prerequisites did not complete'\n b={k:Path(v['path']) for k,v in baseline['binaries'].items()}\n for lane in ('cold','qps','density'):\n  quiet('before-baseline-'+lane)\n  args=list(common[lane]);replacements={str(paths['capsid-host']):str(b['host']),str(paths['capsid-worker']):str(b['worker']),\n   str(paths['cold-start']):str(b['cold']),str(paths['capsid-bytecode-compile']):str(b['compiler'])}\n  args=[replacements.get(str(a),str(a)) for a in args]\n  directory=root/'bench/results'/(session+'-baseline-'+lane)\n  r.update(status='baseline-'+lane+'-running');save()\n  run('baseline-'+lane,[sys.executable,'-B',root/'bench'/scripts[lane],*baseargs,'--observation','--out',directory,*args,'--stacks','capsid'],timeout=5*60*60)\n  assert (directory/'observation.json').is_file() and not (directory/'lane.json').exists()\n r.update(complete=True,status='native-formal-candidate-and-full-protocol-baseline-observations-complete',\n  baselineFormalHistoricalPointNotClaimed=True,sourceAndMeasuredBinariesUnchanged=True)\n assert git('rev-parse','HEAD')==commit and not git('status','--porcelain')\n assert all(sha(p)==binaries[k]['sha256'] for k,p in paths.items())\n save();print(json.dumps({k:r[k] for k in ['complete','status','formalPerformancePoints','fullV030GoalComplete']}))\nexcept BaseException:\n r.update(status='native-session-failed',error=traceback.format_exc());save();raise\n\nPY\n"
+        },
+        {
+          "name": "Preserve complete session archives including any original failure",
+          "if": "always()",
+          "run": "sudo env GITHUB_RUN_ID=\"$GITHUB_RUN_ID\" GITHUB_RUN_ATTEMPT=\"$GITHUB_RUN_ATTEMPT\" python3 -B - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,os,tarfile\nroot=Path.cwd();build=root/'build-validity';build.mkdir(exist_ok=True)\nname='native-v030-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT']\narchive=build/'native-formal-session.tar.gz'\nassert not archive.exists()\nselected=[p for p in (root/'bench/results').glob(name+'*')] if (root/'bench/results').exists() else []\nselected += [p for p in [build/'formal-session-evidence',build/'generated/build-info.txt',build/'compile_commands.json',\n build/'full-build-commands.txt',build/'full-registration.json',root/'build-perf-prerequisite/evidence'] if p.exists()]\nwith tarfile.open(archive,'x:gz',dereference=False) as t:\n for p in selected:t.add(p,arcname=p.relative_to(root).as_posix())\nrecord=dict(archiveSHA256=hashlib.sha256(archive.read_bytes()).hexdigest(),selected=[p.relative_to(root).as_posix() for p in selected],\n sourceInputsOrFailureArtifactsNotRewritten=True,releaseOrPagesNotDispatched=True)\n(archive.with_name(archive.name+'.sha256')).write_text(record['archiveSHA256']+'  '+archive.name+'\\n')\n(build/'native-formal-archive.json').write_text(json.dumps(record,indent=2)+'\\n')\nprint(json.dumps(record))\nPY\n"
+        },
+        {
+          "name": "Save native formal measurement and failure evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "native-formal-performance-evidence",
+            "path": "build-validity/native-formal-session.tar.gz\nbuild-validity/native-formal-session.tar.gz.sha256\nbuild-validity/native-formal-archive.json\n",
+            "if-no-files-found": "error"
+          }
+        }
+      ]
+    }
+  }
+}
