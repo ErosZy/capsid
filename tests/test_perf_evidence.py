@@ -969,5 +969,46 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.assertFalse((output / "evidence").exists())
 
 
+def run_isolated_complete_suite():
+    """Overlap independent fixtures, not assertions or measured workloads."""
+    from concurrent.futures import ThreadPoolExecutor
+    import re
+    import time
+    names = unittest.defaultTestLoader.getTestCaseNames(PerformanceEvidenceTests)
+    assert names, "complete suite must not become an empty selection"
+    workers = min(4, os.cpu_count() or 1, len(names))
+    groups = [["PerformanceEvidenceTests." + name for name in names[index::workers]] for index in range(workers)]
+    assert len({name for group in groups for name in group}) == len(names)
+    started = time.monotonic()
+    deadline = started + 90
+    def run_group(group):
+        command = [sys.executable, "-B", str(Path(__file__).resolve()), "--collector", str(args.collector.resolve()), *group]
+        try:
+            result = subprocess.run(command, capture_output=True, timeout=max(.001, deadline-time.monotonic()))
+            return group, result.returncode, result.stdout, result.stderr
+        except subprocess.TimeoutExpired as error:
+            return group, None, error.stdout or b"", error.stderr or b""
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        outcomes = list(pool.map(run_group, groups))
+    passed = True
+    skipped = 0
+    for group, code, stdout, stderr in outcomes:
+        sys.stdout.buffer.write(stdout)
+        sys.stderr.buffer.write(stderr)
+        executed = re.findall(rb"Ran ([0-9]+) tests? in ", stderr)
+        skipped += sum(int(value) for value in re.findall(rb"skipped=([0-9]+)", stderr))
+        passed = passed and code == 0 and executed == [str(len(group)).encode()]
+    sys.stdout.flush()
+    sys.stderr.flush()
+    print(json.dumps(dict(isolatedSuiteGroups=groups,originalSharedBudgetSeconds=90,
+                          everyOriginalTestAssignedExactlyOnce=True,skippedTests=skipped,complete=passed)))
+    success = "OK" + (f" (skipped={skipped})" if skipped else "") + "\n"
+    sys.stderr.write(f"\nRan {len(names)} tests in {time.monotonic()-started:.3f}s\n\n" + (success if passed else "FAILED (isolated suite child failure or original shared deadline)\n"))
+    return 0 if passed else 1
+
+
 if __name__ == "__main__":
-    unittest.main()
+    if sys.argv[1:]:
+        unittest.main()
+    else:
+        raise SystemExit(run_isolated_complete_suite())

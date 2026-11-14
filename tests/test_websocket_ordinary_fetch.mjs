@@ -192,6 +192,7 @@ for (const id of cases) {
         value.upstream = source.snapshot();
     } catch (error) {
         value.failure = error.stack;
+        if (source) value.failureUpstream = source.snapshot();
         if (error.observation) value.failureObservation = error.observation;
         if (readState) try {value.failureState = await readState();} catch (nested) {value.failureStateError = nested.stack;}
     } finally {

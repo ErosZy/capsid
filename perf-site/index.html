@@ -494,6 +494,7 @@ function renderHero() {
   if (VERIFIED) {
     $("verification-note").textContent = "Archive and protocol checks passed. Source, binary identities, and raw evidence are listed below.";
   }
+  if (P && P.notes) $("verification-note").textContent += " " + P.notes;
   var m = (P && P.machine) || {};
   var cpu = (m.cpu || "").replace(/\(R\)|\(TM\)/g, "").trim();
   cpu = cpu.split(" ").slice(-1)[0] || "—";
@@ -529,9 +530,8 @@ function renderHero() {
       '<div class="k-sub">single worker through the isolated host↔worker IPC path</div></div>';
   }
   if (q && q.servingPss && q.servingPss.capsid && q.servingPss.workerd) {
-    var a = 0, b = 0;
-    q.servingPss.capsid.forEach(function (x) { a += x.mb; });
-    q.servingPss.workerd.forEach(function (x) { b += x.mb; });
+    var a = memoryTotal(q.servingPss, "capsid", q.servingPssMb);
+    var b = memoryTotal(q.servingPss, "workerd", q.servingPssMb);
     cards +=
       '<div class="kpi hero-kpi"><div class="k-label">Memory @ 64 conns</div>' +
       '<div class="k-value">' + fmt(a, 1) + '<small>MB PSS</small></div>' +
@@ -734,8 +734,18 @@ function rk(st, role) {
   return role;
 }
 
+/* Prefer the measured whole-tree total: individually rounded roles can
+   differ by 0.1 MB. Older observations may only have component records. */
+function memoryTotal(sp, stack, totals) {
+  if (totals && typeof totals[stack] === "number" && isFinite(totals[stack]) && totals[stack] > 0)
+    return totals[stack];
+  var total = 0;
+  ((sp && sp[stack]) || []).forEach(function (part) { total += part.mb; });
+  return total;
+}
+
 /* stacked serving-memory chart; axis-break for outliers (see note) */
-function memStackedChart(sp, chartId, legendId) {
+function memStackedChart(sp, chartId, legendId, measuredTotals) {
   var sts = [];
   for (var k in sp) sts.push(k);
 
@@ -745,9 +755,7 @@ function memStackedChart(sp, chartId, legendId) {
   var H = top + sts.length * rowH + 4;
   var tot = {};
   sts.forEach(function (s2) {
-    var t = 0;
-    sp[s2].forEach(function (x) { t += x.mb; });
-    tot[s2] = t;
+    tot[s2] = memoryTotal(sp, s2, measuredTotals);
   });
   /* bars ranked small to large */
   sts.sort(function (a, b) { return tot[a] - tot[b]; });
@@ -909,17 +917,17 @@ function renderMem() {
   var sp = P && P.qps && P.qps.servingPss;
   var spLow = P && P.qps && P.qps.lowLoadPss;
   if (!sp) { $("mem-chart").innerHTML = ""; return; }
-  memStackedChart(sp, "mem-chart", "mem-legend");
-  if (spLow) memStackedChart(spLow, "mem-low-chart", "mem-low-legend");
+  memStackedChart(sp, "mem-chart", "mem-legend", P.qps.servingPssMb);
+  if (spLow) memStackedChart(spLow, "mem-low-chart", "mem-low-legend", P.qps.lowLoadPssMb);
   renderWorkerCost(sp, spLow);
   renderBudget(sp, spLow);
 
   var spc = spLow && spLow.capsid ? spLow : sp;
   if (spc.capsid && spc.workerd) {
-    var ca = 0, cw = 0;
-    spc.capsid.forEach(function (x) { ca += x.mb; });
-    spc.workerd.forEach(function (x) { cw += x.mb; });
     var isTrickle = spc === spLow;
+    var totals = isTrickle ? P.qps.lowLoadPssMb : P.qps.servingPssMb;
+    var ca = memoryTotal(spc, "capsid", totals);
+    var cw = memoryTotal(spc, "workerd", totals);
     var phase = isTrickle
       ? "At an identical <b>10 req/s</b> — the same request volume for " +
         "every stack, so heap growth and GC timing cannot skew the read — "
@@ -931,8 +939,7 @@ function renderMem() {
       "resident: " + fmt(cw / ca, 1) + "× less than workerd's single " +
       "process (" + fmt(cw, 1) + " MB).";
     if (spc.php) {
-      var ph = 0;
-      spc.php.forEach(function (x) { ph += x.mb; });
+      var ph = memoryTotal(spc, "php", totals);
       msg += ph < ca
         ? " The php-fpm pool sits at " + fmt(ph, 1) + " MB."
         : " The php-fpm pool is heavier at " + fmt(ph, 1) + " MB — and " +
@@ -945,11 +952,17 @@ function renderMem() {
   if (cw2 != null) {
     $("mem-callout").innerHTML +=
       " Each additional Capsid tenant adds <b>" + fmt(cw2, 1) +
-      " MB</b> of measured worker PSS. A real fill-to-budget benchmark — " +
-      "grown, warmed (100 req/worker) and filled to 2048 MB — puts " +
-      "<b>896</b> Capsid 10k workers (or <b>638</b> workerd cells) in 2 GB; " +
-      "see the measured-density table below. Scheduling, kernel memory, CPU " +
-      "quota, and per-app heap sit on top of these counts.";
+      " MB</b> of measured worker PSS.";
+    var dc = P.density && P.density.capsid && P.density.capsid["warm@10k"];
+    var dw = P.density && P.density.workerd && P.density.workerd["warm@10k"];
+    if (dc && dw && dc.limit === "budget" && dw.limit === "budget") {
+      $("mem-callout").innerHTML +=
+        " The measured warmed 10k pools (100 req/worker, 2048 MiB whole-tree budget) contain " +
+        "<b>" + fmt(dc.count) + "</b> Capsid workers and <b>" + fmt(dw.count) +
+        "</b> workerd cells; see the measured-density table below.";
+    }
+    $("mem-callout").innerHTML +=
+      " Scheduling, kernel memory, CPU quota, and per-app heap sit on top of these counts.";
   }
 }
 
