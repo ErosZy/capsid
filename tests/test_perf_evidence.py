@@ -489,6 +489,26 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
                     self.collect()
 
+    def test_density_http_idle_admission_rechecks_every_raw_gauge_and_shared_deadline(self):
+        f = self.fixture
+        _, _, row = self.density_probe_record(phase='warm')
+        name = row['probeDirectory']+'/runtime/prewarm-barriers.jsonl'
+        changes = [
+            lambda rows: rows[0].pop('idleReadiness'),
+            lambda rows: rows[0]['idleReadiness'].update(readings=[]),
+            lambda rows: rows[0]['idleReadiness']['readings'][0].update(httpInflight=1),
+            lambda rows: rows[0]['idleReadiness']['readings'][0].update(rawGauge='capsid_channel_http_inflight{scope="service",listener=""} 1'),
+            lambda rows: rows[1]['idleReadiness'].update(deadlineMonotonic=700),
+            lambda rows: rows[0].update(pauseStartedMonotonic=99),
+            lambda rows: rows[0]['idleReadiness'].update(admittedMonotonic=401),
+            lambda rows: rows[0]['idleReadiness']['readings'][0].update(startedMonotonic=99),
+        ]
+        for position, change in enumerate(changes):
+            with self.subTest(change=position), f.transaction():
+                self.mutate_density_jsonl(name,change)
+                with self.assertRaisesRegex(contract.EvidenceError,'HTTP idle'):
+                    self.collect()
+
     def test_density_resealed_pss_cannot_omit_processes_or_replace_the_samples(self):
         f = self.fixture
         index, _, _ = self.density_probe_record()

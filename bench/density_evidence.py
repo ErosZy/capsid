@@ -130,6 +130,44 @@ def validate_network_startup(archive, directory, row, count, target):
     require(previous == admitted, 'network admission time disagrees with its final raw reading')
 
 
+def validate_http_idle(barriers, count, verdict):
+    """Reparse original service gauges; every pause needs actual prior retirement."""
+    first = barriers[0].get('idleReadiness')
+    require(isinstance(first, dict), 'HTTP idle evidence is missing')
+    deadline = number(first.get('deadlineMonotonic'), 'HTTP idle deadline')
+    coverage_start = deadline - verdict['coverageTimeoutSeconds']
+    coverage_end = coverage_start + verdict['conditioningSeconds']
+    require(0 <= coverage_start < coverage_end <= deadline, 'HTTP idle shared coverage deadline changed')
+    previous_resume = coverage_start
+    for barrier in barriers:
+        idle = barrier.get('idleReadiness')
+        require(isinstance(idle, dict) and set(idle) == {'startedMonotonic', 'deadlineMonotonic', 'readings', 'admittedMonotonic'},
+                'HTTP idle evidence is incomplete')
+        require(number(idle['deadlineMonotonic'], 'HTTP idle deadline') == deadline, 'HTTP idle coverage budget restarted')
+        started = number(idle['startedMonotonic'], 'HTTP idle wait start')
+        admitted = number(idle['admittedMonotonic'], 'HTTP idle admission')
+        pause = number(barrier.get('pauseStartedMonotonic'), 'HTTP idle pause start')
+        require(previous_resume <= started <= admitted <= pause < deadline, 'HTTP idle pause preceded actual retirement')
+        readings = idle['readings']
+        require(isinstance(readings, list) and 0 < len(readings) <= 60001, 'HTTP idle readings are missing or unbounded')
+        previous_time, previous_count = started, count
+        for index, reading in enumerate(readings):
+            require(isinstance(reading, dict), 'HTTP idle reading must be an object')
+            read_start = number(reading.get('startedMonotonic'), 'HTTP idle read start')
+            read_end = number(reading.get('completedMonotonic'), 'HTTP idle read completion')
+            require(previous_time <= read_start <= read_end <= admitted < deadline, 'HTTP idle reading order or deadline changed')
+            raw = reading.get('rawGauge')
+            match = re.fullmatch(r'capsid_channel_http_inflight\{scope="service",listener=""\} ([0-9]+)', raw) if isinstance(raw, str) else None
+            require(match is not None, 'HTTP idle raw service gauge is missing')
+            observed = integer(reading.get('httpInflight'), 'HTTP idle inflight', 0)
+            require(observed == int(match[1]) and observed <= previous_count, 'HTTP idle raw gauge or previous-wave identity disagrees')
+            require(observed == 0 if index == len(readings) - 1 else observed > 0, 'HTTP idle must admit only the first actual zero')
+            previous_time, previous_count = read_end, observed
+        require(admitted == previous_time, 'HTTP idle admission differs from the final raw reading')
+        previous_resume = pause + number(barrier.get('pauseSeconds'), 'HTTP idle pause duration')
+        require(previous_resume <= coverage_end, 'HTTP idle wait escaped the unchanged conditioning interval')
+
+
 def validate_density_conditioning(archive, key, row, verdict, protocol):
     stack, size, phase = key
     count = row['count']
@@ -261,6 +299,7 @@ def validate_density_conditioning(archive, key, row, verdict, protocol):
         require(type(verdict.get('barrierWaves')) is int and verdict['barrierWaves'] == target, 'wrong barrier wave total')
         barriers = archive.jsonl(directory + '/' + verdict['conditioningEvidence'])
         require(len(barriers) == target, 'missing complete barrier wave evidence')
+        validate_http_idle(barriers, count, verdict)
         root_pid = integer(barriers[0].get('rootPid'), 'Host PID')
         roots = {p for p in members if p[0] == root_pid}
         require(len(roots) == 1, 'Host is absent from measured readiness membership')

@@ -74,7 +74,12 @@ def synthetic_density(root, directory, stack, size, phase, count, *, probe_index
                 request['externalWorkerExecutionBarrier']=True
             requests.append(request)
         if stack=='capsid':
+            wave_start = 100 + (ordinal - 1) * .04
+            idle = dict(startedMonotonic=wave_start, deadlineMonotonic=400, admittedMonotonic=wave_start+.001,
+                        readings=[dict(startedMonotonic=wave_start, completedMonotonic=wave_start+.001,
+                                       httpInflight=0, rawGauge='capsid_channel_http_inflight{scope="service",listener=""} 0')])
             barriers.append(dict(wave=ordinal,workers=workers,rootPid=root_pid,rootPaused=False,
+                                 idleReadiness=idle,pauseStartedMonotonic=wave_start+.002,
                                  observedHttpInflightBeforeResume=count,pauseSeconds=.02,
                                  resumeSignalsAttempted=count,resumeSignalsIssued=count,resumeFailures=[]))
             for worker in workers:
@@ -90,7 +95,8 @@ def synthetic_density(root, directory, stack, size, phase, count, *, probe_index
                    errors=0,mismatches=0,timeouts=0,warmupConcurrencyLimit=concurrency,
                    maximumWaveRequests=count,maximumRequestsAllowed=max(64,count*target*(32 if phase=='warm' else 8)),
                    coverageTimeoutSeconds=300,conditioningMethod='owned-worker-dispatch-v1' if stack=='capsid' else 'targeted-cell-socket-v1',
-                   conditioningWaves=target,conditioningSeconds=.1,externalWorkerExecutionBarrier=stack=='capsid')
+                   conditioningWaves=target,conditioningSeconds=target*.04+.01 if stack=='capsid' else .1,
+                   externalWorkerExecutionBarrier=stack=='capsid')
     if stack=='capsid':
         verdict.update(barrierWaves=target,conditioningEvidence='runtime/prewarm-barriers.jsonl')
     row = dict(stack=stack,size=size,phase=phase,count=count,unit='workers' if stack=='capsid' else 'cells',

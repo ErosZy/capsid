@@ -183,7 +183,14 @@ work; controller tests and restricted smoke do not qualify a performance point.
   service HTTP inflight gauge to reach `pool_count`, then resume every worker.
   Every resume is attempted even if another fails; any failure rejects the
   probe and the owner cleans its whole process tree. Every wave must record
-  one business execution on each original worker. workerd uses the same wave
+  one business execution on each original worker. Before pausing the next
+  Capsid wave, readonly Admin metrics must show exact service HTTP inflight
+  zero: receiving a complete client response can precede Host retirement.
+  Poll only that observed state within the same original 300-second coverage
+  deadline, without a fixed hold, deadline restart or business-request retry.
+  Seal every raw service gauge and its reading/admission/pause timestamps;
+  revalidate actual zero, previous-wave ownership and the shared deadline.
+  workerd uses the same wave
   size through its individual cell sockets. This changes density prewarm
   execution timing; the clients finish before settling and PSS sampling.
   QPS remains fixed at 64 connections/in-flight and the cold-start lane retains

@@ -29,6 +29,31 @@ def http_inflight(raw):
     return int(matches[0])
 
 
+def wait_http_idle(tree, admin, count, deadline):
+    """Observe retirement before pausing; never restart the coverage budget."""
+    evidence = dict(startedMonotonic=time.monotonic(), deadlineMonotonic=deadline, readings=[])
+    previous = count
+    while True:
+        started = time.monotonic()
+        if started >= deadline or not tree.alive():
+            raise ProbeError('barrier-not-idle', 'previous HTTP requests did not retire within the original coverage deadline',
+                             idleReadiness=evidence)
+        raw = admin_request(admin, 'GET', '/metrics')
+        observed = http_inflight(raw)
+        completed = time.monotonic()
+        gauge = re.findall(rb'^capsid_channel_http_inflight\{scope="service",listener=""\} [0-9]+$', raw, re.MULTILINE)[0]
+        evidence['readings'].append(dict(startedMonotonic=started, completedMonotonic=completed,
+                                        rawGauge=gauge.decode('ascii'), httpInflight=observed))
+        if completed >= deadline or not tree.alive() or observed > previous:
+            raise ProbeError('barrier-not-idle', 'HTTP retirement deadline, host lifetime or previous-wave identity failed',
+                             idleReadiness=evidence)
+        if observed == 0:
+            evidence['admittedMonotonic'] = completed
+            return evidence
+        previous = observed
+        time.sleep(min(.005, deadline - completed))
+
+
 @contextmanager
 def paused_owned_workers(tree, worker, count):
     executable = Path(worker).resolve()
@@ -50,6 +75,7 @@ def paused_owned_workers(tree, worker, count):
     scope = {'workers': [{'pid': p.pid, 'start': p.start} for p in selected],
              'rootPid': tree.root.pid, 'rootPaused': False}
     started = time.monotonic()
+    scope['pauseStartedMonotonic'] = started
     stopped = []
     try:
         for identity in selected:
@@ -124,13 +150,13 @@ class ConditionedDensityProbe(DensityProbe):
             for ordinal in range(target):
                 if time.monotonic() >= deadline or not tree.alive():
                     raise ProbeError('barrier-coverage', 'prewarm coverage deadline or host lifetime ended')
-                if http_inflight(admin_request(self.barrier_admin, 'GET', '/metrics')) != 0:
-                    raise ProbeError('barrier-not-idle', 'previous HTTP requests must finish before the next wave')
+                idle = wait_http_idle(tree, self.barrier_admin, count, deadline)
                 selected = [ports[i % len(ports)] for i in range(count)]
                 scope = None
                 with ThreadPoolExecutor(max_workers=1) as sender:
                     try:
                         with paused_owned_workers(tree, self.worker, count) as scope:
+                            scope['idleReadiness'] = idle
                             future = sender.submit(validated_wave, selected, nonce, connect_parallel=self.parallel)
                             dispatch_deadline = min(deadline, time.monotonic() + 1)
                             while True:

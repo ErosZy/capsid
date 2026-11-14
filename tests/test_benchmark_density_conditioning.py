@@ -89,8 +89,11 @@ class ConditioningTests(unittest.TestCase):
             calls = [0]
             def metrics(*_):
                 calls[0] += 1
-                if calls[0] == 1:
-                    count = 1 if fault == 'not-idle' else 0
+                if fault == 'not-idle':
+                    now[0] += 1
+                    count = 1
+                elif calls[0] == 1:
+                    count = 0
                 elif fault == 'metrics-failed':
                     raise ProbeError('barrier-metrics', 'injected metrics failure')
                 else:
@@ -141,6 +144,109 @@ class ConditioningTests(unittest.TestCase):
 
     def test_unfinished_previous_requests_prevent_a_new_barrier(self):
         self.exercise_cover_fault('not-idle')
+
+
+class HttpRetirementTests(unittest.TestCase):
+    def exercise(self, values, *, deadline=5, alive=lambda: True, after_read=None):
+        now = [0.0]
+        calls = []
+        sleeps = []
+        def metrics(*_):
+            value = next(values)
+            calls.append(value)
+            if after_read is not None:
+                now[0] = after_read
+            return f'capsid_channel_http_inflight{{scope="service",listener=""}} {value}\n'.encode()
+        def sleep(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+        with patch.object(conditioning, 'admin_request', side_effect=metrics), \
+             patch.object(conditioning.time, 'monotonic', side_effect=lambda: now[0]), \
+             patch.object(conditioning.time, 'sleep', side_effect=sleep):
+            result = conditioning.wait_http_idle(SimpleNamespace(alive=alive), Path('unused'), 2, deadline)
+        return result, calls, sleeps
+
+    def test_completed_responses_can_precede_metric_retirement(self):
+        result, calls, sleeps = self.exercise(iter([2, 1, 0]))
+        self.assertEqual([2, 1, 0], calls)
+        self.assertEqual([2, 1, 0], [v['httpInflight'] for v in result['readings']])
+        self.assertEqual(5, result['deadlineMonotonic'])
+        self.assertEqual(2, len(sleeps))
+        self.assertEqual(result['admittedMonotonic'], result['readings'][-1]['completedMonotonic'])
+        self.assertTrue(all('listener=""' in v['rawGauge'] for v in result['readings']))
+
+    def test_cover_waits_for_retirement_before_pausing_the_next_wave(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            probe = conditioning.ConditionedDensityProbe(host='unused', worker='unused', workerd='unused',
+                apps=temporary, out=temporary, cpuset='0', coverage_timeout=5)
+            probe.barrier_admin = Path(temporary) / 'admin.sock'
+            probe.barrier_log = Path(temporary) / 'barriers.jsonl'
+            coverage = Coverage(2, 'retirement-control')
+            now = [10.0]
+            gauges = iter([0, 2, 1, 0, 2])
+            observed = []
+            waves = []
+            output = io.StringIO()
+            def metrics(*_):
+                value = next(gauges)
+                observed.append(value)
+                return f'capsid_channel_http_inflight{{scope="service",listener=""}} {value}\n'.encode()
+            def sleep(seconds):
+                now[0] += seconds
+            @contextmanager
+            def paused(*_):
+                self.assertEqual(0, observed[-1], 'must observe actual idle before pausing')
+                scope = dict(workers=[dict(pid=101,start=1),dict(pid=102,start=2)], rootPid=100,
+                             rootPaused=False, pauseStartedMonotonic=now[0])
+                try:
+                    yield scope
+                finally:
+                    scope.update(pauseSeconds=.1,resumeSignalsIssued=2,resumeSignalsAttempted=2,resumeFailures=[])
+            def wave(ports, nonce, **_):
+                waves.append((ports,nonce))
+                coverage.counts = {'one':len(waves),'two':len(waves)}
+                return [dict(port=port,status=200,ok=True,bodySHA256='a'*64) for port in ports]
+            with patch.object(conditioning, 'admin_request', side_effect=metrics), \
+                 patch.object(conditioning, 'paused_owned_workers', side_effect=paused), \
+                 patch.object(conditioning, 'validated_wave', side_effect=wave), \
+                 patch.object(conditioning.time, 'monotonic', side_effect=lambda: now[0]), \
+                 patch.object(conditioning.time, 'sleep', side_effect=sleep):
+                result = probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=lambda:None),
+                                     'capsid',[12345],2,2,'retirement-control',output)
+            self.assertEqual(4,result['responses_checked'])
+            self.assertEqual(2,len(waves), 'observation polling must not retry business requests')
+            records = [json.loads(line) for line in probe.barrier_log.read_text().splitlines()]
+            self.assertEqual([1,2],[len(row['idleReadiness']['readings']) for row in records])
+            self.assertEqual([15,15],[row['idleReadiness']['deadlineMonotonic'] for row in records])
+
+    def test_already_idle_has_no_fixed_hold(self):
+        result, calls, sleeps = self.exercise(iter([0]))
+        self.assertEqual([0], calls)
+        self.assertEqual([], sleeps)
+        self.assertEqual(0, result['admittedMonotonic'])
+
+    def test_busy_retirement_cannot_restart_the_shared_coverage_deadline(self):
+        with self.assertRaises(ProbeError) as raised:
+            self.exercise(iter([1] * 20), deadline=.012)
+        self.assertEqual('barrier-not-idle', raised.exception.code)
+
+    def test_idle_read_returning_after_deadline_cannot_admit(self):
+        with self.assertRaises(ProbeError) as raised:
+            self.exercise(iter([0]), deadline=5, after_read=5.001)
+        self.assertEqual('barrier-not-idle', raised.exception.code)
+
+    def test_host_loss_prevents_another_read_or_pause(self):
+        calls = iter([True, False])
+        with self.assertRaises(ProbeError) as raised:
+            self.exercise(iter([1]), alive=lambda: next(calls))
+        self.assertEqual('barrier-not-idle', raised.exception.code)
+
+    def test_foreign_or_increasing_inflight_is_not_hidden_by_waiting(self):
+        for values in ([3], [1, 2]):
+            with self.subTest(values=values):
+                with self.assertRaises(ProbeError) as raised:
+                    self.exercise(iter(values))
+                self.assertEqual('barrier-not-idle', raised.exception.code)
 
 
 @unittest.skipUnless(sys.platform == 'linux', 'owned worker process barriers require Linux /proc')
