@@ -5,11 +5,13 @@ from pathlib import Path
 import errno
 import hashlib
 import http.client
+import io
 import json
 import os
 import re
 import shutil
 import socket
+import tarfile
 import tempfile
 import threading
 import time
@@ -26,6 +28,45 @@ EXPECTED_BODY = b'{"status":"ok","total":2039,"count":16}'
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def snapshot_runtime_files(folder, archive):
+    """Preserve exact Linux names inside a sealed TAR, never normalize them."""
+    from perf_evidence import EvidenceError, relative_name
+    packed = []
+    for path in sorted(folder.rglob("*")):
+        if not path.is_file():
+            continue
+        name = path.relative_to(folder).as_posix()
+        try:
+            relative_name("runtime/" + name)
+        except EvidenceError:
+            packed.append((name, path))
+        else:
+            target = archive / "runtime" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+    members = []
+    if packed:
+        with tarfile.open(archive / "runtime-nonportable.tar", "x:") as tar:
+            for name, path in packed:
+                raw = path.read_bytes()
+                info = tarfile.TarInfo(name)
+                info.size = len(raw)
+                info.mode = path.stat().st_mode & 0o777
+                tar.addfile(info, io.BytesIO(raw))
+                members.append(dict(name=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest()))
+    write_json(archive / "runtime-nonportable.json",
+               dict(schema=1, archive="runtime-nonportable.tar" if members else None, members=members))
+    # Observation runs must exercise this contract too, before a long search.
+    from density_evidence import validate_runtime_snapshot
+    class RuntimeArchive:
+        def json(self, name):
+            return json.loads((archive / name).read_text(encoding="utf-8"))
+        def sealed(self, name):
+            return archive / name
+    validate_runtime_snapshot(RuntimeArchive(), "")
+
 
 
 def instrument_fixture(source, nonce):
@@ -371,11 +412,7 @@ class DensityProbe:
                         write_json(archive / "cleanup.json", cleanup)
             # Keep actual launch/fixture/state bytes; do not copy runtime Unix
             # sockets, and never write generated configs into the shared APPS.
-            for path in folder.rglob("*"):
-                if path.is_file():
-                    target_file = archive / "runtime" / path.relative_to(folder)
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(path, target_file)
+            snapshot_runtime_files(folder, archive)
         if failure is not None:
             if not isinstance(failure, (ProbeError, KeyboardInterrupt, SystemExit)):
                 failure = ProbeError("probe-failed", f"density probe failed: {failure}", type=type(failure).__name__)

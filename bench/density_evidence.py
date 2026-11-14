@@ -3,7 +3,9 @@ from collections import Counter
 import hashlib
 import json
 import math
+from pathlib import PurePosixPath
 import re
+import tarfile
 import uuid
 
 
@@ -38,6 +40,55 @@ def unique_pairs(pairs):
         require(key not in result, 'duplicate JSON key: ' + key)
         result[key] = value
     return result
+
+
+def validate_runtime_snapshot(archive, directory):
+    prefix = directory + '/' if directory else ''
+    index = archive.json(prefix + 'runtime-nonportable.json')
+    require(isinstance(index, dict) and set(index) == {'schema', 'archive', 'members'} and
+            type(index['schema']) is int and index['schema'] == 1 and isinstance(index['members'], list),
+            'invalid runtime snapshot index')
+    records = index['members']
+    if not records:
+        require(index['archive'] is None, 'empty runtime snapshot must not invent an archive')
+        return
+    require(index['archive'] == 'runtime-nonportable.tar' and len(records) <= 4096,
+            'invalid runtime snapshot container')
+    expected = {}
+    for record in records:
+        require(isinstance(record, dict) and set(record) == {'name', 'bytes', 'sha256'},
+                'malformed runtime snapshot member')
+        name = record['name']
+        require(isinstance(name, str) and name and '\\' not in name and
+                not any(ord(c) < 32 for c in name), 'invalid runtime snapshot name')
+        path = PurePosixPath(name)
+        require(not path.is_absolute() and path.as_posix() == name and
+                all(p not in ('', '.', '..') for p in path.parts), 'runtime snapshot path traversal')
+        special = [part for part in path.parts if ':' in part]
+        require(special and all(re.fullmatch(r'sha256:[0-9a-f]{64}', part) for part in special),
+                'runtime snapshot must preserve a known generation name, not a drive or ADS')
+        require(name not in expected and integer(record['bytes'], 'runtime member size', 0) <= 256 * 1024**2 and
+                isinstance(record['sha256'], str) and re.fullmatch(r'[0-9a-f]{64}', record['sha256']),
+                'duplicate or malformed runtime snapshot identity')
+        expected[name] = record
+    seen = set()
+    try:
+        with tarfile.open(archive.sealed(prefix + index['archive']), 'r:') as tar:
+            for member in tar:
+                require(member.isfile() and not member.issym() and not member.islnk() and
+                        member.name in expected and member.name not in seen,
+                        'runtime snapshot has an unexpected, repeated or non-file member')
+                record = expected[member.name]
+                require(member.size == record['bytes'], 'runtime snapshot size mismatch')
+                digest = hashlib.sha256()
+                with tar.extractfile(member) as stream:
+                    for block in iter(lambda: stream.read(65536), b''):
+                        digest.update(block)
+                require(digest.hexdigest() == record['sha256'], 'runtime snapshot byte hash mismatch')
+                seen.add(member.name)
+    except (tarfile.TarError, OSError) as exc:
+        raise DensityEvidenceError('density conditioning: invalid runtime snapshot TAR') from exc
+    require(seen == set(expected), 'runtime snapshot omitted an indexed member')
 
 
 def validate_network_startup(archive, directory, row, count, target):
@@ -95,6 +146,7 @@ def validate_density_conditioning(archive, key, row, verdict, protocol):
     directory = row.get('probeDirectory')
     require(isinstance(directory, str) and directory not in ('', '.', '..') and
             not any(c in directory for c in '/\\:'), 'invalid probe directory')
+    validate_runtime_snapshot(archive, directory)
     launch = archive.json(directory + '/launch.json')
     for name, expected in (('stack', stack), ('size', size), ('phase', phase), ('count', count)):
         require(type(launch.get(name)) is type(expected) and launch[name] == expected, 'launch identity mismatch: ' + name)

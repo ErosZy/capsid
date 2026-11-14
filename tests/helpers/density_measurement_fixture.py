@@ -5,8 +5,10 @@ Production acceptance comes from separate real-process executions.
 """
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
+import tarfile
 import uuid
 
 from density_probe import instrument_fixture
@@ -46,6 +48,18 @@ def synthetic_density(root, directory, stack, size, phase, count, *, probe_index
         source = "export default { fetch() { return new Response('synthetic fixture only'); } };\n"
     wrapper = 'runtime/apps/orders/v1/bundle.mjs' if stack=='capsid' else 'runtime/bundle.mjs'
     write(root/directory/wrapper, instrument_fixture(source, nonce).encode())
+    runtime_index = dict(schema=1, archive=None, members=[])
+    if stack == 'capsid':
+        name = 'state/apps/orders/generations/sha256:'+'a'*64+'/COMPLETE'
+        data = b'explicitly synthetic generation marker'
+        memory = io.BytesIO()
+        with tarfile.open(fileobj=memory, mode='w:') as tar:
+            member = tarfile.TarInfo(name); member.size = len(data)
+            tar.addfile(member, io.BytesIO(data))
+        write(root/directory/'runtime-nonportable.tar', memory.getvalue())
+        runtime_index.update(archive='runtime-nonportable.tar',
+                             members=[dict(name=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest())])
+    write(root/directory/'runtime-nonportable.json', encoded(runtime_index))
     logs = ([json.dumps(dict(event='worker_ready',pid=p['pid'])) for p in ready[1:]] if stack=='capsid'
             else [json.dumps(dict(event='listen',socket=f's{i}',port=port)) for i,port in enumerate(ports)])
     requests, barriers, signals = [], [], []

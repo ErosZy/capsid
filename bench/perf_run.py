@@ -21,7 +21,7 @@ else:
     fcntl = None
 
 from measurement_runtime import ProbeError
-from perf_evidence import read_json, sha256
+from perf_evidence import read_json, relative_name, sha256
 
 
 def utc_now():
@@ -124,6 +124,7 @@ def seal_archive(out):
             name = path.relative_to(out).as_posix()
             if "\n" in name or "\r" in name:
                 raise ProbeError("archive-path", "newline in archive file name")
+            relative_name(name)
             entries.append(f"{sha256(path)}  {name}\n")
     (out / "sha256sums.txt").write_text("".join(entries), encoding="utf-8", newline="\n")
 

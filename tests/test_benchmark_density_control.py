@@ -41,6 +41,50 @@ def result_for(call, pss=None):
             "cleanup": {"ownedPidsRemaining": 0}}
 
 
+class RuntimeSnapshotTests(unittest.TestCase):
+    def test_portable_runtime_files_keep_their_exact_bytes(self):
+        import density_probe
+        with tempfile.TemporaryDirectory() as temporary:
+            source, archive = Path(temporary)/'source', Path(temporary)/'archive'
+            source.mkdir(); archive.mkdir()
+            (source/'bundle.mjs').write_bytes(b'fixture bytes\x00\xff')
+            density_probe.snapshot_runtime_files(source, archive)
+            self.assertEqual((archive/'runtime/bundle.mjs').read_bytes(), b'fixture bytes\x00\xff')
+            index = json.loads((archive/'runtime-nonportable.json').read_text())
+            self.assertEqual(index, {'schema': 1, 'archive': None, 'members': []})
+
+    @unittest.skipUnless(sys.platform == 'linux', 'actual colon filename requires Linux')
+    def test_linux_generation_name_is_preserved_inside_tar_without_renaming(self):
+        import density_probe
+        import tarfile
+        from perf_run import seal_archive
+        from density_evidence import validate_runtime_snapshot
+        with tempfile.TemporaryDirectory() as temporary:
+            source, archive = Path(temporary)/'source', Path(temporary)/'archive'
+            source.mkdir(); archive.mkdir()
+            name = 'state/apps/orders/generations/sha256:'+'a'*64+'/COMPLETE'
+            file = source/name; file.parent.mkdir(parents=True); file.write_bytes(b'original generation\x00\xff')
+            (source/'prewarm-barriers.jsonl').write_bytes(b'original barrier bytes\n')
+            density_probe.snapshot_runtime_files(source, archive)
+            self.assertFalse(any(':' in p.relative_to(archive).as_posix() for p in archive.rglob('*')))
+            with tarfile.open(archive/'runtime-nonportable.tar', 'r:') as tar:
+                self.assertEqual(tar.getnames(), [name])
+                self.assertEqual(tar.extractfile(name).read(), b'original generation\x00\xff')
+            self.assertEqual((archive/'runtime/prewarm-barriers.jsonl').read_bytes(), b'original barrier bytes\n')
+            seal_archive(archive)
+            reader = SimpleNamespace(json=lambda n: json.loads((archive/n).read_text()), sealed=lambda n: archive/n)
+            validate_runtime_snapshot(reader, '')
+
+    @unittest.skipUnless(sys.platform == 'linux', 'actual colon filename requires Linux')
+    def test_observation_sealing_already_rejects_nonportable_names(self):
+        from perf_run import seal_archive
+        from perf_evidence import EvidenceError
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary); (out/('sha256:'+'b'*64)).write_bytes(b'not portable')
+            with self.assertRaisesRegex(EvidenceError, 'invalid archive-relative'):
+                seal_archive(out)
+
+
 class WorkerdNetworkHeadroomTests(unittest.TestCase):
     def invoke(self, values, required=103424, deadline=120):
         clock = SimpleNamespace(now=0.0)

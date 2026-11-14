@@ -556,6 +556,47 @@ class PerformanceEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(contract.EvidenceError, 'startup readiness'):
                 self.collect()
 
+    def test_runtime_snapshot_tar_and_index_are_reparsed_after_resealing(self):
+        import tarfile
+        f = self.fixture
+        _, _, row = self.density_probe_record()
+        directory = row['probeDirectory']
+        index_path = f.paths['density']/directory/'runtime-nonportable.json'
+        tar_path = f.paths['density']/directory/'runtime-nonportable.tar'
+        for case in ('forged-hash', 'omitted-member', 'repeated-member', 'traversal',
+                     'drive-name', 'symlink', 'wrong-bytes', 'broken-tar'):
+            with self.subTest(case=case), f.transaction():
+                index = json.loads(index_path.read_text())
+                with tarfile.open(tar_path, 'r:') as tar:
+                    name = tar.getnames()[0]
+                    data = tar.extractfile(name).read()
+                if case == 'forged-hash':
+                    index['members'][0]['sha256'] = 'f'*64
+                elif case == 'traversal':
+                    name = '../'+name
+                    index['members'][0]['name'] = name
+                elif case == 'drive-name':
+                    name = 'C:/'+name
+                    index['members'][0]['name'] = name
+                elif case == 'wrong-bytes':
+                    data = b'X'*len(data)
+                memory = io.BytesIO()
+                with tarfile.open(fileobj=memory, mode='w:') as tar:
+                    if case != 'omitted-member':
+                        info = tarfile.TarInfo(name); info.size = len(data)
+                        if case == 'symlink':
+                            info.type = tarfile.SYMTYPE; info.linkname = '../../foreign'
+                            tar.addfile(info)
+                        else:
+                            tar.addfile(info, io.BytesIO(data))
+                        if case == 'repeated-member':
+                            tar.addfile(info, io.BytesIO(data))
+                f.write(index_path, encoded(index))
+                f.write(tar_path, b'invalid tar bytes' if case == 'broken-tar' else memory.getvalue())
+                f.seal('density')
+                with self.assertRaisesRegex(contract.EvidenceError, 'runtime snapshot'):
+                    self.collect()
+
     def test_workerd_network_headroom_and_shared_deadline_are_reparsed(self):
         f = self.fixture
         index, _, row = self.density_probe_record(stack='workerd')

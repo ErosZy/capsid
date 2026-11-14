@@ -242,6 +242,18 @@ work; controller tests and restricted smoke do not qualify a performance point.
   insufficient native capacity or deadline expiry fail closed. Sealed raw
   network-headroom readings and startup/launch/readiness timestamps are
   independently rechecked, including actual admission and the shared deadline.
+  Runtime files with legal Linux generation names such as sha256:<64 hex>
+  cannot be direct portable-archive paths. Keep their exact original names and
+  bytes in runtime-nonportable.tar, with a sealed runtime-nonportable.json member
+  index (name, length and SHA-256). Portable runtime fixtures and barrier logs
+  retain their direct paths. Validation streams every indexed regular TAR member,
+  rejects traversal/drive/ADS names, links, duplicates, omitted members and byte
+  mismatches, and never extracts or renames these members on Windows.
+  Both observation and formal producers apply the unchanged portable-path rule
+  during sealing, so the existing short prerequisite run catches a bad archive
+  before a complete density search. Repackaging an already failed measurement
+  cannot retroactively qualify it; a corrected source needs a fresh full session.
+
 
 
 `density-lane.sh` now execs `density-lane.py`, using injectable control and
