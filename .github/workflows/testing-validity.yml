@@ -1,1112 +1,685 @@
-name: Testing validity
-
-on:
-  pull_request:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
-  workflow_call:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: testing-validity-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  release-wpt-and-delegated-sandbox:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Set up Deno
-        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
-        with:
-          deno-version: v2.x
-
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          # Hosted probes verified this Ubuntu mirror while the ubuntu.com
-          # domains failed DNS. Preserve suites, components and Signed-By.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic
-          /usr/bin/openssl version
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-
-      - name: Require actual Linux perf counters for evidence controls
-        run: python3 -B tools/setup-hosted-perf.py
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          /usr/bin/python3.12 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Check out the manifest-pinned WPT revision
-        env:
-          WPT_DIRECTORY: ${{ runner.temp }}/wpt
-        run: |
-          set -euo pipefail
-          repository=$(node -p \
-            "require('./tests/wpt/manifest.json').repository")
-          commit=$(node -p \
-            "require('./tests/wpt/manifest.json').commit")
-          git init "${WPT_DIRECTORY}"
-          git -C "${WPT_DIRECTORY}" remote add origin "${repository}"
-          git -C "${WPT_DIRECTORY}" fetch --depth=1 origin "${commit}"
-          git -C "${WPT_DIRECTORY}" checkout --detach FETCH_HEAD
-          test "$(git -C "${WPT_DIRECTORY}" rev-parse HEAD)" = "${commit}"
-
-      # capsid-bytecode-compile and the Host trust chain require OpenSSL
-      # >= 3.5. ubuntu-24.04 supplies 3.0, so the Release build must use the
-      # same pinned provider source as the sanitizer Host build.
-      - name: Build OpenSSL 3.5 for Release
-        run: |
-          set -euo pipefail
-          # Built in the runner temp dir: extracting the tarball inside the
-          # workspace dirties the checkout and trips the Release
-          # clean-worktree identity gate.
-          cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider openssl --source "$PWD" | tee "${evidence}/openssl-source.json"
-          ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm
-          make -j2
-          sudo make install_sw
-
-      - name: Build c-ares 1.34.5 for Release
-        run: |
-          set -euo pipefail
-          cd "${RUNNER_TEMP}"
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          curl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013
-          echo "cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz" | sha256sum -c -
-          tar xzf capsid-cares.tar.gz
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider cares --source "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" | tee "${evidence}/cares-source.json"
-          cmake -S "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" -B "${RUNNER_TEMP}/capsid-cares-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \
-            -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF
-          cmake --build "${RUNNER_TEMP}/capsid-cares-build" --parallel 2 --verbose
-          sudo cmake --install "${RUNNER_TEMP}/capsid-cares-build"
-          cp "${RUNNER_TEMP}/capsid-cares-build/compile_commands.json" "${evidence}/cares-compile-commands.json"
-
-      - name: Configure Release/LTO with WPT and benchmarks
-        env:
-          WPT_DIRECTORY: ${{ runner.temp }}/wpt
-        run: |
-          cmake -S . -B build-validity -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_USE_MIMALLOC=OFF \
-            -DCAPSID_BUILD_BENCHMARKS=ON \
-            -DCAPSID_GENERATE_LINK_MAP=ON \
-            -DCMAKE_PREFIX_PATH=/opt/openssl35 \
-            -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include \
-            -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \
-            -DCAPSID_SANDBOX_PROFILE=production \
-            -DCAPSID_WPT_ROOT="${WPT_DIRECTORY}"
-
-      - name: Build
-        run: cmake --build build-validity --parallel 2
-
-      - name: Require complete workerd WebSocket comparison
-        run: |
-          node tools/run-workerd-ws-gate.mjs \
-            build-validity build-validity/workerd-ws-evidence
-
-      - name: Run the complete ordinary-host matrix
-        id: ordinary_host
-        # The raw step retains its failure outcome and exit code. The next
-        # mandatory acceptance step permits only the exact locked profile.
-        continue-on-error: true
-        run: |
-          rm -f build-validity/ordinary-host-exit-code.txt
-          ctest --test-dir build-validity --no-tests=error --show-only=json-v1 \
-            > build-validity/ordinary-host-registration.json
-          ordinary_ctest_status=0
-          ctest --test-dir build-validity \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit ordinary-host-junit.xml \
-            --parallel 2 || ordinary_ctest_status=$?
-          printf '%s\n' "${ordinary_ctest_status}" > build-validity/ordinary-host-exit-code.txt
-          exit "${ordinary_ctest_status}"
-        # The worker_package_contents / smoke / reproducibility gates run in
-        # this full matrix (spec §12.3/§12.4): the archive is built, the
-        # package smoke consumes it, and a second fresh build must reproduce
-        # the identity and manifest.
-
-      - name: Audit the versioned workerd profile without changing standard results
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          evidence=build-validity/workerd-wpt-profile-evidence
-          mkdir -p "${evidence}"
-          cp build-validity/Testing/Temporary/LastTest.log "${evidence}/ordinary-LastTest.log"
-          cp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
-          cp build-validity/ordinary-host-exit-code.txt "${evidence}/ordinary-exit-code.txt"
-          node tools/run_workerd_wpt_context.mjs \
-            --build build-validity \
-            --registration build-validity/ordinary-host-registration.json \
-            --output "${evidence}/context"
-          node tools/workerd-wpt-acceptance.mjs audit \
-            --ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
-            --ordinary-outcome '${{ steps.ordinary_host.outcome }}' \
-            --last-test "${evidence}/ordinary-LastTest.log" \
-            --junit "${evidence}/ordinary-junit.xml" \
-            --registration build-validity/ordinary-host-registration.json \
-            --gate build-validity/workerd-ws-evidence \
-            --context "${evidence}/context/context.json" \
-            --build build-validity --wpt-root "${RUNNER_TEMP}/wpt" \
-            --output "${evidence}/profile-audit.json" \
-            --acceptance-output "${evidence}/compatibility-acceptance.json"
-
-      # The ordinary matrix runs unprivileged, so the sandbox tests skip
-      # (exit 77: namespaces/cgroups need privileges). Run them again under
-      # root so they execute instead of skipping — cgroup v2 and network
-      # namespace additionally run inside the delegated-sandbox container
-      # below, this step covers the native namespace probe.
-      - name: Run the privileged sandbox matrix
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          # Binding §7.9: a sandbox test that skips (77) under root is a
-          # failure in the Hosted Validity workflow — the delegated
-          # environment must actually execute every profile probe.
-          sudo ctest --test-dir build-validity \
-            --no-tests=error \
-            --output-on-failure \
-            -L sandbox 2>&1 | tee build-validity/sandbox-run.log
-          if grep -q "Skipped" build-validity/sandbox-run.log; then
-            echo "::error::a sandbox test skipped under root; Binding §7.9 "\
-                 "requires every probe to execute"
-            exit 1
-          fi
-
-      - name: Record package evidence (build ID, compatibility ID, package and SBOM hashes)
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          archive=$(ls -t build-validity/capsid-*.tar.gz | head -1)
-          test -f "${archive}"
-          package_sha256=$(sha256sum "${archive}" | awk '{print $1}')
-          build_info=build-validity/generated/build-info.txt
-          build_id=$(sed -n 's/^buildId=//p' "${build_info}")
-          compatibility_id=$(sed -n 's/^compatibilityId=//p' "${build_info}")
-          test -n "${build_id}"
-          test -n "${compatibility_id}"
-          staging=$(mktemp -d)
-          tar xzf "${archive}" -C "${staging}"
-          sbom=$(find "${staging}" -name SBOM.spdx.json -print -quit)
-          test -n "${sbom}"
-          sbom_sha256=$(sha256sum "${sbom}" | awk '{print $1}')
-          {
-            printf 'build_id=%s\n' "${build_id}"
-            printf 'compatibility_id=%s\n' "${compatibility_id}"
-            printf 'package_archive=%s\n' "$(basename "${archive}")"
-            printf 'package_sha256=%s\n' "${package_sha256}"
-            printf 'sbom_sha256=%s\n' "${sbom_sha256}"
-          } > build-validity/package-evidence.txt
-          cat build-validity/package-evidence.txt
-
-      - name: Generate txiki.js upgrade gate report
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          set -euo pipefail
-          evidence=build-validity/workerd-wpt-profile-evidence
-          cmp build-validity/ordinary-host-junit.xml "${evidence}/ordinary-junit.xml"
-          python3 tools/generate-txiki-upgrade-report.py \
-            --source-root . \
-            --build-dir build-validity \
-            --junit "${evidence}/ordinary-junit.xml" \
-            --baseline docs/txiki-upgrade-baseline.json \
-            --node-executable "$(node -p 'process.execPath')" \
-            --workerd-python "${CAPSID_WS_INTEROP_PYTHON}" \
-            --workerd-acceptance "${evidence}/compatibility-acceptance.json" \
-            --workerd-last-test "${evidence}/ordinary-LastTest.log" \
-            --workerd-registration build-validity/ordinary-host-registration.json \
-            --workerd-gate build-validity/workerd-ws-evidence \
-            --workerd-context "${evidence}/context/context.json" \
-            --workerd-wpt-root "${RUNNER_TEMP}/wpt" \
-            --workerd-ctest-exit-code "${evidence}/ordinary-exit-code.txt" \
-            --output-json build-validity/txiki-upgrade-report.json \
-            --output-md build-validity/txiki-upgrade-report.md
-
-      - name: Require delegated cgroup v2 and network namespace passes
-        if: ${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}
-        run: |
-          docker run --rm \
-            --privileged \
-            --cgroupns=private \
-            -e CAPSID_DELEGATED_SANDBOX_CONTAINER=1 \
-            -v "${GITHUB_WORKSPACE}:/repo:ro" \
-            -v "${GITHUB_WORKSPACE}/build-validity:/build:ro" \
-            --entrypoint /bin/bash \
-            ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 \
-            /repo/scripts/run-delegated-sandbox-tests.sh /build
-
-      - name: Archive workerd execution evidence
-        if: always()
-        run: |
-          set -euo pipefail
-          if [ -d build-validity/workerd-ws-evidence ]; then
-            tar -czf build-validity/workerd-ws-evidence.tar.gz -C build-validity workerd-ws-evidence
-            sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256
-          fi
-
-      - name: Save hosted Release evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: release-wpt-hosted-evidence
-          if-no-files-found: error
-          path: |
-            build-validity/ordinary-host-junit.xml
-            build-validity/ordinary-host-registration.json
-            build-validity/ordinary-host-exit-code.txt
-            build-validity/workerd-wpt-profile-evidence/
-            build-validity/workerd-ws-evidence.tar.gz
-            build-validity/workerd-ws-evidence.tar.gz.sha256
-            build-validity/bench/build-metadata.json
-            build-validity/txiki-upgrade-report.json
-            build-validity/txiki-upgrade-report.md
-            build-validity/package-evidence.txt
-            build-perf-prerequisite/evidence/
-            build-validity/generated/build-info.txt
-            build-validity/capsid-*.tar.gz
-            ${{ runner.temp }}/capsid-native-provider-evidence/
-
-  sanitizers:
-    runs-on: ubuntu-24.04
-    # The measured TSan matrix alone takes over 60 minutes, before provider
-    # and product builds. Keep individual CTest timeouts unchanged.
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        # The packaging gates (worker_package_*) are the Release row's
-        # responsibility (§12.5): under sanitizers the instrumented worker
-        # links a dynamic libasan/libtsan, which the package smoke's
-        # undeclared-dependency scan would reject, and the §12.3 second
-        # fresh build would duplicate a full sanitizer build.
-        include:
-          - name: asan
-            cmake_flag: CAPSID_ENABLE_ASAN
-            build_host: 1
-            ctest_parallel: 2
-            ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$
-          - name: ubsan
-            cmake_flag: CAPSID_ENABLE_UBSAN
-            build_host: 1
-            ctest_parallel: 2
-            ctest_exclude: '^(wpt_conformance_not_configured|worker_package_.*)$'
-          - name: tsan
-            cmake_flag: CAPSID_ENABLE_TSAN
-            compiler: clang
-            build_host: 1
-            # TSan's shadow allocator runs out of mmap space under
-            # -j2 (observed: "ThreadSanitizer: out of memory ... Failed
-            # to mmap" on the hosted runner); the matrix runs serially.
-            ctest_parallel: 1
-            # Clang and GCC select the existing TSan test-driver wait
-            # scale. Run all native managed checks; an unsupported finite
-            # RLIMIT_AS probe reports its explicit CTest skip code.
-            ctest_exclude: >-
-              ^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.22.x'
-
-      - name: Install build and locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          # Match the Release dependency transport and reject stale indexes.
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          # libclang-rt-dev supplies the Clang sanitizer runtimes (TSan
-          # included, arch-suffixed) that the clang-based tsan matrix entry
-          # links against.
-          sudo apt-get "${apt_network[@]}" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv linux-tools-generic
-          /usr/bin/openssl version
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-
-      - name: Require actual Linux perf counters for evidence controls
-        run: python3 -B tools/setup-hosted-perf.py
-
-      - name: Install locked independent clients and reference for sanitizers
-        run: |
-          set -euo pipefail
-          /usr/bin/python3.12 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker-side bytecode compiler and the Host both require OpenSSL
-      # >= 3.5. Every sanitizer entry therefore provisions the same pinned
-      # provider, even when that matrix entry does not build capsid-host.
-      - name: Build OpenSSL 3.5 for sanitizer targets
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            asan) sanitizer=address ;;
-            ubsan) sanitizer=undefined ;;
-            tsan) sanitizer=thread ;;
-            *) echo "Unknown sanitizer matrix entry" >&2; exit 1 ;;
-          esac
-          compiler=cc
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler=clang
-          fi
-          sanitizer_flags="-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all"
-          # Built in the runner temp dir: extracting the tarball inside the
-          # workspace dirties the checkout and trips the build-identity
-          # clean-worktree gate.
-          cd "${RUNNER_TEMP}"
-          echo "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz" > openssl.sha256
-          curl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz
-          sha256sum -c openssl.sha256
-          tar xzf openssl-3.5.7.tar.gz
-          cd openssl-3.5.7
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider openssl --source "$PWD" | tee "${evidence}/openssl-source.json"
-          # Match the Capsid compiler/runtime and instrument the provider's C
-          # implementation, including paths normally implemented in assembly.
-          CC="${compiler}" CFLAGS="${sanitizer_flags}" CXXFLAGS="${sanitizer_flags}" LDFLAGS="-fsanitize=${sanitizer}" \
-            ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm
-          make -j2
-          sudo make install_sw
-
-      - name: Build c-ares 1.34.5 for sanitizer targets
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            asan) sanitizer=address ;;
-            ubsan) sanitizer=undefined ;;
-            tsan) sanitizer=thread ;;
-            *) echo "Unknown sanitizer matrix entry" >&2; exit 1 ;;
-          esac
-          compiler=cc
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler=clang
-          fi
-          sanitizer_flags="-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all"
-          cd "${RUNNER_TEMP}"
-          evidence="${RUNNER_TEMP}/capsid-native-provider-evidence"
-          mkdir -p "${evidence}"
-          curl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013
-          echo "cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz" | sha256sum -c -
-          tar xzf capsid-cares.tar.gz
-          python3 "${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py" \
-            --provider cares --source "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" | tee "${evidence}/cares-source.json"
-          cmake -S "${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013" -B "${RUNNER_TEMP}/capsid-cares-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER="${compiler}" \
-            -DCMAKE_C_FLAGS="${sanitizer_flags}" \
-            -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${sanitizer}" \
-            -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \
-            -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF
-          cmake --build "${RUNNER_TEMP}/capsid-cares-build" --parallel 2 --verbose
-          sudo cmake --install "${RUNNER_TEMP}/capsid-cares-build"
-          cp "${RUNNER_TEMP}/capsid-cares-build/compile_commands.json" "${evidence}/cares-compile-commands.json"
-
-      - name: Configure ${{ matrix.name }}
-        run: |
-          compiler_args=()
-          if [ "${{ matrix.compiler }}" = "clang" ]; then
-            compiler_args=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
-          fi
-          host_args=(-DCMAKE_PREFIX_PATH=/opt/openssl35 -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include)
-          if [ "${{ matrix.build_host }}" = "1" ]; then
-            host_args+=(-DCAPSID_BUILD_HOST=ON)
-          fi
-          cmake -S . -B "build-${{ matrix.name }}" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -D${{ matrix.cmake_flag }}=ON \
-            -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \
-            -DCAPSID_SANDBOX_PROFILE=sanitizer \
-            -DCAPSID_USE_MIMALLOC=OFF \
-            -DCAPSID_BUILD_BENCHMARKS=ON \
-            "${compiler_args[@]}" "${host_args[@]}"
-
-      - name: Build ${{ matrix.name }}
-        run: |
-          cmake --build "build-${{ matrix.name }}" --parallel 2
-
-      - name: Record original ASan RSS results
-        id: asan_rss_raw
-        if: matrix.name == 'asan'
-        continue-on-error: true
-        env:
-          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: |
-          set -euo pipefail
-          rm -f build-asan/asan-rss-raw-exit-code.txt build-asan/asan-rss-raw-junit.xml build-asan/asan-rss-raw-LastTest.log
-          rm -f build-asan/asan-memory-registration.json build-asan/asan-memory-acceptance.json
-          rm -f build-asan/asan-memory-replacement-recursion.json build-asan/asan-memory-reclamation-idle.json
-          ctest --test-dir build-asan --no-tests=error --show-only=json-v1 > build-asan/asan-memory-registration.json
-          asan_rss_status=0
-          ctest --test-dir build-asan \
-            --no-tests=error --output-on-failure \
-            --output-junit asan-rss-raw-junit.xml --parallel 1 \
-            -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || asan_rss_status=$?
-          printf '%s\n' "${asan_rss_status}" > build-asan/asan-rss-raw-exit-code.txt
-          cp build-asan/Testing/Temporary/LastTest.log build-asan/asan-rss-raw-LastTest.log
-          exit "${asan_rss_status}"
-
-      - name: Record original TSan RSS results
-        id: tsan_rss_raw
-        if: matrix.name == 'tsan'
-        continue-on-error: true
-        env:
-          TSAN_OPTIONS: halt_on_error=1:exitcode=66
-        run: |
-          set -euo pipefail
-          rm -f build-tsan/tsan-rss-raw-exit-code.txt build-tsan/tsan-rss-raw-junit.xml build-tsan/tsan-rss-raw-LastTest.log
-          rm -f build-tsan/tsan-memory-registration.json build-tsan/tsan-memory-acceptance.json
-          rm -f build-tsan/tsan-memory-replacement-recursion.json build-tsan/tsan-memory-reclamation-idle.json
-          ctest --test-dir build-tsan --no-tests=error --show-only=json-v1 > build-tsan/tsan-memory-registration.json
-          tsan_rss_status=0
-          ctest --test-dir build-tsan \
-            --no-tests=error --output-on-failure \
-            --output-junit tsan-rss-raw-junit.xml --parallel 1 \
-            -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || tsan_rss_status=$?
-          printf '%s\n' "${tsan_rss_status}" > build-tsan/tsan-rss-raw-exit-code.txt
-          cp build-tsan/Testing/Temporary/LastTest.log build-tsan/tsan-rss-raw-LastTest.log
-          exit "${tsan_rss_status}"
-
-      - name: Run ${{ matrix.name }} matrix
-        env:
-          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:strict_string_checks=1
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-          TSAN_OPTIONS: halt_on_error=1
-          CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-${{ matrix.name }}/matrix-case-reports
-        run: |
-          mkdir -p "${CAPSID_WS_REPORT_DIR}"
-          ctest --test-dir "build-${{ matrix.name }}" \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit "${{ matrix.name }}-junit.xml" \
-            --parallel ${{ matrix.ctest_parallel }} \
-            -E '${{ matrix.ctest_exclude }}'
-
-      - name: Require separate ASan memory acceptance
-        if: ${{ !cancelled() && matrix.name == 'asan' && steps.asan_rss_raw.outcome != 'skipped' }}
-        run: |
-          python3 -B tools/asan-memory-acceptance.py \
-            --registration build-asan/asan-memory-registration.json \
-            --raw-junit build-asan/asan-rss-raw-junit.xml \
-            --raw-last-test build-asan/asan-rss-raw-LastTest.log \
-            --raw-exit-code build-asan/asan-rss-raw-exit-code.txt \
-            --raw-outcome '${{ steps.asan_rss_raw.outcome }}' \
-            --matrix-junit build-asan/asan-junit.xml \
-            --resource-report-root build-asan \
-            --output build-asan/asan-memory-acceptance.json
-
-      - name: Require separate TSan memory acceptance
-        if: ${{ !cancelled() && matrix.name == 'tsan' && steps.tsan_rss_raw.outcome != 'skipped' }}
-        run: |
-          python3 -B tools/asan-memory-acceptance.py --sanitizer tsan \
-            --registration build-tsan/tsan-memory-registration.json \
-            --raw-junit build-tsan/tsan-rss-raw-junit.xml \
-            --raw-last-test build-tsan/tsan-rss-raw-LastTest.log \
-            --raw-exit-code build-tsan/tsan-rss-raw-exit-code.txt \
-            --raw-outcome '${{ steps.tsan_rss_raw.outcome }}' \
-            --matrix-junit build-tsan/tsan-junit.xml \
-            --resource-report-root build-tsan \
-            --output build-tsan/tsan-memory-acceptance.json
-
-      - name: Archive sanitizer driver reports preserving original names
-        if: always()
-        env:
-          REPORT_DIRECTORY: build-${{ matrix.name }}/matrix-case-reports
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib,json,os,tarfile
-          report=Path(os.environ['REPORT_DIRECTORY'])
-          report.parent.mkdir(parents=True,exist_ok=True)
-          archive=report.parent/(report.name+'.tar.gz')
-          with tarfile.open(archive,'w:gz',dereference=False) as output:
-              if report.exists():output.add(report,arcname=report.name)
-          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
-          archive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\n')
-          print(json.dumps(dict(complete=True,sourceDirectory=str(report),sourceExists=report.exists(),
-              archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))
-          PY
-
-      - name: Save sanitizer evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: ${{ matrix.name }}-hosted-evidence
-          if-no-files-found: error
-          path: |
-            build-${{ matrix.name }}/${{ matrix.name }}-junit.xml
-            build-${{ matrix.name }}/matrix-case-reports.tar.gz
-            build-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256
-            build-${{ matrix.name }}/Testing/Temporary/LastTest.log
-            build-perf-prerequisite/evidence/
-            build-asan/asan-rss-raw-junit.xml
-            build-asan/asan-rss-raw-LastTest.log
-            build-asan/asan-rss-raw-exit-code.txt
-            build-asan/asan-memory-*.json
-            build-tsan/tsan-rss-raw-junit.xml
-            build-tsan/tsan-rss-raw-LastTest.log
-            build-tsan/tsan-rss-raw-exit-code.txt
-            build-tsan/tsan-memory-*.json
-            ${{ runner.temp }}/capsid-native-provider-evidence/
-
-  fuzz:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Install Clang and Ninja
-        run: |
-          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          apt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
-          sudo apt-get "${apt_network[@]}" update --error-on=any
-          sudo apt-get "${apt_network[@]}" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev
-
-      - name: Configure fuzz harnesses
-        env:
-          CC: clang
-          CXX: clang++
-        run: |
-          cmake -S . -B build-fuzz -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCAPSID_BUILD_WORKER=OFF \
-            -DCAPSID_BUILD_FUZZERS=ON \
-            -DCAPSID_USE_MIMALLOC=OFF
-
-      - name: Build fuzz harnesses
-        run: cmake --build build-fuzz --parallel 2
-
-      - name: Run bounded corpus gates
-        run: |
-          ctest --test-dir build-fuzz \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit fuzz-junit.xml \
-            -L fuzz
-
-      - name: Save fuzz evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: fuzz-hosted-evidence
-          if-no-files-found: error
-          path: build-fuzz/fuzz-junit.xml
-
-  posix-host-library:
-    runs-on: macos-15
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      # Keep the POSIX gate honest for the complete M1D Admin surface.  The
-      # transport and long-lived service are intentionally conditional on
-      # Boost, so relying on the runner image could silently skip their
-      # compilation (and miss Linux-only APIs in otherwise POSIX sources).
-      - name: Install macOS Host dependencies
-        run: brew install boost c-ares openssl@3.5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Configure distinct loopback peers for redirect contracts
-        run: |
-          set -euo pipefail
-          sudo ifconfig lo0 alias 127.0.0.2 netmask 255.255.255.255
-          node --input-type=module - <<'JS'
-          import assert from 'node:assert/strict';
-          import net from 'node:net';
-          import {once} from 'node:events';
-          const servers=[];
-          try {
-            let port=0;
-            for(const host of ['127.0.0.1','127.0.0.2']) {
-              const server=net.createServer(socket=>socket.end(host));servers.push(server);
-              server.listen({host,port});await once(server,'listening');
-              assert.equal(server.address().address,host);port=server.address().port;
+{
+  "name": "Complete workerd control-readiness and original-budget qualification",
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "testing-validity-${{ github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "release-wpt-and-delegated-sandbox": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 90,
+      "steps": [
+        {
+          "name": "Check out recursively pinned sources",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+            "submodules": "recursive",
+            "fetch-tags": true
+          }
+        },
+        {
+          "name": "Set up Node.js",
+          "uses": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "with": {
+            "node-version": "24.14.0"
+          }
+        },
+        {
+          "name": "Install and verify locked workerd reference",
+          "run": "set -euo pipefail\nreference=\"${RUNNER_TEMP}/capsid-workerd/workerd\"\nnode tools/workerd-reference.mjs install \"${reference}\"\nprintf 'CAPSID_WORKERD_REF=%s\\n' \"${reference}\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Set up Go",
+          "uses": "actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
+          "with": {
+            "go-version": "1.22.x"
+          }
+        },
+        {
+          "name": "Set up Deno",
+          "uses": "denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed",
+          "with": {
+            "deno-version": "v2.x"
+          }
+        },
+        {
+          "name": "Install build dependencies",
+          "run": "set -euo pipefail\n# Hosted probes verified this Ubuntu mirror while the ubuntu.com\n# domains failed DNS. Preserve suites, components and Signed-By.\nsudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources\napt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)\nsudo apt-get \"${apt_network[@]}\" update --error-on=any\nsudo apt-get \"${apt_network[@]}\" install -y ninja-build libboost-system-dev libc-ares-dev openssl python3-venv linux-tools-generic\n/usr/bin/openssl version\n# The vendor audit's expected tag must match cmake/build_tests.cmake\n# (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.\ngit -C vendor/txiki.js fetch --depth=1 origin \\\n  refs/tags/v26.6.0:refs/tags/v26.6.0\nfor directory in \\\n  vendor/txiki.js \\\n  examples/hono-reference \\\n  examples/itty-router-reference \\\n  examples/h3-v2-reference \\\n  examples/elysia-reference\ndo\n  npm ci --ignore-scripts --prefix \"${directory}\"\ndone\n"
+        },
+        {
+          "name": "Require actual Linux perf counters for evidence controls",
+          "run": "python3 -B tools/setup-hosted-perf.py"
+        },
+        {
+          "name": "Install locked independent WebSocket clients",
+          "run": "set -euo pipefail\n/usr/bin/python3.12 tools/setup-ws-interop-python.py \"${RUNNER_TEMP}/capsid-ws-python\"\nprintf 'CAPSID_WS_INTEROP_PYTHON=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/bin/python\" >> \"${GITHUB_ENV}\"\nprintf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/node-ws\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Check out the manifest-pinned WPT revision",
+          "env": {
+            "WPT_DIRECTORY": "${{ runner.temp }}/wpt"
+          },
+          "run": "set -euo pipefail\nrepository=$(node -p \\\n  \"require('./tests/wpt/manifest.json').repository\")\ncommit=$(node -p \\\n  \"require('./tests/wpt/manifest.json').commit\")\ngit init \"${WPT_DIRECTORY}\"\ngit -C \"${WPT_DIRECTORY}\" remote add origin \"${repository}\"\ngit -C \"${WPT_DIRECTORY}\" fetch --depth=1 origin \"${commit}\"\ngit -C \"${WPT_DIRECTORY}\" checkout --detach FETCH_HEAD\ntest \"$(git -C \"${WPT_DIRECTORY}\" rev-parse HEAD)\" = \"${commit}\"\n"
+        },
+        {
+          "name": "Build OpenSSL 3.5 for Release",
+          "run": "set -euo pipefail\n# Built in the runner temp dir: extracting the tarball inside the\n# workspace dirties the checkout and trips the Release\n# clean-worktree identity gate.\ncd \"${RUNNER_TEMP}\"\necho \"a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz\" > openssl.sha256\ncurl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz\nsha256sum -c openssl.sha256\ntar xzf openssl-3.5.7.tar.gz\ncd openssl-3.5.7\nevidence=\"${RUNNER_TEMP}/capsid-native-provider-evidence\"\nmkdir -p \"${evidence}\"\npython3 \"${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py\" \\\n  --provider openssl --source \"$PWD\" | tee \"${evidence}/openssl-source.json\"\n./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm\nmake -j2\nsudo make install_sw\n"
+        },
+        {
+          "name": "Build c-ares 1.34.5 for Release",
+          "run": "set -euo pipefail\ncd \"${RUNNER_TEMP}\"\nevidence=\"${RUNNER_TEMP}/capsid-native-provider-evidence\"\nmkdir -p \"${evidence}\"\ncurl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013\necho \"cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz\" | sha256sum -c -\ntar xzf capsid-cares.tar.gz\npython3 \"${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py\" \\\n  --provider cares --source \"${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013\" | tee \"${evidence}/cares-source.json\"\ncmake -S \"${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013\" -B \"${RUNNER_TEMP}/capsid-cares-build\" -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Release \\\n  -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \\\n  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \\\n  -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \\\n  -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF\ncmake --build \"${RUNNER_TEMP}/capsid-cares-build\" --parallel 2 --verbose\nsudo cmake --install \"${RUNNER_TEMP}/capsid-cares-build\"\ncp \"${RUNNER_TEMP}/capsid-cares-build/compile_commands.json\" \"${evidence}/cares-compile-commands.json\"\n"
+        },
+        {
+          "name": "Configure Release/LTO with WPT and benchmarks",
+          "env": {
+            "WPT_DIRECTORY": "${{ runner.temp }}/wpt"
+          },
+          "run": "cmake -S . -B build-validity -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Release \\\n  -DCAPSID_BUILD_HOST=ON \\\n  -DCAPSID_ENABLE_LTO=ON \\\n  -DCAPSID_USE_MIMALLOC=OFF \\\n  -DCAPSID_BUILD_BENCHMARKS=ON \\\n  -DCAPSID_GENERATE_LINK_MAP=ON \\\n  -DCMAKE_PREFIX_PATH=/opt/openssl35 \\\n  -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include \\\n  -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \\\n  -DCAPSID_SANDBOX_PROFILE=production \\\n  -DCAPSID_WPT_ROOT=\"${WPT_DIRECTORY}\"\n"
+        },
+        {
+          "name": "Build",
+          "run": "cmake --build build-validity --parallel 2"
+        },
+        {
+          "name": "Preserve complete production build and registration identities",
+          "run": "ninja -C build-validity -t commands > build-validity/full-build-commands.txt\nctest --test-dir build-validity --show-only=json-v1 > build-validity/full-registration.json\n"
+        },
+        {
+          "name": "Require complete workerd WebSocket comparison",
+          "run": "node tools/run-workerd-ws-gate.mjs \\\n  build-validity build-validity/workerd-ws-evidence\n"
+        },
+        {
+          "name": "Run the complete ordinary-host matrix",
+          "id": "ordinary_host",
+          "env": {
+            "CAPSID_WS_REPORT_DIR": "${{ github.workspace }}/build-validity/ordinary-driver-reports"
+          },
+          "continue-on-error": true,
+          "run": "rm -f build-validity/ordinary-host-exit-code.txt\nctest --test-dir build-validity --no-tests=error --show-only=json-v1 \\\n  > build-validity/ordinary-host-registration.json\nordinary_ctest_status=0\nctest --test-dir build-validity \\\n  --no-tests=error \\\n  --output-on-failure \\\n  --output-junit ordinary-host-junit.xml \\\n  --parallel 2 || ordinary_ctest_status=$?\nprintf '%s\\n' \"${ordinary_ctest_status}\" > build-validity/ordinary-host-exit-code.txt\nexit \"${ordinary_ctest_status}\"\n"
+        },
+        {
+          "name": "Audit the versioned workerd profile without changing standard results",
+          "if": "${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}",
+          "run": "set -euo pipefail\nevidence=build-validity/workerd-wpt-profile-evidence\nmkdir -p \"${evidence}\"\ncp build-validity/Testing/Temporary/LastTest.log \"${evidence}/ordinary-LastTest.log\"\ncp build-validity/ordinary-host-junit.xml \"${evidence}/ordinary-junit.xml\"\ncp build-validity/ordinary-host-exit-code.txt \"${evidence}/ordinary-exit-code.txt\"\nnode tools/run_workerd_wpt_context.mjs \\\n  --build build-validity \\\n  --registration build-validity/ordinary-host-registration.json \\\n  --output \"${evidence}/context\"\nnode tools/workerd-wpt-acceptance.mjs audit \\\n  --ctest-exit-code \"${evidence}/ordinary-exit-code.txt\" \\\n  --ordinary-outcome '${{ steps.ordinary_host.outcome }}' \\\n  --last-test \"${evidence}/ordinary-LastTest.log\" \\\n  --junit \"${evidence}/ordinary-junit.xml\" \\\n  --registration build-validity/ordinary-host-registration.json \\\n  --gate build-validity/workerd-ws-evidence \\\n  --context \"${evidence}/context/context.json\" \\\n  --build build-validity --wpt-root \"${RUNNER_TEMP}/wpt\" \\\n  --output \"${evidence}/profile-audit.json\" \\\n  --acceptance-output \"${evidence}/compatibility-acceptance.json\"\n"
+        },
+        {
+          "name": "Display raw WPT failure separately from compatibility qualification",
+          "if": "always()",
+          "run": "python3 -B - <<'PY'\nfrom pathlib import Path\nimport json,os\np=Path('build-validity/workerd-wpt-profile-evidence/compatibility-acceptance.json')\nd=json.loads(p.read_text()) if p.exists() else {}\nwith open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:\n    stream.write('## Separate raw standards and compatibility verdicts\\n\\n')\n    stream.write('| Gate | Actual result |\\n|---|---|\\n')\n    stream.write('| Raw full CTest/WPT suite | '+('FAILED \u2014 '+str(len(d.get('rawFullSuite',{}).get('failed',[])))+' retained WPT file failures' if d.get('rawCTestExitText')=='8\\n' else 'not independently qualified here')+' |\\n')\n    stream.write('| Locked workerd compatibility profile | '+('QUALIFIED' if d.get('complete') is True and d.get('compatibilityQualified') is True else 'NOT QUALIFIED')+' |\\n')\n    stream.write('| Full WPT / standards conformance | NOT CLAIMED |\\n')\n    stream.write('\\nA successful compatibility job does not turn any raw WPT failure into a pass. Full v0.3.0 acceptance remains separate.\\n')\nPY\n"
+        },
+        {
+          "name": "Run the privileged sandbox matrix",
+          "if": "${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}",
+          "run": "set -euo pipefail\n# Binding \u00a77.9: a sandbox test that skips (77) under root is a\n# failure in the Hosted Validity workflow \u2014 the delegated\n# environment must actually execute every profile probe.\nsudo ctest --test-dir build-validity \\\n  --no-tests=error \\\n  --output-on-failure \\\n  -L sandbox 2>&1 | tee build-validity/sandbox-run.log\nif grep -q \"Skipped\" build-validity/sandbox-run.log; then\n  echo \"::error::a sandbox test skipped under root; Binding \u00a77.9 \"\\\n       \"requires every probe to execute\"\n  exit 1\nfi\n"
+        },
+        {
+          "name": "Record package evidence (build ID, compatibility ID, package and SBOM hashes)",
+          "if": "${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}",
+          "run": "set -euo pipefail\narchive=$(ls -t build-validity/capsid-*.tar.gz | head -1)\ntest -f \"${archive}\"\npackage_sha256=$(sha256sum \"${archive}\" | awk '{print $1}')\nbuild_info=build-validity/generated/build-info.txt\nbuild_id=$(sed -n 's/^buildId=//p' \"${build_info}\")\ncompatibility_id=$(sed -n 's/^compatibilityId=//p' \"${build_info}\")\ntest -n \"${build_id}\"\ntest -n \"${compatibility_id}\"\nstaging=$(mktemp -d)\ntar xzf \"${archive}\" -C \"${staging}\"\nsbom=$(find \"${staging}\" -name SBOM.spdx.json -print -quit)\ntest -n \"${sbom}\"\nsbom_sha256=$(sha256sum \"${sbom}\" | awk '{print $1}')\n{\n  printf 'build_id=%s\\n' \"${build_id}\"\n  printf 'compatibility_id=%s\\n' \"${compatibility_id}\"\n  printf 'package_archive=%s\\n' \"$(basename \"${archive}\")\"\n  printf 'package_sha256=%s\\n' \"${package_sha256}\"\n  printf 'sbom_sha256=%s\\n' \"${sbom_sha256}\"\n} > build-validity/package-evidence.txt\ncat build-validity/package-evidence.txt\n"
+        },
+        {
+          "name": "Generate txiki.js upgrade gate report",
+          "if": "${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}",
+          "run": "set -euo pipefail\nevidence=build-validity/workerd-wpt-profile-evidence\ncmp build-validity/ordinary-host-junit.xml \"${evidence}/ordinary-junit.xml\"\npython3 tools/generate-txiki-upgrade-report.py \\\n  --source-root . \\\n  --build-dir build-validity \\\n  --junit \"${evidence}/ordinary-junit.xml\" \\\n  --baseline docs/txiki-upgrade-baseline.json \\\n  --node-executable \"$(node -p 'process.execPath')\" \\\n  --workerd-python \"${CAPSID_WS_INTEROP_PYTHON}\" \\\n  --workerd-acceptance \"${evidence}/compatibility-acceptance.json\" \\\n  --workerd-last-test \"${evidence}/ordinary-LastTest.log\" \\\n  --workerd-registration build-validity/ordinary-host-registration.json \\\n  --workerd-gate build-validity/workerd-ws-evidence \\\n  --workerd-context \"${evidence}/context/context.json\" \\\n  --workerd-wpt-root \"${RUNNER_TEMP}/wpt\" \\\n  --workerd-ctest-exit-code \"${evidence}/ordinary-exit-code.txt\" \\\n  --output-json build-validity/txiki-upgrade-report.json \\\n  --output-md build-validity/txiki-upgrade-report.md\n"
+        },
+        {
+          "name": "Require delegated cgroup v2 and network namespace passes",
+          "if": "${{ !cancelled() && steps.ordinary_host.outcome != 'skipped' }}",
+          "run": "docker run --rm \\\n  --privileged \\\n  --cgroupns=private \\\n  -e CAPSID_DELEGATED_SANDBOX_CONTAINER=1 \\\n  -v \"${GITHUB_WORKSPACE}:/repo:ro\" \\\n  -v \"${GITHUB_WORKSPACE}/build-validity:/build:ro\" \\\n  --entrypoint /bin/bash \\\n  ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 \\\n  /repo/scripts/run-delegated-sandbox-tests.sh /build\n"
+        },
+        {
+          "name": "Archive workerd execution evidence",
+          "if": "always()",
+          "run": "set -euo pipefail\nif [ -d build-validity/workerd-ws-evidence ]; then\n  tar -czf build-validity/workerd-ws-evidence.tar.gz -C build-validity workerd-ws-evidence\n  sha256sum build-validity/workerd-ws-evidence.tar.gz > build-validity/workerd-ws-evidence.tar.gz.sha256\nfi\n"
+        },
+        {
+          "name": "Archive complete ordinary driver reports",
+          "if": "always()",
+          "env": {
+            "REPORT_DIRECTORY": "${{ github.workspace }}/build-validity/ordinary-driver-reports",
+            "RAW_ARCHIVE": "build-validity/ordinary-driver-reports.tar.gz"
+          },
+          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,os,tarfile\nreport=Path(os.environ['REPORT_DIRECTORY']);archive=Path(os.environ['RAW_ARCHIVE'])\narchive.parent.mkdir(parents=True,exist_ok=True)\nwith tarfile.open(archive,'w:gz',dereference=False) as output:\n    if report.exists():output.add(report,arcname='raw-driver-reports')\ndigest=hashlib.sha256(archive.read_bytes()).hexdigest()\narchive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\\n')\nprint(json.dumps(dict(sourceExists=report.exists(),archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))\nPY\n"
+        },
+        {
+          "name": "Save hosted Release evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "release-wpt-hosted-evidence",
+            "if-no-files-found": "error",
+            "path": "build-validity/ordinary-host-junit.xml\nbuild-validity/ordinary-host-registration.json\nbuild-validity/full-registration.json\nbuild-validity/full-build-commands.txt\nbuild-validity/CMakeCache.txt\nbuild-validity/compile_commands.json\nbuild-validity/generated/build-info.txt\nbuild-validity/ordinary-driver-reports.tar.gz\nbuild-validity/ordinary-driver-reports.tar.gz.sha256\nbuild-validity/ordinary-host-exit-code.txt\nbuild-validity/workerd-wpt-profile-evidence/\nbuild-validity/workerd-ws-evidence.tar.gz\nbuild-validity/workerd-ws-evidence.tar.gz.sha256\nbuild-validity/bench/build-metadata.json\nbuild-validity/txiki-upgrade-report.json\nbuild-validity/txiki-upgrade-report.md\nbuild-validity/package-evidence.txt\nbuild-perf-prerequisite/evidence/\nbuild-validity/generated/build-info.txt\nbuild-validity/capsid-*.tar.gz\n${{ runner.temp }}/capsid-native-provider-evidence/\n"
+          }
+        }
+      ],
+      "name": "Release/LTO + workerd compatibility (raw WPT failures retained)"
+    },
+    "sanitizers": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 180,
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "include": [
+            {
+              "name": "asan",
+              "cmake_flag": "CAPSID_ENABLE_ASAN",
+              "build_host": 1,
+              "ctest_parallel": 2,
+              "ctest_exclude": "^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$"
+            },
+            {
+              "name": "ubsan",
+              "cmake_flag": "CAPSID_ENABLE_UBSAN",
+              "build_host": 1,
+              "ctest_parallel": 2,
+              "ctest_exclude": "^(wpt_conformance_not_configured|worker_package_.*)$"
+            },
+            {
+              "name": "tsan",
+              "cmake_flag": "CAPSID_ENABLE_TSAN",
+              "compiler": "clang",
+              "build_host": 1,
+              "ctest_parallel": 1,
+              "ctest_exclude": "^(wpt_conformance_not_configured|worker_package_.*|websocket_managed_(replacement-recursion|reclamation-idle))$"
             }
-            for(const host of ['127.0.0.1','127.0.0.2']) {
-              const client=net.createConnection({host,port});let body='';
-              for await(const bytes of client)body+=bytes.toString();
-              assert.equal(body,host,'distinct loopback peer receives the actual connection');
-            }
-            console.log(JSON.stringify({complete:true,loopbackPeers:2,samePort:true,actualRoundTrips:2}));
-          } finally {await Promise.all(servers.map(server=>new Promise(resolve=>server.close(resolve))));}
-          JS
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Install locked independent WebSocket clients
-        run: |
-          set -euo pipefail
-          python3 tools/setup-ws-interop-python.py "${RUNNER_TEMP}/capsid-ws-python"
-          printf 'CAPSID_WS_INTEROP_PYTHON=%s\n' "${RUNNER_TEMP}/capsid-ws-python/bin/python" >> "${GITHUB_ENV}"
-          printf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\n' "${RUNNER_TEMP}/capsid-ws-python/node-ws" >> "${GITHUB_ENV}"
-
-      - name: Install and verify locked workerd reference
-        run: |
-          set -euo pipefail
-          reference="${RUNNER_TEMP}/capsid-workerd/workerd"
-          node tools/workerd-reference.mjs install "${reference}"
-          printf 'CAPSID_WORKERD_REF=%s\n' "${reference}" >> "${GITHUB_ENV}"
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the macOS configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-
-      # §12.5 macOS row: Host units plus the non-strict worker contracts.
-      # Linux-only strict-sandbox and managed-suite tests are not registered
-      # on macOS (they SKIP by absence, never FAIL), and the §12.3 fresh
-      # second build is excluded here to keep the job inside its time budget
-      # (the Release job runs it on Linux).
-      - name: Configure macOS host library and worker contracts
-        run: |
-          set -euo pipefail
-          node_binary=$(node -p 'process.execPath')
-          cmake -S . -B build-macos \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3.5);$(brew --prefix boost)" \
-            -DCAPSID_BUILD_HOST=ON \
-            -DCAPSID_BUILD_WORKER=ON \
-            -DCAPSID_ENABLE_LTO=ON \
-            -DCAPSID_HOST_TEST_NODE="${node_binary}" \
-            -DCAPSID_NODE_EXECUTABLE="${node_binary}"
-
-      - name: Build macOS Host, Admin transport, and unit gates
-        run: |
-          cmake --build build-macos --parallel 2
-          # Named targets make a missing/quietly skipped Boost-backed Admin
-          # surface an explicit configuration failure.
-          cmake --build build-macos --parallel 2 --target \
-            capsid-host \
-            test-host-admin-api \
-            test-host-admin-http \
-            test-host-admin-service
-
-      - name: Run POSIX host-side matrix
-        run: |
-          ctest --test-dir build-macos \
-            --no-tests=error \
-            --output-on-failure \
-            --output-junit macos-junit.xml \
-            -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'
-
-      - name: Save macOS evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: macos-host-library-evidence
-          if-no-files-found: error
-          path: |
-            build-macos/macos-junit.xml
-            build-macos/Testing/Temporary/LastTest.log
-            build-macos/CMakeCache.txt
-
-  windows-host-library:
-    runs-on: windows-latest
-    # The measured serial Release matrix alone takes about 104 minutes.
-    # Allow dependency/build time without changing individual test budgets.
-    timeout-minutes: 180
-
-    steps:
-      - name: Check out recursively pinned sources
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          submodules: recursive
-          # The txiki vendor audit derives the pinned tag via git describe;
-          # submodule checkouts must carry the tag refs.
-          fetch-tags: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 24.14.0
-
-      - name: Set up the locked Python WebSocket runtime
-        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (node24)
-        with:
-          python-version: '3.12.3'
-
-      - name: Locate OpenSSL for WebSocket test certificates
-        shell: pwsh
-        run: |
-          $git_root = Split-Path (Split-Path (Get-Command git -ErrorAction Stop).Source)
-          $openssl_candidates = @(
-            (Join-Path $git_root 'mingw64/bin/openssl.exe'),
-            (Join-Path $git_root 'usr/bin/openssl.exe')
-          )
-          $openssl_fixture = $openssl_candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-          if (-not $openssl_fixture) { throw 'OpenSSL CLI for fixture certificates is missing' }
-          & $openssl_fixture version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          (Split-Path $openssl_fixture) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install locked independent WebSocket clients
-        shell: pwsh
-        run: |
-          $interop_root = Join-Path $env:RUNNER_TEMP 'capsid-ws-interop'
-          python tools/setup-ws-interop-python.py $interop_root
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "CAPSID_WS_INTEROP_PYTHON=$interop_root\Scripts\python.exe" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CAPSID_WS_INTEROP_NODE_PACKAGE=$interop_root\node-ws" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install the locked native Windows workerd reference
-        shell: pwsh
-        run: |
-          $reference_path = Join-Path $env:RUNNER_TEMP 'capsid-workerd-reference/workerd.exe'
-          node tools/workerd-reference.mjs install $reference_path
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "CAPSID_WORKERD_REF=$reference_path" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CAPSID_WORKERD_REQUIRED=1" |
-            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      # Ninja invokes `cl` via PATH, unlike the MSBuild generator that
-      # resolves the toolchain itself; without the VS developer
-      # environment CMake cannot find the MSVC compiler.
-      - name: Set up the MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1 (v1.13.0; default-branch commits carry no node_modules)
-
-      # The worker bootstrap bundles via esbuild from the locked txiki.js
-      # node_modules; without this the Windows configure fails with
-      # "esbuild is missing".
-      - name: Install locked JavaScript dependencies
-        run: |
-          set -euo pipefail
-          for directory in \
-            vendor/txiki.js \
-            examples/hono-reference \
-            examples/itty-router-reference \
-            examples/h3-v2-reference \
-            examples/elysia-reference
-          do
-            npm ci --ignore-scripts --prefix "${directory}"
-          done
-          # The vendor audit's expected tag must match cmake/build_tests.cmake
-          # (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.
-          git -C vendor/txiki.js fetch --depth=1 origin \
-            refs/tags/v26.6.0:refs/tags/v26.6.0
-        shell: bash
-
-      # OpenSSL (static) and Boost.System/Asio (header-only) come from the
-      # runner's preinstalled vcpkg; the static triplet matches the /MT CRT
-      # policy pinned by the vendored txiki build. boost-asio is a separate
-      # port from boost-system (the Host data plane needs <boost/asio.hpp>).
-      - name: Install Windows build dependencies (vcpkg)
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install `
-            openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
-        shell: pwsh
-
-      # §12.5 Windows row: Host units, non-strict worker contracts and the
-      # actual package contents/metadata/smoke/reproducibility gates.
-      # Platform-specific Linux tests retain their explicit registration or
-      # skip policy. Creating the Release archive alone does not validate it.
-      # Ninja keeps this single-config like every other job; the Visual
-      # Studio generator would default to Debug builds and require ctest
-      # -C <config>, which quietly "Not Run"s the whole matrix. Pin the
-      # compiler to cl: in a non-vcvars shell Ninja otherwise grabs mingw
-      # gcc off PATH, which cannot build the CRT/winsock port.
-      - name: Configure Windows host library and worker contracts
-        run: |
-          cmake -S . -B build-windows `
-            -G Ninja `
-            -DCMAKE_C_COMPILER=cl `
-            -DCMAKE_CXX_COMPILER=cl `
-            -DCMAKE_BUILD_TYPE=Release `
-              -DCAPSID_BUILD_HOST=ON `
-              -DCAPSID_BUILD_WORKER=ON `
-              -DCAPSID_STRICT_WARNINGS=ON `
-              -DCAPSID_USE_MIMALLOC=OFF `
-              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static
-        shell: pwsh
-
-      - name: Build Windows Host and worker contracts
-        shell: pwsh
-        run: |
-          # On failure, replay the build tail as ::error:: annotations so
-          # the actual compiler diagnostic is visible in the run summary
-          # (raw step logs need a signed-in viewer).
-          cmake --build build-windows --parallel 2 2>&1 | Tee-Object build-windows\build.log
-          if ($LASTEXITCODE -ne 0) {
-            # GitHub accepts only a small annotation set. Emit compiler and
-            # Ninja diagnostics first; annotating every normal tail line can
-            # exhaust that set before the actual error is reached.
-            Select-String -Path build-windows\build.log `
-              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
-              | Select-Object -First 20 `
-              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
-            Get-Content build-windows\build.log -Tail 60
-            exit 1
+          ]
+        }
+      },
+      "steps": [
+        {
+          "name": "Check out recursively pinned sources",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+            "submodules": "recursive",
+            "fetch-tags": true
           }
-          # The named gate mirrors the macOS job: a quietly skipped
-          # Boost-backed Host surface would fail this step explicitly.
-          cmake --build build-windows --parallel 2 --target capsid-host 2>&1 | Tee-Object build-windows\build.log
-          if ($LASTEXITCODE -ne 0) {
-            Select-String -Path build-windows\build.log `
-              -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `
-              | Select-Object -First 20 `
-              | ForEach-Object { "::error title=Windows build::$($_.Line.Trim())" }
-            Get-Content build-windows\build.log -Tail 60
-            exit 1
+        },
+        {
+          "name": "Set up Node.js",
+          "uses": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "with": {
+            "node-version": "24.14.0"
           }
-
-      - name: Run the native Windows workerd compatibility gate
-        shell: pwsh
-        run: |
-          node tools/run-workerd-ws-gate.mjs build-windows build-windows/workerd-compatibility
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Run Windows host-side matrix
-        run: |
-          $evidence_root = (Resolve-Path build-windows).Path
-          $ctest_log = Join-Path $evidence_root 'ctest.log'
-          $junit_path = Join-Path $evidence_root 'windows-junit.xml'
-          ctest --test-dir build-windows `
-            --parallel 1 `
-            --no-tests=error `
-            --output-on-failure `
-            --output-junit $junit_path `
-            -E '^wpt_conformance_not_configured$' `
-            2>&1 | Tee-Object -FilePath $ctest_log
-          $ctest_exit = $LASTEXITCODE
-          if ($ctest_exit -ne 0) {
-            Select-String -Path $ctest_log `
-              -Pattern '(\*\*\*Failed|\*\*\*Timeout|The following tests FAILED|^FAIL:)' `
-              -Context 0,15 | Select-Object -First 40 | ForEach-Object { "::error::$_" }
-            Get-Content $ctest_log -Tail 120
-            exit $ctest_exit
+        },
+        {
+          "name": "Set up Go",
+          "uses": "actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff",
+          "with": {
+            "go-version": "1.22.x"
           }
-        shell: pwsh
-
-      - name: Save Windows evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: windows-host-library-evidence
-          if-no-files-found: error
-          path: |
-            build-windows/windows-junit.xml
-            build-windows/ctest.log
-            build-windows/Testing/Temporary/LastTest.log
-            build-windows/workerd-compatibility/
-
-  hosted-evidence-index:
-    if: always()
-    needs:
-      - release-wpt-and-delegated-sandbox
-      - sanitizers
-      - fuzz
-      - posix-host-library
-      - windows-host-library
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    steps:
-      - name: Download all hosted evidence
-        continue-on-error: true
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          pattern: '*-evidence'
-          path: hosted-evidence/inputs
-
-      - name: Generate run and content index
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          set -euo pipefail
-          mkdir -p hosted-evidence/inputs
-          {
-            printf 'run_url=%s/%s/actions/runs/%s\n' \
-              "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
-            printf 'repository=%s\n' "${GITHUB_REPOSITORY}"
-            printf 'commit_sha=%s\n' "${GITHUB_SHA}"
-            printf 'ref=%s\n' "${GITHUB_REF}"
-            printf 'release=%s\n' "${RELEASE_RESULT}"
-            printf 'sanitizers=%s\n' "${SANITIZER_RESULT}"
-            printf 'fuzz=%s\n' "${FUZZ_RESULT}"
-            printf 'macos=%s\n' "${MACOS_RESULT}"
-            printf 'windows=%s\n' "${WINDOWS_RESULT}"
-          } > hosted-evidence/run.txt
-          # §12.5: the index also records the Release package identity —
-          # build ID, compatibility ID, package hash and SBOM hash — from
-          # the Release job's package-evidence.txt.
-          package_evidence=$(find hosted-evidence/inputs \
-            -name package-evidence.txt -print -quit)
-          if test -n "${package_evidence}"; then
-            cat "${package_evidence}" >> hosted-evidence/run.txt
-          fi
-          (
-            cd hosted-evidence
-            find inputs -type f -print0 |
-              sort -z |
-              xargs -0 -r sha256sum > sha256sums.txt
-            sha256sum sha256sums.txt |
-              awk '{print $1}' > evidence-tree.sha256
-          )
-
-      - name: Save hosted evidence index
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: hosted-evidence-index
-          if-no-files-found: error
-          path: |
-            hosted-evidence/run.txt
-            hosted-evidence/sha256sums.txt
-            hosted-evidence/evidence-tree.sha256
-
-      - name: Require every hosted job to pass
-        env:
-          RELEASE_RESULT: ${{ needs.release-wpt-and-delegated-sandbox.result }}
-          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
-          FUZZ_RESULT: ${{ needs.fuzz.result }}
-          MACOS_RESULT: ${{ needs.posix-host-library.result }}
-          WINDOWS_RESULT: ${{ needs.windows-host-library.result }}
-        run: |
-          test "${RELEASE_RESULT}" = success
-          test "${SANITIZER_RESULT}" = success
-          test "${FUZZ_RESULT}" = success
-          test "${MACOS_RESULT}" = success
-          test "${WINDOWS_RESULT}" = success
+        },
+        {
+          "name": "Install build and locked JavaScript dependencies",
+          "run": "set -euo pipefail\n# Match the Release dependency transport and reject stale indexes.\nsudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources\napt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)\nsudo apt-get \"${apt_network[@]}\" update --error-on=any\n# libclang-rt-dev supplies the Clang sanitizer runtimes (TSan\n# included, arch-suffixed) that the clang-based tsan matrix entry\n# links against.\nsudo apt-get \"${apt_network[@]}\" install -y ninja-build libboost-system-dev libc-ares-dev libclang-rt-dev openssl python3-venv linux-tools-generic\n/usr/bin/openssl version\n# The vendor audit's expected tag must match cmake/build_tests.cmake\n# (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.\ngit -C vendor/txiki.js fetch --depth=1 origin \\\n  refs/tags/v26.6.0:refs/tags/v26.6.0\nfor directory in \\\n  vendor/txiki.js \\\n  examples/hono-reference \\\n  examples/itty-router-reference \\\n  examples/h3-v2-reference \\\n  examples/elysia-reference\ndo\n  npm ci --ignore-scripts --prefix \"${directory}\"\ndone\n"
+        },
+        {
+          "name": "Require actual Linux perf counters for evidence controls",
+          "run": "python3 -B tools/setup-hosted-perf.py"
+        },
+        {
+          "name": "Install locked independent clients and reference for sanitizers",
+          "run": "set -euo pipefail\n/usr/bin/python3.12 tools/setup-ws-interop-python.py \"${RUNNER_TEMP}/capsid-ws-python\"\nprintf 'CAPSID_WS_INTEROP_PYTHON=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/bin/python\" >> \"${GITHUB_ENV}\"\nprintf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/node-ws\" >> \"${GITHUB_ENV}\"\nreference=\"${RUNNER_TEMP}/capsid-workerd/workerd\"\nnode tools/workerd-reference.mjs install \"${reference}\"\nprintf 'CAPSID_WORKERD_REF=%s\\n' \"${reference}\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Build OpenSSL 3.5 for sanitizer targets",
+          "run": "set -euo pipefail\ncase \"${{ matrix.name }}\" in\n  asan) sanitizer=address ;;\n  ubsan) sanitizer=undefined ;;\n  tsan) sanitizer=thread ;;\n  *) echo \"Unknown sanitizer matrix entry\" >&2; exit 1 ;;\nesac\ncompiler=cc\nif [ \"${{ matrix.compiler }}\" = \"clang\" ]; then\n  compiler=clang\nfi\nsanitizer_flags=\"-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all\"\n# Built in the runner temp dir: extracting the tarball inside the\n# workspace dirties the checkout and trips the build-identity\n# clean-worktree gate.\ncd \"${RUNNER_TEMP}\"\necho \"a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8  openssl-3.5.7.tar.gz\" > openssl.sha256\ncurl -sSL -o openssl-3.5.7.tar.gz https://www.openssl.org/source/openssl-3.5.7.tar.gz\nsha256sum -c openssl.sha256\ntar xzf openssl-3.5.7.tar.gz\ncd openssl-3.5.7\nevidence=\"${RUNNER_TEMP}/capsid-native-provider-evidence\"\nmkdir -p \"${evidence}\"\npython3 \"${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py\" \\\n  --provider openssl --source \"$PWD\" | tee \"${evidence}/openssl-source.json\"\n# Match the Capsid compiler/runtime and instrument the provider's C\n# implementation, including paths normally implemented in assembly.\nCC=\"${compiler}\" CFLAGS=\"${sanitizer_flags}\" CXXFLAGS=\"${sanitizer_flags}\" LDFLAGS=\"-fsanitize=${sanitizer}\" \\\n  ./config --prefix=/opt/openssl35 --openssldir=/opt/openssl35 no-shared no-tests no-asm\nmake -j2\nsudo make install_sw\n"
+        },
+        {
+          "name": "Build c-ares 1.34.5 for sanitizer targets",
+          "run": "set -euo pipefail\ncase \"${{ matrix.name }}\" in\n  asan) sanitizer=address ;;\n  ubsan) sanitizer=undefined ;;\n  tsan) sanitizer=thread ;;\n  *) echo \"Unknown sanitizer matrix entry\" >&2; exit 1 ;;\nesac\ncompiler=cc\nif [ \"${{ matrix.compiler }}\" = \"clang\" ]; then\n  compiler=clang\nfi\nsanitizer_flags=\"-fsanitize=${sanitizer} -fno-omit-frame-pointer -fno-sanitize-recover=all\"\ncd \"${RUNNER_TEMP}\"\nevidence=\"${RUNNER_TEMP}/capsid-native-provider-evidence\"\nmkdir -p \"${evidence}\"\ncurl -sSL -o capsid-cares.tar.gz https://codeload.github.com/c-ares/c-ares/tar.gz/d3a507e920e7af18a5efb7f9f1d8044ed4750013\necho \"cd1968cd09d384a5c553c82bf53ba458e47e9bfcdc253a3627f1b36ea6f814e2  capsid-cares.tar.gz\" | sha256sum -c -\ntar xzf capsid-cares.tar.gz\npython3 \"${GITHUB_WORKSPACE}/tools/apply-native-provider-patches.py\" \\\n  --provider cares --source \"${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013\" | tee \"${evidence}/cares-source.json\"\ncmake -S \"${RUNNER_TEMP}/c-ares-d3a507e920e7af18a5efb7f9f1d8044ed4750013\" -B \"${RUNNER_TEMP}/capsid-cares-build\" -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Debug \\\n  -DCMAKE_C_COMPILER=\"${compiler}\" \\\n  -DCMAKE_C_FLAGS=\"${sanitizer_flags}\" \\\n  -DCMAKE_C_FLAGS_DEBUG=\"-g -O1\" \\\n  -DCMAKE_EXE_LINKER_FLAGS=\"-fsanitize=${sanitizer}\" \\\n  -DCMAKE_INSTALL_PREFIX=/opt/openssl35 \\\n  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \\\n  -DCARES_STATIC=ON -DCARES_SHARED=OFF -DCARES_STATIC_PIC=ON \\\n  -DCARES_BUILD_TESTS=OFF -DCARES_BUILD_TOOLS=OFF\ncmake --build \"${RUNNER_TEMP}/capsid-cares-build\" --parallel 2 --verbose\nsudo cmake --install \"${RUNNER_TEMP}/capsid-cares-build\"\ncp \"${RUNNER_TEMP}/capsid-cares-build/compile_commands.json\" \"${evidence}/cares-compile-commands.json\"\n"
+        },
+        {
+          "name": "Configure ${{ matrix.name }}",
+          "run": "compiler_args=()\nif [ \"${{ matrix.compiler }}\" = \"clang\" ]; then\n  compiler_args=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)\nfi\nhost_args=(-DCMAKE_PREFIX_PATH=/opt/openssl35 -DCAPSID_CARES_PROVIDER_DIR=/opt/openssl35/include)\nif [ \"${{ matrix.build_host }}\" = \"1\" ]; then\n  host_args+=(-DCAPSID_BUILD_HOST=ON)\nfi\ncmake -S . -B \"build-${{ matrix.name }}\" -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Debug \\\n  -D${{ matrix.cmake_flag }}=ON \\\n  -DCAPSID_TEST_OPENSSL_EXECUTABLE=/usr/bin/openssl \\\n  -DCAPSID_SANDBOX_PROFILE=sanitizer \\\n  -DCAPSID_USE_MIMALLOC=OFF \\\n  -DCAPSID_BUILD_BENCHMARKS=ON \\\n  \"${compiler_args[@]}\" \"${host_args[@]}\"\n"
+        },
+        {
+          "name": "Build ${{ matrix.name }}",
+          "run": "cmake --build \"build-${{ matrix.name }}\" --parallel 2\n"
+        },
+        {
+          "name": "Preserve complete instrumented build and registration identities",
+          "run": "ninja -C \"build-${{ matrix.name }}\" -t commands > \"build-${{ matrix.name }}/full-build-commands.txt\"\nctest --test-dir \"build-${{ matrix.name }}\" --show-only=json-v1 > \"build-${{ matrix.name }}/full-registration.json\"\nctest --test-dir \"build-${{ matrix.name }}\" --show-only=json-v1 -E '${{ matrix.ctest_exclude }}' > \"build-${{ matrix.name }}/selected-registration.json\"\n"
+        },
+        {
+          "name": "Record original ASan RSS results",
+          "id": "asan_rss_raw",
+          "if": "matrix.name == 'asan'",
+          "continue-on-error": true,
+          "env": {
+            "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:strict_string_checks=1",
+            "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+          },
+          "run": "set -euo pipefail\nrm -f build-asan/asan-rss-raw-exit-code.txt build-asan/asan-rss-raw-junit.xml build-asan/asan-rss-raw-LastTest.log\nrm -f build-asan/asan-memory-registration.json build-asan/asan-memory-acceptance.json\nrm -f build-asan/asan-memory-replacement-recursion.json build-asan/asan-memory-reclamation-idle.json\nctest --test-dir build-asan --no-tests=error --show-only=json-v1 > build-asan/asan-memory-registration.json\nasan_rss_status=0\nctest --test-dir build-asan \\\n  --no-tests=error --output-on-failure \\\n  --output-junit asan-rss-raw-junit.xml --parallel 1 \\\n  -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || asan_rss_status=$?\nprintf '%s\\n' \"${asan_rss_status}\" > build-asan/asan-rss-raw-exit-code.txt\ncp build-asan/Testing/Temporary/LastTest.log build-asan/asan-rss-raw-LastTest.log\nexit \"${asan_rss_status}\"\n"
+        },
+        {
+          "name": "Record original TSan RSS results",
+          "id": "tsan_rss_raw",
+          "if": "matrix.name == 'tsan'",
+          "continue-on-error": true,
+          "env": {
+            "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
+          },
+          "run": "set -euo pipefail\nrm -f build-tsan/tsan-rss-raw-exit-code.txt build-tsan/tsan-rss-raw-junit.xml build-tsan/tsan-rss-raw-LastTest.log\nrm -f build-tsan/tsan-memory-registration.json build-tsan/tsan-memory-acceptance.json\nrm -f build-tsan/tsan-memory-replacement-recursion.json build-tsan/tsan-memory-reclamation-idle.json\nctest --test-dir build-tsan --no-tests=error --show-only=json-v1 > build-tsan/tsan-memory-registration.json\ntsan_rss_status=0\nctest --test-dir build-tsan \\\n  --no-tests=error --output-on-failure \\\n  --output-junit tsan-rss-raw-junit.xml --parallel 1 \\\n  -R '^websocket_managed_(replacement-recursion|reclamation-idle)$' || tsan_rss_status=$?\nprintf '%s\\n' \"${tsan_rss_status}\" > build-tsan/tsan-rss-raw-exit-code.txt\ncp build-tsan/Testing/Temporary/LastTest.log build-tsan/tsan-rss-raw-LastTest.log\nexit \"${tsan_rss_status}\"\n"
+        },
+        {
+          "name": "Repeat original TSan resource scenarios with fatal diagnostics",
+          "if": "${{ matrix.name == 'tsan' }}",
+          "env": {
+            "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:strict_string_checks=1",
+            "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+            "TSAN_OPTIONS": "halt_on_error=1",
+            "CAPSID_WS_REPORT_DIR": "${{ github.workspace }}/build-${{ matrix.name }}/matrix-case-reports"
+          },
+          "run": "for iteration in $(seq 1 10); do\n  destination=\"${PWD}/build-tsan/focused-dirfd-${iteration}\"\n  mkdir -p \"${destination}\"\n  status=0\n  ctest --test-dir build-tsan --no-tests=error --output-on-failure --parallel 1     --output-junit \"${destination}/junit.xml\"     -R '^websocket_managed_tsan_resources_(replacement-recursion|reclamation-idle)$' || status=$?\n  cp build-tsan/Testing/Temporary/LastTest.log \"${destination}/LastTest.log\"\n  for report in build-tsan/tsan-memory-*.json; do\n    if [ -f \"${report}\" ]; then cp \"${report}\" \"${destination}/\"; fi\n  done\n  if [ \"${status}\" -ne 0 ]; then exit \"${status}\"; fi\ndone\n"
+        },
+        {
+          "name": "Run ${{ matrix.name }} matrix",
+          "env": {
+            "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:strict_string_checks=1",
+            "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+            "TSAN_OPTIONS": "halt_on_error=1",
+            "CAPSID_WS_REPORT_DIR": "${{ github.workspace }}/build-${{ matrix.name }}/matrix-case-reports"
+          },
+          "run": "mkdir -p \"${CAPSID_WS_REPORT_DIR}\"\nctest --test-dir \"build-${{ matrix.name }}\" \\\n  --no-tests=error \\\n  --output-on-failure \\\n  --output-junit \"${{ matrix.name }}-junit.xml\" \\\n  --parallel ${{ matrix.ctest_parallel }} \\\n  -E '${{ matrix.ctest_exclude }}'\n"
+        },
+        {
+          "name": "Require separate ASan memory acceptance",
+          "if": "${{ !cancelled() && matrix.name == 'asan' && steps.asan_rss_raw.outcome != 'skipped' }}",
+          "run": "python3 -B tools/asan-memory-acceptance.py \\\n  --registration build-asan/asan-memory-registration.json \\\n  --raw-junit build-asan/asan-rss-raw-junit.xml \\\n  --raw-last-test build-asan/asan-rss-raw-LastTest.log \\\n  --raw-exit-code build-asan/asan-rss-raw-exit-code.txt \\\n  --raw-outcome '${{ steps.asan_rss_raw.outcome }}' \\\n  --matrix-junit build-asan/asan-junit.xml \\\n  --resource-report-root build-asan \\\n  --output build-asan/asan-memory-acceptance.json\n"
+        },
+        {
+          "name": "Require separate TSan memory acceptance",
+          "if": "${{ !cancelled() && matrix.name == 'tsan' && steps.tsan_rss_raw.outcome != 'skipped' }}",
+          "run": "python3 -B tools/asan-memory-acceptance.py --sanitizer tsan \\\n  --registration build-tsan/tsan-memory-registration.json \\\n  --raw-junit build-tsan/tsan-rss-raw-junit.xml \\\n  --raw-last-test build-tsan/tsan-rss-raw-LastTest.log \\\n  --raw-exit-code build-tsan/tsan-rss-raw-exit-code.txt \\\n  --raw-outcome '${{ steps.tsan_rss_raw.outcome }}' \\\n  --matrix-junit build-tsan/tsan-junit.xml \\\n  --resource-report-root build-tsan \\\n  --output build-tsan/tsan-memory-acceptance.json\n"
+        },
+        {
+          "name": "Archive sanitizer driver reports preserving original names",
+          "if": "always()",
+          "env": {
+            "REPORT_DIRECTORY": "build-${{ matrix.name }}/matrix-case-reports"
+          },
+          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,os,tarfile\nreport=Path(os.environ['REPORT_DIRECTORY'])\nreport.parent.mkdir(parents=True,exist_ok=True)\narchive=report.parent/(report.name+'.tar.gz')\nwith tarfile.open(archive,'w:gz',dereference=False) as output:\n    if report.exists():output.add(report,arcname=report.name)\ndigest=hashlib.sha256(archive.read_bytes()).hexdigest()\narchive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\\n')\nprint(json.dumps(dict(complete=True,sourceDirectory=str(report),sourceExists=report.exists(),\n    archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))\nPY\n"
+        },
+        {
+          "name": "Save sanitizer evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "${{ matrix.name }}-hosted-evidence",
+            "if-no-files-found": "error",
+            "path": "build-${{ matrix.name }}/${{ matrix.name }}-junit.xml\nbuild-${{ matrix.name }}/CMakeCache.txt\nbuild-${{ matrix.name }}/compile_commands.json\nbuild-${{ matrix.name }}/full-build-commands.txt\nbuild-${{ matrix.name }}/full-registration.json\nbuild-${{ matrix.name }}/selected-registration.json\nbuild-${{ matrix.name }}/generated/build-info.txt\nbuild-${{ matrix.name }}/matrix-case-reports.tar.gz\nbuild-${{ matrix.name }}/matrix-case-reports.tar.gz.sha256\nbuild-${{ matrix.name }}/Testing/Temporary/LastTest.log\nbuild-perf-prerequisite/evidence/\nbuild-asan/asan-rss-raw-junit.xml\nbuild-asan/asan-rss-raw-LastTest.log\nbuild-asan/asan-rss-raw-exit-code.txt\nbuild-asan/asan-memory-*.json\nbuild-tsan/tsan-rss-raw-junit.xml\nbuild-tsan/tsan-rss-raw-LastTest.log\nbuild-tsan/tsan-rss-raw-exit-code.txt\nbuild-tsan/tsan-memory-*.json\n${{ runner.temp }}/capsid-native-provider-evidence/\n\nbuild-tsan/focused-dirfd-*/\n"
+          }
+        },
+        {
+          "name": "Display original RSS and sanitizer resource outcomes separately",
+          "if": "always()",
+          "env": {
+            "SANITIZER_PROFILE": "${{ matrix.name }}"
+          },
+          "run": "python3 -B - <<'PY'\nfrom pathlib import Path\nimport json,os,xml.etree.ElementTree as E\nkind=os.environ['SANITIZER_PROFILE']\np=Path('build-'+kind)/(kind+'-memory-acceptance.json')\nd=json.loads(p.read_text()) if p.exists() else {}\nj=Path('build-'+kind)/(kind+'-junit.xml')\ncases=list(E.fromstring(j.read_bytes()).iter('testcase')) if j.exists() else []\nfailed=[c.get('name') for c in cases if c.find('failure') is not None or c.find('error') is not None]\nskipped=[c.get('name') for c in cases if c.find('skipped') is not None]\nwith open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream:\n    stream.write('## '+kind.upper()+' \u2014 raw and resource verdicts\\n\\n')\n    stream.write('Selected matrix: '+str(len(cases))+' reported; '+str(len(failed))+' failed; '+str(len(skipped))+' skipped.\\n\\n')\n    if kind in ('asan','tsan'):\n        stream.write('Original instrumented RSS assertion failures (retained): '+json.dumps(d.get('rawRssFailures','not captured'))+'.\\n\\n')\n        stream.write('Separate resource profile: '+('QUALIFIED' if d.get('complete') is True and d.get('sanitizerResourceAcceptanceQualified') is True else 'NOT QUALIFIED')+'. Production RSS and complete ASan/LSan remain separate mandatory evidence.\\n')\nPY\n"
+        }
+      ]
+    },
+    "fuzz": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 30,
+      "steps": [
+        {
+          "name": "Check out recursively pinned sources",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+            "submodules": "recursive",
+            "fetch-tags": true
+          }
+        },
+        {
+          "name": "Install Clang and Ninja",
+          "run": "sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors\\.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources\napt_network=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)\nsudo apt-get \"${apt_network[@]}\" update --error-on=any\nsudo apt-get \"${apt_network[@]}\" install -y clang libclang-rt-dev ninja-build libboost-dev libssl-dev\n"
+        },
+        {
+          "name": "Configure fuzz harnesses",
+          "env": {
+            "CC": "clang",
+            "CXX": "clang++"
+          },
+          "run": "cmake -S . -B build-fuzz -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Debug \\\n  -DCAPSID_BUILD_WORKER=OFF \\\n  -DCAPSID_BUILD_FUZZERS=ON \\\n  -DCAPSID_USE_MIMALLOC=OFF\n"
+        },
+        {
+          "name": "Build fuzz harnesses",
+          "run": "cmake --build build-fuzz --parallel 2"
+        },
+        {
+          "name": "Preserve complete fuzz build and registration identities",
+          "run": "ninja -C build-fuzz -t commands > build-fuzz/full-build-commands.txt\nctest --test-dir build-fuzz --show-only=json-v1 -L fuzz > build-fuzz/full-registration.json\n"
+        },
+        {
+          "name": "Retain original fuzz binaries and immutable starting corpus",
+          "if": "always()",
+          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,tarfile\nbuild=Path('build-fuzz');registration=json.loads((build/'full-registration.json').read_text())\nfiles=[Path('tests/fuzz/fuzz_websocket_frames.cc'),build/'fuzz/corpus']\nfiles += sorted({Path(test['command'][0]) for test in registration['tests'] if Path(test['command'][0]).is_file() and Path(test['command'][0]).resolve().is_relative_to(Path.cwd())})\ntarget=build/'fuzz-replay-before.tar.gz'\nwith tarfile.open(target,'w:gz',dereference=False) as tar:\n    for path in files:\n        if path.exists():tar.add(path,arcname=str(path.resolve().relative_to(Path.cwd())),recursive=True)\ntarget.with_name(target.name+'.sha256').write_text(hashlib.sha256(target.read_bytes()).hexdigest()+'  '+target.name+'\\n')\nPY\n"
+        },
+        {
+          "name": "Run bounded corpus gates",
+          "run": "ctest --test-dir build-fuzz \\\n  --no-tests=error \\\n  --output-on-failure \\\n  --output-junit fuzz-junit.xml \\\n  -L fuzz\n"
+        },
+        {
+          "name": "Retain actual fuzz binaries mutated corpus and crash inputs",
+          "if": "always()",
+          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,tarfile\nbuild=Path('build-fuzz');registration=json.loads((build/'full-registration.json').read_text())\nfiles=[Path('tests/fuzz/fuzz_websocket_frames.cc'),build/'fuzz/corpus']\nfiles += sorted({Path(test['command'][0]) for test in registration['tests'] if Path(test['command'][0]).is_file() and Path(test['command'][0]).resolve().is_relative_to(Path.cwd())})\ntarget=build/'fuzz-replay-after.tar.gz'\nwith tarfile.open(target,'w:gz',dereference=False) as tar:\n    for path in files:\n        if path.exists():tar.add(path,arcname=str(path.resolve().relative_to(Path.cwd())),recursive=True)\ntarget.with_name(target.name+'.sha256').write_text(hashlib.sha256(target.read_bytes()).hexdigest()+'  '+target.name+'\\n')\nPY\n"
+        },
+        {
+          "name": "Save fuzz evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "fuzz-hosted-evidence",
+            "if-no-files-found": "error",
+            "path": "build-fuzz/fuzz-junit.xml\nbuild-fuzz/fuzz-replay-*.tar.gz\nbuild-fuzz/fuzz-replay-*.tar.gz.sha256\nbuild-fuzz/Testing/Temporary/LastTest.log\nbuild-fuzz/CMakeCache.txt\nbuild-fuzz/compile_commands.json\nbuild-fuzz/full-build-commands.txt\nbuild-fuzz/full-registration.json\nbuild-fuzz/generated/build-info.txt\n"
+          }
+        }
+      ]
+    },
+    "posix-host-library": {
+      "runs-on": "macos-15",
+      "timeout-minutes": 180,
+      "steps": [
+        {
+          "name": "Check out recursively pinned sources",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+            "submodules": "recursive",
+            "fetch-tags": true
+          }
+        },
+        {
+          "name": "Install macOS Host dependencies",
+          "run": "brew install boost c-ares openssl@3.5"
+        },
+        {
+          "name": "Set up Node.js",
+          "uses": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "with": {
+            "node-version": "24.14.0"
+          }
+        },
+        {
+          "name": "Configure distinct loopback peers for redirect contracts",
+          "run": "set -euo pipefail\nsudo ifconfig lo0 alias 127.0.0.2 netmask 255.255.255.255\nnode --input-type=module - <<'JS'\nimport assert from 'node:assert/strict';\nimport net from 'node:net';\nimport {once} from 'node:events';\nconst servers=[];\ntry {\n  let port=0;\n  for(const host of ['127.0.0.1','127.0.0.2']) {\n    const server=net.createServer(socket=>socket.end(host));servers.push(server);\n    server.listen({host,port});await once(server,'listening');\n    assert.equal(server.address().address,host);port=server.address().port;\n  }\n  for(const host of ['127.0.0.1','127.0.0.2']) {\n    const client=net.createConnection({host,port});let body='';\n    for await(const bytes of client)body+=bytes.toString();\n    assert.equal(body,host,'distinct loopback peer receives the actual connection');\n  }\n  console.log(JSON.stringify({complete:true,loopbackPeers:2,samePort:true,actualRoundTrips:2}));\n} finally {await Promise.all(servers.map(server=>new Promise(resolve=>server.close(resolve))));}\nJS\n"
+        },
+        {
+          "name": "Set up the locked Python WebSocket runtime",
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.3"
+          }
+        },
+        {
+          "name": "Install locked independent WebSocket clients",
+          "run": "set -euo pipefail\npython3 tools/setup-ws-interop-python.py \"${RUNNER_TEMP}/capsid-ws-python\"\nprintf 'CAPSID_WS_INTEROP_PYTHON=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/bin/python\" >> \"${GITHUB_ENV}\"\nprintf 'CAPSID_WS_INTEROP_NODE_PACKAGE=%s\\n' \"${RUNNER_TEMP}/capsid-ws-python/node-ws\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Install and verify locked workerd reference",
+          "run": "set -euo pipefail\nreference=\"${RUNNER_TEMP}/capsid-workerd/workerd\"\nnode tools/workerd-reference.mjs install \"${reference}\"\nprintf 'CAPSID_WORKERD_REF=%s\\n' \"${reference}\" >> \"${GITHUB_ENV}\"\n"
+        },
+        {
+          "name": "Install locked JavaScript dependencies",
+          "run": "set -euo pipefail\nfor directory in \\\n  vendor/txiki.js \\\n  examples/hono-reference \\\n  examples/itty-router-reference \\\n  examples/h3-v2-reference \\\n  examples/elysia-reference\ndo\n  npm ci --ignore-scripts --prefix \"${directory}\"\ndone\n# The vendor audit's expected tag must match cmake/build_tests.cmake\n# (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.\ngit -C vendor/txiki.js fetch --depth=1 origin \\\n  refs/tags/v26.6.0:refs/tags/v26.6.0\n"
+        },
+        {
+          "name": "Configure macOS host library and worker contracts",
+          "run": "set -euo pipefail\nnode_binary=$(node -p 'process.execPath')\ncmake -S . -B build-macos \\\n  -DCMAKE_BUILD_TYPE=Release \\\n  -DCMAKE_PREFIX_PATH=\"$(brew --prefix openssl@3.5);$(brew --prefix boost)\" \\\n  -DCAPSID_BUILD_HOST=ON \\\n  -DCAPSID_BUILD_WORKER=ON \\\n  -DCAPSID_ENABLE_LTO=ON \\\n  -DCAPSID_HOST_TEST_NODE=\"${node_binary}\" \\\n  -DCAPSID_NODE_EXECUTABLE=\"${node_binary}\"\n"
+        },
+        {
+          "name": "Build macOS Host, Admin transport, and unit gates",
+          "run": "cmake --build build-macos --parallel 2\n# Named targets make a missing/quietly skipped Boost-backed Admin\n# surface an explicit configuration failure.\ncmake --build build-macos --parallel 2 --target \\\n  capsid-host \\\n  test-host-admin-api \\\n  test-host-admin-http \\\n  test-host-admin-service\n"
+        },
+        {
+          "name": "Preserve complete native macOS build and registration identities",
+          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimport json\nbuild=Path('build-macos');cache=(build/'CMakeCache.txt').read_text()\nassert 'CMAKE_GENERATOR:INTERNAL=Unix Makefiles' in cache\ncommands=json.loads((build/'compile_commands.json').read_text());assert commands\nlinks=[dict(file=str(p.relative_to(build)),command=p.read_text()) for p in sorted(build.rglob('link.txt'))]\nassert links\n(build/'full-build-commands.txt').write_text(json.dumps(dict(generator='Unix Makefiles',actualCompileDatabase=commands,generatedLinkCommands=links),indent=2)+'\\n')\nPY\nctest --test-dir build-macos --show-only=json-v1 -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$' > build-macos/full-registration.json\n"
+        },
+        {
+          "name": "Compare the original timer and fixed fragmentation fixture on native macOS",
+          "run": "python3 -B - <<'PY'\nfrom pathlib import Path\nfrom datetime import datetime,timezone\nimport hashlib\nimport json\nimport os\nimport shlex\nimport subprocess\nimport sys\nimport time\n\nassert sys.platform=='darwin'\nroot=Path.cwd();build=root/'build-macos'\nout=build/'native-fragment-fixture-control'\nout.mkdir(parents=True,exist_ok=False)\nsha=lambda p:hashlib.sha256(Path(p).read_bytes()).hexdigest()\nsource=root/'tests/test_host_admin_http.cc'\ntext=source.read_text('utf-8')\nnew='''            // Keep FIONREAD as the per-fragment read barrier, but do not\n            // make every byte pay for a timer. Darwin may coalesce short\n            // sleeps enough to exhaust the real HTTP phase deadline before\n            // this fixture has delivered the bytes that exercise a limit.\n            std::this_thread::yield();'''\nold='''            std::this_thread::sleep_for(std::chrono::milliseconds(1));'''\nassert text.count(new)==1\nbaseline_source=out/'original-timer-fixture.cc'\nbaseline_source.write_text(text.replace(new,old),encoding='utf-8')\nrecord=dict(complete=False,createdUTC=datetime.now(timezone.utc).isoformat(),platform=sys.platform,\n    candidateSourceSHA256=sha(source),baselineSourceSHA256=sha(baseline_source),\n    baselineDiffIsOnlyOriginalOneMillisecondTimer=True,baselineHasDiagnosticOnlyImprovement=True,\n    productionParserUnchanged=True,headerAndBodyDeadlinesMilliseconds=1000,outerBudgetSeconds=10,\n    commands=[],baselineRuns=[],candidateRuns=[],fullMatrixStillMandatory=True)\ndef save():(out/'result.json').write_text(json.dumps(record,indent=2)+'\\n')\ndef run(label,args,cwd=build,timeout=120):\n    start=time.monotonic()\n    p=subprocess.run(list(map(str,args)),cwd=cwd,capture_output=True,timeout=timeout)\n    so=out/(label+'.stdout.log');se=out/(label+'.stderr.log')\n    so.write_bytes(p.stdout);se.write_bytes(p.stderr)\n    record['commands'].append(dict(label=label,command=list(map(str,args)),exitCode=p.returncode,\n        seconds=time.monotonic()-start,stdoutSHA256=sha(so),stderrSHA256=sha(se)))\n    save();return p\nentries=json.loads((build/'compile_commands.json').read_text())\nentry=next(e for e in entries if e['file'].endswith('/tests/test_host_admin_http.cc'))\ncompile_args=shlex.split(entry['command']);obj=compile_args[compile_args.index('-o')+1]\nbaseline_object=out/'original-timer-fixture.o';baseline_binary=out/'original-timer-fixture'\ncompile_args[compile_args.index('-o')+1]=str(baseline_object)\ncompile_args[compile_args.index('-c')+1]=str(baseline_source)\nif '-MF' in compile_args:compile_args[compile_args.index('-MF')+1]=str(out/'original-timer-fixture.d')\nassert run('baseline-build',compile_args,cwd=Path(entry['directory'])).returncode==0\nlink_args=shlex.split((build/'CMakeFiles/test-host-admin-http.dir/link.txt').read_text())\nassert not any(x in link_args for x in ['&&',';','|'])\nassert link_args.count(obj)==1\nlink_args[link_args.index(obj)]=str(baseline_object)\nlink_args[link_args.index('-o')+1]=str(baseline_binary)\nassert run('baseline-link',link_args).returncode==0\nrecord['baselineBinarySHA256']=sha(baseline_binary)\nrecord['candidateBinarySHA256']=sha(build/'test-host-admin-http')\nfor index in range(16):\n    p=run('baseline-'+str(index),[baseline_binary,'host_admin_http_fragmented_limits'],timeout=10)\n    diagnostic=p.stderr.decode('utf-8','replace').strip()\n    timeout_failure=p.returncode==1 and diagnostic in (\n        'FAIL: Admin HTTP response expected status 431, got 408',\n        'FAIL: Admin HTTP response expected status 413, got 408')\n    assert p.returncode==0 or timeout_failure,diagnostic\n    record['baselineRuns'].append(dict(round=index,exitCode=p.returncode,observedHttp408=timeout_failure,diagnostic=diagnostic))\n    save()\ncommand=['ctest','--test-dir',build,'--parallel','1','--no-tests=error','--output-on-failure','--repeat','until-fail:20',\n         '-R','^host_admin_http_(fragmented_headers|chunked_requests|chunked_errors|fragmented_limits|buffer_boundaries)$',\n         '--output-junit',out/'candidate-repeated-junit.xml']\np=run('candidate-repeat',command,cwd=root,timeout=120)\nassert p.returncode==0,p.stdout.decode('utf-8','replace')[-4000:]\nimport re\nassert len(re.findall(rb'Test\\s+#\\d+:\\s+host_admin_http_\\S+\\s+\\.+\\s+Passed',p.stdout))==100\nrecord.update(complete=True,status='native-candidate-fragmentation-fixture-qualified',candidateRepeatedPasses=100,\n    baselineTimeouts=sum(r['observedHttp408'] for r in record['baselineRuns']),\n    nativeOriginalFailureReproduced=any(r['observedHttp408'] for r in record['baselineRuns']),\n    productionImplementationModified=False,allRequestBytesAndExpectedStatusesRetained=True,\n    baselineIdleSuccessWouldNotEraseOriginalFullMatrixFailure=True)\nassert sha(source)==record['candidateSourceSHA256'] and sha(build/'test-host-admin-http')==record['candidateBinarySHA256']\nsave()\nprint(json.dumps({k:record[k] for k in ['complete','status','baselineTimeouts','nativeOriginalFailureReproduced','candidateRepeatedPasses']}))\n\nPY\n"
+        },
+        {
+          "name": "Run POSIX host-side matrix",
+          "env": {
+            "CAPSID_WS_REPORT_DIR": "${{ runner.temp }}/capsid-full-driver-reports"
+          },
+          "run": "ctest --test-dir build-macos \\\n  --no-tests=error \\\n  --output-on-failure \\\n  --output-junit macos-junit.xml \\\n  -E '^(wpt_conformance_not_configured|worker_package_reproducibility)$'\n"
+        },
+        {
+          "name": "Archive all native macOS driver reports",
+          "if": "always()",
+          "env": {
+            "REPORT_DIRECTORY": "${{ runner.temp }}/capsid-full-driver-reports",
+            "RAW_ARCHIVE": "native-raw-archive/macos-driver-reports.tar.gz"
+          },
+          "run": "python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,os,tarfile\nreport=Path(os.environ['REPORT_DIRECTORY']);archive=Path(os.environ['RAW_ARCHIVE'])\narchive.parent.mkdir(parents=True,exist_ok=True)\nwith tarfile.open(archive,'w:gz',dereference=False) as output:\n    if report.exists():output.add(report,arcname='raw-driver-reports')\ndigest=hashlib.sha256(archive.read_bytes()).hexdigest()\narchive.with_name(archive.name+'.sha256').write_text(digest+'  '+archive.name+'\\n')\nprint(json.dumps(dict(sourceExists=report.exists(),archive=str(archive),sha256=digest,originalNamesAndSymlinksPreserved=True)))\nPY\n"
+        },
+        {
+          "name": "Save macOS evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "macos-host-library-evidence",
+            "if-no-files-found": "error",
+            "path": "build-macos/macos-junit.xml\nbuild-macos/Testing/Temporary/LastTest.log\nbuild-macos/CMakeCache.txt\nbuild-macos/compile_commands.json\nbuild-macos/full-build-commands.txt\nbuild-macos/full-registration.json\nbuild-macos/generated/build-info.txt\nnative-raw-archive/macos-driver-reports.tar.gz\nnative-raw-archive/macos-driver-reports.tar.gz.sha256\n\nbuild-macos/native-fragment-fixture-control/\n"
+          }
+        }
+      ]
+    },
+    "windows-host-library": {
+      "runs-on": "windows-latest",
+      "timeout-minutes": 180,
+      "steps": [
+        {
+          "name": "Check out recursively pinned sources",
+          "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "with": {
+            "ref": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+            "submodules": "recursive",
+            "fetch-tags": true
+          }
+        },
+        {
+          "name": "Set up Node.js",
+          "uses": "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+          "with": {
+            "node-version": "24.14.0"
+          }
+        },
+        {
+          "name": "Set up the locked Python WebSocket runtime",
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.3"
+          }
+        },
+        {
+          "name": "Locate OpenSSL for WebSocket test certificates",
+          "shell": "pwsh",
+          "run": "$git_root = Split-Path (Split-Path (Get-Command git -ErrorAction Stop).Source)\n$openssl_candidates = @(\n  (Join-Path $git_root 'mingw64/bin/openssl.exe'),\n  (Join-Path $git_root 'usr/bin/openssl.exe')\n)\n$openssl_fixture = $openssl_candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1\nif (-not $openssl_fixture) { throw 'OpenSSL CLI for fixture certificates is missing' }\n& $openssl_fixture version\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n(Split-Path $openssl_fixture) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append\n"
+        },
+        {
+          "name": "Install locked independent WebSocket clients",
+          "shell": "pwsh",
+          "run": "$interop_root = Join-Path $env:RUNNER_TEMP 'capsid-ws-interop'\npython tools/setup-ws-interop-python.py $interop_root\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n\"CAPSID_WS_INTEROP_PYTHON=$interop_root\\Scripts\\python.exe\" |\n  Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append\n\"CAPSID_WS_INTEROP_NODE_PACKAGE=$interop_root\\node-ws\" |\n  Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append\n"
+        },
+        {
+          "name": "Install the locked native Windows workerd reference",
+          "shell": "pwsh",
+          "run": "$reference_path = Join-Path $env:RUNNER_TEMP 'capsid-workerd-reference/workerd.exe'\nnode tools/workerd-reference.mjs install $reference_path\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n\"CAPSID_WORKERD_REF=$reference_path\" |\n  Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append\n\"CAPSID_WORKERD_REQUIRED=1\" |\n  Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append\n"
+        },
+        {
+          "name": "Set up the MSVC developer environment",
+          "uses": "ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756"
+        },
+        {
+          "name": "Install locked JavaScript dependencies",
+          "run": "set -euo pipefail\nfor directory in \\\n  vendor/txiki.js \\\n  examples/hono-reference \\\n  examples/itty-router-reference \\\n  examples/h3-v2-reference \\\n  examples/elysia-reference\ndo\n  npm ci --ignore-scripts --prefix \"${directory}\"\ndone\n# The vendor audit's expected tag must match cmake/build_tests.cmake\n# (CAPSID_TXIKI_EXPECTED_TAG) and the pinned submodule commit.\ngit -C vendor/txiki.js fetch --depth=1 origin \\\n  refs/tags/v26.6.0:refs/tags/v26.6.0\n",
+          "shell": "bash"
+        },
+        {
+          "name": "Install Windows build dependencies (vcpkg)",
+          "run": "& \"$env:VCPKG_INSTALLATION_ROOT\\vcpkg.exe\" install `\n  openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static\n",
+          "shell": "pwsh"
+        },
+        {
+          "name": "Configure Windows host library and worker contracts",
+          "run": "cmake -S . -B build-windows `\n  -G Ninja `\n  -DCMAKE_C_COMPILER=cl `\n  -DCMAKE_CXX_COMPILER=cl `\n  -DCMAKE_BUILD_TYPE=Release `\n    -DCAPSID_BUILD_HOST=ON `\n    -DCAPSID_BUILD_WORKER=ON `\n    -DCAPSID_STRICT_WARNINGS=ON `\n    -DCAPSID_USE_MIMALLOC=OFF `\n    -DCMAKE_TOOLCHAIN_FILE=\"$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake\" `\n  -DVCPKG_TARGET_TRIPLET=x64-windows-static\n",
+          "shell": "pwsh"
+        },
+        {
+          "name": "Build Windows Host and worker contracts",
+          "shell": "pwsh",
+          "run": "# On failure, replay the build tail as ::error:: annotations so\n# the actual compiler diagnostic is visible in the run summary\n# (raw step logs need a signed-in viewer).\ncmake --build build-windows --parallel 2 2>&1 | Tee-Object build-windows\\build.log\nif ($LASTEXITCODE -ne 0) {\n  # GitHub accepts only a small annotation set. Emit compiler and\n  # Ninja diagnostics first; annotating every normal tail line can\n  # exhaust that set before the actual error is reached.\n  Select-String -Path build-windows\\build.log `\n    -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `\n    | Select-Object -First 20 `\n    | ForEach-Object { \"::error title=Windows build::$($_.Line.Trim())\" }\n  Get-Content build-windows\\build.log -Tail 60\n  exit 1\n}\n# The named gate mirrors the macOS job: a quietly skipped\n# Boost-backed Host surface would fail this step explicitly.\ncmake --build build-windows --parallel 2 --target capsid-host 2>&1 | Tee-Object build-windows\\build.log\nif ($LASTEXITCODE -ne 0) {\n  Select-String -Path build-windows\\build.log `\n    -Pattern '(error C[0-9]+|fatal error|FAILED:|ninja: build stopped)' `\n    | Select-Object -First 20 `\n    | ForEach-Object { \"::error title=Windows build::$($_.Line.Trim())\" }\n  Get-Content build-windows\\build.log -Tail 60\n  exit 1\n}\n"
+        },
+        {
+          "name": "Preserve complete native Windows build and registration identities",
+          "shell": "pwsh",
+          "run": "ninja -C build-windows -t commands | Out-File -FilePath build-windows/full-build-commands.txt -Encoding utf8\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\nctest --test-dir build-windows --show-only=json-v1 -E '^wpt_conformance_not_configured$' |\n  Out-File -FilePath build-windows/full-registration.json -Encoding utf8\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n"
+        },
+        {
+          "name": "Run the native Windows workerd compatibility gate",
+          "shell": "pwsh",
+          "run": "node tools/run-workerd-ws-gate.mjs build-windows build-windows/workerd-compatibility\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n"
+        },
+        {
+          "name": "Run the complete original Windows matrix under an owned archival supervisor",
+          "shell": "pwsh",
+          "run": "$root = (Resolve-Path build-windows).Path\n[IO.File]::WriteAllBytes((Join-Path $root 'original-matrix-command.ps1'), [Convert]::FromBase64String('JGV2aWRlbmNlX3Jvb3QgPSAoUmVzb2x2ZS1QYXRoIGJ1aWxkLXdpbmRvd3MpLlBhdGgKJGN0ZXN0X2xvZyA9IEpvaW4tUGF0aCAkZXZpZGVuY2Vfcm9vdCAnY3Rlc3QubG9nJwokanVuaXRfcGF0aCA9IEpvaW4tUGF0aCAkZXZpZGVuY2Vfcm9vdCAnd2luZG93cy1qdW5pdC54bWwnCmN0ZXN0IC0tdGVzdC1kaXIgYnVpbGQtd2luZG93cyBgCiAgLS1wYXJhbGxlbCAxIGAKICAtLW5vLXRlc3RzPWVycm9yIGAKICAtLW91dHB1dC1vbi1mYWlsdXJlIGAKICAtLW91dHB1dC1qdW5pdCAkanVuaXRfcGF0aCBgCiAgLUUgJ153cHRfY29uZm9ybWFuY2Vfbm90X2NvbmZpZ3VyZWQkJyBgCiAgMj4mMSB8IFRlZS1PYmplY3QgLUZpbGVQYXRoICRjdGVzdF9sb2cKJGN0ZXN0X2V4aXQgPSAkTEFTVEVYSVRDT0RFCmlmICgkY3Rlc3RfZXhpdCAtbmUgMCkgewogIFNlbGVjdC1TdHJpbmcgLVBhdGggJGN0ZXN0X2xvZyBgCiAgICAtUGF0dGVybiAnKFwqXCpcKkZhaWxlZHxcKlwqXCpUaW1lb3V0fFRoZSBmb2xsb3dpbmcgdGVzdHMgRkFJTEVEfF5GQUlMOiknIGAKICAgIC1Db250ZXh0IDAsMTUgfCBTZWxlY3QtT2JqZWN0IC1GaXJzdCA0MCB8IEZvckVhY2gtT2JqZWN0IHsgIjo6ZXJyb3I6OiRfIiB9CiAgR2V0LUNvbnRlbnQgJGN0ZXN0X2xvZyAtVGFpbCAxMjAKICBleGl0ICRjdGVzdF9leGl0Cn0K'))\n[IO.File]::WriteAllBytes((Join-Path $root 'matrix-supervisor.py'), [Convert]::FromBase64String('ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmltcG9ydCBqc29uLHN1YnByb2Nlc3Msc3lzLHRpbWUKZm9sZGVyPVBhdGgoc3lzLmFyZ3ZbMV0pO3N0YXJ0PXRpbWUubW9ub3RvbmljKCkKb3JpZ2luYWw9KGZvbGRlci8nb3JpZ2luYWwtbWF0cml4LWNvbW1hbmQucHMxJykucmVhZF9ieXRlcygpCnNjcmlwdD1mb2xkZXIvJ3J1bm5lci1lcXVpdmFsZW50LW1hdHJpeC1jb21tYW5kLnBzMScKc2NyaXB0LndyaXRlX2J5dGVzKGIiJEVycm9yQWN0aW9uUHJlZmVyZW5jZSA9ICdzdG9wJ1xuIitvcmlnaW5hbCtiIlxuaWYgKChUZXN0LVBhdGggLUxpdGVyYWxQYXRoIHZhcmlhYmxlOlxcTEFTVEVYSVRDT0RFKSkgeyBleGl0ICRMQVNURVhJVENPREUgfVxuIikKd2l0aCAoZm9sZGVyLydtYXRyaXgtc3VwZXJ2aXNvci5zdGRvdXQubG9nJykub3BlbigneGInKSBhcyBzbywoZm9sZGVyLydtYXRyaXgtc3VwZXJ2aXNvci5zdGRlcnIubG9nJykub3BlbigneGInKSBhcyBzZToKIHA9c3VicHJvY2Vzcy5ydW4oWydwd3NoJywnLU5vTG9nbycsJy1Ob1Byb2ZpbGUnLCctTm9uSW50ZXJhY3RpdmUnLCctRXhlY3V0aW9uUG9saWN5JywnQnlwYXNzJywnLUZpbGUnLHN0cihzY3JpcHQpXSxzdGRvdXQ9c28sc3RkZXJyPXNlKQpyPWRpY3QoZXhpdENvZGU9cC5yZXR1cm5jb2RlLHNlY29uZHM9dGltZS5tb25vdG9uaWMoKS1zdGFydCxvcmlnaW5hbE1hdHJpeENvbW1hbmRVbmNoYW5nZWQ9VHJ1ZSkKdGVtcD1mb2xkZXIvJ21hdHJpeC1vd25lZC1yZXN1bHQucGFydGlhbC5qc29uJzt0ZW1wLndyaXRlX3RleHQoanNvbi5kdW1wcyhyKSsnXG4nKTt0ZW1wLnJlcGxhY2UoZm9sZGVyLydtYXRyaXgtb3duZWQtcmVzdWx0Lmpzb24nKQo='))\n$python = (Get-Command python).Source\n$script = Join-Path $root 'matrix-supervisor.py'\n$p = Start-Process -FilePath $python -ArgumentList @('-B', ('\"' + $script + '\"'), ('\"' + $root + '\"')) -WorkingDirectory (Get-Location).Path -PassThru\n$state = @{ pid=$p.Id; startTicks=$p.StartTime.ToUniversalTime().Ticks; originalCommandSHA256=(Get-FileHash -LiteralPath (Join-Path $root 'original-matrix-command.ps1') -Algorithm SHA256).Hash }\n[IO.File]::WriteAllText((Join-Path $root 'matrix-owned-controller.json'), ($state | ConvertTo-Json), [Text.UTF8Encoding]::new($false))\n"
+        },
+        {
+          "name": "Observe original Windows matrix and snapshot immutable checkpoint 1",
+          "shell": "pwsh",
+          "run": "$root = (Resolve-Path build-windows).Path\n$state = [IO.File]::ReadAllText((Join-Path $root 'matrix-owned-controller.json')) | ConvertFrom-Json\n$until = [DateTime]::UtcNow.AddSeconds(1200)\nwhile (-not (Test-Path -LiteralPath (Join-Path $root 'matrix-owned-result.json'))) {\n  $p = Get-Process -Id $state.pid -ErrorAction Stop\n  if ($p.StartTime.ToUniversalTime().Ticks -ne $state.startTicks) { throw 'owned matrix supervisor identity changed' }\n  if ([DateTime]::UtcNow -ge $until) { break }\n  Start-Sleep -Seconds 5\n}\n$destination = Join-Path $root 'matrix-checkpoint-1'\nNew-Item -ItemType Directory -Path $destination -ErrorAction Stop | Out-Null\n$files = @('ctest.log','Testing/Temporary/LastTest.log','Testing/Temporary/LastTest.log.tmp','Testing/Temporary/LastTestsFailed.log','matrix-supervisor.stdout.log','matrix-supervisor.stderr.log','matrix-owned-result.json','matrix-owned-controller.json','original-matrix-command.ps1','runner-equivalent-matrix-command.ps1','full-registration.json','generated/build-info.txt')\n$inventory = @()\nforeach ($name in $files) {\n  $source = Join-Path $root $name\n  if (Test-Path -LiteralPath $source -PathType Leaf) {\n    $target = Join-Path $destination ($name.Replace('/','__'))\n    Copy-Item -LiteralPath $source -Destination $target -ErrorAction Stop\n    $inventory += @{ source=$name; bytes=(Get-Item -LiteralPath $target).Length; sha256=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash }\n  }\n}\n$proof = @{ observedUTC=[DateTime]::UtcNow.ToString('o'); partialDiagnosticOnly=$true; testsNotSignalledOrInterrupted=$true; originalJobBudgetMinutes=180; files=$inventory }\n[IO.File]::WriteAllText((Join-Path $destination 'checkpoint.json'), ($proof | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))\n"
+        },
+        {
+          "name": "Preserve Windows matrix diagnostic checkpoint 1",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "windows-matrix-checkpoint-1",
+            "path": "build-windows/matrix-checkpoint-1",
+            "if-no-files-found": "error"
+          }
+        },
+        {
+          "name": "Observe original Windows matrix and snapshot immutable checkpoint 2",
+          "shell": "pwsh",
+          "run": "$root = (Resolve-Path build-windows).Path\n$state = [IO.File]::ReadAllText((Join-Path $root 'matrix-owned-controller.json')) | ConvertFrom-Json\n$until = [DateTime]::UtcNow.AddSeconds(1200)\nwhile (-not (Test-Path -LiteralPath (Join-Path $root 'matrix-owned-result.json'))) {\n  $p = Get-Process -Id $state.pid -ErrorAction Stop\n  if ($p.StartTime.ToUniversalTime().Ticks -ne $state.startTicks) { throw 'owned matrix supervisor identity changed' }\n  if ([DateTime]::UtcNow -ge $until) { break }\n  Start-Sleep -Seconds 5\n}\n$destination = Join-Path $root 'matrix-checkpoint-2'\nNew-Item -ItemType Directory -Path $destination -ErrorAction Stop | Out-Null\n$files = @('ctest.log','Testing/Temporary/LastTest.log','Testing/Temporary/LastTest.log.tmp','Testing/Temporary/LastTestsFailed.log','matrix-supervisor.stdout.log','matrix-supervisor.stderr.log','matrix-owned-result.json','matrix-owned-controller.json','original-matrix-command.ps1','runner-equivalent-matrix-command.ps1','full-registration.json','generated/build-info.txt')\n$inventory = @()\nforeach ($name in $files) {\n  $source = Join-Path $root $name\n  if (Test-Path -LiteralPath $source -PathType Leaf) {\n    $target = Join-Path $destination ($name.Replace('/','__'))\n    Copy-Item -LiteralPath $source -Destination $target -ErrorAction Stop\n    $inventory += @{ source=$name; bytes=(Get-Item -LiteralPath $target).Length; sha256=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash }\n  }\n}\n$proof = @{ observedUTC=[DateTime]::UtcNow.ToString('o'); partialDiagnosticOnly=$true; testsNotSignalledOrInterrupted=$true; originalJobBudgetMinutes=180; files=$inventory }\n[IO.File]::WriteAllText((Join-Path $destination 'checkpoint.json'), ($proof | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))\n"
+        },
+        {
+          "name": "Preserve Windows matrix diagnostic checkpoint 2",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "windows-matrix-checkpoint-2",
+            "path": "build-windows/matrix-checkpoint-2",
+            "if-no-files-found": "error"
+          }
+        },
+        {
+          "name": "Observe original Windows matrix and snapshot immutable checkpoint 3",
+          "shell": "pwsh",
+          "run": "$root = (Resolve-Path build-windows).Path\n$state = [IO.File]::ReadAllText((Join-Path $root 'matrix-owned-controller.json')) | ConvertFrom-Json\n$until = [DateTime]::UtcNow.AddSeconds(1200)\nwhile (-not (Test-Path -LiteralPath (Join-Path $root 'matrix-owned-result.json'))) {\n  $p = Get-Process -Id $state.pid -ErrorAction Stop\n  if ($p.StartTime.ToUniversalTime().Ticks -ne $state.startTicks) { throw 'owned matrix supervisor identity changed' }\n  if ([DateTime]::UtcNow -ge $until) { break }\n  Start-Sleep -Seconds 5\n}\n$destination = Join-Path $root 'matrix-checkpoint-3'\nNew-Item -ItemType Directory -Path $destination -ErrorAction Stop | Out-Null\n$files = @('ctest.log','Testing/Temporary/LastTest.log','Testing/Temporary/LastTest.log.tmp','Testing/Temporary/LastTestsFailed.log','matrix-supervisor.stdout.log','matrix-supervisor.stderr.log','matrix-owned-result.json','matrix-owned-controller.json','original-matrix-command.ps1','runner-equivalent-matrix-command.ps1','full-registration.json','generated/build-info.txt')\n$inventory = @()\nforeach ($name in $files) {\n  $source = Join-Path $root $name\n  if (Test-Path -LiteralPath $source -PathType Leaf) {\n    $target = Join-Path $destination ($name.Replace('/','__'))\n    Copy-Item -LiteralPath $source -Destination $target -ErrorAction Stop\n    $inventory += @{ source=$name; bytes=(Get-Item -LiteralPath $target).Length; sha256=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash }\n  }\n}\n$proof = @{ observedUTC=[DateTime]::UtcNow.ToString('o'); partialDiagnosticOnly=$true; testsNotSignalledOrInterrupted=$true; originalJobBudgetMinutes=180; files=$inventory }\n[IO.File]::WriteAllText((Join-Path $destination 'checkpoint.json'), ($proof | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))\n"
+        },
+        {
+          "name": "Preserve Windows matrix diagnostic checkpoint 3",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "windows-matrix-checkpoint-3",
+            "path": "build-windows/matrix-checkpoint-3",
+            "if-no-files-found": "error"
+          }
+        },
+        {
+          "name": "Require the actual complete original Windows matrix exit code",
+          "shell": "pwsh",
+          "if": "always()",
+          "run": "$root = (Resolve-Path build-windows).Path\n$state = [IO.File]::ReadAllText((Join-Path $root 'matrix-owned-controller.json')) | ConvertFrom-Json\nwhile (-not (Test-Path -LiteralPath (Join-Path $root 'matrix-owned-result.json'))) {\n  $p = Get-Process -Id $state.pid -ErrorAction Stop\n  if ($p.StartTime.ToUniversalTime().Ticks -ne $state.startTicks) { throw 'owned matrix supervisor identity changed' }\n  Start-Sleep -Seconds 5\n}\n$result = [IO.File]::ReadAllText((Join-Path $root 'matrix-owned-result.json')) | ConvertFrom-Json\nWrite-Output ($result | ConvertTo-Json)\nif ($result.exitCode -ne 0) { exit $result.exitCode }\n"
+        },
+        {
+          "name": "Retain actual native executables for independent replay",
+          "if": "always()",
+          "shell": "pwsh",
+          "run": "@'\nfrom pathlib import Path\nimport hashlib,json\nbuild=Path('build-windows')\nnames=['capsid-host.exe','capsid-worker.exe','test-spawn-failure-recovery.exe']\nfound={name:dict(bytes=(build/name).stat().st_size,sha256=hashlib.sha256((build/name).read_bytes()).hexdigest()) for name in names if (build/name).is_file()}\n(build/'native-executable-identities.json').write_text(json.dumps(dict(expected=names,found=found),indent=2)+'\\n')\n'@ | Set-Content -LiteralPath capture-native-executables.py -Encoding utf8\npython -B capture-native-executables.py\n"
+        },
+        {
+          "name": "Save Windows evidence",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "windows-host-library-evidence",
+            "if-no-files-found": "error",
+            "path": "build-windows/windows-junit.xml\nbuild-windows/capsid-host.exe\nbuild-windows/capsid-worker.exe\nbuild-windows/test-spawn-failure-recovery.exe\nbuild-windows/native-executable-identities.json\nbuild-windows/full-registration.json\nbuild-windows/full-build-commands.txt\nbuild-windows/build.log\nbuild-windows/generated/build-info.txt\n${{ runner.temp }}/capsid-full-driver-reports/\nbuild-windows/ctest.log\nbuild-windows/Testing/Temporary/LastTest.log\nbuild-windows/workerd-compatibility/\n"
+          }
+        }
+      ]
+    },
+    "hosted-evidence-index": {
+      "if": "always()",
+      "needs": [
+        "release-wpt-and-delegated-sandbox",
+        "sanitizers",
+        "fuzz",
+        "posix-host-library",
+        "windows-host-library"
+      ],
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "name": "Download all hosted evidence",
+          "continue-on-error": true,
+          "uses": "actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53",
+          "with": {
+            "pattern": "*-evidence",
+            "path": "hosted-evidence/inputs"
+          }
+        },
+        {
+          "name": "Generate run and content index",
+          "env": {
+            "RELEASE_RESULT": "${{ needs.release-wpt-and-delegated-sandbox.result }}",
+            "SANITIZER_RESULT": "${{ needs.sanitizers.result }}",
+            "FUZZ_RESULT": "${{ needs.fuzz.result }}",
+            "MACOS_RESULT": "${{ needs.posix-host-library.result }}",
+            "WINDOWS_RESULT": "${{ needs.windows-host-library.result }}"
+          },
+          "run": "set -euo pipefail\nmkdir -p hosted-evidence/inputs\n{\n  printf 'run_url=%s/%s/actions/runs/%s\\n' \\\n    \"${GITHUB_SERVER_URL}\" \"${GITHUB_REPOSITORY}\" \"${GITHUB_RUN_ID}\"\n  printf 'repository=%s\\n' \"${GITHUB_REPOSITORY}\"\n  printf 'commit_sha=%s\\n' \"${GITHUB_SHA}\"\n  printf 'ref=%s\\n' \"${GITHUB_REF}\"\n  printf 'release=%s\\n' \"${RELEASE_RESULT}\"\n  printf 'sanitizers=%s\\n' \"${SANITIZER_RESULT}\"\n  printf 'fuzz=%s\\n' \"${FUZZ_RESULT}\"\n  printf 'macos=%s\\n' \"${MACOS_RESULT}\"\n  printf 'windows=%s\\n' \"${WINDOWS_RESULT}\"\n} > hosted-evidence/run.txt\n# \u00a712.5: the index also records the Release package identity \u2014\n# build ID, compatibility ID, package hash and SBOM hash \u2014 from\n# the Release job's package-evidence.txt.\npackage_evidence=$(find hosted-evidence/inputs \\\n  -name package-evidence.txt -print -quit)\nif test -n \"${package_evidence}\"; then\n  cat \"${package_evidence}\" >> hosted-evidence/run.txt\nfi\n(\n  cd hosted-evidence\n  find inputs -type f -print0 |\n    sort -z |\n    xargs -0 -r sha256sum > sha256sums.txt\n  sha256sum sha256sums.txt |\n    awk '{print $1}' > evidence-tree.sha256\n)\n"
+        },
+        {
+          "name": "Save hosted evidence index",
+          "if": "always()",
+          "uses": "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+          "with": {
+            "name": "hosted-evidence-index",
+            "if-no-files-found": "error",
+            "path": "hosted-evidence/run.txt\nhosted-evidence/sha256sums.txt\nhosted-evidence/evidence-tree.sha256\n"
+          }
+        },
+        {
+          "name": "Require every hosted job to pass",
+          "env": {
+            "RELEASE_RESULT": "${{ needs.release-wpt-and-delegated-sandbox.result }}",
+            "SANITIZER_RESULT": "${{ needs.sanitizers.result }}",
+            "FUZZ_RESULT": "${{ needs.fuzz.result }}",
+            "MACOS_RESULT": "${{ needs.posix-host-library.result }}",
+            "WINDOWS_RESULT": "${{ needs.windows-host-library.result }}"
+          },
+          "run": "test \"${RELEASE_RESULT}\" = success\ntest \"${SANITIZER_RESULT}\" = success\ntest \"${FUZZ_RESULT}\" = success\ntest \"${MACOS_RESULT}\" = success\ntest \"${WINDOWS_RESULT}\" = success\n"
+        }
+      ]
+    }
+  },
+  "on": {
+    "workflow_dispatch": null
+  }
+}
