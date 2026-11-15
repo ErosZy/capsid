@@ -191,3 +191,40 @@ async function stopOnce(child) {
     if(control?.error && child.exitCode!==0) throw new Error('parent stop control failed', {cause:control.error});
     return {code:child.exitCode,signal:child.signalCode,forced};
 }
+
+// A localhost authority includes both loopback families. Reserving only IPv4
+// leaves its IPv6 endpoint available to an unrelated service, and a refused
+// IPv6 connect can consume most of a fixture's unchanged observation budget.
+// Return only after both exact loopback addresses belong to this fixture.
+export async function listenLoopbackTcp(onConnection, {port=0}={}) {
+    assert.equal(typeof onConnection,'function');
+    assert.ok(Number.isInteger(port)&&port>=0&&port<=65535,'valid loopback port');
+    const sockets=new Set(),started=[];
+    const create=()=>net.createServer({allowHalfOpen:true},socket=>{
+        sockets.add(socket);socket.once('close',()=>sockets.delete(socket));
+        onConnection(socket);
+    });
+    const ipv4=create(),ipv6=create();
+    const listen=(server,options)=>new Promise((resolve,reject)=>{
+        const failed=error=>{server.removeListener('listening',ready);reject(error);};
+        const ready=()=>{server.removeListener('error',failed);started.push(server);resolve();};
+        server.once('error',failed);server.once('listening',ready);server.listen(options);
+    });
+    const closeListeners=()=>Promise.all(started.map(server=>new Promise((resolve,reject)=>{
+        server.close(error=>error?reject(error):resolve());
+    })));
+    try {
+        await listen(ipv4,{host:'127.0.0.1',port,exclusive:true});
+        await listen(ipv6,{host:'::1',port:ipv4.address().port,ipv6Only:true,exclusive:true});
+    } catch(error) {
+        for(const socket of sockets)socket.destroy();
+        try {await closeListeners();} catch(cleanupError) {
+            throw new AggregateError([error,cleanupError],'loopback bind and cleanup failed',{cause:error});
+        }
+        throw error;
+    }
+    const addresses=Object.freeze([ipv4.address(),ipv6.address()].map(value=>Object.freeze(value)));
+    let closing;
+    return Object.freeze({port:addresses[0].port,addresses,
+        close(){if(!closing)closing=closeListeners();return closing;}});
+}

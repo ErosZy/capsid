@@ -4,6 +4,8 @@ import test from 'node:test';
 import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import net from 'node:net';
+import {listenLoopbackTcp} from './helpers/ws_host_backend.mjs';
 import {fetchResourceCases, assertFetchResourceCase, validateFetchResourceReport, compareFetchResourceReports} from '../tools/workerd-fetch-resource-contract.mjs';
 
 // Actual pinned Linux workerd output, replayed only to test this validator.
@@ -191,3 +193,86 @@ test('Linux validation rejects omission of managed from a verified healthy backe
     assert.doesNotThrow(()=>compareFetchResourceReports(m.reference,m.candidates,m.expected));
     assert.throws(()=>compareFetchResourceReports(m.reference,m.candidates.filter(r=>r.mode!=='managed'),m.expected));
 });
+
+for (const id of fetchResourceCases.filter(id=>!id.startsWith('fetch-abort-pre-')&&id!=='fetch-sync-context-numeric'))
+    test(id+' accepts actual owned IPv6 loopback observations without changing HTTP semantics',()=>{
+        const value=structuredClone(stored.cases.find(entry=>entry.id===id));
+        for(const key of ['upstream','checkpointUpstream','beforeAction'])
+            for(const entry of value[key]??[])entry.localAddress='::1';
+        assert.doesNotThrow(()=>assertFetchResourceCase(value,'reference'));
+    });
+for(const address of ['::2','::ffff:127.0.0.1','fe80::1'])
+    test('resource model rejects unowned IPv6 address '+address,()=>{
+        const value=structuredClone(stored.cases.find(entry=>entry.id==='fetch-complete'));
+        value.upstream[0].localAddress=address;
+        assert.throws(()=>assertFetchResourceCase(value,'reference'),/actual listening address/);
+    });
+test('numeric IPv4 target cannot claim an IPv6 accepted socket',()=>{
+    const value=structuredClone(stored.cases.find(entry=>entry.id==='fetch-sync-context-numeric'));
+    value.upstream[0].localAddress='::1';
+    assert.throws(()=>assertFetchResourceCase(value,'reference'),/actual listening address/);
+});
+
+function listenForTest(server,options) {
+    return new Promise((resolve,reject)=>{
+        const failed=error=>{server.removeListener('listening',ready);reject(error);};
+        const ready=()=>{server.removeListener('error',failed);resolve();};
+        server.once('error',failed);server.once('listening',ready);server.listen(options);
+    });
+}
+const closeForTest=server=>server.listening?new Promise((resolve,reject)=>
+    server.close(error=>error?reject(error):resolve())):Promise.resolve();
+
+test('loopback fixture owns both exact addresses on one port and preserves actual socket families',
+    {timeout:3000},async()=>{
+        const accepted=[];
+        const listener=await listenLoopbackTcp(socket=>{
+            accepted.push(socket.localAddress);
+            socket.on('data',data=>{assert.equal(data.toString(),'probe');socket.end('owned/'+socket.localAddress);});
+        });
+        try {
+            assert.deepEqual(listener.addresses.map(v=>[v.address,v.port]),
+                [['127.0.0.1',listener.port],['::1',listener.port]]);
+            for(const host of ['127.0.0.1','::1']) {
+                const text=await new Promise((resolve,reject)=>{
+                    const chunks=[],socket=net.createConnection({host,port:listener.port},()=>socket.end('probe'));
+                    socket.on('data',data=>chunks.push(data));socket.once('error',reject);
+                    socket.once('close',()=>resolve(Buffer.concat(chunks).toString()));
+                });
+                assert.equal(text,'owned/'+host);
+            }
+            assert.deepEqual(accepted,['127.0.0.1','::1']);
+        } finally {await listener.close();}
+        assert.equal(listener.close(),listener.close(),'listener teardown is idempotent');
+    });
+test('loopback fixture prevents another application owning its IPv6 authority',
+    {timeout:3000},async()=>{
+        const listener=await listenLoopbackTcp(socket=>socket.destroy());
+        const foreign=net.createServer(socket=>socket.destroy());
+        try {
+            await assert.rejects(listenForTest(foreign,
+                {host:'::1',port:listener.port,ipv6Only:true,exclusive:true}),{code:'EADDRINUSE'});
+        } finally {await closeForTest(foreign);await listener.close();}
+    });
+test('IPv4-only control leaves the same authority available to another IPv6 application',
+    {timeout:3000},async()=>{
+        const ipv4=net.createServer(socket=>socket.destroy()),foreign=net.createServer(socket=>socket.destroy());
+        try {
+            await listenForTest(ipv4,{host:'127.0.0.1',port:0,exclusive:true});
+            await listenForTest(foreign,{host:'::1',port:ipv4.address().port,ipv6Only:true,exclusive:true});
+            assert.equal(ipv4.address().port,foreign.address().port);
+            assert.equal(foreign.listening,true,'the old IPv4 reservation cannot exclude a foreign IPv6 listener');
+        } finally {await closeForTest(foreign);await closeForTest(ipv4);}
+    });
+test('a partial dual-loopback bind failure releases only its own IPv4 listener',
+    {timeout:3000},async()=>{
+        const foreign=net.createServer(socket=>socket.destroy()),rebound=net.createServer(socket=>socket.destroy());
+        try {
+            await listenForTest(foreign,{host:'::1',port:0,ipv6Only:true,exclusive:true});
+            const port=foreign.address().port;
+            await assert.rejects(listenLoopbackTcp(socket=>socket.destroy(),{port}),{code:'EADDRINUSE'});
+            assert.equal(foreign.listening,true,'cleanup cannot close another owner');
+            await listenForTest(rebound,{host:'127.0.0.1',port,exclusive:true});
+            assert.equal(rebound.address().port,port,'the failed attempt left no IPv4 reservation');
+        } finally {await closeForTest(rebound);await closeForTest(foreign);}
+    });

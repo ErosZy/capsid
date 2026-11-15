@@ -1,13 +1,12 @@
 import {waitForWorkerdListen} from './helpers/workerd_listener_control.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
-import {startCapsid, stopCapsid} from './helpers/ws_host_backend.mjs';
+import {startCapsid, stopCapsid, listenLoopbackTcp} from './helpers/ws_host_backend.mjs';
 import {responseSession} from './helpers/ws_response_client.mjs';
 import {root, readLock, verifyBinary, verifyClient, fileDigest} from '../tools/workerd-reference.mjs';
 import {fetchResourceCases, fetchResourceInputPaths, validateFetchResourceReport} from '../tools/workerd-fetch-resource-contract.mjs';
@@ -48,7 +47,7 @@ async function observeUntil(predicate, milliseconds = 3000) {
 }
 async function startUpstream(kind, challenge, role) {
     const sockets = new Map(), records = []; let release;
-    const listener = net.createServer({allowHalfOpen: true}, socket => {
+    const listener = await listenLoopbackTcp(socket => {
         const item = {request: null, rawRequest: '', bytes: 0, peerEnded: false, peerReset: false,
             fixtureEnded: false, fixtureDestroyed: false, events: [],
             localAddress: socket.localAddress, localPort: socket.localPort}; records.push(item);
@@ -75,11 +74,10 @@ async function startUpstream(kind, challenge, role) {
             }
         });
     });
-    await new Promise((resolve, reject) => {listener.once('error', reject); listener.listen(0, '127.0.0.1', resolve);});
-    return {port: listener.address().port, records, release() {assert.ok(release, 'actual foreign request before release'); release();},
+    return {port: listener.port, records, release() {assert.ok(release, 'actual foreign request before release'); release();},
         snapshot() {return structuredClone(records);}, async stop() {
             for (const [socket, item] of sockets) {item.fixtureDestroyed = true; socket.destroy();}
-            await new Promise(resolve => listener.close(resolve));
+            await listener.close();
         }};
 }
 async function startReference(directory) {
@@ -182,6 +180,7 @@ for (const id of fetchResourceCases) {
         value.observed = await state(); await delay(100); value.finalState = await state(); value.upstream = snapshot();
     } catch (error) {
         value.failure = error.stack; if (error.observation) value.failureObservation = error.observation;
+        value.failureUpstream = servers.flatMap(server => server.snapshot());
         if (readState) try {value.failureState = await readState();} catch (nested) {value.failureStateError = nested.stack;}
     }
     finally {

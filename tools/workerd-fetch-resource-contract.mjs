@@ -112,7 +112,8 @@ function http(value, realm, state, label) {
 }
 function requestHeaders(entry, value, index, label) {
     const target = value.targets[index];
-    assert.equal(entry.localAddress, '127.0.0.1', label + ' actual listening address');
+    const listeningAddresses = target.host === '127.0.0.1' ? ['127.0.0.1'] : ['127.0.0.1', '::1'];
+    assert.ok(listeningAddresses.includes(entry.localAddress), label + ' actual listening address');
     assert.equal(entry.localPort, target.port, label + ' actual accepted socket port');
     const lines = entry.request.split('\r\n').slice(1);
     const actual = lines.map(line => {
