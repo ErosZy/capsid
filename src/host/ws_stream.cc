@@ -2,6 +2,7 @@
 #include "protocol.h"
 #include <algorithm>
 #include <limits>
+#include <cstring>
 
 namespace capsid {
 namespace host {
@@ -104,9 +105,19 @@ StreamDecoder::Result StreamDecoder::consume(const uint8_t *bytes, size_t size,
             const uint8_t *key = header_.data() + header_needed_ - 4;
             for (size_t i = 0; i < amount; ++i)
                 item->payload[i] = bytes[input_offset + i] ^ key[(offset_ + i) % 4];
-        } else {
-            for (size_t i = 0; i < amount; ++i)
-                item->payload[i] = bytes[input_offset + i];
+        } else if (amount) {
+            const uint8_t *input = bytes + input_offset;
+            uint8_t *output = item->payload.data();
+            const std::uintptr_t from = reinterpret_cast<std::uintptr_t>(input);
+            const std::uintptr_t to = reinterpret_cast<std::uintptr_t>(output);
+            const bool disjoint = from < to ? to - from >= amount : from - to >= amount;
+            if (disjoint) {
+                std::memcpy(output, input, amount);
+            } else {
+                // Preserve the original sequential behavior for any alias.
+                for (size_t i = 0; i < amount; ++i)
+                    item->payload[i] = bytes[input_offset + i];
+            }
         }
         *used = input_offset + amount;
         const bool end = fin_ && remaining_ == amount;

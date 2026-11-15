@@ -32,7 +32,61 @@ void error(std::vector<uint8_t> wire,uint16_t expected,uint64_t maximum=1024*102
         if(result==ws::StreamDecoder::Error){require(decoder.error_code()==expected,"scoped RFC failure code");return;}
         require(offset<wire.size(),"invalid stream must be rejected");}
 }
+using Bytes = std::vector<uint8_t>;
+static Bytes unmasked_header(size_t size) {
+    Bytes bytes{0x82};
+    if (size < 126) bytes.push_back(static_cast<uint8_t>(size));
+    else if (size <= 65535) {
+        bytes.push_back(126); bytes.push_back(static_cast<uint8_t>(size >> 8)); bytes.push_back(static_cast<uint8_t>(size));
+    } else {
+        bytes.push_back(127);
+        for (unsigned i = 8; i; --i) bytes.push_back(static_cast<uint8_t>(uint64_t(size) >> ((i - 1) * 8)));
+    }
+    return bytes;
+}
+static void unmasked_copy_regression() {
+    const auto check = [](bool value) { require(value, "unmasked copy/credit/chunk/empty/exact-alias regression"); };
+    size_t cases = 0;
+    for (size_t length : {size_t(0), size_t(1), size_t(2), size_t(125), size_t(126), size_t(127), size_t(4096), size_t(16383), size_t(16384), size_t(16385), size_t(65535), size_t(65536)}) {
+        Bytes expected(length);
+        for (size_t i = 0; i < length; ++i) expected[i] = static_cast<uint8_t>(i * 37 + length);
+        const Bytes prefix = unmasked_header(length); Bytes bytes = prefix;
+        bytes.insert(bytes.end(), expected.begin(), expected.end());
+        for (size_t chunk : {size_t(1), size_t(3), size_t(257), size_t(4096), size_t(65536)}) {
+            ws::StreamDecoder decoder(std::max<size_t>(1, length), ws::kClient);
+            Bytes observed; size_t offset = 0, starts = 0, ends = 0, step = 0;
+            while (ends == 0) {
+                check(step < bytes.size() * 8 + 128);
+                const uint64_t credits[] = {0, 1, 31, 16384, 16384, 65536};
+                const uint64_t credit = credits[step++ % 6]; size_t used = 777;
+                const size_t available = std::min(chunk, bytes.size() - offset);
+                ws::StreamDecoder::Item item;
+                const auto result = decoder.consume(available ? bytes.data() + offset : nullptr, available, &used, credit, &item);
+                check(result != ws::StreamDecoder::Error && used <= available); offset += used;
+                if (result == ws::StreamDecoder::ItemReady) {
+                    check(item.opcode == ws::kBinary && !item.text && item.payload.size() <= credit && item.payload.size() <= 16384);
+                    starts += item.start; ends += item.end;
+                    observed.insert(observed.end(), item.payload.begin(), item.payload.end());
+                }
+            }
+            check(offset == bytes.size() && starts == 1 && ends == 1 && observed == expected); ++cases;
+        }
+    }
+    for (size_t length : {size_t(1), size_t(2), size_t(125), size_t(126), size_t(4096), size_t(16384)}) {
+        ws::StreamDecoder decoder(length, ws::kClient); const Bytes prefix = unmasked_header(length);
+        ws::StreamDecoder::Item item; item.payload.resize(length);
+        for (size_t i = 0; i < length; ++i) item.payload[i] = static_cast<uint8_t>(i * 19 + 7);
+        const Bytes expected = item.payload; const size_t capacity = item.payload.capacity(); size_t used = 0;
+        check(decoder.consume(prefix.data(), prefix.size(), &used, 0, &item) == ws::StreamDecoder::NeedMore && used == prefix.size());
+        const uint8_t* alias = item.payload.data();
+        check(decoder.consume(alias, length, &used, length, &item) == ws::StreamDecoder::ItemReady);
+        check(used == length && item.payload == expected && item.payload.capacity() == capacity && item.start && item.end); ++cases;
+    }
+    std::printf("actual StreamDecoder copy/credit/chunk/empty/exact-alias cases: %zu\n", cases);
+}
+
 int main() {
+    unmasked_copy_regression();
     for(size_t chunk:{size_t(1),size_t(7),size_t(16384)}) {
         ws::StreamDecoder decoder(1024*1024);std::vector<uint8_t> payload(180000);
         for(size_t i=0;i<payload.size();++i)payload[i]=uint8_t(i*13);
