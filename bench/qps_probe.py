@@ -11,7 +11,8 @@ import tempfile
 import time
 from urllib.parse import quote
 
-from density_probe import admin_listener_ready, admin_request, write_json
+from density_probe import (admin_listener_ready, admin_request, deployment_operation_id,
+                           deployment_operation_ready, write_json)
 from measurement_runtime import OwnedGroup, ProbeError, ProcFS, stable_pss
 from qps_control import checked_round, expected_body
 from perf_evidence import read_json, object_pairs
@@ -119,16 +120,20 @@ class QpsProbe:
 
     def wait_ready(self, group, roots, folder, stack, port):
         deadline, deployed = time.monotonic() + self.startup_timeout, stack != 'capsid'
+        operation_id = None
         while time.monotonic() < deadline:
             if any(not tree.alive() for _, _, tree, _ in roots):
                 raise ProbeError('qps-startup', 'serving root exited before readiness')
             if not deployed:
                 admin = folder / 'run/admin.sock'
                 if admin_listener_ready(admin, deadline):
-                    admin_request(admin, 'POST', '/v1/deploy', b'{"app":"orders","version":"v1"}', accepted=(202,))
+                    operation_id = deployment_operation_id(admin_request(
+                        admin, 'POST', '/v1/deploy', b'{"app":"orders","version":"v1"}', accepted=(202,)))
                     deployed = True
             if deployed:
                 if stack == 'capsid':
+                    if not deployment_operation_ready(folder / 'run/admin.sock', operation_id):
+                        time.sleep(.02); continue
                     state = json.loads(admin_request(folder / 'run/admin.sock', 'GET', '/v1/apps/orders'))
                     if state.get('active') is not True:
                         time.sleep(.02); continue

@@ -2598,6 +2598,13 @@ if(BUILD_TESTING)
                     --worker $<TARGET_FILE:capsid-worker>)
             set_tests_properties(headers_compatibility_actual_vms
                 PROPERTIES TIMEOUT 60 LABELS "worker;binding;fetch;compatibility")
+            add_test(NAME headers_fastpath_boundaries_actual_vm
+                COMMAND "${CAPSID_HOST_TEST_NODE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_headers_fastpaths.mjs"
+                    --helper $<TARGET_FILE:test-binding-fetch-body>
+                    --worker $<TARGET_FILE:capsid-worker>)
+            set_tests_properties(headers_fastpath_boundaries_actual_vm
+                PROPERTIES TIMEOUT 60 LABELS "worker;fetch;compatibility;regression")
             add_test(NAME headers_contract_controls
                 COMMAND "${CAPSID_HOST_TEST_NODE}" --test
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_headers_contract.mjs")

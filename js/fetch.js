@@ -212,19 +212,24 @@ function toByteString(value) {
     return string;
 }
 
+// Preserve the pinned name rules, including empty/non-ASCII names, without
+// repeated interpreted character indexing and String.includes calls.
+const invalidHeaderName = /[\u0000-\u0020\u007f\u0028\u0029\u003c\u003e\u0040\u002c\u003b\u003a\u005c\u0022\u002f\u005b\u005d\u003f\u003d\u007b\u007d]/;
+const nonAsciiHeaderValue = /[^\x00-\x7f]/;
+const headerRegExpExec = Function.prototype.call.bind(RegExp.prototype.exec);
 function normalizeName(value) {
-    const name = headerMutationString(value), forbidden = '()<>@,;:\\"/[]?={}';
-    for (let index = 0; index < name.length; ++index) {
-        const code = name.charCodeAt(index);
-        if (code <= 32 || code === 127 || forbidden.includes(name[index]))
-            throw new bodyTypeError('Invalid header name.');
-    }
+    const name = headerMutationString(value);
+    if (headerRegExpExec(invalidHeaderName, name) !== null)
+        throw new bodyTypeError('Invalid header name.');
     return lowerHeaderKey(name);
 }
 
 function normalizeValue(value) {
     const string = headerMutationString(value).replace(/^[\t\r\n ]+|[\t\r\n ]+$/g, '');
     if (/[\0\r\n]/.test(string)) throw new bodyTypeError('Invalid header value.');
+    // UTF-8 encode/decode is identity for ASCII. Keep the original WTF-8
+    // conversion for non-ASCII, especially unpaired UTF-16 surrogates.
+    if (headerRegExpExec(nonAsciiHeaderValue, string) === null) return string;
     return headerDecode(headerEncode(string));
 }
 

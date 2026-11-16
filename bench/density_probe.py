@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import uuid
+from urllib.parse import quote
 
 from density_control import CounterLog, Coverage, MARKER, WorkerdReadyLog, wait_network_headroom
 from measurement_runtime import OwnedProcess, ProbeError, stable_pss
@@ -127,6 +128,40 @@ def admin_request(path, method, route, body=None, accepted=(200,)):
         return payload
     finally:
         connection.close()
+
+
+def deployment_operation_id(payload):
+    """Retain the identity of our one deploy RPC; never retry that RPC."""
+    try:
+        accepted = json.loads(payload)
+    except (ValueError, TypeError) as exc:
+        raise ProbeError("activation", "invalid deployment acceptance document") from exc
+    operation_id = accepted.get("operationId") if isinstance(accepted, dict) else None
+    if not isinstance(operation_id, str) or not operation_id:
+        raise ProbeError("activation", "deployment operation identity missing")
+    return operation_id
+
+
+def deployment_operation_ready(path, operation_id, version="v1"):
+    """Disk active.json precedes routing publication; wait for the deploy ACK.
+
+    This is one read-only poll inside the caller's original absolute deadline.
+    Neither the deploy RPC nor the first exact business request is retried.
+    """
+    payload = admin_request(path, "GET", "/v1/operations/" + quote(operation_id, safe=""))
+    try:
+        operation = json.loads(payload)
+    except (ValueError, TypeError) as exc:
+        raise ProbeError("activation", "invalid deployment operation document") from exc
+    if (not isinstance(operation, dict) or operation.get("operationId") != operation_id or
+            operation.get("version") != version):
+        raise ProbeError("activation", "deployment operation identity mismatch")
+    state = operation.get("state")
+    if state == "failed":
+        raise ProbeError("activation", "deployment operation failed")
+    if state not in ("validating", "staging", "warming", "activating", "active"):
+        raise ProbeError("activation", "invalid deployment operation state")
+    return state == "active"
 
 
 def validated_request(port, nonce, *, start=None):
@@ -244,6 +279,7 @@ class DensityProbe:
         if deadline is None:
             deadline = time.monotonic() + self.startup_timeout
         deployed = stack != "capsid"
+        operation_id = None
         if stack == "workerd" and control_log is None:
             raise ProbeError("readiness-protocol", "workerd requires its owned startup control log")
         control = WorkerdReadyLog(control_log, ports) if stack == "workerd" else None
@@ -254,8 +290,12 @@ class DensityProbe:
                 admin = folder / "run/admin.sock"
                 if deployed or admin_listener_ready(admin, deadline):
                     if not deployed:
-                        admin_request(admin, "POST", "/v1/deploy", b'{"app":"orders","version":"v1"}', accepted=(202,))
+                        operation_id = deployment_operation_id(admin_request(
+                            admin, "POST", "/v1/deploy", b'{"app":"orders","version":"v1"}', accepted=(202,)))
                         deployed = True
+                    if not deployment_operation_ready(admin, operation_id):
+                        time.sleep(.05)
+                        continue
                     state = admin_request(admin, "GET", "/v1/apps/orders")
                     if not re.search(rb'"active"\s*:\s*true', state):
                         time.sleep(.05)

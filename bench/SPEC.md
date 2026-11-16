@@ -78,6 +78,14 @@ after traffic, settle for 1 s and require two equal positive recursive PSS reads
 within eight attempts at 1 s intervals. Every process, role, client, response,
 raw sample, configuration and cleanup record is retained and sealed.
 
+Managed QPS and density readiness retain the operation ID returned by the single
+Admin deploy request. Read-only polls require that exact operation and version
+to reach `state: active` before the existing App-active and owned-listener checks.
+The durable `active.json` document alone can precede routing publication and is
+not a serving-readiness acknowledgement. This wait stays within the original
+absolute startup deadline; neither deploy nor the first exact business request
+is retried. Failed or malformed operation responses abort the probe.
+
 Formal archives require clean measured-build/session metadata, four available
 CPU indices, all stacks/workloads/rounds and independent build provenance. The
 producer self-validates its sealed output. Restricted `--observation` output

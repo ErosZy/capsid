@@ -99,7 +99,9 @@ class AdminReadinessTests(unittest.TestCase):
                 def reply(self):
                     self.rfile.read(int(self.headers.get('Content-Length','0')))
                     requests.append((self.command,self.path))
-                    body=b'{"operationId":"one"}' if self.command=='POST' else b'{"active":true}'
+                    body=(b'{"operationId":"one"}' if self.command=='POST' else
+                          b'{"operationId":"one","state":"active","version":"v1"}' if self.path.startswith('/v1/operations/') else
+                          b'{"active":true}')
                     self.send_response(202 if self.command=='POST' else 200)
                     self.send_header('Content-Length',str(len(body)))
                     self.send_header('Connection','close');self.end_headers();self.wfile.write(body)
@@ -147,7 +149,8 @@ class AdminReadinessTests(unittest.TestCase):
                         invoke()
                         self.assertEqual(1,len(refusals),'the actual pre-listen refusal must precede activation')
                         self.assertEqual(['/v1/deploy'],posts)
-                        self.assertEqual([('POST','/v1/deploy'),('GET','/v1/apps/orders')],requests)
+                        self.assertEqual([('POST','/v1/deploy'),('GET','/v1/operations/one'),
+                                          ('GET','/v1/apps/orders')],requests)
             finally:
                 if threads:server.shutdown()
                 server.server_close();refused.close()
@@ -160,6 +163,102 @@ class AdminReadinessTests(unittest.TestCase):
     def test_business_connection_refusal_is_never_retried(self):
         for kind in ('qps','density'):
             with self.subTest(kind=kind):self.exercise(kind,refuse_post=True)
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'managed benchmark readiness requires Unix sockets')
+class DeploymentCompletionTests(unittest.TestCase):
+    """active.json is visible before routing commit; never retry a business request."""
+    def exercise(self, kind, mode='pending'):
+        import socketserver
+        from qps_control import expected_body
+        with tempfile.TemporaryDirectory(prefix='capsid-deploy-readiness-') as temp:
+            folder=Path(temp);(folder/'run').mkdir()
+            address=folder/'run/admin.sock';requests=[];business=[];state={'reads':0,'published':False}
+            class Admin(http.server.BaseHTTPRequestHandler):
+                protocol_version='HTTP/1.1'
+                def log_message(self,*_):pass
+                def do_POST(self):self.reply()
+                def do_GET(self):self.reply()
+                def reply(self):
+                    self.rfile.read(int(self.headers.get('Content-Length','0')))
+                    requests.append((self.command,self.path))
+                    if self.command=='POST':
+                        document={} if mode=='missing-id' else {'operationId':'one'}
+                    elif self.path=='/v1/operations/one':
+                        state['reads']+=1
+                        name='validating' if state['reads']<3 or mode=='pending-forever' else 'active'
+                        document={'operationId':'one','state':name,'version':'v1'}
+                        if mode=='wrong-id':document['operationId']='foreign'
+                        elif mode=='wrong-version':document['version']='v2'
+                        elif mode=='failed':document['state']='failed'
+                        elif mode=='invalid-state':document['state']='unknown'
+                        if document['state']=='active':state['published']=True
+                    else:
+                        # The disk already says active, even while the route is not published.
+                        document={'active':True}
+                    body=json.dumps(document).encode()
+                    self.send_response(202 if self.command=='POST' else 200)
+                    self.send_header('Content-Length',str(len(body)));self.send_header('Connection','close')
+                    self.end_headers();self.wfile.write(body)
+            class Serving(http.server.BaseHTTPRequestHandler):
+                protocol_version='HTTP/1.1'
+                def log_message(self,*_):pass
+                def do_GET(self):
+                    business.append(state['published'])
+                    body=expected_body('matrix-json-1k') if state['published'] else b'app retired'
+                    if mode=='bad-first-response' and state['published']:body=b'wrong body'
+                    self.send_response(200 if state['published'] else 404)
+                    self.send_header('Content-Length',str(len(body)));self.send_header('Connection','close')
+                    self.end_headers();self.wfile.write(body)
+            admin=socketserver.UnixStreamServer(str(address),Admin)
+            serving=http.server.ThreadingHTTPServer(('127.0.0.1',0),Serving)
+            threads=[threading.Thread(target=s.serve_forever,kwargs={'poll_interval':.01},daemon=True) for s in (admin,serving)]
+            for thread in threads:thread.start()
+            port=serving.server_address[1]
+            tree=SimpleNamespace(alive=lambda:True,discover=lambda:[object(),object()],listeners_owned=lambda ports:True)
+            timeout=.12 if mode=='pending-forever' else 2
+            if kind=='qps':
+                adapter=QpsProbe(binaries={},apps=folder,out=folder,cpuset='0',workloads=['stream'],startup_timeout=timeout)
+                invoke=lambda:adapter.wait_ready(None,[('host','worker',tree,[port])],folder,'capsid',port)
+            else:
+                adapter=DensityProbe(host=Path(sys.executable),worker=Path(sys.executable),workerd=Path(sys.executable),
+                    apps=folder,out=folder,cpuset='0',startup_timeout=timeout)
+                invoke=lambda:adapter.wait_ready(tree,folder,'capsid',[port])
+            try:
+                started=time.monotonic()
+                if mode in ('pending','bad-first-response'):
+                    if mode=='bad-first-response':
+                        with self.assertRaises(ProbeError):invoke()
+                    else:invoke()
+                    self.assertTrue(state['published'],'routing commit precedes readiness')
+                    self.assertEqual(3,state['reads'])
+                    self.assertEqual([True] if kind=='qps' else [],business,'only one business request, after commit')
+                    self.assertEqual(('GET','/v1/apps/orders'),requests[-1])
+                else:
+                    with self.assertRaises(ProbeError):invoke()
+                    self.assertEqual([],business,'invalid/pending operation never admits business traffic')
+                    self.assertNotIn(('GET','/v1/apps/orders'),requests)
+                    if mode=='pending-forever':self.assertLess(time.monotonic()-started,1)
+                self.assertEqual(1,requests.count(('POST','/v1/deploy')))
+            finally:
+                for server in (admin,serving):server.shutdown();server.server_close()
+                for thread in threads:thread.join(2);self.assertFalse(thread.is_alive())
+
+    def test_disk_active_does_not_bypass_pending_deployment(self):
+        for kind in ('qps','density'):
+            with self.subTest(kind=kind):self.exercise(kind)
+
+    def test_bad_operation_identity_state_or_failure_is_rejected(self):
+        for kind in ('qps','density'):
+            for mode in ('missing-id','wrong-id','wrong-version','failed','invalid-state'):
+                with self.subTest(kind=kind,mode=mode):self.exercise(kind,mode)
+
+    def test_pending_operation_keeps_original_absolute_deadline(self):
+        for kind in ('qps','density'):
+            with self.subTest(kind=kind):self.exercise(kind,'pending-forever')
+
+    def test_first_wrong_business_response_is_not_retried(self):
+        self.exercise('qps','bad-first-response')
 
 
 class LaunchConfigurationTests(unittest.TestCase):
