@@ -1,0 +1,274 @@
+{
+  "complete": true,
+  "stage": "checkout-ref-only-fix-before-beta2-source-qualification",
+  "originalFailedTag": "v0.3.0-beta.1",
+  "originalSource": "16f4354d353e6ab044394efe85438f040741c033",
+  "originalReleaseRun": 43877044617,
+  "failedBeforeProductBuildsOrTests": true,
+  "actualError": "fatal: Cannot fetch both 16f4354d353e6ab044394efe85438f040741c033 and refs/tags/v0.3.0-beta.1 to refs/tags/v0.3.0-beta.1",
+  "originalLogs": {
+    "E:\\capsid-verification-20261113\\evidence\\v030-beta-dns-accept-r1\\tag-release-r1\\logs\\packages\\20261116T133814491845Z\\133332693798.log": "4b94c813f855d22ad2d7fa37b492229219966a6f9e642fcd140b3ec3822391ea",
+    "E:\\capsid-verification-20261113\\evidence\\v030-beta-dns-accept-r1\\tag-release-r1\\logs\\packages\\20261116T133814491845Z\\133332694397.log": "8cbf1eb02478259d9d413826050154fa29848aa6c3f08abf4845211d86b00d4c"
+  },
+  "actualGitABBA": {
+    "complete": true,
+    "source": "16f4354d353e6ab044394efe85438f040741c033",
+    "tag": "refs/tags/v0.3.0-beta.1",
+    "gitVersion": "git version 2.52.0.windows.1",
+    "readOnlyRemoteFetchOnly": true,
+    "tagNotRewritten": true,
+    "commands": [
+      {
+        "label": "1-init",
+        "argv": [
+          "init",
+          "--template="
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "1-origin",
+        "argv": [
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/ErosZy/capsid"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "1-fetch",
+        "argv": [
+          "-c",
+          "protocol.version=2",
+          "fetch",
+          "--prune",
+          "--no-recurse-submodules",
+          "--depth=1",
+          "origin",
+          "+16f4354d353e6ab044394efe85438f040741c033:refs/tags/v0.3.0-beta.1"
+        ],
+        "actualExit": 128,
+        "stderr": "fatal: Cannot fetch both 16f4354d353e6ab044394efe85438f040741c033 and refs/tags/v0.3.0-beta.1 to refs/tags/v0.3.0-beta.1\n"
+      },
+      {
+        "label": "2-init",
+        "argv": [
+          "init",
+          "--template="
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "2-origin",
+        "argv": [
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/ErosZy/capsid"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "2-fetch",
+        "argv": [
+          "-c",
+          "protocol.version=2",
+          "fetch",
+          "--prune",
+          "--no-recurse-submodules",
+          "--depth=1",
+          "origin",
+          "16f4354d353e6ab044394efe85438f040741c033"
+        ],
+        "actualExit": 0,
+        "stderr": "From https://github.com/ErosZy/capsid\n * branch            16f4354d353e6ab044394efe85438f040741c033 -> FETCH_HEAD\n"
+      },
+      {
+        "label": "2-checkout",
+        "argv": [
+          "checkout",
+          "--detach",
+          "FETCH_HEAD"
+        ],
+        "actualExit": 0,
+        "stderr": "HEAD is now at 16f4354 Wait for actual DNS dial ACCEPT within the original window; preserve exact result and lifecycle assertions and gated beta publication\n"
+      },
+      {
+        "label": "2-head",
+        "argv": [
+          "rev-parse",
+          "HEAD"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "2-tag",
+        "argv": [
+          "show-ref",
+          "--verify",
+          "refs/tags/v0.3.0-beta.1"
+        ],
+        "actualExit": 128,
+        "stderr": "fatal: 'refs/tags/v0.3.0-beta.1' - not a valid ref\n"
+      },
+      {
+        "label": "2-status",
+        "argv": [
+          "status",
+          "--porcelain=v1"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "3-init",
+        "argv": [
+          "init",
+          "--template="
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "3-origin",
+        "argv": [
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/ErosZy/capsid"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "3-fetch",
+        "argv": [
+          "-c",
+          "protocol.version=2",
+          "fetch",
+          "--prune",
+          "--no-recurse-submodules",
+          "--depth=1",
+          "origin",
+          "16f4354d353e6ab044394efe85438f040741c033"
+        ],
+        "actualExit": 0,
+        "stderr": "From https://github.com/ErosZy/capsid\n * branch            16f4354d353e6ab044394efe85438f040741c033 -> FETCH_HEAD\n"
+      },
+      {
+        "label": "3-checkout",
+        "argv": [
+          "checkout",
+          "--detach",
+          "FETCH_HEAD"
+        ],
+        "actualExit": 0,
+        "stderr": "HEAD is now at 16f4354 Wait for actual DNS dial ACCEPT within the original window; preserve exact result and lifecycle assertions and gated beta publication\n"
+      },
+      {
+        "label": "3-head",
+        "argv": [
+          "rev-parse",
+          "HEAD"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "3-tag",
+        "argv": [
+          "show-ref",
+          "--verify",
+          "refs/tags/v0.3.0-beta.1"
+        ],
+        "actualExit": 128,
+        "stderr": "fatal: 'refs/tags/v0.3.0-beta.1' - not a valid ref\n"
+      },
+      {
+        "label": "3-status",
+        "argv": [
+          "status",
+          "--porcelain=v1"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "4-init",
+        "argv": [
+          "init",
+          "--template="
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "4-origin",
+        "argv": [
+          "remote",
+          "add",
+          "origin",
+          "https://github.com/ErosZy/capsid"
+        ],
+        "actualExit": 0,
+        "stderr": ""
+      },
+      {
+        "label": "4-fetch",
+        "argv": [
+          "-c",
+          "protocol.version=2",
+          "fetch",
+          "--prune",
+          "--no-recurse-submodules",
+          "--depth=1",
+          "origin",
+          "+16f4354d353e6ab044394efe85438f040741c033:refs/tags/v0.3.0-beta.1"
+        ],
+        "actualExit": 128,
+        "stderr": "fatal: Cannot fetch both 16f4354d353e6ab044394efe85438f040741c033 and refs/tags/v0.3.0-beta.1 to refs/tags/v0.3.0-beta.1\n"
+      }
+    ],
+    "rootTagPresence": [
+      false,
+      false
+    ],
+    "successfulDetachedCheckouts": [
+      2,
+      3
+    ],
+    "actualOldNewNewOldExits": [
+      128,
+      0,
+      0,
+      128
+    ],
+    "samePublicSourceAndImmutableFailedTag": true,
+    "originalDepthAndAutomaticTagFetchPolicyUnchanged": true,
+    "finishedUTC": "2026-11-16T13:49:46.637695+00:00"
+  },
+  "proofSHA256": "9a6bbc7cfb70732d3a022b1272d4c2f4dbfa193cc61b90fc32216fa608d65581",
+  "pinnedAction": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+  "reviewedLibraryId": "/actions/checkout/v4",
+  "sourceEvidence": [
+    "https://github.com/actions/checkout/blob/11d5960a326750d5838078e36cf38b85af677262/src/input-helper.ts",
+    "https://github.com/actions/checkout/blob/11d5960a326750d5838078e36cf38b85af677262/src/ref-helper.ts"
+  ],
+  "fiveEventShaPins": true,
+  "recursiveSubmoduleAndVendorTagPolicyUnchanged": true,
+  "workflowControlsActualPassed": 262,
+  "workflowControlsActualFailed": 0,
+  "noProductOrIndividualTimeoutOrJobBudgetChange": true,
+  "productionInputsAndAbiSdkUnchanged": true,
+  "firstReviewerIncorrectRootTagPresenceAssumptionPreserved": "E:\\capsid-verification-20261113\\evidence\\v030-tag-checkout-failure-r1\\real-fetch-r1",
+  "operatorChosePreserveBeta1AndPublishBeta2": true,
+  "noBeta1RetagOrFailedWorkflowRerun": true,
+  "beta2SourceAllGatesAndTagReviewStillRequired": true,
+  "releasePublished": false
+}

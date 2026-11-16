@@ -24,6 +24,9 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # A tag ref plus its SHA collides with Git's automatic tag fetch.
+          # Detach at the event commit; retain the existing tag/vendor policy.
+          ref: ${{ github.sha }}
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -374,6 +377,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.sha }}
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -657,6 +661,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.sha }}
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -707,6 +712,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.sha }}
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.
@@ -846,6 +852,7 @@ jobs:
       - name: Check out recursively pinned sources
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.sha }}
           submodules: recursive
           # The txiki vendor audit derives the pinned tag via git describe;
           # submodule checkouts must carry the tag refs.

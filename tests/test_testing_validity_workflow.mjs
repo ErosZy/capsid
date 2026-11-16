@@ -47,6 +47,17 @@ test('the opposite line ending preserves the same complete healthy audit', () =>
     assert.match(other.output, /Windows package profile required/);
 });
 
+const validationRefs = [...workflow.matchAll(/^ {10}ref: \$\{\{ github\.sha \}\}\n/gm)];
+assert.equal(validationRefs.length, 5, 'all validation jobs pin the event SHA');
+for (const [index, match] of validationRefs.entries()) {
+    const before = workflow.slice(0, match.index), after = workflow.slice(match.index + match[0].length);
+    fault(`validation checkout ${index + 1} cannot lose its event commit`, before + after,
+        'validation checkout pins the exact event SHA');
+    fault(`validation checkout ${index + 1} cannot substitute the tag ref`,
+        before + match[0].replace('github.sha', 'github.ref') + after,
+        'validation checkout pins the exact event SHA');
+}
+
 for (const [name, before, after, diagnostic] of [
     ['ordinary raw result not deferred to strict acceptance', '        continue-on-error: true\n        run: |\n          rm -f build-validity/ordinary-host-exit-code.txt', '        run: |\n          rm -f build-validity/ordinary-host-exit-code.txt', 'only the raw ordinary step defers its conclusion'],
     ['ordinary exit capture removed', '--parallel 2 || ordinary_ctest_status=$?', '--parallel 2 || true', 'ordinary full suite failures must retain their raw exit code'],

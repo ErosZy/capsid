@@ -20,6 +20,19 @@ assert.match(releaseWorkflow, /^  package:\r?\n    needs: validation\s*$/m,
 assert.match(releaseWorkflow, /ref: \$\{\{ github\.sha \}\}/,
   'package checkout uses the tested event SHA, not a movable tag name');
 
+// Reusable validation also runs from release tags. A tag ref plus SHA can
+// collide with Git's automatic tag fetch before any test or build executes.
+const validationCheckouts = workflow.split('      - name: Check out recursively pinned sources').slice(1)
+  .map(block => block.split(/\r?\n      - name:/)[0].split(/\r?\n/)
+    .filter(line => !/^\s*#/.test(line)).map(line => line.trim()).join('\n'));
+assert.equal(validationCheckouts.length, 5, 'all five validation checkout steps are reviewed');
+for (const checkout of validationCheckouts) {
+  assert.deepEqual([...checkout.matchAll(/^ref:\s*(.+)$/gm)].map(match => match[1]),
+    ['${{ github.sha }}'], 'validation checkout pins the exact event SHA');
+  assert.match(checkout, /^submodules: recursive$/m, 'validation checkout retains recursive vendor ownership');
+  assert.match(checkout, /^fetch-tags: true$/m, 'validation checkout retains the vendor tag policy');
+}
+
 const expectedActions = new Map([
   ["actions/checkout", "11d5960a326750d5838078e36cf38b85af677262"],
   ["actions/setup-node", "49933ea5288caeca8642d1e84afbd3f7d6820020"],
