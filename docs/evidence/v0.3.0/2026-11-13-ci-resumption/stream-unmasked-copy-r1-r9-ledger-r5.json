@@ -1,0 +1,128 @@
+{
+  "schema": "capsid-stream-unmasked-copy-current-r1-r9-ledger-v2",
+  "revision": 5,
+  "observedUTC": "2026-11-15T08:11:33.302348+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "complete_for_targeted_requirement",
+      "qualificationScope": "Current-source Release/LTO, Debug, ASan, UBSan and TSan targeted contracts; NOT whole supported-platform acceptance.",
+      "currentSourceEvidence": "current-b59-targeted-requirements-review.json",
+      "priorDd589AcceptanceNotMigrated": true
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "complete_for_targeted_requirement",
+      "qualificationScope": "Current-source Release/LTO, Debug, ASan, UBSan and TSan targeted contracts; NOT whole supported-platform acceptance.",
+      "currentSourceEvidence": "current-b59-targeted-requirements-review.json",
+      "priorDd589AcceptanceNotMigrated": true
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "complete_for_targeted_requirement",
+      "qualificationScope": "Current-source Release/LTO, Debug, ASan, UBSan and TSan targeted contracts; NOT whole supported-platform acceptance.",
+      "currentSourceEvidence": "current-b59-targeted-requirements-review.json",
+      "priorDd589AcceptanceNotMigrated": true
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "complete_for_targeted_requirement",
+      "qualificationScope": "Current-source Release/LTO, Debug, ASan, UBSan and TSan targeted contracts; NOT whole supported-platform acceptance.",
+      "currentSourceEvidence": "current-b59-targeted-requirements-review.json",
+      "priorDd589AcceptanceNotMigrated": true
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "in_progress",
+      "fiveLinuxConfigurationGraphAndOrdinaryReportsValidated": true,
+      "currentSourceEvidence": "stream-unmasked-copy-r3-r5-r6-native-contract-review-r2.json",
+      "currentWindowsFailure": "websocket_fetch_resources_static-pool / fetch-abort-body-dom",
+      "failureCauseUnresolved": true
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "complete_for_targeted_requirement",
+      "qualificationScope": "Current-source Release/LTO, Debug, ASan, UBSan and TSan targeted contracts; NOT whole supported-platform acceptance.",
+      "currentSourceEvidence": "current-b59-targeted-requirements-review.json",
+      "priorDd589AcceptanceNotMigrated": true
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "in_progress",
+      "currentWindowsFailureAndHistoricalFrameTsanMetadataEvidenceDeadlineOrdinaryFetchCausesUnresolved": true,
+      "currentResourceExactPeLocalAndHostedAbbaNotReproduction": true,
+      "originalRawFailuresAndGenuineSkipsNotReclassified": true
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "in_progress",
+      "currentFiveCoreMacosFuzzInstrumentationAnd1800sSoakReviewed": true,
+      "currentWindowsMatrixAccepted": false,
+      "ciProtocolValidatedSessionCount": 3,
+      "ciProtocolNotLocalAcceptance": true,
+      "localAcceptedPerformanceSessions": 0,
+      "currentSourceLocalPerformanceBlocked": true,
+      "blockingEvidence": "local-ubuntu-user-recovery-pending.json",
+      "finalLocalFourViewportsNotYetRun": true
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "allPriorFailuresAndLimitsRetained": true,
+      "finalCurrentSourceCombinedClosurePending": true,
+      "status": "incomplete",
+      "requiresRemaining": [
+        "R5",
+        "R7",
+        "R8"
+      ],
+      "noReleaseOrDeploymentAuthorized": true
+    }
+  ],
+  "closureProgress": "stream-unmasked-copy-progress-r5.json",
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "ciProtocolValidatedSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+    "b59af527a9be5cea50bd1bb8550e7b459c817841"
+  ],
+  "wholePlatformWindowsFailureStillBlocking": true,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,47 @@
+{
+  "complete": true,
+  "workflowRunId": 43555865031,
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "openssl": [
+    {
+      "kind": "release",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "5de3a32aea201a3346782d6b1c12fe676abf4d83362b28a92d24a3d7aef2c862",
+      "selectedFatalSanitizer": null,
+      "inventorySHA256": "388de1099c7f4b7e3e1628013a9167823b24f6a85f3e15a576b0127bbbbc3e4b"
+    },
+    {
+      "kind": "ubsan",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "43f0191c875ad5d47224f1de7f8ae1499aab5bc4d9ea5578b356e07c96bdc3c8",
+      "selectedFatalSanitizer": "undefined",
+      "inventorySHA256": "c0f9da4e50105b49831d48c06fcfb3328fabc5162b7fdc5412f1f2c6993f73c7"
+    },
+    {
+      "kind": "tsan",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "43c3591b73f7374b24fea93f0a7c27d7d9cf1fe80ee21f2e8194ad0e2e49e6ad",
+      "selectedFatalSanitizer": "thread",
+      "inventorySHA256": "3cd45c3bf604bb8d3c0d9b92d82615b67720b7a06692830d9f541ec2cce8ffc4"
+    },
+    {
+      "kind": "asan",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "582ecc964f0174ae70ac0ac9d9bd8cca2a054844407e76ce05cbb6780cc103cb",
+      "selectedFatalSanitizer": "address",
+      "inventorySHA256": "f8091d6fa9d250bedcff61007df6223b12ce9ab81985d761a402206c6fef1234"
+    }
+  ],
+  "all1187CCommandsPerConfigurationVerified": true,
+  "prior1109LibraryOnlySubsetExpanded": true,
+  "delegatedCgroupV2Passed": true,
+  "delegatedNetworkNamespacePassed": true,
+  "ordinaryPrerequisiteSkipsNotRewritten": true,
+  "physicalHostIsolationNotClaimed": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

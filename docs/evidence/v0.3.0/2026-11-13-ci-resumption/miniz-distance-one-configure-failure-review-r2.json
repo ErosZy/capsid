@@ -1,0 +1,218 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T21:34:56.867701+00:00",
+  "productCheckout": "9321c88398630d67db436ba170277549eeda6517",
+  "productTree": "0305aeed34e6a7d4eda4cffed5a184912778a324",
+  "fullRunId": 43639750913,
+  "supplementalRunId": 43639750701,
+  "bothWorkflowsActuallyFailed": true,
+  "eightActualConfigureFailuresIndependentlyVerified": [
+    {
+      "jobId": 132584454690,
+      "name": "windows-host-library",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-miniz-distance-one-full-r1\\job-logs-20261114T213346721441Z\\132584454690.log",
+      "sha256": "eec9e4390fab5a63e7d41f5a24e88aeb1509315e8b6cf0f0844c372cedf0e391",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure Windows host library and worker contracts",
+          "number": 11,
+          "conclusion": "failure"
+        },
+        {
+          "name": "Require the actual complete original Windows matrix exit code",
+          "number": 22,
+          "conclusion": "failure"
+        },
+        {
+          "name": "Require exact archival capture of original temporary reports including failures",
+          "number": 23,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584454878,
+      "name": "sanitizers (asan, CAPSID_ENABLE_ASAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*|we...",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-miniz-distance-one-full-r1\\job-logs-20261114T212843316918Z\\132584454878.log",
+      "sha256": "0c6cdbc610fc7cc9d3e8dd1abe2220085dc62a16ecf7ec133e32dae4eb39fd27",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure asan",
+          "number": 10,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584454903,
+      "name": "Release/LTO + workerd compatibility (raw WPT failures retained)",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-miniz-distance-one-full-r1\\job-logs-20261114T212843316918Z\\132584454903.log",
+      "sha256": "4ea642d2d89cc534dd90fe5cdc54330ca7fe778f9d2ef2a6213d339f486d34d9",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure Release/LTO with WPT and benchmarks",
+          "number": 13,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584454949,
+      "name": "sanitizers (tsan, CAPSID_ENABLE_TSAN, clang, 1, 1, ^(wpt_conformance_not_configured|worker_packag...",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-miniz-distance-one-full-r1\\job-logs-20261114T212843316918Z\\132584454949.log",
+      "sha256": "e6678be3b87ad56060111d6c5a53733f52439975e7a4c7e949ffb0d8aa63d64b",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure tsan",
+          "number": 10,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584455010,
+      "name": "posix-host-library",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-miniz-distance-one-full-r1\\job-logs-20261114T205629232739Z\\132584455010.log",
+      "sha256": "d2febd10e36914106ed6846d4b315b563238e2a537b1b340be24ec77e9a1a3da",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure macOS host library and worker contracts",
+          "number": 10,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584455014,
+      "name": "sanitizers (ubsan, CAPSID_ENABLE_UBSAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*)$)",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-miniz-distance-one-full-r1\\job-logs-20261114T212843316918Z\\132584455014.log",
+      "sha256": "63513dcdec77785a751d1e0b511116277ee3a53078fd401c5090672b1fe4c8b6",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure ubsan",
+          "number": 10,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584453350,
+      "name": "Native Release/LTO regression, timing and real 1800-second soak",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-native-supplemental-r1\\job-logs-20261114T212848445685Z\\132584453350.log",
+      "sha256": "e95f978b816bd5a64ca353c61846229ba511f31dd966717c1881d5ab84d3e724",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure Release/LTO with WPT and benchmarks",
+          "number": 13,
+          "conclusion": "failure"
+        }
+      ]
+    },
+    {
+      "jobId": 132584453525,
+      "name": "Debug + workerd compatibility (raw WPT failures retained)",
+      "conclusion": "failure",
+      "file": "E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-native-supplemental-r1\\job-logs-20261114T212848445685Z\\132584453525.log",
+      "sha256": "a121e4fc8b09a15f2e6cdf8588901c98ba17e6f54e26a803fc3204ce0af66562",
+      "actualConfigureFailure": "Prepared overlay key/manifest differs from the locked build identity",
+      "failedSteps": [
+        {
+          "name": "Configure clean Debug without LTO using the unchanged production profile",
+          "number": 13,
+          "conclusion": "failure"
+        }
+      ]
+    }
+  ],
+  "nineOriginalNonFuzzArtifactsRehashed": [
+    {
+      "id": 14132615019,
+      "name": "windows-host-library-evidence",
+      "bytes": 333,
+      "sha256": "18614895a19f1976923b4b6fefe39bbf53dc92a8addcfee8bf206dbe2bf56baf",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14131887512,
+      "name": "hosted-evidence-index",
+      "bytes": 2942,
+      "sha256": "1599b33fc70ae07d1a31c3bd22882ac0ef62a6a4b1253729bbc5d1ea0abd1946",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14131756143,
+      "name": "asan-hosted-evidence",
+      "bytes": 23630,
+      "sha256": "e44e96672bf80ec0c098d4325bd7e49dbabf218aa0ca282134d3dc98cb5be4fa",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14131676699,
+      "name": "macos-host-library-evidence",
+      "bytes": 16296,
+      "sha256": "972ae9d84ff2b168ed823721de15b91f0f028533d232cfdb75b570be2c4e7afd",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14131402985,
+      "name": "tsan-hosted-evidence",
+      "bytes": 23643,
+      "sha256": "a72148626238e1fdf4a92976a5ff9c05e18d4a6f302a36d1f831828f9d1b2d67",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14131229984,
+      "name": "ubsan-hosted-evidence",
+      "bytes": 23634,
+      "sha256": "2830a0b7fb29ffc2adf77f434787f92d5205de8e95cb733e00a2168f7aa043bb",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14131173446,
+      "name": "release-wpt-hosted-evidence",
+      "bytes": 23570,
+      "sha256": "cabc200d309febf533715e62fb938d670cf913601be80337452e100aea5d552e",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14130863865,
+      "name": "native-soak-hosted-evidence",
+      "bytes": 2221,
+      "sha256": "05ee8095e0c53d7c03569068a627c2a101e568f021a1e21d07fd96d92f93f2b7",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    },
+    {
+      "id": 14130739021,
+      "name": "debug-wpt-hosted-evidence",
+      "bytes": 23610,
+      "sha256": "2418fa6e4d3b30af446f56d9bfa33cefffb4fcd95cc366f09d32f339fe9dc611",
+      "ordinaryFinalRegistrationAndJunitEvidenceAbsent": true
+    }
+  ],
+  "originalWindowsDownstreamMissingMatrixExitAndCaptureFailuresRetained": true,
+  "windowsDownstreamFailuresNotInventedAsExecutedBusinessTestFailures": true,
+  "originalSoakNotReachedAndNo1800SecondPassClaim": true,
+  "fuzzJobGreenNotWholeSourceAcceptance": true,
+  "allOriginalFailuresAndArchiveBytesRetained": true,
+  "knownIntegrationOmissionCorrectedBySubsequentAuditedPinOnly": true,
+  "subsequentSource": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "subsequentCurrentSourceFullAcceptanceStillPending": true,
+  "noExistingJobCancelled": true,
+  "formalPerformancePoints": 1,
+  "qualifiedPointRemainsPrior77Only": true,
+  "fullV030GoalComplete": false
+}

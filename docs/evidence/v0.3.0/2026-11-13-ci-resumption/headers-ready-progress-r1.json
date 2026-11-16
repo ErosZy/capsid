@@ -1,0 +1,129 @@
+{
+  "complete": true,
+  "observedUTC": "2026-11-16T01:36:24.286225+00:00",
+  "productCheckout": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+  "productTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+  "sourceFileCount": 5171,
+  "changedFiles": [
+    "js/fetch.js",
+    "bench/qps_probe.py",
+    "bench/density_probe.py",
+    "tests/test_benchmark_qps_probe.py",
+    "bench/SPEC.md",
+    "cmake/build_tests.cmake",
+    "tests/test_headers_fastpaths.mjs",
+    "tests/fixtures/headers-fastpaths.mjs"
+  ],
+  "rootCodeBytesMatchMeasuredCandidate": true,
+  "rootHEADUnchanged": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "privateFreezeOnlyNoRootCommitPushOrPublication": true,
+  "sdkPatches": 78,
+  "vendorCleanAndUnchanged": true,
+  "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
+  "localPerformanceAcceptedSessionCount": 1,
+  "acceptedScope": "same-local-machine-original-protocol-whole-performance-session",
+  "previous9cIndependentReviewNotPromoted": true,
+  "priorCIProtocolOnlySessionCount": 3,
+  "actualSupervisedExits": {
+    "build": 0,
+    "smoke": 0,
+    "formal-r2": 0,
+    "archive-and-review-r2": 0
+  },
+  "relatedCtests": {
+    "registered": 1034,
+    "selected": 49,
+    "passed": 49,
+    "failed": [],
+    "skipped": []
+  },
+  "realRaceAba": {
+    "directory": "E:\\capsid-verification-20261113\\evidence\\v030-headers-ready-integration-r1\\integrated-real-host-race-aba-r1",
+    "outcome": "original-fail-candidate-pass-restored-fail",
+    "firstBusinessRequestsEach": 1
+  },
+  "firstFailedSessionPreserved": {
+    "session": "local-wsl-v030-headers-ready-20261115T234116Z-b57d9f93",
+    "actualExit": 1,
+    "betweenQpsBusyFraction": 0.05837275569203526,
+    "noQpsOrDensityRan": true,
+    "noLaneStitchingOrResealing": true,
+    "transientBusyCauseNotProven": true
+  },
+  "qualifiedPointSHA256": "ea64bab3ba38f8962f77891df87ce6b73fbc76b03485378822123223e83c71f2",
+  "capsidQps": [
+    {
+      "stack": "capsid",
+      "workload": "matrix-json-1k",
+      "qps": 9341.6,
+      "p50Ms": 6.828239,
+      "p95Ms": 8.424971
+    },
+    {
+      "stack": "capsid",
+      "workload": "matrix-json-16k",
+      "qps": 8090.2,
+      "p50Ms": 8.074357,
+      "p95Ms": 11.152069
+    },
+    {
+      "stack": "capsid",
+      "workload": "stream",
+      "qps": 6491.7,
+      "p50Ms": 10.091685,
+      "p95Ms": 11.284555
+    }
+  ],
+  "capsidDensity": {
+    "cold@10k": {
+      "count": 746,
+      "unit": "workers",
+      "pssMb": 2045.0,
+      "limit": "budget"
+    },
+    "warm@10k": {
+      "count": 738,
+      "unit": "workers",
+      "pssMb": 2047.0,
+      "limit": "budget"
+    },
+    "cold@100k": {
+      "count": 510,
+      "unit": "workers",
+      "pssMb": 2047.6,
+      "limit": "budget"
+    },
+    "warm@100k": {
+      "count": 509,
+      "unit": "workers",
+      "pssMb": 2047.1,
+      "limit": "budget"
+    },
+    "cold@1m": {
+      "count": 128,
+      "unit": "workers",
+      "pssMb": 2033.0,
+      "limit": "budget"
+    },
+    "warm@1m": {
+      "count": 128,
+      "unit": "workers",
+      "pssMb": 2034.0,
+      "limit": "budget"
+    }
+  },
+  "capsidPssMiB": {
+    "low": 14.0,
+    "serving": 18.0
+  },
+  "baselineDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+  "noV022RerunOrRequalification": true,
+  "noHistoricalLabelValueOrMachineMutation": true,
+  "noCiDispatchOrSystemTuning": true,
+  "fullV030GoalComplete": false,
+  "fullPlatformQualified": false,
+  "standardsConformanceClaimed": false,
+  "physicalWindowsHostExclusivityNotClaimed": true,
+  "postFreezeProgressNotMeasuredSourceInput": true,
+  "comparison": "E:\\capsid-verification-20261113\\evidence\\v030-headers-ready-user-reference-comparison-r1\\review.json"
+}

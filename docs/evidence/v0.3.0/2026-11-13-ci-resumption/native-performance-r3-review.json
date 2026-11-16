@@ -1,0 +1,22 @@
+{
+  "complete": true,
+  "workflowRunId": 43512501017,
+  "artifactId": 14079724098,
+  "archiveSHA256": "c5e79026113119b2c4b4f6b3c4d89d3d841f8b26f67872dd1b163594a37fb810",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "wholeSessionPassed": false,
+  "formalLanesEntered": 0,
+  "quietWindows": 0,
+  "strictSandboxPrerequisitesPassed": 26,
+  "failure": "Gunicorn 23.0.0 rejects --control-socket before Flask readiness; preflight fails closed",
+  "actualFlaskExitCode": 2,
+  "ownedPidsRemaining": 0,
+  "runtimeSourceAndAssertionsUnchanged": true,
+  "nextWorkflowCommit": "830519571856a9d6116d88d928ce2f320cf4bfc8",
+  "nextGunicornVersion": "26.2.0",
+  "officialVersionAddedControlSocket": "25.1.0",
+  "officialReference": "https://github.com/benoitc/gunicorn/blob/26.2.0/docs/content/reference/settings.md",
+  "originalFiveFormalQpsRoundsAndOtherProtocolsUnchanged": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

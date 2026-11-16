@@ -1,0 +1,91 @@
+{
+  "schema": "capsid-native-performance-r2-failure-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-13T21:48:12.208671+00:00",
+  "workflowRunId": 43504109882,
+  "artifactId": 14076298499,
+  "archiveSHA256": "750f58c30cf920ed543ecb3990bb114d96fe5781eb7c334dd605417b02b34396",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "status": "partial-cold-lane-validated-three-lane-session-rejected",
+  "wholeSessionPassed": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "cold": {
+    "independentlyValidatedWithFrozenOriginalValidator": true,
+    "cells": 15,
+    "sealFiles": 742,
+    "checksumSHA256": "875323cf64be3f8c57367eeb980077a4b004a1a24ece38f358c6338e0b9f71a8",
+    "originalCompleteLanePreserved": true,
+    "cannotReplaceMissingQpsOrDensity": true
+  },
+  "failure": "QPS preflight correctly rejected missing PHP installed vendor tree and composer.lock; density was not reached",
+  "baselineOriginalV022AndSeparatelyIdentifiedObserverReady": true,
+  "originalBaselineRuntimeUnmodified": true,
+  "originalBaselineSourceClean": true,
+  "currentPublicUpgradeFlag32RetainedNotZeroed": true,
+  "originalResponseAssertionsUnchanged": true,
+  "nativePrerequisite": {
+    "availableCpus": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "nofileBefore": [
+      1024,
+      1048576
+    ],
+    "hardLimitNotRaised": true,
+    "nofileAfter": [
+      65536,
+      1048576
+    ]
+  },
+  "strictSandboxPrerequisiteCasesPassed": 26,
+  "observedQuietWindows": [
+    {
+      "label": "before-formal-session",
+      "seconds": 30.00034465700014,
+      "before": {
+        "total": 697066,
+        "idle": 262527,
+        "steal": 0
+      },
+      "after": {
+        "total": 709039,
+        "idle": 274472,
+        "steal": 0
+      },
+      "busyFraction": 0.0023385951724713694,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-qps",
+      "seconds": 30.00032383200005,
+      "before": {
+        "total": 786609,
+        "idle": 345656,
+        "steal": 0
+      },
+      "after": {
+        "total": 798580,
+        "idle": 357599,
+        "steal": 0
+      },
+      "busyFraction": 0.002338985882549549,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    }
+  ],
+  "physicalHostIsolationNotClaimed": true,
+  "nextRunId": 43512501017,
+  "nextWorkflowCommit": "51c4ed3fe3ec81896a464852b780a9821d68ebd1",
+  "nextPreparation": "exact original eleven-package PHP lock, Composer without plugins/scripts, all-five-stack and both-density-backend short observations before the unchanged formal three lanes",
+  "shortPrerequisiteObservationsNeverFormalPerformancePoints": true,
+  "measurementParametersNotRelaxed": true,
+  "originalArtifactsNotRewritten": true,
+  "rootMainOrTagsOrReleaseOrPagesNotModified": true
+}

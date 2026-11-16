@@ -1,0 +1,120 @@
+{
+  "schema": "capsid-loopback-owner-fixture-current-r1-r9-ledger-v1",
+  "revision": 4,
+  "observedUTC": "2026-11-15T12:12:10.322655+00:00",
+  "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "productTree": "f2d6f39f8d0f9fd9345e7e856e7a9e281288e542",
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "complete_for_targeted_requirement",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "complete_for_targeted_requirement",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "complete_for_targeted_requirement",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "complete_for_targeted_requirement",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "in_progress",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true,
+      "controlledLoopbackOwnerFixtureDefectReproducedAndIntegrated": true,
+      "realLocalWindows96AndLinuxReference32Validated": true,
+      "currentFullWindowsAndOtherPlatformAcceptancePending": true
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "complete_for_targeted_requirement",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "in_progress",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true,
+      "originalHistoricalFrameTsanWindowsMetadataOrdinaryFetchCausesNotClaimedClosed": true,
+      "b59ResourceFailureShapeReproducedUnderControlledIpv6CollisionButHistoricCollisionNotAssumed": true,
+      "currentFuzzOriginalBudgetsNinePassing70000UnitsIndependentlyReviewed": true,
+      "currentFuzzAllSevenBinaryBytesEqualParentB59": true,
+      "currentFuzzDoesNotCloseOriginalSeed4191328252Cause": true,
+      "current9cTsanJobReportedFailure": true,
+      "currentTsanFailureCauseAndRuntimeVsInfrastructureScopeNotYetAudited": false,
+      "currentTsanMatrixStoppedAt684Of1017AfterRunnerShutdown": true,
+      "shutdownInitiatorUnknownAndOriginalRssFailurePreserved": true,
+      "currentTsanQualificationStillIncomplete": true
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "status": "in_progress",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "in_progress",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true,
+      "originalFullCiAnd1800SecondSoakDispatched": true,
+      "currentShortQualificationReviewed": true,
+      "ciPerformanceNotAReplacement": true,
+      "userSuppliedUbuntuBootAndRwObserved": true,
+      "actualGuestWriteAndOtherLocalPrerequisitesPending": false,
+      "currentTsanJobFailureAndWindowsCompletionOrArtifactAuditPending": true,
+      "localCurrentSourceCleanReleaseLtoAnd43TestsPassed": true,
+      "localOriginalProtocolThreeLaneSessionStartedNotYetAccepted": true
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "status": "incomplete",
+      "currentSourceFreshQualificationPending": true,
+      "parentB59ScopedStatus": "incomplete",
+      "parentEvidenceNotMigrated": true,
+      "allOriginalFailuresAndLimitsRetained": true
+    }
+  ],
+  "closureProgress": "loopback-owner-fixture-progress-r4.json",
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "fullV030GoalComplete": false,
+  "previousLedgerPreserved": {
+    "file": "loopback-owner-fixture-r1-r9-ledger-r3.json",
+    "sha256": "a1f81169245cc3c149ab58faa859301fa8d3c3d0f3d50f2e566d7dd5ba78b267"
+  }
+}

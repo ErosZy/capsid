@@ -1,0 +1,16 @@
+{
+  "complete": true,
+  "recordedUTC": "2026-11-15T03:59:35.355656+00:00",
+  "scope": "Existing Ubuntu only, ordinary start to perform read-only prerequisite inspection; blocked CapsidV030 not targeted",
+  "exitCode": 0,
+  "timedOut": false,
+  "seconds": 4.76500000001397,
+  "stdout": "--- kernel ---\n6.18.40.1-microsoft-standard-WSL2\n--- identity ---\nuid=0(root) gid=0(root) groups=0(root)\n--- root filesystem ---\next4   rw,relatime,discard,errors=remount-ro,data=ordered\n--- scoped disk availability ---\nFilesystem     1024-blocks      Used Available Capacity Mounted on\n/dev/sdd         263112772 215715360  33959256      87% /\nE:\\              487947268  45992196 441955072      10% /mnt/e\n--- available tools ---\n/usr/bin/python3\n/usr/bin/cmake\n/usr/bin/ninja\n/usr/bin/c++\n/usr/bin/clang\n/usr/bin/clang++\n/mnt/d/nodejs//npm\n/usr/bin/go\n/usr/bin/php\n/usr/sbin/php-fpm8.3\n/usr/sbin/nginx\n/usr/bin/unshare\n/usr/bin/taskset\n--- read-only process capabilities ---\n{\"python\": \"3.12.3\", \"cpu\": \"x86_64\", \"availableCpuIndices\": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], \"smapsRollupReadable\": true, \"cgroupV2ControllersReadable\": true, \"networkReadings\": {\"nf_conntrack_max\": \"262144\", \"nf_conntrack_count\": \"0\"}, \"sourceMountReadable\": true}\n",
+  "stderr": "",
+  "stdoutSHA256": "cb7fe5ff8755f6e495ef3d9ce06c412bf0f3cee8d15a2a99c458fb7390a01a9a",
+  "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "noBlockedDistroRepairRestartDeleteMove": true,
+  "noGlobalInstallKernelTuningOrNetworkChanges": true,
+  "noBusinessLoadOrPerformanceMeasurementRun": true,
+  "fullV030GoalComplete": false
+}

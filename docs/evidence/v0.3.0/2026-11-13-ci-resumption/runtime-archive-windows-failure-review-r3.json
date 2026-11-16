@@ -1,0 +1,42 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T14:42:42.264076+00:00",
+  "workflowRunId": 43590178801,
+  "artifactId": 14117362397,
+  "archiveSHA256": "087b1b441d40e5c6f9ff2fb99d63750619de289c59507d38ee6ee4247633c292",
+  "productCheckout": "d6b4ead0d09c75b0b1e04c10d7683b766a6d1cbf",
+  "registered": 758,
+  "passed": 749,
+  "failed": [
+    "benchmark_evidence_contract"
+  ],
+  "skipped": [
+    "host_single_worker_ab_emits_complete_evidence",
+    "worker_binding_sandbox_write",
+    "worker_binding_sandbox_read",
+    "worker_binding_sandbox_watch",
+    "worker_binding_sandbox_sqlite",
+    "worker_binding_sandbox_network",
+    "worker_binding_sandbox_wasi",
+    "worker_binding_sandbox_union"
+  ],
+  "originalBenchmarkBudgetSeconds": 90,
+  "actualBenchmarkTimeoutSeconds": 90.02,
+  "registrationJUnitAndEveryFinalLastTestOutcomeChecked": true,
+  "allNativeExecutableBytesRehashed": true,
+  "actualOriginalMatrixTemporaryReportsRehashed": 93,
+  "codecReportReplay": {
+    "complete": true,
+    "reports": 6,
+    "cases": 195,
+    "originalFrozenValidatorAndEveryRawCasePassed": true,
+    "windowsCheckoutBytesDerivedFromFrozenGitBlobsAndAttributes": true,
+    "reportReplayNotNewRuntimeExecution": true,
+    "previousWindowsFailureNotErasedOrClaimedFixed": true
+  },
+  "oldMetadataFlakeNotReproducedHereAndNotClaimedFixed": true,
+  "originalFailingBudgetNotRaisedOrExcluded": true,
+  "noWindowsAllPassClaim": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

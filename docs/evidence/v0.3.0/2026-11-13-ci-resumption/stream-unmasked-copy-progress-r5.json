@@ -1,0 +1,258 @@
+{
+  "schema": "capsid-stream-unmasked-copy-current-progress-v2",
+  "complete": true,
+  "revision": 5,
+  "observedUTC": "2026-11-15T08:11:33.302348+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "localSnapshot": "ade394c018fba87b8d81e1966eacd8bba2af6e17",
+  "frozenInputs": 5169,
+  "rootNonDocumentationInputsStillExactlyFrozenB59": true,
+  "noNewProductOrRegisteredTestSourceChange": true,
+  "currentCoreConfigurationsReviewed": [
+    "release-wpt",
+    "debug",
+    "asan",
+    "ubsan",
+    "tsan"
+  ],
+  "currentCoreCounts": {
+    "ubsan": {
+      "passed": 1024,
+      "failed": [],
+      "skipped": 4
+    },
+    "asan": {
+      "passed": 1024,
+      "failed": [],
+      "skipped": 5
+    },
+    "tsan": {
+      "passed": 1012,
+      "failed": [],
+      "skipped": 5
+    },
+    "release-wpt": {
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": 4
+    },
+    "debug": {
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": 4
+    }
+  },
+  "rawFiveWptFailuresAndInstrumentedRssExceptionsPreserved": true,
+  "currentMacosPassed": 755,
+  "currentMacosSkips": 11,
+  "currentSoakSeconds": 1800.428,
+  "currentSoakRounds": 4285,
+  "currentFiveConfigSemanticReports": 205,
+  "currentFiveConfigSemanticObservations": 3340,
+  "currentR1ByobReports": 140,
+  "currentR4AbiRows": 3200,
+  "currentR1R2R4OriginalPassingCTestResults": 155,
+  "targetedRequirementsCompletedInReviewedLinuxScope": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R6"
+  ],
+  "currentR5WindowsResourceFailureStillOpen": true,
+  "windows": {
+    "registered": 758,
+    "passed": 749,
+    "failed": [
+      "websocket_fetch_resources_static-pool"
+    ],
+    "genuineSkips": 8,
+    "actualCtestExitCode": 8,
+    "actualControllerSeconds": 5338.516,
+    "failedWholeCtestSeconds": 61.7493,
+    "originalCtestBudgetSeconds": 120,
+    "originalUpstreamObservationSeconds": 3,
+    "temporaryReportsRehashed": 93,
+    "requiredCompatibilityReportsReplayed": 134,
+    "matrixAccepted": false,
+    "failureTimeUpstreamSnapshotMissing": true,
+    "originalNativePeLocalAndHostedAbbaEachFourPassesNotCausalClosure": true
+  },
+  "hostedIndex": {
+    "archivedFilesRehashed": 563,
+    "allSevenArchivesExactlyCovered": true,
+    "integrityVerified": true,
+    "acceptancePassed": false,
+    "windowsFailureAndWholeWorkflowFailurePreserved": true
+  },
+  "ciProtocolValidatedSessionCount": 3,
+  "ciProtocolValidatedSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+    "b59af527a9be5cea50bd1bb8550e7b459c817841"
+  ],
+  "currentB59CiProtocolSessionAccepted": true,
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "formalPerformancePointCounterScope": "Same-local-host accepted measurement only; CI protocol validation is separate.",
+  "currentCiPerformanceMachine": {
+    "architecture": "x86_64",
+    "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "hostId": "19335b214418adbdaa67365f356b5feb227d49119d850fa16ce02ba62048f9b2",
+    "kernel": "7.0.0-1017-azure",
+    "logicalCpus": 4,
+    "uname": "7.0.0-1017-azure",
+    "nproc": 4,
+    "node": "24.14.0",
+    "deno": "2.9.8",
+    "workerd_version": "workerd 2026-10-10",
+    "python": "3.12.3",
+    "php_fpm": "8.3.6",
+    "nginx": "1.24.0"
+  },
+  "currentCiLaneSealedFiles": {
+    "cold": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "452c98d608bf7f926b875d452ac913fb2b513f8364d4ba846ca5f3cc549356df"
+    },
+    "qps": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 2115,
+      "checksumSHA256": "84fa5f6b05a44247fa0a32f03427c62a60a9ea2296c8bbf6200e97503a06f849"
+    },
+    "density": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 2742,
+      "checksumSHA256": "563cf7600203918da7def008f5cf5890b66db41aaeb0b71c9b7264cc47d48d61"
+    }
+  },
+  "currentSourceLocalPerformanceStillBlocked": true,
+  "localUserRecoveryPending": "local-ubuntu-user-recovery-pending.json",
+  "backingDriveAvailableBytes": 23737335808,
+  "hostBackingGuardNowAdmittedButUbuntuNotRecovered": true,
+  "allLocalWslPreparationAndLoadsStillStopped": true,
+  "existingUserAcceptedV022DataUnchanged": true,
+  "noCiDataPromotedIntoRepositoryPerformanceSite": true,
+  "ciStagingEntryFailsClosedBeforeAnySourceOrStagingWrites": true,
+  "privateFailureOnlyCaptureVerifiedButNotIntegratedIntoProduct": true,
+  "originalMetadataOrdinaryFetchResourceFrameTsanConfigureControllerAndTransportFailuresRetained": true,
+  "helperBytesAndRemovedHistoricalIpcRawInputsStillUnavailable": true,
+  "workflowObservations": [
+    {
+      "workflowRunId": 43671341667,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43671341667",
+      "status": "completed",
+      "conclusion": "failure",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "workflowCommit": "a4fb193bac80ae779e00f0f016f35e58dc738176",
+      "purpose": "full"
+    },
+    {
+      "workflowRunId": 43671341947,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43671341947",
+      "status": "completed",
+      "conclusion": "success",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "workflowCommit": "a63570f01224dfb6d639a0e75629a03f804855fc",
+      "purpose": "debug-soak"
+    },
+    {
+      "workflowRunId": 43671548788,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43671548788",
+      "status": "completed",
+      "conclusion": "success",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "workflowCommit": "03b3e53e2391c5b06041e035145a714f34976f2a",
+      "purpose": "ci-three-lane"
+    },
+    {
+      "workflowRunId": 43691285001,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43691285001",
+      "status": "completed",
+      "conclusion": "success",
+      "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+      "workflowCommit": "444d696a1538c81d6347a90137c26e8535b582c4",
+      "purpose": "resource-diagnostic"
+    }
+  ],
+  "supportingRecords": [
+    {
+      "file": "ci-core-review-streamfull.json",
+      "sha256": "546c80b2d6102df35fc08342b2228bee7a9fd014dfeac34426da4cd1c1eeb5e1"
+    },
+    {
+      "file": "ci-core-review-stream-debug.json",
+      "sha256": "09ffc8fbfd7a3967a6b1a0dcc435e14e9c8f3be01d82b666bb8b0c3487009295"
+    },
+    {
+      "file": "stream-unmasked-copy-r3-r5-r6-native-contract-review-r2.json",
+      "sha256": "2632f0b007ae14bb87a011bc04c951140e6df52ee742676fa7eaf7f1ad69f166"
+    },
+    {
+      "file": "stream-unmasked-copy-native-provider-log-review.json",
+      "sha256": "8ad0691d7a7cfcc54f6a89476daf83f37d2a0e2ebe4372762c0a312a6930365d"
+    },
+    {
+      "file": "stream-unmasked-copy-r1-r2-r4-current-review.json",
+      "sha256": "c9ff91b7816efe31898d9040ec1225cbbde39282b099ea71f8ea054a078af38d"
+    },
+    {
+      "file": "current-b59-targeted-requirements-review.json",
+      "sha256": "8ca3a530860667aa5457c07ae5f4117fd5e748c76cf88ab66aa9c455777e0c5f"
+    },
+    {
+      "file": "stream-unmasked-copy-windows-failure-review-r1.json",
+      "sha256": "25125f038d4930d2c5bcc4aada331515f000932d1347df0bc6aa44cfa63aa226"
+    },
+    {
+      "file": "stream-unmasked-copy-failed-hosted-index-integrity-review.json",
+      "sha256": "189763837e854587feda0ba56522d4e14db16d20de695c1a6a817fd2a3535b2e"
+    },
+    {
+      "file": "native-performance-r12-review.json",
+      "sha256": "6f42037df5a837b6499903d7f0965dc938c20944a812e800980453e899235801"
+    },
+    {
+      "file": "stream-fetch-resource-local-diagnostic-review.json",
+      "sha256": "f34ada1fe6031161c03a4472591536e0dbbaadaa53015f48b57ba3d64fa982b7"
+    },
+    {
+      "file": "stream-fetch-resource-hosted-observation-review.json",
+      "sha256": "a777982ceb925bde84007c4c1b3f6ef1171bbac82117e9075e2aed602a32ddfe"
+    },
+    {
+      "file": "stream-unmasked-copy-native-soak-review.json",
+      "sha256": "da50b9bf526fe84f743a14d62731594609e9b4a60d992b067878294bed1a4dfb"
+    },
+    {
+      "file": "stream-unmasked-copy-macos-review.json",
+      "sha256": "fe568e098bfc1d4791a6a82727daa0736dfa3c316527c320b409687588814b80"
+    }
+  ],
+  "priorImmutableProgress": {
+    "file": "stream-unmasked-copy-progress-r4.json",
+    "sha256": "5359ea23d488d31ebc3d9ff75e80a295f31740d7a4b3fe352c70e5c083da4b8e"
+  },
+  "rawStatusBeforeThisProgress": {
+    "file": "qualification-before-b59-windows-failure-and-ci-protocol-closure.md.txt",
+    "sha256": "6ac57c0d35639ce7b190c5dcbc2fce7d2ecb361411560e05e61ab1a56e30607b"
+  },
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "mainTagsReleasesAndPagesUnchanged": true,
+  "fullV030GoalComplete": false
+}

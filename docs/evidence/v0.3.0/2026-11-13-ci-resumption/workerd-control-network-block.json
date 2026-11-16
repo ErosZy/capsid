@@ -1,0 +1,192 @@
+{
+  "schema": "capsid-workerd-control-network-observation-block-v1",
+  "complete": true,
+  "recordedUTC": "2026-11-14T05:07:14.664987+00:00",
+  "classification": "observation-and-artifact-collection-blocked-not-a-product-test-verdict",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "nodeFailures": [
+    {
+      "directory": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-workerd-control-readiness-full-r1\\collection-20261114T050414519045Z",
+      "evidence": {
+        "path": "actions/runs/43555865031/artifacts?per_page=100",
+        "exitCode": 1,
+        "failure": {
+          "name": "TypeError",
+          "code": "ECONNRESET",
+          "category": "network-or-transport"
+        }
+      },
+      "sha256": "04ea212c7bb8f7c1d1547b579395e83f2c186d26c8a4ef54eb93587abc6a86b2"
+    }
+  ],
+  "nativeCurlFailure": {
+    "complete": false,
+    "readOnly": true,
+    "method": "GET",
+    "transport": "native curl IPv4 with normal certificate verification",
+    "exitCode": 35,
+    "summary": "000 0",
+    "stderrSHA256": "02cc3f79b4819380d4d9ad84ccebec3ae81d452614e8cfdeccc7a80e05fedfb7",
+    "responseSHA256": null,
+    "priorNodeFetchFailure": "ECONNRESET",
+    "formalPerformancePoints": 0
+  },
+  "nativeCurlDirectory": "E:\\capsid-verification-20261113\\evidence\\v030-hosted-workerd-control-readiness-full-r1\\collection-curl-probe-20261114T050515379336Z",
+  "certificateVerificationNotDisabled": true,
+  "publicStatusFetchAlsoFailedButGlobalGithubOutageNotEstablished": true,
+  "remoteTestsNotCancelledOrSignalled": true,
+  "wslAndVolumeAndProxySettingsNotChanged": true,
+  "workflows": {
+    "controlfull": {
+      "workflowRunId": 43555865031,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43555865031",
+      "observedUTC": "2026-11-14T05:00:20.505984+00:00",
+      "status": "in_progress",
+      "conclusion": null,
+      "jobs": [
+        {
+          "id": 132328456147,
+          "name": "Release/LTO + workerd compatibility (raw WPT failures retained)",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run the complete ordinary-host matrix"
+          ],
+          "failedSteps": []
+        },
+        {
+          "id": 132328456307,
+          "name": "sanitizers (ubsan, CAPSID_ENABLE_UBSAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*)$)",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run ubsan matrix"
+          ],
+          "failedSteps": []
+        },
+        {
+          "id": 132328456320,
+          "name": "fuzz",
+          "status": "completed",
+          "conclusion": "success",
+          "activeSteps": [],
+          "failedSteps": []
+        },
+        {
+          "id": 132328456358,
+          "name": "windows-host-library",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run the native Windows workerd compatibility gate"
+          ],
+          "failedSteps": []
+        },
+        {
+          "id": 132328456360,
+          "name": "posix-host-library",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run POSIX host-side matrix"
+          ],
+          "failedSteps": []
+        },
+        {
+          "id": 132328456418,
+          "name": "sanitizers (tsan, CAPSID_ENABLE_TSAN, clang, 1, 1, ^(wpt_conformance_not_configured|worker_packag...",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run tsan matrix"
+          ],
+          "failedSteps": []
+        },
+        {
+          "id": 132328456517,
+          "name": "sanitizers (asan, CAPSID_ENABLE_ASAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*|we...",
+          "status": "completed",
+          "conclusion": "success",
+          "activeSteps": [],
+          "failedSteps": []
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 14099328344,
+          "name": "asan-hosted-evidence",
+          "bytes": 48257114,
+          "digest": "sha256:00215252e9cc9e351070de370d75077864bf08f78c2b834e90c63e68aaf5f5df"
+        },
+        {
+          "id": 14098521167,
+          "name": "fuzz-hosted-evidence",
+          "bytes": 21853773,
+          "digest": "sha256:ff91d0e60b4fc2fd53c98a2ea52e73e4ebc9fc91321b4c037b95859aea436e32"
+        }
+      ]
+    },
+    "controlsupp": {
+      "workflowRunId": 43556048512,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43556048512",
+      "observedUTC": "2026-11-14T05:00:22.882113+00:00",
+      "status": "in_progress",
+      "conclusion": null,
+      "jobs": [
+        {
+          "id": 132329022678,
+          "name": "Debug + workerd compatibility (raw WPT failures retained)",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run the complete ordinary-host matrix"
+          ],
+          "failedSteps": []
+        },
+        {
+          "id": 132329022836,
+          "name": "Native Release/LTO regression, timing and real 1800-second soak",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Run same-source 167 regressions, nine timing cases and uninterrupted 1800-second soak"
+          ],
+          "failedSteps": []
+        }
+      ],
+      "artifacts": []
+    },
+    "native5": {
+      "workflowRunId": 43555973603,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43555973603",
+      "observedUTC": "2026-11-14T05:00:25.243013+00:00",
+      "status": "in_progress",
+      "conclusion": null,
+      "jobs": [
+        {
+          "id": 132328788245,
+          "name": "Native four-CPU formal measurements (not WPT conformance)",
+          "status": "in_progress",
+          "conclusion": null,
+          "activeSteps": [
+            "Execute one observed-quiet native session with original three-lane contracts"
+          ],
+          "failedSteps": []
+        }
+      ],
+      "artifacts": []
+    }
+  },
+  "formalPerformancePoints": 0,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "fullV030GoalComplete": false,
+  "resumeCommands": [
+    "observe-ci.py controlfull --brief",
+    "observe-ci.py controlsupp --brief",
+    "observe-ci.py native5 --brief",
+    "collect-ready-ci.py --controlfull --list-only",
+    "download-artifact-ranged.py 14099328344 43555865031",
+    "audit-ci-core.py controlfull asan"
+  ]
+}

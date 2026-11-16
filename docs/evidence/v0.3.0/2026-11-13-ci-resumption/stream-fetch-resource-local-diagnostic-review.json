@@ -1,0 +1,74 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T07:07:57.326400+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "originalArchiveSHA256": "8fd302eb89c1c471104443ad46f147bafc629e31082db051b7ddfa64f1c1dcdc",
+  "exactOriginalNativePeBytes": {
+    "capsid-host.exe": "f984a9d25f0b03e505388165ae67b8a1dd9b55383d28b5c35ff0082a3f94ae79",
+    "capsid-worker.exe": "81c8c5ffc97f29147a86d69686fec14b77e2ba5e32579598b147f9308e4f00be"
+  },
+  "localDiagnosticNotHostedQualification": true,
+  "predeclaredAbbaCompleted": true,
+  "positiveAttempts": 4,
+  "negativeAttempts": 2,
+  "allOriginalCasesRetainedPerAttempt": 32,
+  "attempts": [
+    {
+      "name": "A1",
+      "seconds": 64.0267,
+      "reportSHA256": "d1ea6edadf998655a21e79f2966cf1942a4de26349c572ec5c91c26ef0e2ada3",
+      "cases": 32,
+      "complete": true,
+      "expectedNegative": false
+    },
+    {
+      "name": "B1",
+      "seconds": 62.5827,
+      "reportSHA256": "3d8bbe425d7029d6f04e44770a058a05bdd8a666b962671fc7a1557142ab899a",
+      "cases": 32,
+      "complete": true,
+      "expectedNegative": false
+    },
+    {
+      "name": "B2",
+      "seconds": 62.4295,
+      "reportSHA256": "0839776ae5343f44d716dca6dcb2541039cf32d8a4dcc0ddf4bf821107b87d31",
+      "cases": 32,
+      "complete": true,
+      "expectedNegative": false
+    },
+    {
+      "name": "A2",
+      "seconds": 62.6155,
+      "reportSHA256": "442bdcb5cd3267652a92dcc3a0549da1a6443942ee4c64c79efc265ea8741933",
+      "cases": 32,
+      "complete": true,
+      "expectedNegative": false
+    },
+    {
+      "name": "negative-original",
+      "seconds": 62.9449,
+      "reportSHA256": "dc19e34d47e311c2edc1d130a948a3297153d1bba57eda600d954081e7fb2246",
+      "cases": 32,
+      "complete": false,
+      "expectedNegative": true
+    },
+    {
+      "name": "negative-capture",
+      "seconds": 63.0755,
+      "reportSHA256": "da1266df9dac6b53fecfb277d80b5e2a693a8fa65c74919e9ca54c383724a1cc",
+      "cases": 32,
+      "complete": false,
+      "expectedNegative": true
+    }
+  ],
+  "allOriginal120SecondAnd3SecondBudgetsPreserved": true,
+  "bothVariantsRejectActualMissingFetch": true,
+  "postFailureCaptureRecordsActualEmptyUpstream": true,
+  "all5169FrozenInputsAndOther5168CaptureInputsRehashed": true,
+  "noOwnedNativeExecutablesRemain": true,
+  "originalHostedFailureNotReproducedAndNotClaimedFixed": true,
+  "noProductSourceIntegration": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,212 @@
+{
+  "complete": true,
+  "schema": "capsid-complete-evidence-suite-progress-v1",
+  "observedUTC": "2026-11-14T19:47:00.705276+00:00",
+  "productCheckout": "42107f444db014dc2089c4b405669c4be623d208",
+  "productTree": "f4f1278e025f526041e29d9a8b84b63775de6fb2",
+  "privateSnapshot": "e2d2afe3c03d9bff42f0dc10697b1c2cdccf601a",
+  "sourceInputsRehashed": 5169,
+  "changedFiles": [
+    "tests/test_perf_evidence.py",
+    "tests/test_websocket_ordinary_fetch.mjs",
+    "perf-site/index.html"
+  ],
+  "other5166InputsByteIdentical": true,
+  "productionRuntimePublicAbiAndSdk78Unchanged": true,
+  "benchmark120FullOriginalBudgetTestsAndThreeRealWorkerdCasesReviewed": true,
+  "completeOriginal32AssertionAndFixtureClassAstsUnchanged": true,
+  "upToFourIsolatedPythonProcessesOneShared90SecondDeadline": true,
+  "passingAndActualFailureTimeoutSkipPropagationControlsChecked": true,
+  "presentationUsesMeasuredTotalsAndDensityCountsAndExplicitAcceptanceLimitations": true,
+  "postFailureUpstreamCaptureDoesNotChangeBusinessOperationsOrBudgets": true,
+  "currentSourceFormalPerformanceNotYetMeasured": true,
+  "qualifiedPerformancePoints": 1,
+  "qualifiedPerformancePointSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9"
+  ],
+  "previous77Source": {
+    "fullCiActuallyFailedWindows": true,
+    "configurations": {
+      "ubsan": {
+        "passed": 1024,
+        "failed": [],
+        "skipped": 4
+      },
+      "asan": {
+        "passed": 1024,
+        "failed": [],
+        "skipped": 5
+      },
+      "tsan": {
+        "passed": 1012,
+        "failed": [],
+        "skipped": 5
+      },
+      "release-wpt": {
+        "passed": 1115,
+        "failed": [
+          "worker_wpt_fetch_api_headers_headers_basic_any_js",
+          "worker_wpt_fetch_api_headers_headers_errors_any_js",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+          "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+        ],
+        "skipped": 4
+      },
+      "debug": {
+        "passed": 1115,
+        "failed": [
+          "worker_wpt_fetch_api_headers_headers_basic_any_js",
+          "worker_wpt_fetch_api_headers_headers_errors_any_js",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+          "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+        ],
+        "skipped": 4
+      }
+    },
+    "windowsReview": "http-retirement-windows-failure-review-r1.json",
+    "macosReview": "density-http-retirement-macos-review.json",
+    "soakReview": "density-http-retirement-native-soak-review.json",
+    "fuzzReview": "density-http-retirement-ci-fuzz-review.json",
+    "semanticReplay": "density-http-retirement-r3-r5-r6-native-contract-review.json",
+    "semanticReports": 205,
+    "semanticCaseObservations": 3340
+  },
+  "formal10Review": "native-performance-r10-review.json",
+  "candidateThreeLaneClosure": "native10-performance-candidate-closure.json",
+  "allTwelveDensityCellsActualBudgetBoundaries": true,
+  "baselinePartialComparison": "native10-partial-baseline-comparison.json",
+  "legacyBaselineDensityStillRejectedMissingExactGauge": true,
+  "legacyOriginalRuntimeNotModifiedOrMissingGaugeForged": true,
+  "observedBaselineQpsDrops20To26PercentNotHidden": true,
+  "noFurtherLongPerformanceSessionDispatchedWhileKnownBaselinePrerequisiteBlocked": true,
+  "qualifiedDataFourViewports": "native10-four-viewport-review.json",
+  "latestWindowsGatedThreeSecondSourceRequestFailureStillUnexplained": true,
+  "localEightGatedPassesNotAcceptedAsCausalFix": true,
+  "historicalFrameSeedTsanGzipAndOlderWindowsMetadataFailuresStillOpen": true,
+  "originalFrameProfileOnlyTwoActualRunsNotCompletedAbba": true,
+  "originalProfile1888SamplesAndZeroLostComparisonHookWeight72Point77Percent": true,
+  "rawWptFailedAndStandardsConformanceNotClaimed": true,
+  "workflows": {
+    "suitebench": {
+      "workflowRunId": 43617899841,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43617899841",
+      "observedUTC": "2026-11-14T16:54:39.357158+00:00",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "suitefull": {
+      "workflowRunId": 43618054033,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43618054033",
+      "observedUTC": "2026-11-14T19:30:28.340629+00:00",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    "suitesupp": {
+      "workflowRunId": 43618064945,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43618064945",
+      "observedUTC": "2026-11-14T19:08:40.654000+00:00",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "gzipsite": {
+      "workflowRunId": 43632937932,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43632937932",
+      "observedUTC": "2026-11-14T19:47:00.647309+00:00",
+      "status": "in_progress",
+      "conclusion": null
+    }
+  },
+  "fullV030GoalComplete": false,
+  "mainTagsReleasePagesAndBlockedWslNotChanged": true,
+  "revision": 2,
+  "all5169FrozenInputsStillExact": true,
+  "current421SourceQualification": {
+    "configurations": {
+      "ubsan": {
+        "passed": 1024,
+        "failed": [],
+        "skipped": 4
+      },
+      "asan": {
+        "passed": 1024,
+        "failed": [],
+        "skipped": 5
+      },
+      "release-wpt": {
+        "passed": 1115,
+        "failed": [
+          "worker_wpt_fetch_api_headers_headers_basic_any_js",
+          "worker_wpt_fetch_api_headers_headers_errors_any_js",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+          "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+        ],
+        "skipped": 4
+      },
+      "debug": {
+        "passed": 1115,
+        "failed": [
+          "worker_wpt_fetch_api_headers_headers_basic_any_js",
+          "worker_wpt_fetch_api_headers_headers_errors_any_js",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+          "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+        ],
+        "skipped": 4
+      },
+      "tsan": {
+        "passed": 1011,
+        "failed": [
+          "native_fetch_large_gzip"
+        ],
+        "skipped": 5
+      },
+      "windows": {
+        "passed": 750,
+        "failed": [],
+        "skipped": 8
+      },
+      "macos": {
+        "passed": 755,
+        "failed": [],
+        "skipped": 11
+      }
+    },
+    "coreReview": "evidence-suite-process-core-review.json",
+    "debugReview": "evidence-suite-process-debug-review.json",
+    "tsanActualFailure": "evidence-suite-process-tsan-failure-review.json",
+    "windowsReview": "evidence-suite-process-windows-review.json",
+    "macosReview": "evidence-suite-process-macos-review.json",
+    "soakReview": "evidence-suite-process-native-soak-review.json",
+    "soakSeconds": 1800.373,
+    "soakRounds": 4291,
+    "relatedRegressions": 167,
+    "timingCases": 9,
+    "fuzzReview": "evidence-suite-process-fuzz-review.json",
+    "fuzzPassed": 9,
+    "fuzzUnits": 70000
+  },
+  "fullCurrent421CiActuallyFailed": true,
+  "actualTsan96MiBDeadlineFailureStillUnfixed": true,
+  "current421WindowsWholeOriginalMatrix750PassedNoFailuresEightSkips": true,
+  "current421Whole32EvidenceTestsSeconds": 26.8084,
+  "current421Original90SecondBudgetRetained": true,
+  "ordinaryWindowsCauseNotClosedByCurrentPass": true,
+  "exactPrior77WindowsPeFourAttempt32CaseReplay": "windows-ordinary-failure-observation-review.json",
+  "actualBaselineObserverTwoPositivesNineResealedForgeries": "baseline-observation-full-auditor-controls-review.json",
+  "currentFourConfigurationSemanticReplay": "evidence-suite-process-r3-r5-r6-four-config-review.json",
+  "semanticReports164AndObservations2672": true,
+  "currentFiveConfigurationSemanticClosureIncomplete": true,
+  "fullDependencyLogs": "evidence-suite-process-native-provider-log-review.json",
+  "all1187OpenSslCommandsPerConfigurationAndDelegatedSandboxChecked": true,
+  "hostedIndex": "evidence-suite-process-hosted-index-review.json",
+  "all562ActualIndexedFilesRehashed": true,
+  "failedTsanAndFailedWholeIndexGateNotReclassified": true,
+  "callsiteProfileRetainsFreshActualNativeBytesAndComparesOriginalFailedHashes": true,
+  "callsiteProfileDoesNotChangeRuntimeChecksumOptimizationFlagsOrAnyDeadline": true,
+  "privateAdlerOrDecoderHypothesisNotIntegrated": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false
+}

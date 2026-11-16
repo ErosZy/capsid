@@ -1,0 +1,44 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T19:30:14.272857+00:00",
+  "workflowRunId": 43618054033,
+  "artifactId": 14126217034,
+  "archiveSHA256": "cf657d494551ba4c5a4fe152def1b93afee421c9e1975a631558a299adcbdcc1",
+  "productCheckout": "42107f444db014dc2089c4b405669c4be623d208",
+  "selected": 1017,
+  "passed": 1011,
+  "failed": [
+    "native_fetch_large_gzip"
+  ],
+  "skipped": [
+    "host_managed_executable_active_state_foreign_owner",
+    "host_managed_recovery_rejects_oversized_snapshot",
+    "worker_sandbox_namespaces",
+    "worker_sandbox_cgroup_v2",
+    "worker_sandbox_network_namespace"
+  ],
+  "originalRegistrationAndEveryFinalLogOutcomeChecked": true,
+  "rawInstrumentedRssFailuresRetained": [
+    "websocket_managed_reclamation-idle"
+  ],
+  "gzip8MiBCasePassedOriginalOracle": true,
+  "gzip96MiBBytes": 100663296,
+  "gzip96MiBSourceActuallyReachedEof": true,
+  "gzip96MiBNoWorkerState": true,
+  "actualStderr": "FAIL: event deadline\n",
+  "originalEventDeadlineSeconds": 5,
+  "originalCtestDeadlineSeconds": 60,
+  "minizOriginalO0AndFatalTsanRetained": true,
+  "minizCompileCommand": "/usr/bin/clang -DBH_DEBUG=1 -DBH_FREE=wasm_runtime_free -DBH_MALLOC=wasm_runtime_malloc -DBH_PLATFORM_LINUX -DBUILD_TARGET_X86_64 -DBUILD_WITH_GC_SECTIONS -DBUILD_WITH_SQLITE -DBUILD_WITH_WASM -DMINIZ_NO_STDIO -DMINIZ_NO_TIME -DWASM_DISABLE_HW_BOUND_CHECK=1 -DWASM_DISABLE_STACK_HW_BOUND_CHECK=1 -DWASM_DISABLE_WAKEUP_BLOCKING_OP=0 -DWASM_DISABLE_WRITE_GS_BASE=0 -DWASM_ENABLE_AOT_INTRINSICS=0 -DWASM_ENABLE_BULK_MEMORY=1 -DWASM_ENABLE_EXTENDED_CONST_EXPR=0 -DWASM_ENABLE_FAST_INTERP=1 -DWASM_ENABLE_INTERP=1 -DWASM_ENABLE_LIBC_BUILTIN=1 -DWASM_ENABLE_LIBC_WASI=1 -DWASM_ENABLE_MINI_LOADER=0 -DWASM_ENABLE_MODULE_INST_CONTEXT=1 -DWASM_ENABLE_MULTI_MODULE=0 -DWASM_ENABLE_QUICK_AOT_ENTRY=0 -DWASM_ENABLE_REF_TYPES=1 -DWASM_ENABLE_SHARED_MEMORY=0 -DWASM_ENABLE_SHRUNK_MEMORY=1 -DWASM_GLOBAL_HEAP_SIZE=10485760 -DWASM_HAVE_MREMAP=1 -D_GNU_SOURCE -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/iwasm/interpreter -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/iwasm/libraries/libc-builtin -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/iwasm/libraries/libc-wasi/sandboxed-system-primitives/include -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/iwasm/libraries/libc-wasi/sandboxed-system-primitives/src -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/iwasm/include -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/shared/platform/linux -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/shared/platform/linux/../include -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/shared/platform/common/libc-util -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/shared/mem-alloc -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/iwasm/common -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/wamr/core/shared/utils -I/home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/miniz  -std=gnu99 -ffunction-sections -fdata-sections                                          -Wall -Wno-unused-parameter -Wno-pedantic -fPIC -g -std=gnu11 -fsanitize=thread -fno-omit-frame-pointer -fno-sanitize-recover=all -ffunction-sections -fdata-sections -o txiki-build/deps/miniz/CMakeFiles/miniz.dir/miniz.c.o -c /home/runner/work/capsid/capsid/build-tsan/vendor-overlay/txiki.js/deps/miniz/miniz.c",
+  "recordedNativeBinaryHashes": {
+    "helper": "458cbf443e6a53064fd93565018d0fce52705054250d268d380707429044a9aa",
+    "worker": "16872cb0cd5919c68b5502e35b6ae61aa74f9682609be4981f1953bcea8d8c0a"
+  },
+  "nativeExecutableBytesNotArchivedAndNotIndependentlyRehashed": true,
+  "untruncatedRawJsonUsedRatherThanTruncatedConsoleRows": true,
+  "originalWholeFailedReportStillRejected": true,
+  "historicalAndCurrentSameSymptomNotProvenSameRootCause": true,
+  "noTsanAllPassOrCurrentWholeCiAcceptance": true,
+  "formalPerformancePointCountUnchangedAtOne": true,
+  "fullV030GoalComplete": false
+}

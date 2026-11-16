@@ -1,0 +1,78 @@
+{
+  "complete": true,
+  "workflowRunId": 43671548788,
+  "artifactId": 14147604566,
+  "archiveSHA256": "1da41ddf944987ad26f16a5378e1450dae76c12ba14ba1fa75b7cd1a4d255b6e",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "acceptanceScope": "github-actions-ci-protocol-only",
+  "wholeThreeLaneCandidateAccepted": true,
+  "newCiProtocolSessionsValidated": 1,
+  "ciProtocolValidatedSessionCountBefore": 2,
+  "ciProtocolValidatedSessionCountAfter": 3,
+  "newFormalPointsAccepted": 0,
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "qualifiedFormalPointCountBefore": 0,
+  "qualifiedFormalPointCountAfter": 0,
+  "ciCannotReplaceSameLocalHostMeasurement": true,
+  "fullV030GoalComplete": false,
+  "originalSessionComplete": true,
+  "originalSessionStatus": "native-current-source-three-lane-session-complete-existing-baseline-reference",
+  "originalSessionError": null,
+  "workflowConclusion": "success",
+  "reviewedLanes": {
+    "cold": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "452c98d608bf7f926b875d452ac913fb2b513f8364d4ba846ca5f3cc549356df"
+    },
+    "qps": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 2115,
+      "checksumSHA256": "84fa5f6b05a44247fa0a32f03427c62a60a9ea2296c8bbf6200e97503a06f849"
+    },
+    "density": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 2742,
+      "checksumSHA256": "563cf7600203918da7def008f5cf5890b66db41aaeb0b71c9b7264cc47d48d61"
+    }
+  },
+  "crossLaneSourceMachineSessionBinaryFixtureAndIntervalContractsPassed": true,
+  "ciProtocolSourcesAtReview": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+    "b59af527a9be5cea50bd1bb8550e7b459c817841"
+  ],
+  "ciMeasuredMachine": {
+    "architecture": "x86_64",
+    "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "hostId": "19335b214418adbdaa67365f356b5feb227d49119d850fa16ce02ba62048f9b2",
+    "kernel": "7.0.0-1017-azure",
+    "logicalCpus": 4,
+    "uname": "7.0.0-1017-azure",
+    "nproc": 4,
+    "node": "24.14.0",
+    "deno": "2.9.8",
+    "workerd_version": "workerd 2026-10-10",
+    "python": "3.12.3",
+    "php_fpm": "8.3.6",
+    "nginx": "1.24.0"
+  },
+  "wholeFrozenSourceCandidateSessionAccepted": true,
+  "notInheritedFromDd589Or77": true,
+  "allTwelveDensityCellsFilledOriginalBudget": true,
+  "allFourQuietWindowsRecomputedFromRawCounters": true,
+  "nativeKernelNetworkParametersUnchanged": true,
+  "sourceAndBinaryContractsPassedWithoutBaselineRerun": true,
+  "qualifiedPointSHA256": "baed3781f10e7d0725ded3bdb6360821c18f7d37d5a3be65dfc1ebbb1340f813",
+  "reviewedUTC": "2026-11-15T06:44:15.286558+00:00",
+  "sourceInputsRehashed": 5169,
+  "baselineReferenceAcceptedByUserNotNewlyQualified": true,
+  "existingBaselineDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+  "originalBaselineLabelsAndValuesAndMachinePreserved": true,
+  "currentNativeMachineNotAssumedSameAsOriginalBaseline": true,
+  "historicalFormal10AndOriginalBaselineGaugeFailureNotRewritten": true,
+  "originalFailedOrPartialLanesNotSpliced": true,
+  "physicalHostIsolationNotClaimed": true
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "capsid-failed-ci-hosted-evidence-index-integrity-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T06:51:14.321426+00:00",
+  "workflowRunId": 43671341667,
+  "artifactId": 14148732738,
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "workflowCommit": "a4fb193bac80ae779e00f0f016f35e58dc738176",
+  "indexZipSHA256": "14b406a65951199da56555c634612a82f864951048ca5b1c8cec06c4eda15e4b",
+  "completeEvidenceTreeSHA256": "e3ffda379bac084d75ddcf9bc64da3a84d3f35255bec26054a70394e29b6052f",
+  "actualArchivedFilesRehashed": 563,
+  "artifactFilesRehashed": {
+    "asan-hosted-evidence": 29,
+    "fuzz-hosted-evidence": 11,
+    "macos-host-library-evidence": 52,
+    "release-wpt-hosted-evidence": 114,
+    "tsan-hosted-evidence": 79,
+    "ubsan-hosted-evidence": 22,
+    "windows-host-library-evidence": 256
+  },
+  "sourcePackageBuildAndCompatibilityIdsBound": true,
+  "indexCoverageExactlyMatchesAllSevenActualJobArchives": true,
+  "fullCiJobConclusionsSuccessful": false,
+  "indexIntegrityVerifiedDespiteFailedJobs": true,
+  "indexAcceptancePassed": false,
+  "originalWindowsFailureNotReclassified": true,
+  "rawFiveWptFailuresAndInstrumentedRssExceptionsStillRetained": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "formalPerformanceNotAssessedByThisAudit": true,
+  "ciProtocolPointSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+    "b59af527a9be5cea50bd1bb8550e7b459c817841"
+  ],
+  "fullV030GoalComplete": false
+}

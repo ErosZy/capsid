@@ -1,0 +1,96 @@
+{
+  "schema": "capsid-workerd-control-windows-full-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T06:53:02.319167+00:00",
+  "workflowRunId": 43555865031,
+  "artifactId": 14102233732,
+  "archiveSHA256": "32584494b0608f062a76f2e9322c1bfcb9f1fa53eac13817913c8d3906c1c589",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "productTree": "ad81fef535ab4c0bb3ca52618ddf9fe084834ea4",
+  "registered": 758,
+  "passed": 750,
+  "failed": 0,
+  "skipped": [
+    {
+      "name": "host_single_worker_ab_emits_complete_evidence",
+      "code": 77,
+      "diagnostic": "perf is not usable in this environment",
+      "nonLinuxSandboxPrerequisite": false
+    },
+    {
+      "name": "worker_binding_sandbox_write",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_read",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_watch",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_sqlite",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_network",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_wasi",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_union",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    }
+  ],
+  "registrationJUnitAndFinalLastTestAndConsoleExact": true,
+  "mixedEncodingLastTestParsedAsRawAsciiEnvelopeWithoutReplacement": true,
+  "allThreeActualNativeExecutableBytesIndependentlyRehashed": true,
+  "nativeExecutableIdentities": {
+    "expected": [
+      "capsid-host.exe",
+      "capsid-worker.exe",
+      "test-spawn-failure-recovery.exe"
+    ],
+    "found": {
+      "capsid-host.exe": {
+        "bytes": 8898560,
+        "sha256": "9e19ab435a96ccd95d5d4ea994c353abae045954a45507a8d43bae1d7ad35238"
+      },
+      "capsid-worker.exe": {
+        "bytes": 6230528,
+        "sha256": "6f7858464fe35064173e8663e6d103631d5dc5c62d1e042f33ff4f7df7c4261f"
+      },
+      "test-spawn-failure-recovery.exe": {
+        "bytes": 339456,
+        "sha256": "e65ca2b983b8e90af9de33dab94f85f95d12fe50c0fd49df3083e64ddb7c4323"
+      }
+    }
+  },
+  "platformRequiredCompatibilityTestsReplayed": 134,
+  "originalWindows180MinuteJobBudgetRetained": true,
+  "partialCheckpointsNotUsedAsFinalVerdict": true,
+  "olderLostRunnerAnd180MinuteCancelledRunsNotRewritten": true,
+  "windowsLinuxStrictSandboxNotClaimed": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

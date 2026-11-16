@@ -1,0 +1,30 @@
+{
+  "complete": true,
+  "actualComputeBuildIdentityFunctionExecutedWithWorkerEnabled": true,
+  "actualAuditedStampCopiedByteExactlyAsContractInputOnly": true,
+  "notClaimingFreshPreparedOverlayOrNativeBuildFromThisUnitControl": true,
+  "priorFullCopySetupToolTimeout150SecondsAndFailedJunctionSetupPreserved": true,
+  "steps": [
+    {
+      "label": "original-unupdated-lock",
+      "exitCode": 1,
+      "expectedRejected": true,
+      "originalGuardNotModified": true
+    },
+    {
+      "label": "updated-audited-lock",
+      "exitCode": 0,
+      "expectedRejected": false,
+      "originalGuardNotModified": true
+    }
+  ],
+  "oldLockedIdentityFailureReproduced": true,
+  "newActualAuditedKeyAndManifestAccepted": true,
+  "onlyTwoOverlayHashFieldsChanged": true,
+  "actualVendorAndQuickJsCommitsAndDeviationsUnchanged": true,
+  "originalFailClosedProductionFunctionUnmodified": true,
+  "notNativeCompileOrReleaseOrFullMatrixQualification": true,
+  "generatedRecordsExplicitlyLabelNoCompilerAndDirtyDevelopmentProvenance": true,
+  "original932MacosConfigureFailureRetained": true,
+  "fullV030GoalComplete": false
+}

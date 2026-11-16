@@ -1,0 +1,38 @@
+{
+  "schema": "capsid-performance-local-versus-ci-scope-v1",
+  "complete": true,
+  "recordedUTC": "2026-11-15T04:12:57.982124+00:00",
+  "reason": "User questioned whether QPS was measured in CI. It was; CI observations must not substitute for the requested same-local-machine v0.2.2 reference comparison.",
+  "existingBaselineAcceptedByUserAndNotRerun": true,
+  "existingBaselineDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+  "baselineCpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+  "baselineKernel": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+  "actualLocalCpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+  "actualLocalKernel": "6.18.40.1-microsoft-standard-WSL2",
+  "sameCpuModelAndKernelObservedButNoCompletedLocalV030Measurement": true,
+  "ciProtocolValidatedSessionCount": 2,
+  "ciProtocolValidatedSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf"
+  ],
+  "ciPerformanceIsValidOnlyForItsOwnRecordedGuest": true,
+  "ciRunner": "GitHub Actions Ubuntu24.04,4 logical CPUs, Xeon Platinum8573C (dd589 run)",
+  "ciToLocalPercentDifferencesNotVersionRegressionOrSameHostAcceptance": true,
+  "localPerformanceAcceptedSessionCount": 0,
+  "currentSourceLocalPerformanceNotMeasured": true,
+  "currentSource": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "originalCiArchivesAndRawReviewsAndEarlierCountsPreserved": true,
+  "noCiDataPromotedIntoRepositoryDataJs": true,
+  "newCiPerformanceRerunsNotPlannedForLocalAcceptance": true,
+  "existingNative12CiRunRetainedWithoutCancellationButNotLocalAcceptance": true,
+  "ubuntuExistingDistroReadOnlyPreflightSucceeded": true,
+  "blockedCapsidV030NotStartedRepairedMovedOrDeleted": true,
+  "noGlobalInstallOrKernelNetworkChanges": true,
+  "localPreparationStillNeedsPinnedToolsAndCurrentReleaseBinaries": true,
+  "originalDeadlinesAndAssertionsAndPostureRemainRequired": true,
+  "rawPriorStatus": {
+    "file": "qualification-before-local-ci-scope-correction.md.txt",
+    "sha256": "7dabd6ea6c2dd8e5bba1c7e0a9a3d324510059ea6a58abab7fe35a850010eebd"
+  },
+  "fullV030GoalComplete": false
+}

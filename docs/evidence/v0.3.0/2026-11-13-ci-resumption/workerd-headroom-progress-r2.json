@@ -1,0 +1,83 @@
+{
+  "schema": "capsid-native-network-headroom-qualification-progress-v1",
+  "observedUTC": "2026-11-14T08:49:27.775734+00:00",
+  "productCheckout": "6a9ee0e62b978aeb977526f984ddaead7f4fd552",
+  "productTree": "ad3c4b432337d20480ccb16f0df59759800462f9",
+  "sourceFileCount": 5169,
+  "changedFiles": [
+    "bench/density_probe.py",
+    "bench/density_control.py",
+    "bench/density_evidence.py",
+    "bench/SPEC.md",
+    "tests/test_benchmark_density_control.py",
+    "tests/helpers/density_measurement_fixture.py",
+    "tests/test_perf_evidence.py"
+  ],
+  "other5162InputsByteIdentical": true,
+  "productionImplementationPublicABIAndSdk78Unchanged": true,
+  "previousQualifiedCandidate": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "previousCandidateCompletePlatformEvidence": "workerd-control-platform-closure.json",
+  "previousSuccessNotPromotedToNewSource": true,
+  "causeReview": "workerd-warm-conntrack-causal-review.json",
+  "budgetNeutralPrototypeReview": "workerd-warm-headroom-causal-review.json",
+  "prototypeOriginalGuardedOriginalSameCapacityProof": true,
+  "prototypeMaximumCombinedStartupSeconds": 89.97484820899996,
+  "capacityDuringEntireComparison": 262144,
+  "nativeRunnerInitialCapacityRestored": true,
+  "originalStartup120Request5Coverage300AndMemory2048MiBAnd100PerWorkerUnchanged": true,
+  "noNetworkKernelTuningOrBusinessRetryOrPrewarmOrFixedHoldInIntegratedSource": true,
+  "localWindows": {
+    "densityControlPassed": 34,
+    "conditioningPassed": 9,
+    "conditioningNonLinuxPrerequisiteSkips": 3,
+    "lanePassed": 1,
+    "lanePrerequisiteSkips": 4,
+    "focusedCompleteFixtureAndEightResealedNegativeControlsPassed": true,
+    "fullPerfEvidenceOriginal90SecondsTimedOut": true,
+    "originalParentAlsoHad90SecondTimeout": true,
+    "partialSuccessNotFullQualification": true
+  },
+  "benchmark": {
+    "workflowRunId": 43576232102,
+    "completeOriginalBudgetFiles": 7,
+    "fullUnitTestsPassed": 108,
+    "unitTestsSkipped": 0,
+    "review": "workerd-headroom-benchmark-review.json",
+    "integratedSameCapacityOriginalIntegratedOriginalProofReviewed": true
+  },
+  "newSourceCombinedQualificationPending": true,
+  "formalLanes6And7RejectedBeforeMeasurementsReference": "native-network-rejections-review.json",
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "mainTagsReleasesPagesAndBlockedWslNotModified": true,
+  "updatedWorkspaceStatusDocsAreNotRetroactivelyFrozenTestInputs": true,
+  "fullCiDebugSoakAndFormal8Dispatched": true,
+  "runs": {
+    "headfull": {
+      "workflowRunId": 43577440222,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43577440222",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    "headsupp": {
+      "workflowRunId": 43577440011,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43577440011",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    "native8": {
+      "workflowRunId": 43577440289,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43577440289",
+      "status": "in_progress",
+      "conclusion": null
+    }
+  },
+  "integratedBMaximumSharedStartupSeconds": 86.056517085,
+  "controlledDiagnosticCapacityNeverIncreasedWithinABA": true,
+  "newSourceAllPlatformAndCombinedAcceptancePending": true,
+  "ownFailedCollectionAndAuditorAttemptsRetained": [
+    "Direct prototype ZIP collection reached its 150-second transfer command bound; partial retained and final ranged ZIP matched length/SHA256",
+    "Initial new ranged benchmark invocation rejected absent saved GitHub listing before transferring bytes; fetched listing then retried",
+    "Followup workflow preparer initially treated artifact-only hosted-evidence-index as a product checkout; failed guard script retained, corrected to require its exact download-artifact role and all five actual source refs"
+  ]
+}

@@ -1,0 +1,216 @@
+{
+  "complete": true,
+  "status": "complete",
+  "capturedUTC": "2026-11-08T15:29:45.028010+00:00",
+  "privateOnly": true,
+  "rootIntegrated": false,
+  "fullV030GoalComplete": false,
+  "runnerSHA256": "5c046f31db4c86618f2453b5618e50885eba4633a7591cd231fd93f4cda959f1",
+  "proofs": {
+    "r6-original-binary-identity-audit-r2/run.json": "04c2daad148ddc3ca776183f2849233e10f6f96dd08a79eb8faa3d652fe8b059",
+    "r6-original-worker-project-artifacts-lookup-r2/run.json": "8f30a6386d789ca8aaa69eb3d3a20672f5958e4c5c1f506ce7f8e6f201432627",
+    "r6-exact-original-binary-pair-replay-r1/run.json": "4af57d8f04928df318d53287828eb726af8cd87f642b8eb2343147f1839496fe",
+    "r6-exact-original-binary-pair-replay-r2/run.json": "b1501c60352edf191115930621d39eaccd0f54664e8b9d1203a25ffc86d1b472",
+    "r6-exact-original-handler-trace-r4/run.json": "57d8f66eaf8096a1fb3a3a5d423e781145b09e8bba3e6e862fe6f986a3b5a1de",
+    "r6-exact-corrected-handler-trace-r6/run.json": "6e40aad4bf6a4fc08dfd048eeec71ed55d6650121f11546b8c98777415996a21",
+    "r6-exact-conditional-correction-controls-r7/run.json": "5259317f627044aa8b7e79741b6f52109a2762699c5c4016bdee8d3f44eba56e",
+    "r6-exact-restored-handler-trace-r7/run.json": "0be9ec51b5df6f7503a87f0d346de0d911f7bdd10269c64a3e7dfbd2c84eb51b",
+    "r6-exact-conditional-correction-r6/run.json": "b65d203cf7eca2537457dfc5fc20a1858e4db7caa0fdbeaf5b7f3696a533a630"
+  },
+  "originalBinaries": {
+    "host": "dda6a34250c1d99786f99d4894dbd8cbbdd5950469697d3e73a09381cc3a7303",
+    "worker": "2542afc21659a145086e11e7c257dc28acbf5b5eb76c36de5f64d2b181313aeb"
+  },
+  "exactOriginalWorkerRecoveredFromFourProjectArtifacts": true,
+  "originalRunnerFixturePeerNodeOpenSslAndDeclaredSharedInputsRestored": true,
+  "originalPairFailureReproduced": true,
+  "timingSensitiveOriginalPassReplayPreserved": true,
+  "independentOriginalAndCorrectedAndRestoredRawGdbTraceEvents": {
+    "original": [
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      }
+    ],
+    "corrected": [
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      },
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      }
+    ],
+    "restored": [
+      {
+        "type": 22,
+        "accepted": 1,
+        "discard": 1,
+        "channel": 2,
+        "bytes": 512
+      }
+    ]
+  },
+  "originalAndRestored503InvalidIpcWithAcceptedDiscardedData": true,
+  "correctedTracedAndUntracedBoth14OriginalCasesPassed": true,
+  "originalFileBytesUnmodifiedPrivateCounterfactualChangesOnlyTwoConditionalDisplacementBytes": true,
+  "originalMachineCodeDataDiscardBranchRoutedToRejectionWhitelist": true,
+  "controlledCorrectionRoutesOnlyAlreadyValidatedDiscardedDataToExistingPumpAndSuccessReturn": true,
+  "noInvalidFrameValidationOrJavascriptIoAuthorityOrBudgetsRelaxed": true,
+  "earlierSdk59ReconstructionCorroboratedByExactOriginalWorker": true,
+  "archivedSourceWitness": {
+    "file": "/mnt/e/capsid/build-v030-dev/evidence/native-asan-qualification-20261018/upgrade55t-tested-project-inputs/src/worker_runtime.cc",
+    "sha256": "aff7bb3df3156efa1e8b719fea63a5f5645a895b1843c6162c7fb6ae237908a6",
+    "headerSHA256": "754deefe3d0f7203b6b7d4264442df26f2ab0b70343bcd10369fcc7696ccfc11"
+  },
+  "actualMainAndPreparedSdk73SourceAlreadyContainCorrespondingDataAllowlistCorrection": true,
+  "currentMainRuntimeSHA256": "596464420095d4f33f10d7c0b75ebfcf8fc615a3571f0cf79fb0143c31c344aa",
+  "preparedSdk73RuntimeSHA256": "596464420095d4f33f10d7c0b75ebfcf8fc615a3571f0cf79fb0143c31c344aa",
+  "historicalInvalidIpcRootCauseProvenWithExactOriginalBinaryPair": true,
+  "defaultReaderChunkSequenceAndTimelinessRequirementNotClosedByThisDiagnosis": true,
+  "diagnosticDebuggerTimingAndPrivateBinaryVariantsNotProductQualification": true,
+  "all4940MainSourceInputsUnchanged": true
+}

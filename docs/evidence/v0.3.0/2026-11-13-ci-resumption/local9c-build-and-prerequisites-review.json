@@ -1,0 +1,120 @@
+{
+  "schema": "capsid-local9c-build-prerequisites-and-session-start-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T12:12:10.322655+00:00",
+  "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "productTree": "f2d6f39f8d0f9fd9345e7e856e7a9e281288e542",
+  "environment": "same-local-Ubuntu-WSL2-not-GitHub-Actions",
+  "kernel": "6.18.40.1-microsoft-standard-WSL2",
+  "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+  "actualRootWriteFsyncReadAndCleanupPassed": true,
+  "actualPssAndPrivateNamespacesAndLandlockPassed": true,
+  "globalInstallOrSystemNetworkDefaultUserConfigurationChanged": false,
+  "persistentWorkspace": "/var/tmp/capsid-local9c-20261115-r2",
+  "temporaryWorkspaceDisappearanceAndEarlierSetupFailuresPreserved": true,
+  "all5169SourceInputsAndWorkspaceNonDocumentationInputsMatch": true,
+  "rootHeadVendorAbiSdk78AndUserBaselineUnchanged": true,
+  "cleanReleaseLtoBuildVerified": true,
+  "runtimeLtoProjectUnits": 12,
+  "binaries": {
+    "capsid-host": {
+      "sha256": "ddd7f1c27578a6118ceb1223103373b4e6ec64f6b695420b17430062c939e89a",
+      "bytes": 16259904
+    },
+    "capsid-worker": {
+      "sha256": "88df5c5f908e2da3033625c2b906b905342b478f9d93160090e21c574f6dcff3",
+      "bytes": 17669608
+    },
+    "cold-start": {
+      "sha256": "1dfcb58be3ed2ad42d37f6fb45e784fc50cf756d7c474978c2a793790fd33242",
+      "bytes": 236560
+    },
+    "capsid-bytecode-compile": {
+      "sha256": "88333005111abf955838646ab4d7455512df8ea162baaeced33bc9b13169b704",
+      "bytes": 6390560
+    },
+    "benchmark-tools/loadgen": {
+      "sha256": "aa3cc9bb041c753f135af11aa50357d23e378b25ed7703d2e14ac1904fd32efe",
+      "bytes": 7420901
+    }
+  },
+  "localRegisteredTests": 1033,
+  "localSelectedTests": 43,
+  "localPassed": 43,
+  "localFailed": 0,
+  "localSkipped": 0,
+  "actualCtestExit": 0,
+  "actualFiveStackQpsAndBothDensityBackendsColdWarmShortPrerequisitesPassed": true,
+  "shortPrerequisitesNotFormalPerformancePoints": true,
+  "allThreeOriginalOrderedFormalLaneArgumentsVerified": true,
+  "explicitWslEntryNotSilentCiNativeGuardBypass": true,
+  "privatePythonDirectAndTransitiveArchivesHashed": true,
+  "currentTsanMainMatrixIncompleteRunnerShutdownObserved": true,
+  "currentTsanQualificationAccepted": false,
+  "currentTsanRawRssFailureNotErased": true,
+  "currentFrozenSourcePlatformAndHistoricalR7ClosureStillRequired": true,
+  "stageActualExits": {
+    "prepare-r2": {
+      "actualExitCode": 0,
+      "recordSHA256": "4d16b14c14592b26ce31b30363420ef0498677ddeec31922cb9b88e78ea18642"
+    },
+    "build-r3": {
+      "actualExitCode": 0,
+      "recordSHA256": "5167ca0e323a66c0decb52863d98914c72e23aa40e4d346f61bcad5fc92f21a6"
+    },
+    "python-runtime": {
+      "actualExitCode": 0,
+      "recordSHA256": "8638019968f50b3c18f96eb967488384a53f7bfd51d7e9159192d3c4b6f8b448"
+    },
+    "smoke": {
+      "actualExitCode": 0,
+      "recordSHA256": "fdc3ea404d5788b5d3071fcfdde41da5d0dab3fe47fcb7cab846ed757638977a"
+    }
+  },
+  "originalRecords": [
+    {
+      "file": "preflight-root/result.json",
+      "sha256": "def827dca260ffb812c3666f061e134659510616b6b32d7d5fe32b6172bc2bb0"
+    },
+    {
+      "file": "preparation-r2/result.json",
+      "sha256": "40417419a997e9e255d74d4f0ef2aaf5da6906c6fcf454504e81d74fe005e74c"
+    },
+    {
+      "file": "build-r3/result.json",
+      "sha256": "b7222ca9bc541ed422552428bf47e5064f47d54fd0b815391c8215a33597b2d9"
+    },
+    {
+      "file": "python-runtime/result.json",
+      "sha256": "b6707274054917fd475d27f38c5c4a6068e24a09d606e71735f0196c557f33c4"
+    },
+    {
+      "file": "smoke/result.json",
+      "sha256": "6aef4828624a45233183e60530940a8ecb5570dc6d86a4992fe0dbfc63bf23e9"
+    },
+    {
+      "file": "entry-plan-validation/review.json",
+      "sha256": "4275abe3dabd0d6158f41558bb66bb1f9565099dcaa1bab600bdb0b90da55cd8"
+    }
+  ],
+  "localSession": {
+    "session": "local-wsl-v030-9c-20261115T120539Z-74c7b8a3",
+    "statusAtObservation": "formal-qps-running",
+    "completeAtObservation": false,
+    "sourceRoot": "/var/tmp/capsid-local9c-20261115-r2/source",
+    "coordinatorDirectory": "E:\\capsid-verification-20261113\\evidence\\v030-local9c-execution-r1\\formal-session",
+    "rawLinuxLanes": {
+      "cold": "/var/tmp/capsid-local9c-20261115-r2/source/bench/results/local-wsl-v030-9c-20261115T120539Z-74c7b8a3-cold",
+      "qps": "/var/tmp/capsid-local9c-20261115-r2/source/bench/results/local-wsl-v030-9c-20261115T120539Z-74c7b8a3-qps"
+    },
+    "rawLaneEvidenceToBeCopiedToEAfterSessionExitWithoutRepackingInnerArchives": true,
+    "quietWindowsObserved": 2,
+    "quietScope": "WSL guest counters, not proof of physical Windows host exclusivity",
+    "observedSessionSnapshotSHA256": "ac5d9799bcdfd7deee961a0f11325939126be47657d5bf4bf3165d7db3fc8c9d"
+  },
+  "newCiWorkflowsDispatched": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,55 @@
+{
+  "complete": true,
+  "workflowRunId": 43663784678,
+  "artifactId": 14144902912,
+  "archiveSHA256": "08e9d0c2fa82ce2546b40c57e812c209b5d1de962ebdb340411df91b9962278d",
+  "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "productTree": "281a24c0b10b0a75cbd4e08b0ce5962ca4959b97",
+  "wholeThreeLaneCandidateAccepted": true,
+  "newFormalPointsAccepted": 1,
+  "qualifiedFormalPointCountBefore": 1,
+  "qualifiedFormalPointCountAfter": 2,
+  "fullV030GoalComplete": false,
+  "originalSessionComplete": true,
+  "originalSessionStatus": "native-current-source-three-lane-session-complete-existing-baseline-reference",
+  "originalSessionError": null,
+  "workflowConclusion": "success",
+  "reviewedLanes": {
+    "cold": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "2e2565da2584b6518659c1ea110f37abac145656a0241e0518ff36928d41432a"
+    },
+    "qps": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 2115,
+      "checksumSHA256": "32c1cc1cb7e73a0441790f9ec2c71499641017f201d05013ec67ef314f0ceb6a"
+    },
+    "density": {
+      "frozenValidatorPassed": true,
+      "sealedFiles": 2752,
+      "checksumSHA256": "fe59652f25225d0707a14a7340e631cf1557335d1ec018d136311e79ff0e981b"
+    }
+  },
+  "crossLaneSourceMachineSessionBinaryFixtureAndIntervalContractsPassed": true,
+  "acceptedPointSourcesAtReview": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf"
+  ],
+  "wholeFrozenDd589CandidateSessionAccepted": true,
+  "newCurrentB59SourceNotMeasuredByThisPoint": true,
+  "allTwelveDensityCellsFilledOriginalBudget": true,
+  "allFourQuietWindowsRecomputedFromRawCounters": true,
+  "nativeKernelNetworkParametersUnchanged": true,
+  "sourceAndBinaryContractsPassedWithoutBaselineRerun": true,
+  "qualifiedPointSHA256": "60ad80ce3ee3da28fd6c22d9df89cc772dd35ac139a8c2617a56147a7487ac70",
+  "reviewedUTC": "2026-11-15T03:36:43.220932+00:00",
+  "sourceInputsRehashed": 5169,
+  "baselineReferenceAcceptedByUserNotNewlyQualified": true,
+  "existingBaselineDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+  "originalBaselineLabelsAndValuesAndMachinePreserved": true,
+  "currentNativeMachineNotAssumedSameAsOriginalBaseline": true,
+  "historicalFormal10AndOriginalBaselineGaugeFailureNotRewritten": true,
+  "originalFailedOrPartialLanesNotSpliced": true,
+  "physicalHostIsolationNotClaimed": true
+}

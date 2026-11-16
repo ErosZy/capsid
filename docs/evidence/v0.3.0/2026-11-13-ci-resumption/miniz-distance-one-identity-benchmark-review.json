@@ -1,0 +1,92 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T21:17:35.724656+00:00",
+  "workflowRunId": 43641498903,
+  "artifactId": 14132277704,
+  "archiveSHA256": "594b8f34a4174fe3a675ccf739815b1369a95f4f155052c377cfe3f8f6fcd862",
+  "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "productTree": "281a24c0b10b0a75cbd4e08b0ce5962ca4959b97",
+  "sourceInputsRehashed": 5169,
+  "fullOriginalBudgetFiles": 7,
+  "fullUnitTestsPassed": 120,
+  "unitTestsSkipped": 0,
+  "testFiles": [
+    {
+      "label": "qps-probe",
+      "tests": 7,
+      "budgetSeconds": 90,
+      "actualSeconds": 34.336567583000004
+    },
+    {
+      "label": "qps-control",
+      "tests": 12,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.11414675599999669
+    },
+    {
+      "label": "qps-lane",
+      "tests": 8,
+      "budgetSeconds": 60,
+      "actualSeconds": 2.469385396000007
+    },
+    {
+      "label": "density-control",
+      "tests": 37,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.41479688900000156
+    },
+    {
+      "label": "density-conditioning",
+      "tests": 19,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.5149770410000087
+    },
+    {
+      "label": "density-lane",
+      "tests": 5,
+      "budgetSeconds": 30,
+      "actualSeconds": 1.0161279529999945
+    },
+    {
+      "label": "perf-evidence",
+      "tests": 32,
+      "budgetSeconds": 90,
+      "actualSeconds": 14.257558665999994
+    }
+  ],
+  "actualWorkerdCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "count": 2048,
+      "pssKiB": 4074200,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "count": 65,
+      "pssKiB": 269069,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "count": 8,
+      "pssKiB": 119553,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    }
+  ],
+  "rawConditioningAndRuntimeContractsReplayed": true,
+  "currentSourceFormalPerformanceNotYetMeasured": true,
+  "qualifiedPointBoundToPrior77Source": true,
+  "noUnrelatedDiagnosticCampaignAdded": true,
+  "notFormalPerformanceEvidence": true,
+  "capsidRuntimeNotInvokedByBenchmarkQualification": true,
+  "nativeMinizRuntimeQualificationStillRequired": true,
+  "formalPerformancePoints": 1,
+  "fullV030GoalComplete": false
+}

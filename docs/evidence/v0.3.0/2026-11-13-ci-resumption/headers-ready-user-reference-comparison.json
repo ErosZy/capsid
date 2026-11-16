@@ -1,0 +1,383 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-16T01:33:46.173464+00:00",
+  "productCheckout": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+  "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
+  "comparisonScope": "observed current medians versus user-accepted historical reference on the same local machine",
+  "reference": {
+    "version": "0.2.x",
+    "release": "v0.2.2",
+    "git": {
+      "commit": "b35e266cea1948b69268200ea9bd1eeed398b108",
+      "tag": ""
+    },
+    "machine": {
+      "command": "OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh  # node/workerd pass; deno ran as a separate pass: OUT=/tmp/opencode/cold-deno PATH=/tmp/opencode/deno/bin:$PATH STACKS=\"deno\" (cells.deno.txt)",
+      "commit": "50d0e4287784de6370a287f0396ea2b828e6e047",
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+      "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
+      "generated_at": "2026-10-10T22:35:42+08:00",
+      "nginx": "nginx version: nginx/1.24.0 (Ubuntu)",
+      "node": "v24.14.0",
+      "nproc": "12",
+      "php_fpm": "PHP 8.3.6 (fpm-fcgi) (built: Sep  2 2026 12:56:02)",
+      "php_pool": "static max_children=1, opcache on, validate_timestamps=0",
+      "python": "Python 3.13.11",
+      "python_pkgs": "fastapi==0.143.0 Flask==3.1.3 gunicorn==26.2.0 starlette==1.7.0 uvicorn==0.54.0",
+      "rounds": "5 warm: 50 sut_cpuset: 0-3",
+      "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+      "workerd_version": "workerd 2026-10-10"
+    },
+    "exactSourceDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+    "notRerunOrRequalified": true
+  },
+  "current": {
+    "version": "0.3.0",
+    "release": "v0.3.0",
+    "machine": {
+      "architecture": "x86_64",
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+      "hostId": "f0385d0aeb8b4fc7e7f699e5a5dfc535e1a6aabf262f2c0ba5b773204ea2c51b",
+      "kernel": "6.18.40.1-microsoft-standard-WSL2",
+      "logicalCpus": 12,
+      "uname": "6.18.40.1-microsoft-standard-WSL2",
+      "nproc": 12,
+      "node": "24.14.0",
+      "deno": "2.9.8",
+      "workerd_version": "workerd 2026-10-10",
+      "python": "3.12.3",
+      "php_fpm": "8.3.6",
+      "nginx": "1.24.0"
+    },
+    "qualifiedPointSHA256": "ea64bab3ba38f8962f77891df87ce6b73fbc76b03485378822123223e83c71f2"
+  },
+  "rows": [
+    {
+      "family": "qps",
+      "key": "matrix-json-1k",
+      "metric": "qps",
+      "unit": "req/s",
+      "reference": 9489.7,
+      "current": 9341.6,
+      "changePercent": -1.5606394301189708
+    },
+    {
+      "family": "qps",
+      "key": "matrix-json-1k",
+      "metric": "p50Ms",
+      "unit": "ms",
+      "reference": 6.58045,
+      "current": 6.828239,
+      "changePercent": 3.765532752319367
+    },
+    {
+      "family": "qps",
+      "key": "matrix-json-1k",
+      "metric": "p95Ms",
+      "unit": "ms",
+      "reference": 8.18657,
+      "current": 8.424971,
+      "changePercent": 2.912098717778022
+    },
+    {
+      "family": "qps",
+      "key": "matrix-json-16k",
+      "metric": "qps",
+      "unit": "req/s",
+      "reference": 7109.1,
+      "current": 8090.2,
+      "changePercent": 13.800621738335362
+    },
+    {
+      "family": "qps",
+      "key": "matrix-json-16k",
+      "metric": "p50Ms",
+      "unit": "ms",
+      "reference": 10.665892,
+      "current": 8.074357,
+      "changePercent": -24.2974052240544
+    },
+    {
+      "family": "qps",
+      "key": "matrix-json-16k",
+      "metric": "p95Ms",
+      "unit": "ms",
+      "reference": 16.701688,
+      "current": 11.152069,
+      "changePercent": -33.227892893221345
+    },
+    {
+      "family": "qps",
+      "key": "stream",
+      "metric": "qps",
+      "unit": "req/s",
+      "reference": 6523.2,
+      "current": 6491.7,
+      "changePercent": -0.48289183222958165
+    },
+    {
+      "family": "qps",
+      "key": "stream",
+      "metric": "p50Ms",
+      "unit": "ms",
+      "reference": 9.494911,
+      "current": 10.091685,
+      "changePercent": 6.28519846052269
+    },
+    {
+      "family": "qps",
+      "key": "stream",
+      "metric": "p95Ms",
+      "unit": "ms",
+      "reference": 11.050268,
+      "current": 11.284555,
+      "changePercent": 2.120192922017794
+    },
+    {
+      "family": "memory",
+      "key": "capsid",
+      "metric": "lowLoadPssMb",
+      "unit": "MiB",
+      "reference": 12.5,
+      "current": 14.0,
+      "changePercent": 12.00000000000001
+    },
+    {
+      "family": "memory",
+      "key": "capsid",
+      "metric": "servingPssMb",
+      "unit": "MiB",
+      "reference": 16.4,
+      "current": 18.0,
+      "changePercent": 9.756097560975618
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/10k",
+      "metric": "totalMs",
+      "unit": "ms",
+      "reference": 19.66,
+      "current": 6.22,
+      "changePercent": -68.36215666327568
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/10k",
+      "metric": "warmMs",
+      "unit": "ms",
+      "reference": 0.12,
+      "current": 0.121,
+      "changePercent": 0.8333333333333304
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/10k",
+      "metric": "pssMb",
+      "unit": "MiB",
+      "reference": 0.8,
+      "current": 6.6,
+      "changePercent": 724.9999999999998
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/100k",
+      "metric": "totalMs",
+      "unit": "ms",
+      "reference": 23.41,
+      "current": 10.65,
+      "changePercent": -54.50662110209312
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/100k",
+      "metric": "warmMs",
+      "unit": "ms",
+      "reference": 0.13,
+      "current": 0.12,
+      "changePercent": -7.692307692307699
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/100k",
+      "metric": "pssMb",
+      "unit": "MiB",
+      "reference": 1.2,
+      "current": 7.7,
+      "changePercent": 541.6666666666667
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/1m",
+      "metric": "totalMs",
+      "unit": "ms",
+      "reference": 81.5,
+      "current": 66.85,
+      "changePercent": -17.975460122699396
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/1m",
+      "metric": "warmMs",
+      "unit": "ms",
+      "reference": 0.12,
+      "current": 0.121,
+      "changePercent": 0.8333333333333304
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-source/1m",
+      "metric": "pssMb",
+      "unit": "MiB",
+      "reference": 4.6,
+      "current": 18.6,
+      "changePercent": 304.34782608695656
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/10k",
+      "metric": "totalMs",
+      "unit": "ms",
+      "reference": 17.65,
+      "current": 5.85,
+      "changePercent": -66.85552407932012
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/10k",
+      "metric": "warmMs",
+      "unit": "ms",
+      "reference": 0.12,
+      "current": 0.12,
+      "changePercent": 0.0
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/10k",
+      "metric": "pssMb",
+      "unit": "MiB",
+      "reference": 0.9,
+      "current": 6.6,
+      "changePercent": 633.3333333333333
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/100k",
+      "metric": "totalMs",
+      "unit": "ms",
+      "reference": 19.07,
+      "current": 6.79,
+      "changePercent": -64.39433665443104
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/100k",
+      "metric": "warmMs",
+      "unit": "ms",
+      "reference": 0.12,
+      "current": 0.12,
+      "changePercent": 0.0
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/100k",
+      "metric": "pssMb",
+      "unit": "MiB",
+      "reference": 1.7,
+      "current": 7.4,
+      "changePercent": 335.2941176470589
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/1m",
+      "metric": "totalMs",
+      "unit": "ms",
+      "reference": 31.14,
+      "current": 17.5,
+      "changePercent": -43.802183686576754
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/1m",
+      "metric": "warmMs",
+      "unit": "ms",
+      "reference": 0.12,
+      "current": 0.119,
+      "changePercent": -0.8333333333333304
+    },
+    {
+      "family": "cold-start",
+      "key": "capsid-bytecode/1m",
+      "metric": "pssMb",
+      "unit": "MiB",
+      "reference": 10.2,
+      "current": 15.2,
+      "changePercent": 49.01960784313726
+    },
+    {
+      "family": "density",
+      "key": "cold@100k",
+      "metric": "count",
+      "unit": "workers",
+      "reference": 569,
+      "current": 510,
+      "changePercent": -10.36906854130053
+    },
+    {
+      "family": "density",
+      "key": "cold@10k",
+      "metric": "count",
+      "unit": "workers",
+      "reference": 891,
+      "current": 746,
+      "changePercent": -16.273849607182946
+    },
+    {
+      "family": "density",
+      "key": "cold@1m",
+      "metric": "count",
+      "unit": "workers",
+      "reference": 132,
+      "current": 128,
+      "changePercent": -3.0303030303030276
+    },
+    {
+      "family": "density",
+      "key": "warm@100k",
+      "metric": "count",
+      "unit": "workers",
+      "reference": 568,
+      "current": 509,
+      "changePercent": -10.387323943661976
+    },
+    {
+      "family": "density",
+      "key": "warm@10k",
+      "metric": "count",
+      "unit": "workers",
+      "reference": 882,
+      "current": 738,
+      "changePercent": -16.326530612244895
+    },
+    {
+      "family": "density",
+      "key": "warm@1m",
+      "metric": "count",
+      "unit": "workers",
+      "reference": 132,
+      "current": 128,
+      "changePercent": -3.0303030303030276
+    }
+  ],
+  "baselineLabelsNumbersAndMachineUnmodified": true,
+  "notRetrospectivePairedABExperiment": true,
+  "statisticalSignificanceNotClaimed": true,
+  "singlePatchOrVersionOnlyCausalityNotClaimed": true,
+  "limitations": [
+    "The legacy reference is accepted by the user, not requalified under the current lane contract.",
+    "Current density proves per-worker coverage under per-instance-waves-v2; no absent old HTTP gauge or worker-coverage record is invented.",
+    "Cold-start PSS sampling equivalence to the legacy reference is not independently established. Preserve both values without asserting a like-for-like memory regression.",
+    "Latency summaries retain the producers recorded aggregation rules; QPS p50/p95 are not five-round medians.",
+    "WSL guest quiet windows do not prove physical Windows-host exclusivity."
+  ],
+  "fullV030GoalComplete": false
+}

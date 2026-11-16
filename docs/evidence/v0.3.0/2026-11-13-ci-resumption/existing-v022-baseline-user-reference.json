@@ -1,0 +1,13 @@
+{
+  "complete": true,
+  "recordedUTC": "2026-11-15T01:33:57.600755+00:00",
+  "userInstruction": "v0.2.2就是在这台机器上跑的，所以你可以默认现有数据就是原版本的基准，你只需要考虑0.3.0的",
+  "existingBaselineDataFile": "perf-site/data.js",
+  "exactDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+  "acceptanceScope": "User-accepted existing original-version reference; not a newly revalidated formal legacy point",
+  "oldLegacyGaugeFailurePreservedButNoLongerCurrentTaskPrerequisite": true,
+  "actualCurrentMachineAndOriginalBaselineMachineNotConflated": true,
+  "currentSourceStillRequiresCompleteOriginalThreeLaneEvidence": true,
+  "mainReleaseTagsAndPagesNotChanged": true,
+  "fullV030GoalComplete": false
+}

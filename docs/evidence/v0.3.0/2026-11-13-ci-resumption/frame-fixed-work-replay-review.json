@@ -1,0 +1,42 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T02:01:48.122020+00:00",
+  "workflowRunId": 43665157099,
+  "artifactId": 14142325839,
+  "archiveSHA256": "df6e5e08dcb44dc1210636d0596a4badea6ea8f02e53baf91e80ed38f4429208",
+  "source": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "fourActualOriginalBudgetRunsAndNineFixedInputsRehashed": true,
+  "exactArchivedSourcesMatchedCanonicalEmbeddedPayloadBytes": true,
+  "originalAuditorWindowsPlanCrLfMismatchRetained": true,
+  "actualOriginalEntryCallsPerRun": 10000,
+  "allFourSequenceDigests": "fdfa6fd5a633d92f",
+  "actualNegativeCorruptedWireRejectVerified": true,
+  "originalEntryPointAllAssertionsAndProductionCodecStreamUnchanged": true,
+  "actualO2FatalFuzzerAsanUbsanAndOriginal60Second512MiBAnd2SecondInputFlagsRetained": true,
+  "observedOriginalEntryThreadCpuRatio": 1.0204237715833846,
+  "originalEntryCpuSeconds": [
+    12.977080215,
+    12.833871932
+  ],
+  "proposalEntryCpuSeconds": [
+    13.073451441,
+    13.264657697
+  ],
+  "peakRssMiB": [
+    346,
+    347,
+    347,
+    346
+  ],
+  "smallTwoPairObservationNoStatisticalSignificanceClaim": true,
+  "noMeasuredBenefitForThisNineSeedWorkload": true,
+  "doesNotRepresentOriginalCoverageGuidedMutationWorkloadOrProveNoBenefitForEveryInput": true,
+  "earlierDifferentMutationPathSpeedupNotAssumedPaired": true,
+  "noIntegrationOrHistoricalFailureClosureFromThisResult": true,
+  "originalStandaloneFailedBinaryBytesStillExact": true,
+  "currentCandidateAndNative11InputsUnchanged": true,
+  "physicalHostIsolationNotClaimed": true,
+  "formalPerformancePointsAdded": 0,
+  "existingQualifiedPoints": 1,
+  "fullV030GoalComplete": false
+}

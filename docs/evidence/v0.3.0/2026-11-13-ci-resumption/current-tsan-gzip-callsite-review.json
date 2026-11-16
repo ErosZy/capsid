@@ -1,0 +1,278 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T20:16:02.587706+00:00",
+  "workflowRunId": 43632937932,
+  "artifactId": 14129630054,
+  "archiveSHA256": "c3963f56e379ce5ffdf89ae0e606a9fa902c43a169831937cac374ca432d86c7",
+  "actualFailedCurrentWorkerAndHelperBytesRecoveredAndIndependentlyRehashed": true,
+  "originalCollectorSourceLineReporting120SecondTimeoutRetained": true,
+  "allProfileSampleRecoveryReadOnlyWithoutExecutingSutOrIncreasingTimeout": true,
+  "nativeOriginalAndProfiledAttempts": [
+    {
+      "label": "original-0",
+      "exitCode": 0,
+      "timedOut": false,
+      "seconds": 4.373279959000001,
+      "childUserCpuSeconds": 4.201123,
+      "childSystemCpuSeconds": 0.28743399999999997,
+      "stdoutSHA256": "77383e56839780c7cd72f3044d18d3ccde40d46d95e5e24439b264d1d751a310",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalLastTestSHA256": "02a99ef9111a8d46190d3a6a846c3a3936bcbf6ff460dd896475ea61c66ea743"
+    },
+    {
+      "label": "original-1",
+      "exitCode": 0,
+      "timedOut": false,
+      "seconds": 4.375462986000002,
+      "childUserCpuSeconds": 4.178294,
+      "childSystemCpuSeconds": 0.282639,
+      "stdoutSHA256": "153479fbcff8485a6d854f9be77339be4de62f442acd81d8abfa13fd445fea2f",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalLastTestSHA256": "e75a5ccc0bf0468b5f018471e2e7549e99b42f2257c75b5a83b093bff1c91fc1"
+    },
+    {
+      "label": "original-2",
+      "exitCode": 0,
+      "timedOut": false,
+      "seconds": 4.374564619000012,
+      "childUserCpuSeconds": 4.23701,
+      "childSystemCpuSeconds": 0.2571549999999999,
+      "stdoutSHA256": "eb043cf7d56851d01d911152ca67a1cfc05f5c6816120b4e4c0c9f58dcdf510f",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalLastTestSHA256": "a964f1b21455e352e20d8c26ec69debe049636cdf659a486d3c3015acf9c731f"
+    },
+    {
+      "label": "original-3",
+      "exitCode": 0,
+      "timedOut": false,
+      "seconds": 4.424549580999951,
+      "childUserCpuSeconds": 4.239874,
+      "childSystemCpuSeconds": 0.28479999999999994,
+      "stdoutSHA256": "207cf839284ecd372a4867356467e31a54c4f7c5e6ceed770bd8c288596e6c21",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalLastTestSHA256": "515776610ffdb0ac91830f48549d7dd7a21563710a66318d4769afb6372b7386"
+    },
+    {
+      "label": "profiled-original-helper",
+      "exitCode": 0,
+      "timedOut": false,
+      "seconds": 5.677158279000082,
+      "childUserCpuSeconds": 4.300474999999999,
+      "childSystemCpuSeconds": 0.39573900000000006,
+      "stdoutSHA256": "32ec19494b536e509c61d035c84bcc5cded30b32223d6fe93656addede5b53c8",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "originalFrozenReportReplays": 5,
+  "actualCompleteGzipCases": 10,
+  "profiles": [
+    {
+      "samples": 34,
+      "lost": 0,
+      "sampleType": "0x127",
+      "totalPeriod": 343434340,
+      "top": [
+        {
+          "symbol": "__tsan_read1",
+          "samples": 18,
+          "period": 181818180,
+          "userEventWeightPercent": 52.94117647058824
+        },
+        {
+          "symbol": "mbedtls_internal_sha256_process",
+          "samples": 5,
+          "period": 50505050,
+          "userEventWeightPercent": 14.705882352941178
+        },
+        {
+          "symbol": "_ZN11__sanitizer15internal_strlenEPKc",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "__tsan_write8",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "__tsan_unaligned_read4",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "mz_crc32",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "JS_NewArrayFrom",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "_ZN6__tsan18MemoryAccessRangeTILb0EEEvPNS_11ThreadStateEmmm",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "tinfl_decompress",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "__tsan_write4",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "__tsan_read8",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "_ZN6__tsan7MetaMap10AllocBlockEPNS_11ThreadStateEmmm",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        },
+        {
+          "symbol": "__tsan_read2",
+          "samples": 1,
+          "period": 10101010,
+          "userEventWeightPercent": 2.941176470588235
+        }
+      ],
+      "tsanRead1CallerFrameOffsets": {
+        "mz_inflate+0x9f8": 15
+      },
+      "profile": "perf-helper-20139",
+      "originalScriptPrintedSamples": 34,
+      "completeReportAndAllRawPeriodsIndependentlyMatched": true,
+      "perfDataSHA256": "abb3a2224ac95dff608829324b8b37eb16c6a7c53c7e5bfa024d9ffc048f1808"
+    },
+    {
+      "samples": 328,
+      "lost": 0,
+      "sampleType": "0x127",
+      "totalPeriod": 3313131280,
+      "top": [
+        {
+          "symbol": "__tsan_read1",
+          "samples": 171,
+          "period": 1727272710,
+          "userEventWeightPercent": 52.13414634146341
+        },
+        {
+          "symbol": "mbedtls_internal_sha256_process",
+          "samples": 53,
+          "period": 535353530,
+          "userEventWeightPercent": 16.158536585365855
+        },
+        {
+          "symbol": "__tsan_write1",
+          "samples": 15,
+          "period": 151515150,
+          "userEventWeightPercent": 4.573170731707317
+        },
+        {
+          "symbol": "__tsan_unaligned_read4",
+          "samples": 14,
+          "period": 141414140,
+          "userEventWeightPercent": 4.2682926829268295
+        },
+        {
+          "symbol": "tinfl_decompress",
+          "samples": 13,
+          "period": 131313130,
+          "userEventWeightPercent": 3.9634146341463414
+        },
+        {
+          "symbol": "_ZN6__tsan18MemoryAccessRangeTILb1EEEvPNS_11ThreadStateEmmm",
+          "samples": 9,
+          "period": 90909090,
+          "userEventWeightPercent": 2.7439024390243905
+        },
+        {
+          "symbol": "__tsan_write4",
+          "samples": 7,
+          "period": 70707070,
+          "userEventWeightPercent": 2.1341463414634148
+        },
+        {
+          "symbol": "_ZN6__tsan18MemoryAccessRangeTILb0EEEvPNS_11ThreadStateEmmm",
+          "samples": 7,
+          "period": 70707070,
+          "userEventWeightPercent": 2.1341463414634148
+        },
+        {
+          "symbol": "mz_crc32",
+          "samples": 7,
+          "period": 70707070,
+          "userEventWeightPercent": 2.1341463414634148
+        },
+        {
+          "symbol": "__tsan_read8",
+          "samples": 4,
+          "period": 40404040,
+          "userEventWeightPercent": 1.2195121951219512
+        },
+        {
+          "symbol": "_ZN11__sanitizer14StackDepotBaseINS_14StackDepotNodeELi1ELi20EE3PutENS_10StackTraceEPb",
+          "samples": 3,
+          "period": 30303030,
+          "userEventWeightPercent": 0.9146341463414633
+        },
+        {
+          "symbol": "_ZN6__tsan7MetaMap9FreeRangeEPNS_9ProcessorEmmb",
+          "samples": 2,
+          "period": 20202020,
+          "userEventWeightPercent": 0.6097560975609756
+        },
+        {
+          "symbol": "JS_CallInternalBytecode",
+          "samples": 2,
+          "period": 20202020,
+          "userEventWeightPercent": 0.6097560975609756
+        },
+        {
+          "symbol": "_ZN6__tsan15TraceSwitchPartEPNS_11ThreadStateE",
+          "samples": 2,
+          "period": 20202020,
+          "userEventWeightPercent": 0.6097560975609756
+        },
+        {
+          "symbol": "__tsan_func_entry",
+          "samples": 2,
+          "period": 20202020,
+          "userEventWeightPercent": 0.6097560975609756
+        }
+      ],
+      "tsanRead1CallerFrameOffsets": {
+        "mz_inflate+0x9f8": 112
+      },
+      "profile": "perf-helper-20148",
+      "originalScriptPrintedSamples": 195,
+      "completeReportAndAllRawPeriodsIndependentlyMatched": true,
+      "perfDataSHA256": "4d6eb51b3d3b78609399050379dcfc21d4c87e3a6278001357bec130311be115"
+    }
+  ],
+  "totalRawSamplesRecovered": 362,
+  "totalRawSamplesLost": 0,
+  "sourceLine96MiBScriptActuallyPartial195Of328": true,
+  "rawSampleLayoutAndEveryWeightedPeriodAndCompletePerfReportMatched": true,
+  "threeMalformedPerfControlsRejected": true,
+  "framePointerCallerFrameNotClaimedExactMissingLeafInstruction": true,
+  "repeatedSuccessDoesNotEraseActualCurrentFiveSecondFailure": true,
+  "hypotheticalDecoderOrChecksumChangesNotIntegrated": true,
+  "formalPerformancePointCountUnchangedAtOne": true,
+  "fullV030GoalComplete": false
+}

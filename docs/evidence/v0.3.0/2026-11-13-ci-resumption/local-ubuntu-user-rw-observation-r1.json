@@ -1,0 +1,141 @@
+{
+  "schema": "capsid-local-ubuntu-user-rw-observation-v1",
+  "complete": true,
+  "recordedUTC": "2026-11-15T11:02:48.967619+00:00",
+  "observationSource": "user-pasted-command-output-not-assistant-executed-guest-check",
+  "rawUserOutputFile": "user-supplied-output.txt",
+  "rawUserOutputSHA256": "45429f94a5d8891fa07bd996e9a6d244b238d0f53b8fb7d3515fa3f02e3c41ed",
+  "distribution": "Ubuntu",
+  "userSuccessfullyRanGuestExecutables": true,
+  "rootMountOptions": [
+    "rw",
+    "relatime",
+    "discard",
+    "errors=remount-ro",
+    "data=ordered"
+  ],
+  "rootCurrentlyMountedReadWriteAccordingToUserOutput": true,
+  "errorsRemountRoIsErrorPolicyNotCurrentReadOnlyMount": true,
+  "guestDfHumanRounded": {
+    "filesystem": "/dev/sdd",
+    "size": "251G",
+    "used": "206G",
+    "available": "33G",
+    "usePercent": "87%",
+    "mountpoint": "/"
+  },
+  "exactGuestAvailableBytesNotMeasured": true,
+  "priorBootAndReadonlyBlockerNoLongerAssumedCurrent": true,
+  "actualGuestScratchWriteFsyncReadAndCleanupNotYetVerified": true,
+  "filesystemIntegrityOrOriginalFailureSoleCauseNotProven": true,
+  "loginProfileMissingTemporaryDenoEnvNotModifiedOrRequiredForDirectExec": true,
+  "previousUserRecoveryPendingRecordPreserved": {
+    "file": "local-ubuntu-user-recovery-pending.json",
+    "sha256": "322e9e1e64a55da8b59fbf6668499123296f2b5b411bf36be518b553ea667ca9"
+  },
+  "actualWindowsBackingGuard": {
+    "complete": true,
+    "observedUTC": "2026-11-15T11:02:48.959595+00:00",
+    "readOnlyHostBackingVolumeGuard": true,
+    "distribution": "Ubuntu",
+    "basePath": "D:\\WSL\\Ubuntu",
+    "backingVolume": "D:\\",
+    "availableBytes": 23731167232,
+    "minimumFreeBytes": 8589934592,
+    "minimumReason": "Original formal raw-archive preparation requires at least8GiB; guest filesystem free bytes do not guarantee expandable VHD backing space.",
+    "admitted": true,
+    "wslNotLaunched": true,
+    "noFilesystemWritesRepairOrGlobalConfiguration": true
+  },
+  "actualWindowsBackingGuardExit": 0,
+  "assistantDidNotLaunchRestartRepairMoveCompactOrPrepareWslDuringThisObservation": true,
+  "assistantGuestWritesAndBenchmarkLoadsThisContinuation": 0,
+  "currentCiObservations": [
+    {
+      "purpose": "full",
+      "workflowRunId": 43698560215,
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43698560215",
+      "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+      "workflowCommit": "f67ededd18934b92e3b6f50476a8798057235725",
+      "rawSnapshotSHA256": "217edc3b833f9cdece7b225c230340a834014e4fdfe0980e2141799ed9eba31d",
+      "jobs": [
+        {
+          "id": 132764390766,
+          "name": "fuzz",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390917,
+          "name": "sanitizers (asan, CAPSID_ENABLE_ASAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*|we...",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390920,
+          "name": "sanitizers (tsan, CAPSID_ENABLE_TSAN, clang, 1, 1, ^(wpt_conformance_not_configured|worker_packag...",
+          "status": "completed",
+          "conclusion": "failure"
+        },
+        {
+          "id": 132764390942,
+          "name": "sanitizers (ubsan, CAPSID_ENABLE_UBSAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*)$)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390950,
+          "name": "Release/LTO + workerd compatibility (raw WPT failures retained)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390983,
+          "name": "windows-host-library",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 132764391029,
+          "name": "posix-host-library",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "purpose": "debug-soak",
+      "workflowRunId": 43698559782,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43698559782",
+      "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+      "workflowCommit": "510b87db781fc85c80ea6d85459ba5f2d018d9df",
+      "rawSnapshotSHA256": "2e7bea33d3b91503032a66766c9d400e434ccd0473368da482efb051ed4bba4f",
+      "jobs": [
+        {
+          "id": 132764389304,
+          "name": "Debug + workerd compatibility (raw WPT failures retained)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764389476,
+          "name": "Native Release/LTO regression, timing and real 1800-second soak",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "ciArtifactsNotYetAcceptedFromJobColours": true,
+  "currentTsanFailedJobCauseNotYetAudited": true,
+  "localPerformanceAcceptedSessionCount": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "currentFrozenProduct": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "noProductionOrRegisteredTestSourceChanged": true,
+  "existingV022ReferenceNotChanged": true,
+  "fullV030GoalComplete": false
+}

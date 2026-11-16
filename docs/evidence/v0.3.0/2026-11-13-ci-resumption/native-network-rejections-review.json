@@ -1,0 +1,35 @@
+{
+  "schema": "capsid-native-network-prerequisite-rejections-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T07:53:24.435525+00:00",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "attempts": [
+    {
+      "attempt": 6,
+      "workflowRunId": 43571883574,
+      "artifactId": 14104935818,
+      "archiveSHA256": "1965fa538679b9503198ec509901e658f2f8e20acce3f22b236db496661829f7",
+      "nativeDefaultCapacity": 262144,
+      "requiredCapacity": 1048576,
+      "readOnly": true,
+      "formalLanesEntered": 0,
+      "originalFailureRetained": true
+    },
+    {
+      "attempt": 7,
+      "workflowRunId": 43572157522,
+      "artifactId": 14104751949,
+      "archiveSHA256": "d541f36000389359a0d927d26d6acb538eb3acd12ab8a3b4bc700ac3c09b4397",
+      "nativeDefaultCapacity": 262144,
+      "requiredCapacity": 1048576,
+      "readOnly": true,
+      "formalLanesEntered": 0,
+      "originalFailureRetained": true
+    }
+  ],
+  "noNetworkCapacityRaisedOrKernelSettingWritten": true,
+  "qualifiedNativeEnvironmentPrerequisiteNotMet": true,
+  "privateBudgetNeutralPrelaunchHeadroomProposalNotYetIntegrated": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

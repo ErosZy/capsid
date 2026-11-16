@@ -1,0 +1,58 @@
+{
+  "schema": "capsid-frame-wire-only-allocation-proposal-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T11:10:43.135854+00:00",
+  "workflowRunId": 43585148427,
+  "artifactId": 14110685953,
+  "archiveSHA256": "cf7522dce1756d685b6aec499e5a92c5b82860c4966107b5035e4c62e3013e3b",
+  "productCheckout": "6a9ee0e62b978aeb977526f984ddaead7f4fd552",
+  "independentOldNewWireByteEquivalenceCases": 6336,
+  "entireFuzzEntryPointAndAllAssertionsRetained": true,
+  "productionCodecAndStreamByteInputsUnchanged": true,
+  "attempts": [
+    {
+      "index": 1,
+      "variant": "original-A",
+      "seed": 4191328252,
+      "seconds": 46.16971358000001,
+      "peakRssMiB": 417,
+      "executedUnits": 10000,
+      "original60SecondAnd512MiBBudgetsPassed": true
+    },
+    {
+      "index": 2,
+      "variant": "wire-only-B",
+      "seed": 4191328252,
+      "seconds": 34.150110841999975,
+      "peakRssMiB": 402,
+      "executedUnits": 10000,
+      "original60SecondAnd512MiBBudgetsPassed": true
+    },
+    {
+      "index": 3,
+      "variant": "wire-only-B",
+      "seed": 4191328252,
+      "seconds": 38.464257362999945,
+      "peakRssMiB": 407,
+      "executedUnits": 10000,
+      "original60SecondAnd512MiBBudgetsPassed": true
+    },
+    {
+      "index": 4,
+      "variant": "original-A",
+      "seed": 4191328252,
+      "seconds": 46.718040386999974,
+      "peakRssMiB": 429,
+      "executedUnits": 10000,
+      "original60SecondAnd512MiBBudgetsPassed": true
+    }
+  ],
+  "originalAlsoPassedOnThisRunner": true,
+  "historicalFailureNotReproducedInThisComparison": true,
+  "coverageMutationPathMayDifferSoNoWholeWorkloadPairedSpeedupClaim": true,
+  "historicalBudgetFailureNotClaimedFixed": true,
+  "prototypeNotIntegratedIntoCurrentSource": true,
+  "notQualification": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

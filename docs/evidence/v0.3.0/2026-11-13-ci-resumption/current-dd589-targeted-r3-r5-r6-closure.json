@@ -1,0 +1,59 @@
+{
+  "schema": "capsid-current-source-targeted-r3-r5-r6-closure-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T02:52:24.838618+00:00",
+  "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "productTree": "281a24c0b10b0a75cbd4e08b0ce5962ca4959b97",
+  "all5169FrozenInputsRehashed": true,
+  "workspaceNonDocumentationInputsStillMatch": true,
+  "targetedRequirementsCompleted": [
+    "R3",
+    "R5",
+    "R6"
+  ],
+  "fiveActualSameSourceRuntimeConfigurationResultsReviewed": true,
+  "subsequentFrozenOracleReplaysNotFreshExecutions": true,
+  "currentReports": 205,
+  "currentCaseObservations": 3340,
+  "caseCountsPerConfiguration": {
+    "arguments": 260,
+    "contextMatrix": 320,
+    "defaultGates": 12,
+    "largeGzip": 2,
+    "branchGraph": 74
+  },
+  "sourceBoundRequirements": {
+    "R3": "Actual native body argument/view/constructor/reader context matrices with retry/backing/data/owner/credit/cleanup and intrinsic/concurrency/abort controls.",
+    "R5": "Actual ordinary fetch metadata and eight branch graph report families, natural exit and actual final resources.",
+    "R6": "Actual DefaultReader gate/chunk/credit/timeliness reports plus hash-identical historical exact-original IPC original/corrected/restored proof and retained current validated-discard allowlist."
+  },
+  "supportingRecords": [
+    {
+      "file": "ci-core-review-min2full.json",
+      "sha256": "1a1fbf9c93c80654c23172a0c79bece9524155e789336abe382b2e4c3d32c968"
+    },
+    {
+      "file": "ci-core-review-min2-debug.json",
+      "sha256": "ec2a39fa749dd40acc612aec6deded1af73caed92130620f0baff6c6614a99ef"
+    },
+    {
+      "file": "miniz-distance-one-identity-r3-r5-r6-native-contract-review-r2.json",
+      "sha256": "75b6de730f30bf47d2736c70c3f84eda63264e479d336a0358ed9aa05d5c094d"
+    },
+    {
+      "file": "miniz-distance-one-identity-hosted-index-review.json",
+      "sha256": "0351c6e730402f37d84dea07d1fe97d2eac7240307cab5f3d84f238656157b47"
+    }
+  ],
+  "historicalExactOriginalIpcAuditSHA256": "39ea538b02ecc36684c4ea86335e05480cb291989ebed8e85ce19d19f441c5d6",
+  "currentWorkerRuntimeSourceSHA256": "b4fd51490c4ade9ce8dac10fc03e67187be9e96d71baaf2864b0467cd50a5a25",
+  "originalRemovedIpcBinariesAndTracesNotNewlyRecovered": true,
+  "helperBinaryIndependentRehashStillUnavailable": true,
+  "historicalFailureAndRawWptExceptionsNotErased": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "doesNotCloseR7HistoricalFrameWindowsAndTsanCauses": true,
+  "doesNotClaimCurrentPerformanceOrR9CombinedClosure": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

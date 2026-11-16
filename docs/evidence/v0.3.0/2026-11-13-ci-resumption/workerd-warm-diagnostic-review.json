@@ -1,0 +1,104 @@
+{
+  "schema": "capsid-workerd-warm-diagnostic-independent-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T07:03:58.191393+00:00",
+  "workflowRunId": 43567729973,
+  "artifactId": 14102918721,
+  "archiveSHA256": "dbabbcdccd5128105af64573a554126abeea7e0593da09639a76d38a72f7b98e",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "sourceInputsUnchanged": true,
+  "originalFourUntracedSuccessesAndTwoTracedFailuresRetained": true,
+  "attempts": [
+    {
+      "index": 1,
+      "count": 1024,
+      "traced": false,
+      "passed": true,
+      "seconds": 36.224617486,
+      "ownedPidsRemaining": 0,
+      "completeOriginalConditioningReplayed": true,
+      "responses": 102400,
+      "pssKiB": 3517537
+    },
+    {
+      "index": 2,
+      "count": 768,
+      "traced": false,
+      "passed": true,
+      "seconds": 27.060155397999992,
+      "ownedPidsRemaining": 0,
+      "completeOriginalConditioningReplayed": true,
+      "responses": 76800,
+      "pssKiB": 2650768
+    },
+    {
+      "index": 3,
+      "count": 1024,
+      "traced": true,
+      "passed": false,
+      "seconds": 66.71486984,
+      "ownedPidsRemaining": 0,
+      "connectTimeouts": 403,
+      "lastWave": {
+        "wave": 82,
+        "requests": 1024,
+        "seconds": 39.21606121099998,
+        "passed": false
+      },
+      "maximumClientFds": 1034,
+      "maximumWorkerdFds": 3083,
+      "maximumObservedTimeWait": 65536,
+      "originalFiveSecondConnectDeadlineRetained": true
+    },
+    {
+      "index": 4,
+      "count": 768,
+      "traced": true,
+      "passed": false,
+      "seconds": 11.17353996,
+      "ownedPidsRemaining": 0,
+      "connectTimeouts": 35,
+      "lastWave": {
+        "wave": 1,
+        "requests": 768,
+        "seconds": 8.130112093999998,
+        "passed": false
+      },
+      "maximumClientFds": 778,
+      "maximumWorkerdFds": 2245,
+      "maximumObservedTimeWait": 63505,
+      "originalFiveSecondConnectDeadlineRetained": true
+    },
+    {
+      "index": 5,
+      "count": 1024,
+      "traced": false,
+      "passed": true,
+      "seconds": 38.781269879999996,
+      "ownedPidsRemaining": 0,
+      "completeOriginalConditioningReplayed": true,
+      "responses": 102400,
+      "pssKiB": 3517417
+    },
+    {
+      "index": 6,
+      "count": 768,
+      "traced": false,
+      "passed": true,
+      "seconds": 27.714473297999973,
+      "ownedPidsRemaining": 0,
+      "completeOriginalConditioningReplayed": true,
+      "responses": 76800,
+      "pssKiB": 2651253
+    }
+  ],
+  "diagnosticFailureStage": "TCP connect, not HTTP head/body",
+  "tcpMaxTwBuckets": "65536",
+  "limitNearOccupancyIsObservationNotEstablishedCause": true,
+  "instrumentationVersusOrderAndNetworkStateNotIsolated": true,
+  "historicalUntracedFormalFailureNotAutomaticallyExplained": true,
+  "allOriginalRequestCountsAndDeadlinesUnchanged": true,
+  "overBudgetProbesNotFormalDensityMaximum": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

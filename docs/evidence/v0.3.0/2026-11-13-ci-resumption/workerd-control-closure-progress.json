@@ -1,0 +1,333 @@
+{
+  "schema": "capsid-workerd-control-current-closure-progress-v1",
+  "complete": true,
+  "classification": "partial-qualification-not-final-acceptance",
+  "observedUTC": "2026-11-14T05:57:42.864355+00:00",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "productTree": "ad81fef535ab4c0bb3ca52618ddf9fe084834ea4",
+  "coreReview": "workerd-control-core-review.json",
+  "debugReview": "workerd-control-debug-review.json",
+  "macosReview": "workerd-control-macos-review.json",
+  "providerLogReview": "workerd-control-native-provider-log-review.json",
+  "soakReview": "workerd-control-native-soak-review.json",
+  "semanticReplayReview": "workerd-control-r3-r5-r6-native-contract-review.json",
+  "windowsCheckpointReview": "workerd-control-windows-checkpoint1-review.json",
+  "networkPreviouslyBlockedNowRecovered": true,
+  "priorNetworkFailureRecordRetained": "workerd-control-network-block.json",
+  "core": {
+    "ubsan": {
+      "artifactId": 14098988500,
+      "passed": 1024,
+      "failed": [],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: sanitizer (not production)\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "mainReports": 317,
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        }
+      }
+    },
+    "asan": {
+      "artifactId": 14099328344,
+      "passed": 1024,
+      "failed": [],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "host_managed_recovery_rejects_oversized_snapshot",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP: finite RLIMIT_AS recovery probe is unavailable with this sanitizer runtime"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: sanitizer (not production)\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "mainReports": 317,
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        }
+      }
+    },
+    "tsan": {
+      "artifactId": 14100657049,
+      "passed": 1012,
+      "failed": [],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "host_managed_recovery_rejects_oversized_snapshot",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP: finite RLIMIT_AS recovery probe is unavailable with this sanitizer runtime"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: sanitizer (not production)\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "mainReports": 317,
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        }
+      }
+    },
+    "release-wpt": {
+      "artifactId": 14100801463,
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: production\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "mainReports": 317,
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": true
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        }
+      }
+    }
+  },
+  "debug": {
+    "passed": 1115,
+    "rawWptFilesFailed": 5,
+    "skipped": 4
+  },
+  "macos": {
+    "passed": 755,
+    "failed": 0,
+    "skipped": 11
+  },
+  "opensslCommandsIndividuallyVerifiedPerConfiguration": 1187,
+  "sourceFilesRechecked": 5169,
+  "soakSeconds": 1800.461,
+  "soakRounds": 4371,
+  "rawClockIntervals": 1875,
+  "relatedRegressionsPassed": 167,
+  "timingCasesPassed": 9,
+  "semanticReportsReplayed": 205,
+  "semanticCaseObservations": 3340,
+  "originalInstrumentedRssFailuresRemainSeparate": true,
+  "actualWindowsMatrixAndFormalThreeLaneSessionStillPending": true,
+  "windowsPartialSnapshotNotCompleteVerdict": true,
+  "failedMacosAndAsanTransfersPreservedAndOnlyMissingRangesRecovered": true,
+  "completeOriginalZipLengthsAndGithubSha256Rechecked": true,
+  "ownSoakAuditorInitiallyRejectedWrongPriorCandidateThenCorrectedArtifactSelection": true,
+  "oldSourceWasNotPromotedToCurrentQualification": true,
+  "runtimeSourcesAssertionsAndAllAcceptanceBudgetsUnchanged": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "workflows": {
+    "controlfull": {
+      "workflowRunId": 43555865031,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43555865031",
+      "observedUTC": "2026-11-14T05:56:09.105261+00:00",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    "controlsupp": {
+      "workflowRunId": 43556048512,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43556048512",
+      "observedUTC": "2026-11-14T05:33:06.836413+00:00",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "native5": {
+      "workflowRunId": 43555973603,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43555973603",
+      "observedUTC": "2026-11-14T05:56:06.391196+00:00",
+      "status": "in_progress",
+      "conclusion": null
+    }
+  }
+}

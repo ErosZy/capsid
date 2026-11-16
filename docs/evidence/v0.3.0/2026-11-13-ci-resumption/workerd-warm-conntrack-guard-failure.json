@@ -1,0 +1,20 @@
+{
+  "schema": "capsid-private-conntrack-aba-initial-guard-failure-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T07:26:08.628375+00:00",
+  "workflowRunId": 43570135136,
+  "artifactId": 14103931650,
+  "archiveSHA256": "93a254c38bdb5e62a3bc39ca8af624e907581c52821039027fe6b671d3d2900b",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "jobFailedBeforeAnyWarmAttempts": true,
+  "assumedNativeDefault262144NotMet": true,
+  "actualInitialValueNotCapturedByThisController": true,
+  "kernelParameterWriteFunctionNotReached": true,
+  "originalFailureNotDeleted": true,
+  "logSHA256": "2da9ec59aa6bbe54db19e3fcf4fa49a54c938af422886eedd5fa03fb97e90995",
+  "correctedRetryCapturesInitialValueAndRestoresActualInitial": true,
+  "correctedWorkflowCommit": "d45501dd713ba3d52b9d2c491f1a8decf9750b20",
+  "privateProposalNotQualification": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

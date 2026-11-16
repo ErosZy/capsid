@@ -1,0 +1,382 @@
+{
+  "schema": "capsid-native-performance-r10-independent-review-v1",
+  "complete": true,
+  "workflowRunId": 43600331044,
+  "artifactId": 14119389224,
+  "archiveSHA256": "ba235b2e3924f8b06285ac85e3d167156073f0c795df0574a032fc9b6b4bbbb0",
+  "productCheckout": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+  "originalSessionStatus": "native-session-failed",
+  "originalSessionComplete": false,
+  "originalFailure": "Traceback (most recent call last):\n  File \"<stdin>\", line 207, in <module>\n  File \"<stdin>\", line 24, in run\nAssertionError: ('baseline-density', b'density lane failed: one exact service HTTP inflight gauge is required\\n')\n",
+  "rejectedOriginalLanes": {},
+  "reviewedLanes": {
+    "cold": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "1ced0ec7f19feb9f2cb74ca68a0579d916e469a3af4ee4fbc56b501aa13f398e"
+    },
+    "qps": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 2115,
+      "checksumSHA256": "bdf170d62c3689b0446f776845108e95824815c6a3cbf3e26b129484904ab40b"
+    },
+    "density": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 2732,
+      "checksumSHA256": "4510f39233532b891490e99bbad0dd3d693c504e4d6d0185d4dc86b322fcf19d"
+    }
+  },
+  "formalPerformancePoints": 1,
+  "wholeThreeLaneCandidateAccepted": true,
+  "baselineFormalHistoricalPointNotClaimed": true,
+  "fullV030GoalComplete": false,
+  "crossLaneSourceMachineSessionBinaryFixtureAndIntervalContractsPassed": true,
+  "allTwelveDensityCellsFilledOriginalBudget": true,
+  "sourceCollectorAccepted": true,
+  "baselineSealedObservations": [
+    {
+      "lane": "cold",
+      "sealedFiles": 244,
+      "notFormalHistoricalPoint": true,
+      "originalObservationFilenameRetained": true,
+      "completeSealedInventoryVerified": true,
+      "originalFrozenSampleOraclesPassed": true
+    },
+    {
+      "lane": "qps",
+      "sealedFiles": 103,
+      "notFormalHistoricalPoint": true,
+      "originalObservationFilenameRetained": true,
+      "completeSealedInventoryVerified": true,
+      "originalFrozenSampleOraclesPassed": true
+    }
+  ],
+  "sourceAndProtocolNotModified": true,
+  "allCompleteBaselineArchiveNamesPreservedWithoutNormalization": true,
+  "networkSnapshots": [
+    {
+      "label": "before-preflight",
+      "observedUTC": "2026-11-14T13:53:50.561759+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "78",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-formal-cold",
+      "observedUTC": "2026-11-14T13:56:30.619846+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "20265",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-formal-cold",
+      "observedUTC": "2026-11-14T13:59:39.983684+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "2832",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-formal-qps",
+      "observedUTC": "2026-11-14T14:00:09.985870+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "2203",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-formal-qps",
+      "observedUTC": "2026-11-14T14:26:57.373393+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "14625",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-formal-density",
+      "observedUTC": "2026-11-14T14:27:27.377123+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "14441",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-formal-density",
+      "observedUTC": "2026-11-14T15:21:02.222194+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "204497",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-baseline-cold",
+      "observedUTC": "2026-11-14T15:22:12.850569+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "90659",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-baseline-cold",
+      "observedUTC": "2026-11-14T15:23:27.148069+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "15",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-baseline-qps",
+      "observedUTC": "2026-11-14T15:23:57.150618+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "13",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-baseline-qps",
+      "observedUTC": "2026-11-14T15:29:17.445706+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "463",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-baseline-density",
+      "observedUTC": "2026-11-14T15:29:47.448247+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "470",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "original-failure",
+      "observedUTC": "2026-11-14T15:29:47.795327+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "470",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    }
+  ],
+  "networkParametersUnchanged": null,
+  "quietWindows": [
+    {
+      "label": "before-formal-session",
+      "seconds": 30.00036376900016,
+      "before": {
+        "total": 560681,
+        "idle": 243026,
+        "steal": 30
+      },
+      "after": {
+        "total": 572671,
+        "idle": 255002,
+        "steal": 30
+      },
+      "busyFraction": 0.0011676396997497562,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-qps",
+      "seconds": 30.000350830000116,
+      "before": {
+        "total": 648294,
+        "idle": 326429,
+        "steal": 30
+      },
+      "after": {
+        "total": 660281,
+        "idle": 338401,
+        "steal": 30
+      },
+      "busyFraction": 0.0012513556352715671,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-density",
+      "seconds": 30.000502296999912,
+      "before": {
+        "total": 1286632,
+        "idle": 655087,
+        "steal": 33
+      },
+      "after": {
+        "total": 1298622,
+        "idle": 667059,
+        "steal": 33
+      },
+      "busyFraction": 0.0015012510425354009,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "after-formal-session",
+      "seconds": 30.000399644000026,
+      "before": {
+        "total": 2554324,
+        "idle": 1306280,
+        "steal": 40
+      },
+      "after": {
+        "total": 2566311,
+        "idle": 1318237,
+        "steal": 40
+      },
+      "busyFraction": 0.0025027112705431342,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "before-baseline-cold",
+      "seconds": 30.000379578999855,
+      "before": {
+        "total": 2570508,
+        "idle": 1321379,
+        "steal": 40
+      },
+      "after": {
+        "total": 2582490,
+        "idle": 1333345,
+        "steal": 40
+      },
+      "busyFraction": 0.0013353363378401095,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "before-baseline-qps",
+      "seconds": 30.00039295500028,
+      "before": {
+        "total": 2612141,
+        "idle": 1359794,
+        "steal": 40
+      },
+      "after": {
+        "total": 2624131,
+        "idle": 1371769,
+        "steal": 40
+      },
+      "busyFraction": 0.0012510425354461674,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "before-baseline-density",
+      "seconds": 30.000349029000063,
+      "before": {
+        "total": 2750570,
+        "idle": 1433775,
+        "steal": 41
+      },
+      "after": {
+        "total": 2762559,
+        "idle": 1445750,
+        "steal": 41
+      },
+      "busyFraction": 0.001167737092334642,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    }
+  ],
+  "physicalHostIsolationNotClaimed": true,
+  "finalFullGoalAccepted": false,
+  "wholeSessionAccepted": false,
+  "remainingBaselineNumericalAndWholeProtocolComparisonRequiresSeparateReview": true,
+  "baselineProtocolChecks": [
+    {
+      "lane": "cold-start",
+      "complete": true,
+      "cells": 6,
+      "originalFrozenSampleOraclesPassed": true,
+      "originalProtocolAndStrictPostureAndSameMachineVerified": true,
+      "sourceTag": "v0.2.2",
+      "sourceCommit": "aef602081134d6e87fd141a5693bbbb7c9ad7f2e",
+      "notAFormalHistoricalPoint": true
+    },
+    {
+      "lane": "qps",
+      "complete": true,
+      "cells": 3,
+      "originalFrozenSampleOraclesPassed": true,
+      "originalProtocolAndStrictPostureAndSameMachineVerified": true,
+      "sourceTag": "v0.2.2",
+      "sourceCommit": "aef602081134d6e87fd141a5693bbbb7c9ad7f2e",
+      "notAFormalHistoricalPoint": true
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "schema": "capsid-original-frame-seed-controlled-replay-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T10:08:25.717539+00:00",
+  "workflowRunId": 43578717747,
+  "artifactId": 14107731107,
+  "archiveSHA256": "c4cdaf10136fe45be837fb9e2541883feb8a506776f7a362dfb455dc42642da0",
+  "productCheckout": "6a9ee0e62b978aeb977526f984ddaead7f4fd552",
+  "historicalRun": 43417908994,
+  "allSevenBinaryHashesExactlyEqualHistoricalFailedRun": true,
+  "allFourFreshStartingFileManifestsIdentical": true,
+  "startingCorpusFiles": 192,
+  "historicalFullCorpusFileMapNotYetIndependentlyCompared": true,
+  "original60Seconds512MiBAnd10000RunsAndFatalInstrumentationRetained": true,
+  "attempts": [
+    {
+      "index": 1,
+      "seed": 4191328252,
+      "seconds": 60.023346218,
+      "cpuSeconds": 60.003311000000004,
+      "timeout": true,
+      "exitCode": null,
+      "observedUnitsLowerBound": 8656,
+      "executedUnits": null,
+      "observedQuietBeforeRun": true,
+      "maximumProgressReportedRssMiB": 376
+    },
+    {
+      "index": 2,
+      "seed": 1131436511,
+      "seconds": 41.01058115800001,
+      "cpuSeconds": 40.987158,
+      "timeout": false,
+      "exitCode": 0,
+      "observedUnitsLowerBound": 10000,
+      "executedUnits": 10000,
+      "observedQuietBeforeRun": true,
+      "maximumProgressReportedRssMiB": 363
+    },
+    {
+      "index": 3,
+      "seed": 1131436511,
+      "seconds": 46.43562721700005,
+      "cpuSeconds": 46.37932899999999,
+      "timeout": false,
+      "exitCode": 0,
+      "observedUnitsLowerBound": 10000,
+      "executedUnits": 10000,
+      "observedQuietBeforeRun": true,
+      "maximumProgressReportedRssMiB": 369
+    },
+    {
+      "index": 4,
+      "seed": 4191328252,
+      "seconds": 60.02089234800002,
+      "cpuSeconds": 59.96859100000002,
+      "timeout": true,
+      "exitCode": null,
+      "observedUnitsLowerBound": 8712,
+      "executedUnits": null,
+      "observedQuietBeforeRun": true,
+      "maximumProgressReportedRssMiB": 377
+    }
+  ],
+  "oldSeedReproduciblyFailsOriginalBudget": true,
+  "currentPassingSeedDoesNotEraseOldFailure": true,
+  "cpuWorkSaturatesOneCoreButExactAlgorithmHotspotNotYetEstablished": true,
+  "historicalFailureNotProvenInfrastructureOnly": true,
+  "remainingR7Blocker": true,
+  "notQualification": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "capsid-windows-immutable-checkpoint-independent-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T06:24:46.950373+00:00",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "artifactId": 14102068778,
+  "zipSHA256": "sha256:9d14e600c7c3085cc8836fdb82e27a4d788cbc60f81f6d9fa959cb36408da40b",
+  "observedUTC": "2026-11-14T06:21:18.4535255Z",
+  "fullRegistration": 758,
+  "completedResultLines": 461,
+  "lastStarted": [
+    "462",
+    "websocket_ordinary_fetch_core_reference"
+  ],
+  "observedFailureLines": [],
+  "originalMatrixCommandAndRunnerExitSemanticsVerified": true,
+  "allCopiedHashesVerified": true,
+  "testNumberPaddingHandled": true,
+  "priorLastTestLogNotReusedAsCurrentMatrixVerdict": true,
+  "partialDiagnosticOnly": true,
+  "completeMatrixVerdictNotClaimed": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

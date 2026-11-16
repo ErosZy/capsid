@@ -1,0 +1,86 @@
+{
+  "schema": "capsid-workerd-control-platform-r1-r9-ledger-v1",
+  "observedUTC": "2026-11-14T07:07:38.387363+00:00",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "productTree": "ad81fef535ab4c0bb3ca52618ddf9fe084834ea4",
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "sameSourceCompleteLinuxReportsReplayed": true,
+      "sameSourceReplayReference": "workerd-control-r3-r5-r6-native-contract-review.json"
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "sameSourceCompleteLinuxReportsReplayed": true,
+      "sameSourceReplayReference": "workerd-control-r3-r5-r6-native-contract-review.json"
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "sameSourceCompleteLinuxReportsReplayed": true,
+      "sameSourceReplayReference": "workerd-control-r3-r5-r6-native-contract-review.json"
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "historicalFuzzAndTsanDeadlineCausalQuestionsRemainOpen": true
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "sameSourceLinuxDebugMacosProviderAndSoakReviewed": true,
+      "windowsFinalMatrixPending": false,
+      "allPlatformFunctionalCiAndDebugSoakReviewed": true,
+      "formalPerformanceBaselineAndFinalViewportsStillPending": true
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "status": "incomplete",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    }
+  ],
+  "closureProgress": "workerd-control-closure-progress.json",
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "platformClosureReference": "workerd-control-platform-closure.json"
+}

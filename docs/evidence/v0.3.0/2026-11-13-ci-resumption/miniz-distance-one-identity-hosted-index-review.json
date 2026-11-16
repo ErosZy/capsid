@@ -1,0 +1,31 @@
+{
+  "schema": "capsid-control-hosted-evidence-index-independent-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T01:05:05.637496+00:00",
+  "workflowRunId": 43641603893,
+  "artifactId": 14137796010,
+  "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "workflowCommit": "b91761ba0cab8e0b58389cfb37e95d56f931ee24",
+  "indexZipSHA256": "cb2dfb5d78c184895e37184cfdb1ee71a4f18cac958ab7d299398aa9def35920",
+  "completeEvidenceTreeSHA256": "d48d2869178d86e46e1aaffb536c783b6512a2f2976b26f6e17c38ccd307f4a7",
+  "actualArchivedFilesRehashed": 563,
+  "artifactFilesRehashed": {
+    "asan-hosted-evidence": 29,
+    "fuzz-hosted-evidence": 11,
+    "macos-host-library-evidence": 52,
+    "release-wpt-hosted-evidence": 114,
+    "tsan-hosted-evidence": 79,
+    "ubsan-hosted-evidence": 22,
+    "windows-host-library-evidence": 256
+  },
+  "sourcePackageBuildAndCompatibilityIdsBound": true,
+  "indexCoverageExactlyMatchesAllSevenActualJobArchives": true,
+  "fullCiJobConclusionsSuccessful": true,
+  "rawFiveWptFailuresAndInstrumentedRssExceptionsStillRetained": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 1,
+  "currentSourcePerformanceNotYetMeasured": true,
+  "qualifiedPointBoundTo77Source": true,
+  "fullV030GoalComplete": false
+}

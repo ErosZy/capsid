@@ -1,0 +1,126 @@
+{
+  "complete": true,
+  "configurations": [
+    {
+      "kind": "ubsan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "asan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "tsan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "release-wpt",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "debug",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    }
+  ],
+  "replayedReports": 205,
+  "helperBinaryBytesIndependentlyRehashed": false,
+  "workerIdentitiesBoundToEachOriginalCoreReview": true,
+  "actualRuntimeInvocationsNotRepeated": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "schema": "capsid-r3-r5-r6-same-source-contract-replay-review-v1",
+  "reviewedUTC": "2026-11-15T04:52:46.407184+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "sourceManifestSHA256": "751c92f5e0660d2743854876b1e05d5f0e5b60d4eb607e67b834fbc070e9eab8",
+  "exactOriginalInputHashesAndStaticCaseInventoriesVerified": true,
+  "sourceReferenceLocksRevalidated": true,
+  "wholeBackingBytesAndCreditAndActualEOFAndHealthyReuseAndNaturalExitRetained": true,
+  "originalFiveSecondAndTwoSecondDeadlinesRetained": true,
+  "formalThreeLanePerformanceNotClaimed": true,
+  "doesNotEraseOldTsanLargeGzipFailure": true,
+  "sourceArtifactsNotModified": true,
+  "ciProtocolValidatedSessionCount": 2,
+  "localPerformanceAcceptedSessionCount": 0,
+  "replayAddsFormalPerformancePoints": 0,
+  "ciProtocolPointSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf"
+  ],
+  "formalPerformanceNotAssessedByThisAudit": true,
+  "childReplayCounterZeroIsSessionLocalNotGlobal": true
+}

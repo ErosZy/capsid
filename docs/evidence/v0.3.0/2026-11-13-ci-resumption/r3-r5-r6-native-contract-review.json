@@ -1,0 +1,117 @@
+{
+  "complete": true,
+  "configurations": [
+    {
+      "kind": "release-wpt",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "asan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "ubsan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "tsan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "debug",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    }
+  ],
+  "replayedReports": 205,
+  "helperBinaryBytesIndependentlyRehashed": false,
+  "workerIdentitiesBoundToEachOriginalCoreReview": true,
+  "actualRuntimeInvocationsNotRepeated": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "schema": "capsid-r3-r5-r6-same-source-contract-replay-review-v1",
+  "reviewedUTC": "2026-11-14T01:17:33.720064+00:00",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "sourceManifestSHA256": "623679896aeb729f13dff6663cf50a98f47c3fdad5c78eb19f6532ad168dd7c2",
+  "exactOriginalInputHashesAndStaticCaseInventoriesVerified": true,
+  "sourceReferenceLocksRevalidated": true,
+  "wholeBackingBytesAndCreditAndActualEOFAndHealthyReuseAndNaturalExitRetained": true,
+  "originalFiveSecondAndTwoSecondDeadlinesRetained": true,
+  "formalThreeLanePerformanceNotClaimed": true,
+  "doesNotEraseOldTsanLargeGzipFailure": true,
+  "sourceArtifactsNotModified": true
+}

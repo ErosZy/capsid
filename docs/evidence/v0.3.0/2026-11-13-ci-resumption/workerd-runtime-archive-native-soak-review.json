@@ -1,0 +1,22 @@
+{
+  "complete": true,
+  "workflowRunId": 43590178502,
+  "artifactId": 14113716975,
+  "productCheckout": "d6b4ead0d09c75b0b1e04c10d7683b766a6d1cbf",
+  "sourceFilesRechecked": 5169,
+  "exactSourceAndRuntimeLtoUnits": 12,
+  "relatedRegressionsPassed": 167,
+  "timingCasesPassed": 9,
+  "soakSeconds": 1800.426,
+  "soakRounds": 4394,
+  "rawBracketedClockIntervalsIndependentlyRecomputed": 1875,
+  "clockViolations": 0,
+  "hostSHA256": "0cc0053996b0a1154d765fcec1093facfe14273d3708d903c5a7a029717e6369",
+  "workerSHA256": "331e2197d35aa9f569b0217c6b16378df3c81337200499bc4f4c37f7fcda2118",
+  "maximumHostRssKiB": 26644,
+  "naturalExit": true,
+  "sourceAndBinaryGuardsUnchanged": true,
+  "externalWindowsQpcProofNotClaimed": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

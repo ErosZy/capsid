@@ -1,0 +1,502 @@
+{
+  "schema": "capsid-macos-readiness-independent-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T05:47:57.371599+00:00",
+  "workflowRunId": 43555865031,
+  "artifactId": 14099393287,
+  "archiveSHA256": "8e5a01bec5b1f1225c3a34d9a1350d0aefd22c031b270253ccfd48f22fb9e939",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "registered": 766,
+  "passed": 755,
+  "failed": 0,
+  "skipped": [
+    {
+      "name": "host_static_pool_worker_exit_isolation",
+      "registeredCode": 77,
+      "diagnostic": "Linux /proc process evidence is unavailable",
+      "actualPrerequisite": "explicit runtime prerequisite diagnostic",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "host_single_worker_ab_emits_complete_evidence",
+      "registeredCode": 77,
+      "diagnostic": "perf is not usable in this environment",
+      "actualPrerequisite": "explicit runtime prerequisite diagnostic",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_cpu_affinity",
+      "registeredCode": 77,
+      "diagnostic": "CPU affinity requires Linux or Windows",
+      "actualPrerequisite": "explicit runtime prerequisite diagnostic",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "host_generation_pool_contract",
+      "registeredCode": 77,
+      "diagnostic": "kill-injection scenarios need /proc (Linux)",
+      "actualPrerequisite": "explicit runtime prerequisite diagnostic",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_write",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_read",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_watch",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_sqlite",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_network",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_wasi",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    },
+    {
+      "name": "worker_binding_sandbox_union",
+      "registeredCode": 77,
+      "diagnostic": null,
+      "actualPrerequisite": "non-Linux #else returns 77 in tests/test_sandbox.cc:808-833",
+      "noBlankOutputInvented": true
+    }
+  ],
+  "originalRegistrationJUnitAndLastTestCoverageExact": true,
+  "buildInfo": {
+    "version": "0.3.0",
+    "commit": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+    "commitDate": "2026-11-14T11:49:00+08:00",
+    "treeClean": "true",
+    "provenanceDirty": "0",
+    "buildId": "sha256:17e0a3d61e897e184be571d11193392e2bb2b320d5da9f00e02ca9dc954e32b7",
+    "compatibilityId": "sha256:a9f0fdd68ae09f2aec32fe615c6cd7cdc1a3b6391a3b872c5f931fa8c5ab76ba",
+    "compilerId": "AppleClang",
+    "compilerVersion": "17.0.0.17000013",
+    "targetTriple": "arm64-unknown-Darwin",
+    "cmakeBuildType": "Release",
+    "featureFlags": "lto=ON asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON sandbox_profile=production",
+    "schema": "capsid-build-provenance-v1",
+    "quickjsCommit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e",
+    "txikiOverlayManifest": "6a33c04fa93773aac536b4c146c3595ce308e29ed352bfd96243873568d12784",
+    "bytecodeCompileFlags": "build_type=Release lto=ON asan=OFF ubsan=OFF mimalloc=OFF",
+    "targetArchitecture": "arm64",
+    "endianness": "little",
+    "pointerWidthBits": "64",
+    "bytecodeFormatIdentity": "quickjs-ng-bytecode-v1",
+    "capsidCommit": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+    "capsidTreeClean": "true",
+    "runtimeVersion": "0.3.0",
+    "abiVersion": "7",
+    "fetchRpcVersion": "3",
+    "capabilityManifestSha256": "da742bffc35c8bd77e8aacab103fb9a5eff403bac4c3806869bafb6b63ac9f66",
+    "dependencyOverlayKey": "01d8261928bdf579eafcca4325487edbaf47ea5d5f8d7456176ece0e44869eee"
+  },
+  "fragmentFixtureControl": {
+    "complete": true,
+    "createdUTC": "2026-11-14T04:36:46.960272+00:00",
+    "platform": "darwin",
+    "candidateSourceSHA256": "d9cfdc71c345f5b09a33bad07542af4166eed40ac8a4052b258a0ece195b07bb",
+    "baselineSourceSHA256": "2441a92fb40d1040fff3745903163cc55c03100adafa56683be80a03c98a8226",
+    "baselineDiffIsOnlyOriginalOneMillisecondTimer": true,
+    "baselineHasDiagnosticOnlyImprovement": true,
+    "productionParserUnchanged": true,
+    "headerAndBodyDeadlinesMilliseconds": 1000,
+    "outerBudgetSeconds": 10,
+    "commands": [
+      {
+        "label": "baseline-build",
+        "command": [
+          "/usr/bin/c++",
+          "-DCAPSID_HOST_NETWORKING=1",
+          "-I/Users/runner/work/capsid/capsid/src",
+          "-I/Users/runner/work/capsid/capsid/include",
+          "-isystem",
+          "/opt/homebrew/Cellar/boost/1.92.0_1/include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=c++20",
+          "-arch",
+          "arm64",
+          "-Wall",
+          "-Wextra",
+          "-Wpedantic",
+          "-Werror",
+          "-o",
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture.o",
+          "-c",
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture.cc"
+        ],
+        "exitCode": 0,
+        "seconds": 2.9308401250000315,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "baseline-link",
+        "command": [
+          "/usr/bin/c++",
+          "-O3",
+          "-DNDEBUG",
+          "-arch",
+          "arm64",
+          "-Wl,-search_paths_first",
+          "-Wl,-headerpad_max_install_names",
+          "-flto",
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture.o",
+          "-o",
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "libcapsid_host_core.a",
+          "libcapsid_runtime.a",
+          "vendor/jansson/libcapsid_jansson.a",
+          "/opt/homebrew/lib/libcares.a",
+          "-lresolv",
+          "/opt/homebrew/opt/openssl@3/lib/libssl.a",
+          "/opt/homebrew/opt/openssl@3/lib/libcrypto.a"
+        ],
+        "exitCode": 0,
+        "seconds": 0.28316737499994815,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "baseline-0",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 0,
+        "seconds": 1.6756472080001004,
+        "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "baseline-1",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 0,
+        "seconds": 1.4222665419999885,
+        "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "baseline-2",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0321087090001129,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-3",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0225065839999843,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-4",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0205270419999124,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-5",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0740197079999234,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-6",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.061544792000177,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-7",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.020260750000034,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-8",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0184835410000233,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-9",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0174135419999857,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-10",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0231520000002092,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-11",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 0,
+        "seconds": 1.4671167920000698,
+        "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "baseline-12",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 0,
+        "seconds": 1.2782941250000022,
+        "stdoutSHA256": "c26de83abdc9496cd1301470918ec39ecca1cf389ef0ae1c6504da1800d1c431",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "baseline-13",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.023802415999853,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-14",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.016378709000037,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "baseline-15",
+        "command": [
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/original-timer-fixture",
+          "host_admin_http_fragmented_limits"
+        ],
+        "exitCode": 1,
+        "seconds": 1.0235380000001442,
+        "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderrSHA256": "37f7864a94db4d6a633cb2a4d7666bfd56091f3558f75c215bbe598ba628dfd3"
+      },
+      {
+        "label": "candidate-repeat",
+        "command": [
+          "ctest",
+          "--test-dir",
+          "/Users/runner/work/capsid/capsid/build-macos",
+          "--parallel",
+          "1",
+          "--no-tests=error",
+          "--output-on-failure",
+          "--repeat",
+          "until-fail:20",
+          "-R",
+          "^host_admin_http_(fragmented_headers|chunked_requests|chunked_errors|fragmented_limits|buffer_boundaries)$",
+          "--output-junit",
+          "/Users/runner/work/capsid/capsid/build-macos/native-fragment-fixture-control/candidate-repeated-junit.xml"
+        ],
+        "exitCode": 0,
+        "seconds": 3.1621077920001426,
+        "stdoutSHA256": "59f6f2dd229616b65da96318382dd9d889c147829154056cb4188e3be37f6136",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "baselineRuns": [
+      {
+        "round": 0,
+        "exitCode": 0,
+        "observedHttp408": false,
+        "diagnostic": ""
+      },
+      {
+        "round": 1,
+        "exitCode": 0,
+        "observedHttp408": false,
+        "diagnostic": ""
+      },
+      {
+        "round": 2,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 3,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 4,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 5,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 6,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 7,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 8,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 9,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 10,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 11,
+        "exitCode": 0,
+        "observedHttp408": false,
+        "diagnostic": ""
+      },
+      {
+        "round": 12,
+        "exitCode": 0,
+        "observedHttp408": false,
+        "diagnostic": ""
+      },
+      {
+        "round": 13,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 14,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      },
+      {
+        "round": 15,
+        "exitCode": 1,
+        "observedHttp408": true,
+        "diagnostic": "FAIL: Admin HTTP response expected status 431, got 408"
+      }
+    ],
+    "candidateRuns": [],
+    "fullMatrixStillMandatory": true,
+    "baselineBinarySHA256": "6801afc30bbb2c27e5bc5befdb2629d1dd642b9cabb684bc122fd97213556435",
+    "candidateBinarySHA256": "5ffbfecddec942b22aa0720407ccdb1e1a992db011cf4ed6111989ed846b7f7a",
+    "status": "native-candidate-fragmentation-fixture-qualified",
+    "candidateRepeatedPasses": 100,
+    "baselineTimeouts": 12,
+    "nativeOriginalFailureReproduced": true,
+    "productionImplementationModified": false,
+    "allRequestBytesAndExpectedStatusesRetained": true,
+    "baselineIdleSuccessWouldNotEraseOriginalFullMatrixFailure": true
+  },
+  "rawDriverArchiveSHA256": "142195edac5347bb0b6a2f3235a16c7dbaca6db37c78656b88fd555deb2f1008",
+  "rawJsonReports": 239,
+  "linuxStrictSandboxOnMacNotClaimed": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

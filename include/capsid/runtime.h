@@ -984,8 +984,10 @@ capsid_result capsid_worker_end_request(capsid_worker *worker, uint64_t request_
 capsid_result capsid_worker_grant_response_credit(capsid_worker *worker, uint64_t request_id, uint32_t credit);
 capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id);
 /*
- * Queues one host-only heap snapshot request. The response is delivered as
- * CAPSID_EVENT_MEMORY_METRICS and decoded with capsid_memory_metrics_decode().
+ * Queues one host-only heap snapshot request. If token reclamation is already
+ * scheduled, sampling follows its next ordinary tick; this does not force extra
+ * GC or await live work. The response is delivered as CAPSID_EVENT_MEMORY_METRICS
+ * and decoded with capsid_memory_metrics_decode().
  */
 capsid_result capsid_worker_request_memory_metrics(capsid_worker *worker);
 capsid_result capsid_worker_flush(capsid_worker *worker);

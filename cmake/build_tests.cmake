@@ -1234,6 +1234,28 @@ if(BUILD_TESTING)
                     4
                     50)
             set_tests_properties(soak_memory_waves_smoke PROPERTIES TIMEOUT 120)
+
+            add_executable(test-memory-metrics-reclaim tests/test_memory_metrics_reclaim.cc)
+            target_include_directories(test-memory-metrics-reclaim PRIVATE src tests)
+            target_link_libraries(test-memory-metrics-reclaim PRIVATE capsid_runtime)
+            add_dependencies(test-memory-metrics-reclaim capsid-worker)
+            set_target_properties(test-memory-metrics-reclaim PROPERTIES
+                CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+            if(CAPSID_STRICT_WARNINGS)
+                if(MSVC)
+                    target_compile_options(test-memory-metrics-reclaim PRIVATE /W4 /WX)
+                else()
+                    target_compile_options(test-memory-metrics-reclaim PRIVATE
+                        -Wall -Wextra -Wpedantic -Werror)
+                endif()
+            endif()
+            foreach(mode reclaimed retained)
+                add_test(NAME worker_memory_metrics_${mode}
+                    COMMAND test-memory-metrics-reclaim $<TARGET_FILE:capsid-worker>
+                        "${CMAKE_CURRENT_SOURCE_DIR}/soak/fixtures/soak-app.js" "${mode}")
+                set_tests_properties(worker_memory_metrics_${mode} PROPERTIES
+                    TIMEOUT 120 LABELS "worker;memory;lifecycle")
+            endforeach()
         endif()
 
         add_executable(

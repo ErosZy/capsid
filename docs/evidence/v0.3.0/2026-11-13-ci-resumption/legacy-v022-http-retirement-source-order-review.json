@@ -1,0 +1,144 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T21:42:34.775634+00:00",
+  "legacySource": "aef602081134d6e87fd141a5693bbbb7c9ad7f2e",
+  "allTwelveOriginalCommittedFilesRehashed": {
+    "src/host/admin_api.cc": "a2dbc4fbe368eb6336354512d74e9a765bb09c5bbcb4d1d58d09ad4f05adf785",
+    "src/host/admin_service.cc": "6a6c8e90d5ff879a3cb2773aa3fe70cd548ba531761a61b6077e13496a7654c7",
+    "src/host/generation_pool.cc": "c338773b01a03af28444d2fbf846d3a96cf012d7614bcfd66b67df6188fd82cc",
+    "src/host/managed_host.cc": "a41da4d53ef4507f69964b3421fc5e76357f6da8941c3f2de0fc4012a4d6b2d1",
+    "src/host/managed_listener.cc": "3f2ae7bc8314559f350a20a5e697102efb4696ead1938cacf71c0f1ea8d08e94",
+    "src/host/metrics.cc": "143b36dacee3150239e866184618cc39e6b28962ccf83d125602b68a3cb03774",
+    "src/host/worker_executor.cc": "947a2eee5d47423c7edd25d35b13264d9a3a0eae6bb327da1fb51013742d4f72",
+    "src/host/admin_api.h": "68dda471721d49e096e65bdf81168f00ba41679a8354900fece577617c90b26f",
+    "src/host/admin_service.h": "70b85dc22e8e3a7f467ec4351e1b6c129add2f10ce25f9578de9eda2c4de8921",
+    "src/host/generation_pool.h": "55213d595e78e876f69549f3e9412fd31a824a2f2789e0776f5bedab46d9b146",
+    "src/host/metrics.h": "894cd97dcdc7f50fc0fb16802c678d425bb94151bc7039bf6b125de0e9cab160",
+    "src/host/worker_executor.h": "9062ff189812a9f71708e5ee6b01c6249c22494288fd5e351f2952168e709fa0"
+  },
+  "originalWholeHostAndPublicIncludeExactServiceLeaseIdentifierSearchAbsent": true,
+  "sourceDerivedOrdering": {
+    "worker": [
+      {
+        "line": 289,
+        "text": "void WorkerExecutor::mark_canceled(std::uint64_t request_id) {"
+      },
+      {
+        "line": 297,
+        "text": "        inflight_.fetch_sub(1, std::memory_order_relaxed);"
+      },
+      {
+        "line": 305,
+        "text": "        inflight_.fetch_sub(1, std::memory_order_relaxed);"
+      },
+      {
+        "line": 744,
+        "text": "            case CAPSID_EVENT_RESPONSE_END:"
+      },
+      {
+        "line": 799,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      },
+      {
+        "line": 829,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      },
+      {
+        "line": 838,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      },
+      {
+        "line": 841,
+        "text": "    case CAPSID_EVENT_RESPONSE_END: {"
+      },
+      {
+        "line": 851,
+        "text": "        mark_canceled(event.request_id);"
+      },
+      {
+        "line": 855,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      },
+      {
+        "line": 867,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      },
+      {
+        "line": 877,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      },
+      {
+        "line": 885,
+        "text": "        mark_canceled(event.request_id);"
+      },
+      {
+        "line": 889,
+        "text": "        queue_worker_event(std::move(worker_event));"
+      }
+    ],
+    "pool": [
+      {
+        "line": 543,
+        "text": "std::uint64_t GenerationPool::inflight() const {"
+      },
+      {
+        "line": 547,
+        "text": "        total += slot.executor->inflight();"
+      },
+      {
+        "line": 550,
+        "text": "        total += executor->inflight();"
+      }
+    ],
+    "listener": [
+      {
+        "line": 604,
+        "text": "    http::async_write("
+      },
+      {
+        "line": 713,
+        "text": "    http::async_write("
+      },
+      {
+        "line": 1478,
+        "text": "    http::async_write("
+      },
+      {
+        "line": 1550,
+        "text": "void ManagedListenerImpl::write_fixed_response("
+      },
+      {
+        "line": 1594,
+        "text": "        http::async_write("
+      },
+      {
+        "line": 1600,
+        "text": "void ManagedListenerImpl::write_end_block(const WorkerExecutor* executor,"
+      },
+      {
+        "line": 1618,
+        "text": "    http::async_write("
+      },
+      {
+        "line": 1639,
+        "text": "            self->requests_.erase(it);"
+      },
+      {
+        "line": 1650,
+        "text": "void ManagedListenerImpl::finalize_request("
+      }
+    ]
+  },
+  "sourceProof": "The original worker releases its inflight slot before queueing RESPONSE_END to the listener owner. The original listener can still own the PendingRequest until its asynchronous HTTP write callback. Therefore worker-pool idle does not imply HTTP transport retirement.",
+  "sourceDerivedCounterexampleNotNativeExecutionOrCapturedLegacyGauge": true,
+  "priorR1AuditorRejectedWrongProbeBranchSelectionBeforeAnyVerdict": true,
+  "privatePoolCounterMustNotBeAliasedToServiceHttpRetirement": true,
+  "doesNotEstablishAlternativeExactPublicObservation": true,
+  "legacyOriginalRuntimeAndBinariesNotModified": true,
+  "noMissingGaugeSetToZeroNoFixedHoldNoEvidenceContractRelaxed": true,
+  "baselineDensityStillBlocked": true,
+  "originalPartialColdAndQpsAndNegativeDeltasPreserved": true,
+  "formalPerformancePoints": 1,
+  "qualifiedPointStillPrior77Only": true,
+  "fullV030GoalComplete": false
+}

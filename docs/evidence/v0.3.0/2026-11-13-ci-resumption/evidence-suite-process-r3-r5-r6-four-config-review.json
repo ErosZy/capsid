@@ -1,0 +1,102 @@
+{
+  "complete": true,
+  "configurations": [
+    {
+      "kind": "ubsan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "asan",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "release-wpt",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    },
+    {
+      "kind": "debug",
+      "reports": 41,
+      "counts": {
+        "arguments": 10,
+        "contextMatrix": 20,
+        "defaultGates": 2,
+        "largeGzip": 1,
+        "branchGraph": 8
+      },
+      "caseCounts": {
+        "arguments": 260,
+        "contextMatrix": 320,
+        "defaultGates": 12,
+        "largeGzip": 2,
+        "branchGraph": 74
+      },
+      "originalOraclesAndDeadlinesRetained": true
+    }
+  ],
+  "replayedReports": 164,
+  "fullFiveConfigurationReplayComplete": false,
+  "actualTsanFailureReference": "evidence-suite-process-tsan-failure-review.json",
+  "helperBinaryBytesIndependentlyRehashed": false,
+  "workerIdentitiesBoundToEachOriginalCoreReview": true,
+  "actualRuntimeInvocationsNotRepeated": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "schema": "capsid-r3-r5-r6-same-source-contract-replay-review-v1",
+  "reviewedUTC": "2026-11-14T19:39:04.458186+00:00",
+  "productCheckout": "42107f444db014dc2089c4b405669c4be623d208",
+  "sourceManifestSHA256": "f0245ea6b52f553460441798d0dafeab458a1418ea2e311e465625f011dfbcea",
+  "exactOriginalInputHashesAndStaticCaseInventoriesVerified": true,
+  "sourceReferenceLocksRevalidated": true,
+  "wholeBackingBytesAndCreditAndActualEOFAndHealthyReuseAndNaturalExitRetained": true,
+  "originalFiveSecondAndTwoSecondDeadlinesRetained": true,
+  "formalThreeLanePerformanceNotClaimed": true,
+  "doesNotEraseOldTsanLargeGzipFailure": true,
+  "actualCurrentTsanFailurePreserved": true,
+  "fullFiveConfigurationCombinedClosureNotClaimed": true,
+  "sourceArtifactsNotModified": true
+}

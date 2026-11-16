@@ -1,0 +1,437 @@
+{
+  "complete": true,
+  "schema": "capsid-miniz-distance-one-identity-progress-v1",
+  "observedUTC": "2026-11-15T02:55:02.257383+00:00",
+  "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "productTree": "281a24c0b10b0a75cbd4e08b0ce5962ca4959b97",
+  "privateSnapshot": "de1e04766a3196130946c1456e05ca7acfab7e43",
+  "sourceInputsRehashed": 5169,
+  "integrationParent421": "42107f444db014dc2089c4b405669c4be623d208",
+  "changedFilesRelative421": [
+    "cmake/PrepareTxiki.cmake",
+    "cmake/TestTxikiOverlayAudit.cmake",
+    "cmake/TestTxikiOverlayConfigureDependencies.cmake",
+    "cmake/build_worker.cmake",
+    "docs/txiki-upgrade-baseline.json",
+    "patches/txiki/0066-http-gzip-and-read-demand.patch"
+  ],
+  "other5163InputsByteIdentical": true,
+  "rootHeadUnchanged": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "publicAbiAndSdk78Unchanged": true,
+  "productionRuntimeMinizOneEquivalentContiguousDistanceOneBranchChanged": true,
+  "minizVendorOriginalBytesAndGitStateUntouched": true,
+  "minizOwnedCowAndConfigureGraphRegressionAssertionsAdded": true,
+  "allOriginalChecksumsBoundsInstrumentationCompilerFlagsAndDeadlinesPreserved": true,
+  "privateStreamDifferentialsPassed": 82,
+  "privateIndependentZlibPositiveCases": 76,
+  "privateNegativeCases": 6,
+  "privateActualOriginalBudgetAbbaNativeReports": 4,
+  "privateActualGzipCases": 8,
+  "privateWallRatio": 0.8224791959102283,
+  "privateCpuRatio": 0.8161147318258027,
+  "noStatisticalSignificanceOrFormalPerformanceOrCausalFailureClosureClaim": true,
+  "actualLocalAll78PatchKeyManifestNegativeControlAudit": "miniz-distance-one-local-overlay-review.json",
+  "windowsOnlyLocalCmakeSourceNormalizedPerExistingProjectContract": true,
+  "firstIntegration932OmittedIdentityPinAndActuallyFailedConfigure": true,
+  "original932FullAndSupplementalCiFailuresRetained": true,
+  "independentOriginalConfigureFailureReview": "miniz-distance-one-configure-failure-review.json",
+  "onlyTwoActualAuditedOverlayHashFieldsCorrectedNoGuardChange": true,
+  "oldLockRejectedAndNewLockAcceptedByRealIdentityFunction": "miniz-distance-one-identity-lock-review.json",
+  "identityFunctionControlNotNativeCompileOrReleaseQualification": true,
+  "currentSourceBenchmark120TestsZeroSkipsAndThreeActualWorkerdCasesReviewed": true,
+  "currentSourceFuzzNinePassZeroFailZeroSkip70000UnitsReviewed": true,
+  "currentSourceFrameSeconds": 54.0417,
+  "currentSourceFullAndDebugSoakRemainPending": false,
+  "previous421FullCiActuallyFailedTsan": true,
+  "previous421ReviewedQualification": {
+    "configurations": {
+      "ubsan": {
+        "passed": 1024,
+        "failed": [],
+        "skipped": 4
+      },
+      "asan": {
+        "passed": 1024,
+        "failed": [],
+        "skipped": 5
+      },
+      "release-wpt": {
+        "passed": 1115,
+        "failed": [
+          "worker_wpt_fetch_api_headers_headers_basic_any_js",
+          "worker_wpt_fetch_api_headers_headers_errors_any_js",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+          "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+        ],
+        "skipped": 4
+      },
+      "debug": {
+        "passed": 1115,
+        "failed": [
+          "worker_wpt_fetch_api_headers_headers_basic_any_js",
+          "worker_wpt_fetch_api_headers_headers_errors_any_js",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+          "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+          "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+        ],
+        "skipped": 4
+      },
+      "tsan": {
+        "passed": 1011,
+        "failed": [
+          "native_fetch_large_gzip"
+        ],
+        "skipped": 5
+      },
+      "windows": {
+        "passed": 750,
+        "failed": [],
+        "skipped": 8
+      },
+      "macos": {
+        "passed": 755,
+        "failed": [],
+        "skipped": 11
+      }
+    },
+    "coreReview": "evidence-suite-process-core-review.json",
+    "debugReview": "evidence-suite-process-debug-review.json",
+    "tsanActualFailure": "evidence-suite-process-tsan-failure-review.json",
+    "windowsReview": "evidence-suite-process-windows-review.json",
+    "macosReview": "evidence-suite-process-macos-review.json",
+    "soakReview": "evidence-suite-process-native-soak-review.json",
+    "soakSeconds": 1800.373,
+    "soakRounds": 4291,
+    "relatedRegressions": 167,
+    "timingCases": 9,
+    "fuzzReview": "evidence-suite-process-fuzz-review.json",
+    "fuzzPassed": 9,
+    "fuzzUnits": 70000
+  },
+  "previous421FourConfigurationReports164AndObservations2672NotFiveConfigurationClosure": true,
+  "previous421ActualTsan96MiBOriginalFiveSecondFailureRetained": true,
+  "exactOriginalFailedWorkerAndHelperBytesNowRecoveredAndRehashed": true,
+  "originalCallsiteProfileCollector120SecondTimeoutRetained": true,
+  "all362SamplesRecoveredReadOnlyZeroLost": true,
+  "framePointerCallerFrameNotExactLeafInstructionProof": true,
+  "previous421Windows750PassZeroFailEightSkipsAnd32EvidenceTests26Point8084SecondsReviewed": true,
+  "priorWindowsMetadataAndOrdinaryGatedFailureCausesStillOpen": true,
+  "exactPrior77PeFourAttempts32CasesNotCausalFix": true,
+  "qualifiedPerformancePoints": 1,
+  "qualifiedPerformancePointSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9"
+  ],
+  "olderFuzzReviewInheritedGlobalCounterZeroNotAuthoritative": true,
+  "currentSourceFormalPerformanceNotYetMeasured": true,
+  "originalBaselineRuntimeNotModifiedAndMissingGaugeNotForged": true,
+  "actualBaselineQpsDrops20To26PercentPreserved": true,
+  "qualified77DataFourViewportsFor421PresentationRetained": true,
+  "currentPresentationBytesExactlyEqualReviewed421Page": true,
+  "historicalFrame4191328252TimeoutStillOpen": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "rawFiveWptFailuresRetained": true,
+  "workflows": {
+    "benchmark": {
+      "workflowRunId": 43641498903,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43641498903",
+      "observedUTC": "2026-11-14T21:16:33.766828+00:00",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "full": {
+      "workflowRunId": 43641603893,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43641603893",
+      "observedUTC": "2026-11-15T00:56:21.321820+00:00",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    "supplemental": {
+      "workflowRunId": 43641604351,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43641604351",
+      "observedUTC": "2026-11-15T00:56:20.758416+00:00",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  },
+  "reviewCopies": [
+    {
+      "name": "miniz-distance-one-proposal-review.json",
+      "sha256": "bf15da65bae33ad139c7419ebc5f95fabb2543303f60b01a21818bb380dd3fda"
+    },
+    {
+      "name": "miniz-distance-one-local-overlay-review.json",
+      "sha256": "efc9b661a109e50d86d18abd53f378d7527eed5686725f5c970df6ed69cd9279"
+    },
+    {
+      "name": "miniz-distance-one-configure-failure-review.json",
+      "sha256": "b2f5a6ea45c1ea7142e718a45dfaddedc3735b9fcc57f3a16deee12f78b93426"
+    },
+    {
+      "name": "miniz-distance-one-identity-lock-review.json",
+      "sha256": "92515f1396b2b105f3b84b1eb7a2b1574d811715caea066b8a6a7fded332805b"
+    },
+    {
+      "name": "current-tsan-gzip-callsite-review.json",
+      "sha256": "d67b94158a762156c77f6f10326e7643ac8a6f306bafa1a04e82f99a8b969fee"
+    },
+    {
+      "name": "miniz-distance-one-identity-benchmark-review.json",
+      "sha256": "84ab4eb606c8c317d43db722f090c2b3b6b853dd316543b57b463dd085269f53"
+    },
+    {
+      "name": "miniz-distance-one-identity-ci-fuzz-review.json",
+      "sha256": "ddc7f264bc39a19d775bf8d956e70e6484e8236b982c1693eae2889b4349ae2a"
+    },
+    {
+      "name": "evidence-suite-process-progress-r2.json",
+      "sha256": "e02ea77abd07f1fe027817e4e4970a7cc1fab00e3182a825fd1ab8dbc6b961cd"
+    },
+    {
+      "name": "evidence-suite-process-r1-r9-ledger-r2.json",
+      "sha256": "c49aa3a3434256c8a56194262bba816b64c3d7595de05c85d019db2cf78ebb49"
+    }
+  ],
+  "rawStatusSnapshot": {
+    "file": "qualification-before-miniz-distance-one-identity.md.txt",
+    "bytes": 49165,
+    "sha256": "7c49d71a79b6705a4c49af3663bd1baaea21ad22a3b596a4047b13726087008b",
+    "rawOldStatusPreservedExactly": true,
+    "notMaintainedMarkdownOrRetroactivelyTestedFrozenInput": true
+  },
+  "mainTagsReleasePagesBlockedWslAndExistingEvidenceNotModified": true,
+  "fullV030GoalComplete": false,
+  "revision": 4,
+  "currentSourceFullCiAndDebugSoakIndependentlyReviewed": true,
+  "currentPlatformQualificationCompleteUnderRetainedCompatibilityPolicy": true,
+  "all5169FrozenInputsRehashed": true,
+  "currentSourceConfigurationResults": {
+    "ubsan": {
+      "passed": 1024,
+      "failed": [],
+      "skipped": 4,
+      "buildId": "sha256:02ae0ddf0e00edaf1f96d5002072a62ce6cd5e1d70fd722c224daeeb1e565bf7",
+      "workerSHA256": "3a82e312d92998070d156a396c0dd1c384bacecd9d241ae926cf46e0ae14a306",
+      "mainReports": 317
+    },
+    "asan": {
+      "passed": 1024,
+      "failed": [],
+      "skipped": 5,
+      "buildId": "sha256:6154df0fd86501dc8cd643b7611f672ce88c6abc0d4abb28e76ce0d08c06e4d5",
+      "workerSHA256": "c1f382b39fb68e734f9b1ea5198a99a8e1f80761cc441e833f19c660ee714443",
+      "mainReports": 317
+    },
+    "tsan": {
+      "passed": 1012,
+      "failed": [],
+      "skipped": 5,
+      "buildId": "sha256:83e885a38cef230675d8b6ccc517a577482d4bda123b45df1e6a156943d29e54",
+      "workerSHA256": "8b836ff6c2a2487b468ec6c466055fd5bbd6e806c366108774f94589a50a1c7f",
+      "mainReports": 317
+    },
+    "release-wpt": {
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": 4,
+      "buildId": "sha256:2c36f0d07830d1a282f21a211cb2ae4788cd7334fb380839db8343070bf1f267",
+      "workerSHA256": "bfd60f2877b7e20f8907d3323bb77dccc7e52d01788d43cddeff9142a5e818bd",
+      "mainReports": 317
+    },
+    "debug": {
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": 4,
+      "buildId": "sha256:d5aa5c5c8f0cd7f39c8a5bc889cefc3f6735d22987861f264ef95937cb309af3",
+      "workerSHA256": "de3bd31907d4d7799be1e63a4d2ece38dac1a9ecc1e421163b686949f5d64a62",
+      "mainReports": 317
+    },
+    "windows": {
+      "passed": 750,
+      "failed": [],
+      "skipped": 8
+    },
+    "macos": {
+      "passed": 755,
+      "failed": [],
+      "skipped": 11
+    }
+  },
+  "currentTsanOriginalBudgetLargeGzipPassRetainsHistoricalFailure": true,
+  "currentFiveConfigurationSemanticReplayComplete": true,
+  "currentSemanticReportsReplayed": 205,
+  "currentSemanticCaseObservations": 3340,
+  "semanticReplayNotNewRuntimeExecution": true,
+  "semanticHelperBytesIndependentRehashUnavailableRetained": true,
+  "semanticReview": "miniz-distance-one-identity-r3-r5-r6-native-contract-review-r2.json",
+  "replayAddsFormalPerformancePoints": 0,
+  "currentSourcePerformanceNotYetMeasured": true,
+  "currentNativeSoakSeconds": 1800.07,
+  "currentNativeSoakRounds": 4380,
+  "currentSoakRelatedRegressions": 167,
+  "currentSoakTimingCases": 9,
+  "currentLtoRuntimeUnits": 12,
+  "originalClockIntervalsRecomputed": 1876,
+  "allFourConfigurations1187OpenSslCCommandsAndDelegatedSandboxReviewed": true,
+  "hostedIndexArchivedFilesRehashed": 563,
+  "hostedIndexExactlyCoversSevenCompleteJobArchives": true,
+  "windowsActualMatrixTemporaryReports": 93,
+  "windowsHttpCodecCasesReplayed": 195,
+  "windowsRequiredCompatibilityTestsReplayed": 134,
+  "currentFuzzerAllSevenBinaryBytesIdenticalToPrior6ef4": true,
+  "currentFrameBinaryExactlySameAsHistorical419Failure": true,
+  "baselinePrivateWorkerInflightAliasDisprovedByOriginalSourceOrder": true,
+  "baselineSourceOrderReview": "legacy-v022-http-retirement-source-order-review.json",
+  "reviewFiles": {
+    "miniz-distance-one-identity-windows-review.json": "fc1e1ee69c2059f1674a6bf26818f92142a85f9ce4145866e56df8427c96e96a",
+    "miniz-distance-one-identity-macos-review.json": "9b6e40a1333a4547a1b991577820fef7434e76bdc9f55afb5bacf803cbd2ebda",
+    "miniz-distance-one-identity-native-soak-review.json": "8bbe82acdd629dd781dd5ea68fa80820e063e9d72bf5f7c3d0135a9293fe6d4d",
+    "miniz-distance-one-identity-native-provider-log-review.json": "ee230476a5ac2c4014ba408b48af088452032dd137245eb312dd04565c9ae97e",
+    "miniz-distance-one-identity-hosted-index-review.json": "0351c6e730402f37d84dea07d1fe97d2eac7240307cab5f3d84f238656157b47",
+    "miniz-distance-one-identity-r3-r5-r6-native-contract-review-r2.json": "75b6de730f30bf47d2736c70c3f84eda63264e479d336a0358ed9aa05d5c094d",
+    "miniz-distance-one-identity-ci-fuzz-review.json": "ddc7f264bc39a19d775bf8d956e70e6484e8236b982c1693eae2889b4349ae2a",
+    "miniz-distance-one-identity-benchmark-review.json": "84ab4eb606c8c317d43db722f090c2b3b6b853dd316543b57b463dd085269f53"
+  },
+  "rawStatusBeforePlatformClosure": {
+    "file": "qualification-before-dd589-platform-closure.md.txt",
+    "sha256": "746eb8bfdacddbe5fb751b29b30a489037e58d8e692bf69dac11503e0d08d1bc",
+    "bytes": 53668
+  },
+  "auditorDebugPhaseClassificationAndCurrentGlobalPointMetadataCorrected": true,
+  "olderSemanticR1GlobalPointCounterZeroPreservedAndCorrectedOnlyInR2": true,
+  "rawWptFailuresAndRssExceptionsNotChangedToOrdinaryPass": true,
+  "remainingBlockers": [
+    {
+      "id": "historical-frame-seed",
+      "actual": "Original6f5 frame binary still frozen; private alias-preserving copy-only source reduces same-nine-input entry CPU to0.820874 ratio and passes two normal original-seed probes within60s/512MiB, but originalA also passes; sensitive seeds1/42/current2588777039 resource followup43669364069 pending. No integration or causal failure closure.",
+      "original60Seconds512MiBAnd10000UnitsRetained": true
+    },
+    {
+      "id": "historical-causal-gaps",
+      "actual": "Earlier Windows metadata/gated failures and421 TSan deadline remain original failures; current-source passes do not prove their causes.",
+      "originalFailuresAndMissingEvidenceLimitsRetained": true
+    },
+    {
+      "id": "current-source-formal-performance",
+      "actual": "Currentdd589 native complete candidate cold/QPS/density session43663784678 dispatched; originalv0.2.2 data accepted by user as reference, not rerun or retrospectively qualified.",
+      "noBlindLongRerunWhileBaselinePrerequisiteBlocked": false,
+      "userRemovedLegacyRevalidationPrerequisite": true
+    }
+  ],
+  "userAcceptedExistingV022Reference": {
+    "complete": true,
+    "recordedUTC": "2026-11-15T01:33:57.600755+00:00",
+    "userInstruction": "v0.2.2就是在这台机器上跑的，所以你可以默认现有数据就是原版本的基准，你只需要考虑0.3.0的",
+    "existingBaselineDataFile": "perf-site/data.js",
+    "exactDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+    "acceptanceScope": "User-accepted existing original-version reference; not a newly revalidated formal legacy point",
+    "oldLegacyGaugeFailurePreservedButNoLongerCurrentTaskPrerequisite": true,
+    "actualCurrentMachineAndOriginalBaselineMachineNotConflated": true,
+    "currentSourceStillRequiresCompleteOriginalThreeLaneEvidence": true,
+    "mainReleaseTagsAndPagesNotChanged": true,
+    "fullV030GoalComplete": false
+  },
+  "userDirectionDoesNotRequalifyHistoricalFormalPoint": true,
+  "legacyBaselineRevalidationNoLongerTaskPrerequisiteByExplicitUserDirection": true,
+  "historicalFormal10MissingGaugeFailureAndPrivatePoolCounterNonEquivalenceRetained": true,
+  "originalDataStillRecordedAsVersion02xReleaseV022AndBytesUnchanged": true,
+  "originalBaselineMachineAndNewNativeRunnerMachineNotConflated": true,
+  "native11Workflow": {
+    "workflowRunId": 43663784678,
+    "url": "https://github.com/ErosZy/capsid/actions/runs/43663784678",
+    "status": "in_progress",
+    "conclusion": null,
+    "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+    "productTree": "281a24c0b10b0a75cbd4e08b0ce5962ca4959b97",
+    "workflowCommit": "eaa20a96c2ee428679527c788631fe633e88ce18"
+  },
+  "native11CandidateColdQpsDensityCommonArgumentAstsAndQuietObserverAstsUnchanged": true,
+  "native11AllPreparationAndOriginal360MinuteJobBudgetRetained": true,
+  "native11OriginalV022BuildAndMeasurementRemovedByUserDirection": true,
+  "native11BaselineSnapshotActualNodeScriptExecutedAndBytesChecked": true,
+  "native11NoMainTagsReleaseOrPagesChanges": true,
+  "formalPerformancePointCountBeforeNative11": 1,
+  "formalPointCountNotIncrementedUntilIndependentArtifactReview": true,
+  "rawStatusBeforeUserDirection": {
+    "file": "qualification-before-native11-user-reference.md.txt",
+    "sha256": "3d903b81630b73646efb012bfc762ad3a2228bd62a1e9ccbf53fdd781a4d2157"
+  },
+  "currentTargetedRequirementsCompleted": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6"
+  ],
+  "currentTargetedR3R5R6Closure": {
+    "file": "current-dd589-targeted-r3-r5-r6-closure.json",
+    "sha256": "7817199de658c51aea0de6024c86acdb4aed6479b97dfa7095e75f37e4e5a105"
+  },
+  "historicalExactOriginalIpcProofRetainedNotReexecuted": true,
+  "helperBinaryIndependentRehashLimitationRetained": true,
+  "fixedWireAllocationControlNoBenefit": {
+    "file": "frame-fixed-work-replay-review.json",
+    "sha256": "5426ccdf689a7ecdf28d5c90ba60206dd1d4a1f7bff5e89335f35486f169ad53",
+    "ratio": 1.0204237715833846,
+    "proposalNotIntegrated": true
+  },
+  "original1888PerfCallerChainAttributionOnly": {
+    "file": "frame-coverage-caller-chain-review.json",
+    "sha256": "a339c1ae6bcb7fa345d8d1b9108eb2c630cb412970c19b2f0a8a91c58fafef53",
+    "noLeafInstructionOrCausalClosureClaim": true
+  },
+  "privateUnmaskedStreamCopyProposal": {
+    "file": "stream-unmasked-copy-proposal-review.json",
+    "sha256": "61b8933ca02adbd71fd9be591d5413bca6331e6d8e0b592cbf4993a2632a6344",
+    "actualApiCasesPerOriginalAndProposal": 66,
+    "fixedOriginalEntryThreadCpuRatio": 0.8208741319891447,
+    "sameActualNineInputWorkloadAnd10000Calls": true,
+    "originalSeed419NormalPassesPerVariant": 2,
+    "proposalPeakRssMiB": [
+      496,
+      493
+    ],
+    "originalAlsoPassedSoHistoricalFailureNotCausallyClosed": true,
+    "notIntegratedAndNotCurrentSourceQualification": true
+  },
+  "streamCopySensitiveSeedFollowup": {
+    "workflowRunId": 43669364069,
+    "url": "https://github.com/ErosZy/capsid/actions/runs/43669364069",
+    "status": "in_progress",
+    "conclusion": null,
+    "declaredSeeds": [
+      1,
+      42,
+      2588777039
+    ],
+    "reason": "Near-original512MiB RSS headroom warrants predeclared allocation-sensitive and current-gate seeds; no success-only retries.",
+    "notCurrentCandidateSourceChange": true,
+    "originalDispatcherGenericFixedWorkStatusLabelNotAnActualFixedWorkClaim": true
+  },
+  "native11FinalArtifactUnavailableAndPointNotAccepted": true,
+  "liveLog404IsObservationAvailabilityNotSutFailure": true,
+  "privateAuditorInitialKeyErrorProductCheckoutPreserved": {
+    "file": "audit-current-dd589-targeted-r3-r5-r6-closure.py.before-candidate-field-fix.txt",
+    "sha256": "64ca12432a6bbf655de76bc980b02680f3fe212d04398c3e9b51b103ce859b34",
+    "correctedToAuthoritativeRegisteredCheckoutAndTree": true
+  },
+  "privateDiagnosticsAddNoFormalPoints": true,
+  "rawStatusBeforeTargetedClosure": {
+    "file": "qualification-before-dd589-targeted-and-stream-copy-result.md.txt",
+    "sha256": "291ca88f3b17d8455fe339e1201eea4d98f66fb3a8c21ad3094aeeaa7ee43f25"
+  }
+}

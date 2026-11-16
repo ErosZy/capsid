@@ -1,0 +1,87 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T15:26:45.004665+00:00",
+  "originalCollectionRun": 43603561020,
+  "readOnlyRecoveryRun": 43604176803,
+  "originalCollectorReporterOwnershipFailureRetained": true,
+  "plannedABBAIncompleteOnlyTwoActualAttempts": true,
+  "actualAttempts": [
+    {
+      "index": 1,
+      "profiled": false,
+      "seconds": 45.22022225400002,
+      "completeOriginalRuns": true,
+      "executedUnits": 10000
+    },
+    {
+      "index": 2,
+      "profiled": true,
+      "seconds": 47.073915209000006,
+      "completeOriginalRuns": true,
+      "executedUnits": 10000
+    }
+  ],
+  "untouchedHistoricalBinarySHA256": "6f5ce576afee67f823c4ad165ba1f673772772334a335c65e244352e8d070e78",
+  "exactStartingArchiveSHA256": "c20e6aac472c1cd7c3fb1dc186a92e68f50ed6c73b87861abc4d274ddfde5627",
+  "perfDataSHA256": "d5ddedb1c3acc4c17f395d937f83e4bad415f7c34d55ab8438149fcb40d274eb",
+  "rawPerfSampleRecordsIndependentlyParsed": 1888,
+  "lostRecords": 0,
+  "leadingUserModeEventWeight": [
+    {
+      "userModeEventWeightPercent": 36.49,
+      "symbol": "__sanitizer_cov_trace_const_cmp8"
+    },
+    {
+      "userModeEventWeightPercent": 36.28,
+      "symbol": "__sanitizer_cov_trace_cmp8"
+    },
+    {
+      "userModeEventWeightPercent": 5.88,
+      "symbol": "capsid::host::ws::StreamDecoder::consume(unsigned char const*, unsigned long, unsigned long*, unsigned long, capsid::host::ws::StreamDecoder::Item*)"
+    },
+    {
+      "userModeEventWeightPercent": 3.97,
+      "symbol": "(anonymous namespace)::valid(unsigned char const*, unsigned long, bool, bool, bool)"
+    },
+    {
+      "userModeEventWeightPercent": 3.55,
+      "symbol": "capsid::host::ws::Parser::next(capsid::host::ws::Frame*)"
+    },
+    {
+      "userModeEventWeightPercent": 1.91,
+      "symbol": "std::vector<unsigned char, std::allocator<unsigned char> >::operator[](unsigned long)"
+    },
+    {
+      "userModeEventWeightPercent": 1.85,
+      "symbol": "__sanitizer_internal_memmove"
+    },
+    {
+      "userModeEventWeightPercent": 1.69,
+      "symbol": "capsid::host::ws::encode(capsid::host::ws::Frame const&, capsid::host::ws::Role, unsigned int, std::vector<unsigned char, std::allocator<unsigned char> >*)"
+    },
+    {
+      "userModeEventWeightPercent": 1.27,
+      "symbol": "__asan::Allocator::Allocate(unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType, bool)"
+    },
+    {
+      "userModeEventWeightPercent": 0.95,
+      "symbol": "0x00000000001a1efa"
+    },
+    {
+      "userModeEventWeightPercent": 0.58,
+      "symbol": "__sanitizer::BufferedStackTrace::UnwindFast(unsigned long, unsigned long, unsigned long, unsigned long, unsigned int)"
+    },
+    {
+      "userModeEventWeightPercent": 0.53,
+      "symbol": "__sanitizer::StackDepotBase<__sanitizer::StackDepotNode, 1, 20>::Put(__sanitizer::StackTrace, bool*)"
+    }
+  ],
+  "sanitizerCoverageComparisonHookWeightPercent": 72.77000000000001,
+  "instrumentationNotDisabledAndNoOptimizationIntegrated": true,
+  "currentRunnerDidNotReproduceHistoricalTimeout": true,
+  "historicalOriginal60SecondFailuresRemainOpen": true,
+  "recoveryReadsExistingSamplesWithoutRepeatingFuzzer": true,
+  "notProductOrPerformanceQualification": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

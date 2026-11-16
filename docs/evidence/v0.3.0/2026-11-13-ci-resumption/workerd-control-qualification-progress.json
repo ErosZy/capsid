@@ -1,0 +1,113 @@
+{
+  "schema": "capsid-workerd-control-readiness-qualification-progress-v1",
+  "complete": true,
+  "observedUTC": "2026-11-14T04:31:54.946579+00:00",
+  "classification": "progress-not-complete",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "productTree": "ad81fef535ab4c0bb3ca52618ddf9fe084834ea4",
+  "sourceFileCount": 5169,
+  "changedFiles": {
+    "bench/density_probe.py": {
+      "sha256": "69abe935aedfd1bb38a4727a9152f2ddf747a50ad99b27f76763e95b4be069b1",
+      "bytes": 21193
+    },
+    "bench/density_control.py": {
+      "sha256": "1992f3468175ac7766fae8eccbe52911c5a21ec8dfe574a8a89c9c2eff7929bf",
+      "bytes": 12197
+    },
+    "bench/density_evidence.py": {
+      "sha256": "0c92c79118d0080666f86ac2266f63326d46dc38c44d6064ebfe4b4191284359",
+      "bytes": 12480
+    },
+    "bench/SPEC.md": {
+      "sha256": "9cb9a3c66cf71529349fef7e03d43e6593152df44a3385752003e486b5c56047",
+      "bytes": 20326
+    },
+    "tests/test_benchmark_density_control.py": {
+      "sha256": "5b7aa267fb8ddb24524f8f184a797ccc42ff9c7d6e6beb9c704af36b8a1e6120",
+      "bytes": 28949
+    },
+    "tests/helpers/density_measurement_fixture.py": {
+      "sha256": "676a874e2a1c981f8d989c053166b037aa7b8f9ca2add2e7b61229d4da2b3f55",
+      "bytes": 5696
+    },
+    "tests/test_perf_evidence.py": {
+      "sha256": "d2ead3569b41153371c6e994156e74bde1bc6a58aa6e427bcec9eefebb021067",
+      "bytes": 50762
+    }
+  },
+  "allOther5162FrozenFilesIdentical": true,
+  "productionRuntimeAndPublicAbiAndSdk78Unchanged": true,
+  "sourceManifestSHA256": "b67084ea8303d8128986d263f4b9874db4430bf90547d0c17b361a14b39cd432",
+  "localSnapshotIsTreeEquivalentNotRemoteProductCommit": "736c53624eaa552d2ade99548493174377750514",
+  "benchmarkReview": "workerd-control-benchmark-review.json",
+  "completeOriginalBudgetUnitTestsPassed": 100,
+  "unitTestsSkipped": 0,
+  "actualPinnedWorkerdControlCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "cells": 2048,
+      "responses": 2048
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "cells": 65,
+      "responses": 6500
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "cells": 8,
+      "responses": 8
+    }
+  ],
+  "actualCasesAreControllerIntegrationEvidenceNotFormalDensity": true,
+  "controlFdABAReview": "workerd-density-control-fd-review.json",
+  "fuzzReview": "workerd-control-fuzz-review.json",
+  "fuzzPassed": 9,
+  "fuzzSkipped": 0,
+  "fuzzExecutedUnits": 70000,
+  "allSevenFuzzBinariesEqualPriorReviewedBe19Candidate": true,
+  "windowsOriginalRetryTimedOutAtOriginal180MinuteJobBudget": true,
+  "windowsRetryReview": "readiness-windows-retry-timeout.json",
+  "priorCandidateR1R9Ledger": "current-r1-r9-ledger.json",
+  "priorCandidateCoreAndDebugAndMacosAndSoakNotAutomaticallyPromoted": true,
+  "finalR1ThroughR9SameSourceClosurePending": true,
+  "workflows": {
+    "controlfull": {
+      "workflowRunId": 43555865031,
+      "workflowCommit": "502b8814125d1995cfd18060531b832cf5bf2917",
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43555865031",
+      "status": "in_progress",
+      "conclusion": null,
+      "observedUTC": "2026-11-14T04:24:42.107401+00:00"
+    },
+    "controlsupp": {
+      "workflowRunId": 43556048512,
+      "workflowCommit": "bcfe9034abc4bcb0a010bc0ca3d01e0933a77622",
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43556048512",
+      "status": "in_progress",
+      "conclusion": null,
+      "observedUTC": "2026-11-14T04:19:53.935127+00:00"
+    },
+    "native5": {
+      "workflowRunId": 43555973603,
+      "workflowCommit": "fb51cc0d9249054b9233c3254cc33580eeb46204",
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43555973603",
+      "status": "in_progress",
+      "conclusion": null,
+      "observedUTC": "2026-11-14T04:19:53.799864+00:00"
+    }
+  },
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "postFreezeWorkspaceDocumentationNotClaimedAsEarlierFrozenInput": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "originalFailuresAndUnsuccessfulTransfersAndArtifactsRetained": true,
+  "mainTagsReleasesPagesAndBlockedWslNotModified": true,
+  "previousWorkspaceStatusSHA256": "e56e6fe8a4fb57b61e8d371dc2f6de92a45bcc4798f605c4375b8b851d7f27e9",
+  "previousWorkspaceStatusCopy": "E:\\capsid-verification-20261113\\evidence\\v030-workerd-control-progress-r1\\qualification-before.md"
+}

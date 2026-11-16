@@ -1,0 +1,84 @@
+{
+  "complete": true,
+  "steps": [
+    {
+      "label": "prepare-all78",
+      "command": [
+        "E:\\capsid-verification-20261113\\evidence\\v030-portable-cmake-3.31.8-r1\\cmake-3.31.8-windows-x86_64\\bin\\cmake.exe",
+        "-DCAPSID_VENDOR_SOURCE=E:\\capsid\\vendor\\txiki.js",
+        "-DCAPSID_VENDOR_OVERLAY=E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\overlay",
+        "-P",
+        "E:\\capsid\\cmake\\PrepareTxiki.cmake"
+      ],
+      "exitCode": 0,
+      "seconds": 12.172000000020489
+    },
+    {
+      "label": "stamp-actual-key",
+      "command": [
+        "E:\\capsid-verification-20261113\\evidence\\v030-portable-cmake-3.31.8-r1\\cmake-3.31.8-windows-x86_64\\bin\\cmake.exe",
+        "-DCAPSID_ROOT=E:\\capsid",
+        "-DCAPSID_OVERLAY=E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\overlay",
+        "-P",
+        "E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\stamp-real-overlay.cmake"
+      ],
+      "exitCode": 0,
+      "seconds": 2.327999999979511
+    },
+    {
+      "label": "actual-vendor-key-manifest-audit",
+      "command": [
+        "E:\\capsid-verification-20261113\\evidence\\v030-portable-cmake-3.31.8-r1\\cmake-3.31.8-windows-x86_64\\bin\\cmake.exe",
+        "-DCAPSID_TXIKI_VENDOR=E:\\capsid\\vendor\\txiki.js",
+        "-DCAPSID_TXIKI_PATCH_DIR=E:\\capsid\\patches\\txiki",
+        "-DCAPSID_TXIKI_PREPARE_SCRIPT=E:\\capsid\\cmake\\PrepareTxiki.cmake",
+        "-DCAPSID_TXIKI_OVERLAY_STAMP=E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\overlay\\.capsid-overlay-key",
+        "-DCAPSID_TXIKI_EXPECTED_TAG=v26.6.0",
+        "-DCAPSID_TXIKI_PROBE_DIR=E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\vendor-audit-probe",
+        "-P",
+        "E:\\capsid\\cmake\\AuditTxikiVendor.cmake"
+      ],
+      "exitCode": 0,
+      "seconds": 7.594000000040978
+    },
+    {
+      "label": "original-negative-controls-and-miniz-cow",
+      "command": [
+        "E:\\capsid-verification-20261113\\evidence\\v030-portable-cmake-3.31.8-r1\\cmake-3.31.8-windows-x86_64\\bin\\cmake.exe",
+        "-DCAPSID_TXIKI_VENDOR=E:\\capsid\\vendor\\txiki.js",
+        "-DCAPSID_TXIKI_PATCH_DIR=E:\\capsid\\patches\\txiki",
+        "-DCAPSID_TXIKI_PREPARE_SCRIPT=E:\\capsid\\cmake\\PrepareTxiki.cmake",
+        "-DCAPSID_TXIKI_OVERLAY_STAMP=E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\overlay\\.capsid-overlay-key",
+        "-DCAPSID_TXIKI_AUDIT_SCRIPT=E:\\capsid\\cmake\\AuditTxikiVendor.cmake",
+        "-DCAPSID_TEST_WORK_DIR=E:\\capsid-verification-20261113\\evidence\\v030-miniz-distance-one-overlay-local-r4\\negative-controls",
+        "-P",
+        "E:\\capsid\\cmake\\TestTxikiOverlayAudit.cmake"
+      ],
+      "exitCode": 0,
+      "seconds": 15.265999999945052
+    },
+    {
+      "label": "canonical-key-contract",
+      "command": [
+        "E:\\capsid-verification-20261113\\evidence\\v030-portable-cmake-3.31.8-r1\\cmake-3.31.8-windows-x86_64\\bin\\cmake.exe",
+        "-DCAPSID_TXIKI_VENDOR=E:\\capsid\\vendor\\txiki.js",
+        "-DCAPSID_TXIKI_PATCH_DIR=E:\\capsid\\patches\\txiki",
+        "-DCAPSID_TXIKI_PREPARE_SCRIPT=E:\\capsid\\cmake\\PrepareTxiki.cmake",
+        "-DCAPSID_TXIKI_KEY_SCRIPT=E:\\capsid\\cmake\\ComputeTxikiOverlayKey.cmake",
+        "-P",
+        "E:\\capsid\\cmake\\TestTxikiOverlayKey.cmake"
+      ],
+      "exitCode": 0,
+      "seconds": 3.452999999979511
+    }
+  ],
+  "all78PatchesAppliedToActualOverlay": true,
+  "actualWindowsOverlayNormalizedSourceEqualsIndependentlyTestedProposal": true,
+  "normalizationMatchesExistingProjectKeyAndManifestContract": true,
+  "actualWindowsOverlayMinizSHA256": "b3cb1285f0d8854cce6c8d4807fc62ec31336d299d1232acf2ca7898ae6b3921",
+  "originalVendorAndGeneratedWorkingInputsNotModified": true,
+  "minizOverlayOwnedPrivateDirectory": true,
+  "keyAndManifestAndExistingNegativeControlsPassed": true,
+  "actualConfigureDependencyGraphStillRequiresFreshNativeCi": true,
+  "notWholeRuntimeOrTsanQualification": true
+}

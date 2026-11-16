@@ -1,0 +1,115 @@
+{
+  "schema": "capsid-loopback-authority-ownership-causal-aba-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T08:50:05.895950+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "predeclaredOutcomes": [
+    "fail",
+    "pass",
+    "fail"
+  ],
+  "actualCtestExitCode": 8,
+  "attempts": [
+    {
+      "name": "A1",
+      "seconds": 62.6908,
+      "complete": false,
+      "failedCases": [
+        "fetch-abort-body-dom"
+      ],
+      "foreignListenerBound": true,
+      "reportSHA256": "558dd1fcec36b440f481b158dab798dac4198e735e62f5eb5f2d9a183e3d57c6",
+      "foreignEvidenceSHA256": "26e3bbef0fa5b23969e795ef258eee383f30ede38601ddee3be7cb53a2d99b68"
+    },
+    {
+      "name": "B",
+      "seconds": 10.6366,
+      "complete": true,
+      "failedCases": [],
+      "foreignListenerBound": false,
+      "reportSHA256": "4027fd33f6082f573453acc39ea1dec1b7e6a50885c3428510952107a790543c",
+      "foreignEvidenceSHA256": "420e8d866c872c924e48747fd1e344ea998f85faf7a7ead52ec630a8cc32744b"
+    },
+    {
+      "name": "A2",
+      "seconds": 62.8808,
+      "complete": false,
+      "failedCases": [
+        "fetch-abort-body-dom"
+      ],
+      "foreignListenerBound": true,
+      "reportSHA256": "8e720eb319f72222b9b6b0628e50d8b99ae0d30cc4389637c7b72a6c0dbd48cc",
+      "foreignEvidenceSHA256": "aeb088816f6edaf7b3132a2a0f7d0d72547c959f1f47b0b32e05deea33b1b20c"
+    }
+  ],
+  "actualNativePeBytesUnchanged": true,
+  "all32CasesAndOriginal3Second120SecondBudgetsPreserved": true,
+  "originalAndRestoredMissingSourceAssertionsAndPendingFetchStateExactlyReproduced": true,
+  "realForeignIPv6EndpointCapturedExactNativeRequest": true,
+  "dualOwnerBlocksForeignEndpointAndPassesAllOriginalBusinessChecks": true,
+  "oneCommonOracleAcrossAllThreeVariants": true,
+  "sourceFixtureNotModified": true,
+  "noTimedSleepOrKernelConfigurationChange": true,
+  "independentSystemResolverAndRefusedSocketEvidence": [
+    {
+      "index": 0,
+      "resolveMilliseconds": 8.573700091801584,
+      "orderedAttempts": [
+        {
+          "family": 23,
+          "address": "::1",
+          "error": 10061,
+          "milliseconds": 2015.8694999990985
+        },
+        {
+          "family": 2,
+          "address": "127.0.0.1",
+          "error": 0,
+          "milliseconds": 15.185199910774827
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "resolveMilliseconds": 0.29660004656761885,
+      "orderedAttempts": [
+        {
+          "family": 23,
+          "address": "::1",
+          "error": 10061,
+          "milliseconds": 2051.041900063865
+        },
+        {
+          "family": 2,
+          "address": "127.0.0.1",
+          "error": 0,
+          "milliseconds": 16.925999894738197
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "resolveMilliseconds": 0.3350999904796481,
+      "orderedAttempts": [
+        {
+          "family": 23,
+          "address": "::1",
+          "error": 10061,
+          "milliseconds": 2033.785399980843
+        },
+        {
+          "family": 2,
+          "address": "127.0.0.1",
+          "error": 0,
+          "milliseconds": 15.374799957498908
+        }
+      ]
+    }
+  ],
+  "diagnosticOnlyNotFormalPerformance": true,
+  "historicalCiCollisionNotProvenBecauseOriginalSocketSnapshotMissing": true,
+  "doesNotCloseOtherFrameTsanOrWindowsFailures": true,
+  "productIntegrationNotYetPerformed": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,207 @@
+{
+  "schema": "capsid-portable-runtime-archive-benchmark-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T11:17:12.743208+00:00",
+  "workflowRunId": 43588155866,
+  "artifactId": 14111192177,
+  "archiveSHA256": "a358fff4126f5578f8a93d9bbff8db8972f4b7b028c8e4ee0cd930059e4e2a3c",
+  "productCheckout": "d6b4ead0d09c75b0b1e04c10d7683b766a6d1cbf",
+  "productTree": "dc5684a08ddc27ef6bf3f5b788aad79ce3bb7937",
+  "sourceFileCount": 5169,
+  "productionRuntimeUnchanged": true,
+  "completeOriginalBudgetFiles": 7,
+  "fullUnitTestsPassed": 112,
+  "unitTestsSkipped": 0,
+  "actualPinnedWorkerdCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "count": 2048,
+      "validatedResponses": 2048,
+      "wholeTreePssKiB": 4074160,
+      "rawStartupAndConditioningAndPssAndCleanupIndependentlyReplayed": true
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "count": 65,
+      "validatedResponses": 6500,
+      "wholeTreePssKiB": 268798,
+      "rawStartupAndConditioningAndPssAndCleanupIndependentlyReplayed": true
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "count": 8,
+      "validatedResponses": 8,
+      "wholeTreePssKiB": 119912,
+      "rawStartupAndConditioningAndPssAndCleanupIndependentlyReplayed": true
+    }
+  ],
+  "integratedSameCapacityOriginalIntegratedOriginalABA": [
+    {
+      "index": 1,
+      "stage": "original-A",
+      "count": 1024,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 102400
+    },
+    {
+      "index": 2,
+      "stage": "original-A",
+      "count": 768,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 76800
+    },
+    {
+      "index": 3,
+      "stage": "original-A",
+      "count": 1024,
+      "passed": false,
+      "newKernelTableFullWarnings": 89,
+      "capacity": 262144,
+      "failedConnects": 512
+    },
+    {
+      "index": 4,
+      "stage": "original-A",
+      "count": 768,
+      "passed": false,
+      "newKernelTableFullWarnings": 30,
+      "capacity": 262144,
+      "failedConnects": 84
+    },
+    {
+      "index": 5,
+      "stage": "integrated-B",
+      "count": 1024,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 102400,
+      "sharedStartup": {
+        "admittedMonotonic": 364.740625289,
+        "deadlineMonotonic": 453.726337843,
+        "launchStartedMonotonic": 364.740667013,
+        "method": "linux-conntrack-headroom-v1",
+        "readings": 618,
+        "readyMonotonic": 368.084399063,
+        "requiredConnections": 103424,
+        "startMonotonic": 333.726337843,
+        "startupTimeoutSeconds": 120
+      }
+    },
+    {
+      "index": 6,
+      "stage": "integrated-B",
+      "count": 768,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 76800,
+      "sharedStartup": {
+        "admittedMonotonic": 395.151242532,
+        "deadlineMonotonic": 515.1502163079999,
+        "launchStartedMonotonic": 395.151263862,
+        "method": "linux-conntrack-headroom-v1",
+        "readings": 1,
+        "readyMonotonic": 397.748109312,
+        "requiredConnections": 77568,
+        "startMonotonic": 395.150216308,
+        "startupTimeoutSeconds": 120
+      }
+    },
+    {
+      "index": 7,
+      "stage": "integrated-B",
+      "count": 1024,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 102400,
+      "sharedStartup": {
+        "admittedMonotonic": 509.628531898,
+        "deadlineMonotonic": 537.777449706,
+        "launchStartedMonotonic": 509.628604776,
+        "method": "linux-conntrack-headroom-v1",
+        "readings": 1825,
+        "readyMonotonic": 512.964912859,
+        "requiredConnections": 103424,
+        "startMonotonic": 417.777449706,
+        "startupTimeoutSeconds": 120
+      }
+    },
+    {
+      "index": 8,
+      "stage": "integrated-B",
+      "count": 768,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 76800,
+      "sharedStartup": {
+        "admittedMonotonic": 540.961609927,
+        "deadlineMonotonic": 660.960449547,
+        "launchStartedMonotonic": 540.961633142,
+        "method": "linux-conntrack-headroom-v1",
+        "readings": 1,
+        "readyMonotonic": 543.564495587,
+        "requiredConnections": 77568,
+        "startMonotonic": 540.960449547,
+        "startupTimeoutSeconds": 120
+      }
+    },
+    {
+      "index": 9,
+      "stage": "restored-A",
+      "count": 1024,
+      "passed": false,
+      "newKernelTableFullWarnings": 53,
+      "capacity": 262144,
+      "failedConnects": 311
+    },
+    {
+      "index": 10,
+      "stage": "restored-A",
+      "count": 768,
+      "passed": false,
+      "newKernelTableFullWarnings": 55,
+      "capacity": 262144,
+      "failedConnects": 294
+    },
+    {
+      "index": 11,
+      "stage": "restored-A",
+      "count": 1024,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 102400
+    },
+    {
+      "index": 12,
+      "stage": "restored-A",
+      "count": 768,
+      "passed": true,
+      "newKernelTableFullWarnings": 0,
+      "capacity": 262144,
+      "validatedResponses": 76800
+    }
+  ],
+  "originalSharedStartupBudgetIndependentlyReplayed": true,
+  "noNetworkCapacityIncreaseDuringComparison": true,
+  "maxRequestSeconds": 5,
+  "startupSeconds": 120,
+  "coverageSeconds": 300,
+  "memoryBudgetMiB": 2048,
+  "fullDensityWaveAndWorkerCountsNotChanged": true,
+  "cold2048IsValidOverBudgetUpperProbeNotAFinalDensityMaximum": true,
+  "syntheticFixturesNotPromotedToPerformance": true,
+  "fullCandidateCiAndSameSessionPerformanceStillRequired": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

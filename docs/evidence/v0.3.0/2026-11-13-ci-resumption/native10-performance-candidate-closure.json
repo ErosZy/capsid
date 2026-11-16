@@ -1,0 +1,452 @@
+{
+  "complete": true,
+  "observedUTC": "2026-11-14T16:25:42.013345+00:00",
+  "workflowRunId": 43600331044,
+  "source": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+  "qualifiedSameSessionCandidateThreeLanes": true,
+  "sealedFiles": {
+    "cold": 742,
+    "qps": 2115,
+    "density": 2732
+  },
+  "allTwelveDensityCellsHaveActualBudgetBoundary": true,
+  "wholeOriginalWorkflowFailedAtLegacyDensity": true,
+  "fullBaselineAndWholeV030GoalIncomplete": true,
+  "rawQuietCountersIndependentlyRecomputed": [
+    "before-formal-session",
+    "between-formal-qps",
+    "between-formal-density",
+    "after-formal-session",
+    "before-baseline-cold",
+    "before-baseline-qps",
+    "before-baseline-density"
+  ],
+  "allRecordedNetworkParameterSnapshotsIdenticalExceptOccupancy": true,
+  "nativeConntrackMaximum": "1048576",
+  "finalControllerFlagRemainedUnsetAfterActualFailure": true,
+  "physicalHostIsolationNotClaimed": true,
+  "finalCapsidConditioningWavesRechecked": 303,
+  "finalWavesWithActualPriorInflightAndThenZero": 0,
+  "maximumFinalRetirementWaitSeconds": 0.03927349100013089,
+  "candidateCold": {
+    "cells": [
+      {
+        "stack": "capsid-source",
+        "size": "10k",
+        "totalMs": 6.6,
+        "readyMs": 6.39,
+        "warmMs": 0.1,
+        "pssMb": 6.6
+      },
+      {
+        "stack": "capsid-source",
+        "size": "100k",
+        "totalMs": 11.19,
+        "readyMs": 10.96,
+        "warmMs": 0.102,
+        "pssMb": 8.0
+      },
+      {
+        "stack": "capsid-source",
+        "size": "1m",
+        "totalMs": 70.2,
+        "readyMs": 69.71,
+        "warmMs": 0.126,
+        "pssMb": 18.6
+      },
+      {
+        "stack": "capsid-bytecode",
+        "size": "10k",
+        "totalMs": 6.13,
+        "readyMs": 5.91,
+        "warmMs": 0.099,
+        "pssMb": 6.6
+      },
+      {
+        "stack": "capsid-bytecode",
+        "size": "100k",
+        "totalMs": 7.34,
+        "readyMs": 7.12,
+        "warmMs": 0.1,
+        "pssMb": 7.5
+      },
+      {
+        "stack": "capsid-bytecode",
+        "size": "1m",
+        "totalMs": 23.09,
+        "readyMs": 22.74,
+        "warmMs": 0.138,
+        "pssMb": 15.6
+      },
+      {
+        "stack": "node",
+        "size": "10k",
+        "totalMs": 50.54,
+        "readyMs": 46.44,
+        "warmMs": 0.232,
+        "pssMb": 57.5
+      },
+      {
+        "stack": "node",
+        "size": "100k",
+        "totalMs": 50.78,
+        "readyMs": 46.71,
+        "warmMs": 0.276,
+        "pssMb": 57.6
+      },
+      {
+        "stack": "node",
+        "size": "1m",
+        "totalMs": 76.91,
+        "readyMs": 72.78,
+        "warmMs": 0.184,
+        "pssMb": 73.9
+      },
+      {
+        "stack": "deno",
+        "size": "10k",
+        "totalMs": 28.17,
+        "readyMs": 26.9,
+        "warmMs": 0.127,
+        "pssMb": 38.6
+      },
+      {
+        "stack": "deno",
+        "size": "100k",
+        "totalMs": 42.29,
+        "readyMs": 40.98,
+        "warmMs": 0.136,
+        "pssMb": 42.7
+      },
+      {
+        "stack": "deno",
+        "size": "1m",
+        "totalMs": 142.4,
+        "readyMs": 141.11,
+        "warmMs": 0.111,
+        "pssMb": 46.7
+      },
+      {
+        "stack": "workerd",
+        "size": "10k",
+        "totalMs": 22.72,
+        "readyMs": 21.84,
+        "warmMs": 0.225,
+        "pssMb": 49.9
+      },
+      {
+        "stack": "workerd",
+        "size": "100k",
+        "totalMs": 22.19,
+        "readyMs": 21.24,
+        "warmMs": 0.229,
+        "pssMb": 51.8
+      },
+      {
+        "stack": "workerd",
+        "size": "1m",
+        "totalMs": 43.97,
+        "readyMs": 27.32,
+        "warmMs": 0.134,
+        "pssMb": 64.6
+      }
+    ],
+    "warm": [],
+    "pssMb": []
+  },
+  "candidateQps": {
+    "cells": [
+      {
+        "stack": "capsid",
+        "workload": "matrix-json-1k",
+        "qps": 5927.9,
+        "p50Ms": 10.429017,
+        "p95Ms": 14.562751
+      },
+      {
+        "stack": "capsid",
+        "workload": "matrix-json-16k",
+        "qps": 4966.9,
+        "p50Ms": 13.055343,
+        "p95Ms": 17.586185
+      },
+      {
+        "stack": "capsid",
+        "workload": "stream",
+        "qps": 4341.3,
+        "p50Ms": 13.845279,
+        "p95Ms": 18.188444
+      },
+      {
+        "stack": "workerd",
+        "workload": "matrix-json-1k",
+        "qps": 19317.5,
+        "p50Ms": 1.909278,
+        "p95Ms": 8.975878
+      },
+      {
+        "stack": "workerd",
+        "workload": "matrix-json-16k",
+        "qps": 13553.1,
+        "p50Ms": 3.760206,
+        "p95Ms": 8.104343
+      },
+      {
+        "stack": "workerd",
+        "workload": "stream",
+        "qps": 12816.0,
+        "p50Ms": 3.735499,
+        "p95Ms": 10.993505
+      },
+      {
+        "stack": "fastapi",
+        "workload": "matrix-json-1k",
+        "qps": 6336.2,
+        "p50Ms": 9.676734,
+        "p95Ms": 12.474722
+      },
+      {
+        "stack": "fastapi",
+        "workload": "matrix-json-16k",
+        "qps": 5720.9,
+        "p50Ms": 10.918903,
+        "p95Ms": 13.408228
+      },
+      {
+        "stack": "fastapi",
+        "workload": "stream",
+        "qps": 3585.4,
+        "p50Ms": 16.357423,
+        "p95Ms": 29.938219
+      },
+      {
+        "stack": "flask",
+        "workload": "matrix-json-1k",
+        "qps": 3647.4,
+        "p50Ms": 17.311878,
+        "p95Ms": 18.876033
+      },
+      {
+        "stack": "flask",
+        "workload": "matrix-json-16k",
+        "qps": 2741.2,
+        "p50Ms": 23.295131,
+        "p95Ms": 25.083379
+      },
+      {
+        "stack": "flask",
+        "workload": "stream",
+        "qps": 4065.2,
+        "p50Ms": 15.61896,
+        "p95Ms": 17.408402
+      },
+      {
+        "stack": "php",
+        "workload": "matrix-json-1k",
+        "qps": 1114.8,
+        "p50Ms": 54.885968,
+        "p95Ms": 69.516803
+      },
+      {
+        "stack": "php",
+        "workload": "matrix-json-16k",
+        "qps": 1030.6,
+        "p50Ms": 59.116377,
+        "p95Ms": 72.478246
+      },
+      {
+        "stack": "php",
+        "workload": "stream",
+        "qps": 1040.4,
+        "p50Ms": 61.166953,
+        "p95Ms": 70.176804
+      }
+    ],
+    "lowLoadPssMb": {
+      "capsid": 14.6,
+      "workerd": 47.2,
+      "fastapi": 35.5,
+      "flask": 41.7,
+      "php": 48.0
+    },
+    "lowLoadPss": {
+      "capsid": [
+        {
+          "role": "host",
+          "mb": 7.7
+        },
+        {
+          "role": "worker",
+          "mb": 6.8
+        }
+      ],
+      "workerd": [
+        {
+          "role": "process",
+          "mb": 47.2
+        }
+      ],
+      "fastapi": [
+        {
+          "role": "process",
+          "mb": 35.5
+        }
+      ],
+      "flask": [
+        {
+          "role": "master",
+          "mb": 18.3
+        },
+        {
+          "role": "worker",
+          "mb": 23.4
+        }
+      ],
+      "php": [
+        {
+          "role": "fpm-master",
+          "mb": 30.3
+        },
+        {
+          "role": "nginx",
+          "mb": 1.6
+        },
+        {
+          "role": "nginx-worker",
+          "mb": 2.9
+        },
+        {
+          "role": "fpm-worker",
+          "mb": 13.2
+        }
+      ]
+    },
+    "servingPssMb": {
+      "capsid": 18.3,
+      "workerd": 615.8,
+      "fastapi": 40.8,
+      "flask": 43.9,
+      "php": 48.6
+    },
+    "servingPss": {
+      "capsid": [
+        {
+          "role": "host",
+          "mb": 9.2
+        },
+        {
+          "role": "worker",
+          "mb": 9.2
+        }
+      ],
+      "workerd": [
+        {
+          "role": "process",
+          "mb": 615.8
+        }
+      ],
+      "fastapi": [
+        {
+          "role": "process",
+          "mb": 40.8
+        }
+      ],
+      "flask": [
+        {
+          "role": "master",
+          "mb": 19.3
+        },
+        {
+          "role": "worker",
+          "mb": 24.6
+        }
+      ],
+      "php": [
+        {
+          "role": "fpm-master",
+          "mb": 30.2
+        },
+        {
+          "role": "nginx",
+          "mb": 1.6
+        },
+        {
+          "role": "nginx-worker",
+          "mb": 3.5
+        },
+        {
+          "role": "fpm-worker",
+          "mb": 13.3
+        }
+      ]
+    }
+  },
+  "candidateDensity": {
+    "capsid": {
+      "cold@10k": {
+        "count": 748,
+        "unit": "workers",
+        "pssMb": 2047.1
+      },
+      "warm@10k": {
+        "count": 738,
+        "unit": "workers",
+        "pssMb": 2047.6
+      },
+      "cold@100k": {
+        "count": 510,
+        "unit": "workers",
+        "pssMb": 2045.8
+      },
+      "warm@100k": {
+        "count": 509,
+        "unit": "workers",
+        "pssMb": 2045.6
+      },
+      "cold@1m": {
+        "count": 129,
+        "unit": "workers",
+        "pssMb": 2046.8
+      },
+      "warm@1m": {
+        "count": 129,
+        "unit": "workers",
+        "pssMb": 2047.9
+      }
+    },
+    "workerd": {
+      "cold@10k": {
+        "count": 1041,
+        "unit": "cells",
+        "pssMb": 2047.0
+      },
+      "warm@10k": {
+        "count": 604,
+        "unit": "cells",
+        "pssMb": 2046.8
+      },
+      "cold@100k": {
+        "count": 901,
+        "unit": "cells",
+        "pssMb": 2047.5
+      },
+      "warm@100k": {
+        "count": 553,
+        "unit": "cells",
+        "pssMb": 2047.1
+      },
+      "cold@1m": {
+        "count": 246,
+        "unit": "cells",
+        "pssMb": 2038.9
+      },
+      "warm@1m": {
+        "count": 224,
+        "unit": "cells",
+        "pssMb": 2034.8
+      }
+    }
+  },
+  "formalPerformancePoints": 1,
+  "fullV030GoalComplete": false
+}

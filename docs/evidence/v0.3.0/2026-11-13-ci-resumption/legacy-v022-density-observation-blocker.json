@@ -1,0 +1,26 @@
+{
+  "complete": true,
+  "source": "aef602081134d6e87fd141a5693bbbb7c9ad7f2e",
+  "exactOriginalCommittedFilesRehashed": {
+    "src/host/admin_api.cc": "a2dbc4fbe368eb6336354512d74e9a765bb09c5bbcb4d1d58d09ad4f05adf785",
+    "src/host/admin_service.cc": "6a6c8e90d5ff879a3cb2773aa3fe70cd548ba531761a61b6077e13496a7654c7",
+    "src/host/generation_pool.cc": "c338773b01a03af28444d2fbf846d3a96cf012d7614bcfd66b67df6188fd82cc",
+    "src/host/managed_host.cc": "a41da4d53ef4507f69964b3421fc5e76357f6da8941c3f2de0fc4012a4d6b2d1",
+    "src/host/managed_listener.cc": "3f2ae7bc8314559f350a20a5e697102efb4696ead1938cacf71c0f1ea8d08e94",
+    "src/host/metrics.cc": "143b36dacee3150239e866184618cc39e6b28962ccf83d125602b68a3cb03774",
+    "src/host/worker_executor.cc": "947a2eee5d47423c7edd25d35b13264d9a3a0eae6bb327da1fb51013742d4f72",
+    "src/host/admin_api.h": "68dda471721d49e096e65bdf81168f00ba41679a8354900fece577617c90b26f",
+    "src/host/admin_service.h": "70b85dc22e8e3a7f467ec4351e1b6c129add2f10ce25f9578de9eda2c4de8921",
+    "src/host/generation_pool.h": "55213d595e78e876f69549f3e9412fd31a824a2f2789e0776f5bedab46d9b146",
+    "src/host/metrics.h": "894cd97dcdc7f50fc0fb16802c678d425bb94151bc7039bf6b125de0e9cab160",
+    "src/host/worker_executor.h": "9062ff189812a9f71708e5ee6b01c6249c22494288fd5e351f2952168e709fa0"
+  },
+  "actualFormal10LegacyDensityRejected": true,
+  "originalFailure": "one exact service HTTP inflight gauge is required",
+  "serviceHttpInflightNotExposedByLegacyMetricsRenderer": true,
+  "privateWorkerPoolInflightNotProvenEquivalentToServiceHttpLeaseRetirement": true,
+  "originalLegacySourceAndBinariesNotModified": true,
+  "noMissingMetricSubstitutedWithZeroOrFixedHold": true,
+  "baselineDensityNotQualified": true,
+  "baselineColdAndQpsPartialObservationStillPreserved": true
+}

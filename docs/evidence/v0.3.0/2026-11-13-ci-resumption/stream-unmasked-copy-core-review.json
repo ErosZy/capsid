@@ -1,0 +1,866 @@
+{
+  "schema": "capsid-hosted-core-independent-review-v1",
+  "complete": true,
+  "phase": "streamfull",
+  "reviewedUTC": "2026-11-15T04:52:01.591875+00:00",
+  "workflowRunId": 43671341667,
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "measuredSourceManifestSHA256": "751c92f5e0660d2743854876b1e05d5f0e5b60d4eb607e67b834fbc070e9eab8",
+  "originalArchiveBytesUnchanged": true,
+  "reviews": {
+    "ubsan": {
+      "artifactId": 14145204483,
+      "archiveSHA256": "f1fb7477611800b267b5eed1258e7e578a0a857fd0db342a494a59f3a9881ce1",
+      "registered": 1034,
+      "selected": 1028,
+      "passed": 1024,
+      "failed": [],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: sanitizer (not production)\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "registrationJUnitAndOriginalLogExact": true,
+      "buildId": "sha256:18867bcecb07d9ab1d4c61d4371689a034c342d9796f57572285567fa02cfe51",
+      "compatibilityId": "sha256:6d3c3ed4f32008ec959c4d9dba6d926586828e6064d1e14db2a4cf57d3aef57a",
+      "compiler": "GNU 13.3.0",
+      "buildType": "Debug",
+      "featureFlags": "lto=OFF asan=OFF ubsan=ON tsan=OFF mimalloc=OFF host=ON worker=ON sandbox_profile=sanitizer",
+      "provenanceDirty": "1",
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        }
+      },
+      "caresCompileUnits": 91,
+      "caresSelectedSanitizerPresent": true,
+      "mainReports": 317,
+      "reportSchemas": {
+        "capsid-async-callbacks-v1": 7,
+        "capsid-binding-fetch-arguments-v1": 10,
+        "capsid-binding-fetch-body-v1": 2,
+        "capsid-binding-fetch-cancel-v1": 10,
+        "capsid-binding-fetch-retained-v1": 10,
+        "capsid-binding-fetch-unread-v1": 2,
+        "capsid-binding-quota-v1": 2,
+        "capsid-cross-context-v1": 4,
+        "capsid-webcrypto-compat-v1": 4,
+        "capsid-workerd-fanout-v1": 8,
+        "capsid-fetch-arguments-v1": 20,
+        "capsid-fetch-boundary-v1": 4,
+        "capsid-fetch-byob-v1": 28,
+        "capsid-fetch-proxy-v1": 4,
+        "capsid-fetch-readers-v1": 4,
+        "capsid-fetch-resources-v1": 4,
+        "capsid-fetch-transition-v1": 4,
+        "capsid-fetch-upgrade-lifetime-v1": 4,
+        "capsid-fetch-upgrade-v1": 4,
+        "capsid-websocket-frame-boundaries-v2": 4,
+        "capsid-headers-compat-v1": 1,
+        "capsid-helper-response-credit-v1": 5,
+        "capsid-http-codec-v1": 8,
+        "capsid-websocket-interop-v1": 8,
+        "capsid-managed-local-owner-v1": 1,
+        "unversioned-resource-report": 27,
+        "capsid-ws-fixtures-v1": 3,
+        "capsid-message-port-order-v1": 3,
+        "capsid-workerd-mutations-v1": 1,
+        "capsid-native-branch-graph-v1": 8,
+        "capsid-native-default-reader-gates-v1": 2,
+        "capsid-native-fetch-abort-prefix-v1": 1,
+        "capsid-native-fetch-arguments-v1": 10,
+        "capsid-native-fetch-branch-prefix-v1": 2,
+        "capsid-native-fetch-deadline-v1": 4,
+        "capsid-native-fetch-encoded-branches-v1": 3,
+        "capsid-native-fetch-gzip-members-v1": 1,
+        "capsid-native-fetch-intrinsic-v1": 2,
+        "capsid-native-fetch-large-gzip-v1": 1,
+        "capsid-native-fetch-limits-v1": 2,
+        "capsid-native-fetch-owner-v1": 2,
+        "capsid-native-fetch-pending-v1": 6,
+        "capsid-native-request-targets-v1": 1,
+        "capsid-native-fetch-response-credit-v1": 1,
+        "capsid-native-reader-context-matrix-v1": 20,
+        "capsid-native-reader-context-v1": 2,
+        "capsid-native-reader-lifecycle-v1": 4,
+        "capsid-ordinary-fetch-v1": 20,
+        "capsid-websocket-owner-lifecycle-v1": 4,
+        "capsid-reader-intrinsics-v1": 4,
+        "capsid-reader-scope-v1": 4,
+        "capsid-workerd-ws-reference-v1": 1,
+        "capsid-response-retirement-v1": 4,
+        "capsid-standard-readers-v1": 12
+      },
+      "rawReportsTarSHA256": "a2eab1de3c921652c665a433444f29029d134f4f23a8f56723827245b527cf1e",
+      "recordedHostSHA256": "150efe0f8df21ea566990f12ecb0d135a586191a788c2969490c1ed7eafe021b",
+      "recordedWorkerSHA256": "3a82e312d92998070d156a396c0dd1c384bacecd9d241ae926cf46e0ae14a306",
+      "ordinaryManagedCore": {
+        "cases": 30,
+        "allNaturalShutdown": true,
+        "inputSHA256": {
+          "runner": "e61e617783c1d89882dc31e6e8ef3203e2eddc2669b4b3923e175da530113d58",
+          "fixture": "699861f614b0aa36b9434075271a49141fdaf34a08d6d628a1f606e03582dc93",
+          "contract": "6a2379b0e5167dcbdef4bcc5d710c8969042da3165f73a38f8e86ed6645777e0",
+          "referenceArchive": "f6fcd4cbf15b06b7bf1c4500fb05589713473fb5ba8d576a4442c55acda96f34",
+          "hostBackend": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+          "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+          "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+          "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
+        },
+        "reportSHA256": "4cfbc88a4fa716912a13bb2bf5141c80d9eaf58a20f8c380ede47ff5a5ef3ed6"
+      },
+      "sanitizerBinaryBytesIndependentlyRehashed": false,
+      "opensslCompileCommandsRequireOriginalJobLog": true,
+      "mainReportDigestInventorySHA256": "7f557d944fa2a031b0898fe9dbb4b2b860805332f2eb334dafea9adce4af84c1"
+    },
+    "asan": {
+      "artifactId": 14145249854,
+      "archiveSHA256": "7b1a26f31672b356adaeaaf3674b739cfabdf08dca7f7837c3916bf094b04302",
+      "registered": 1037,
+      "selected": 1029,
+      "passed": 1024,
+      "failed": [],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "host_managed_recovery_rejects_oversized_snapshot",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP: finite RLIMIT_AS recovery probe is unavailable with this sanitizer runtime"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: sanitizer (not production)\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "registrationJUnitAndOriginalLogExact": true,
+      "buildId": "sha256:d566880755e5f69cd7d54de4ccfaf58255ddbd6ee69460bb71341d9b76c7b564",
+      "compatibilityId": "sha256:8013738106ea7a8d731952889528598aa7f35bec14f20709304bb9e38d7acf69",
+      "compiler": "GNU 13.3.0",
+      "buildType": "Debug",
+      "featureFlags": "lto=OFF asan=ON ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON sandbox_profile=sanitizer",
+      "provenanceDirty": "1",
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        }
+      },
+      "caresCompileUnits": 91,
+      "caresSelectedSanitizerPresent": true,
+      "mainReports": 317,
+      "reportSchemas": {
+        "capsid-async-callbacks-v1": 7,
+        "capsid-binding-fetch-arguments-v1": 10,
+        "capsid-binding-fetch-body-v1": 2,
+        "capsid-binding-fetch-cancel-v1": 10,
+        "capsid-binding-fetch-retained-v1": 10,
+        "capsid-binding-fetch-unread-v1": 2,
+        "capsid-binding-quota-v1": 2,
+        "capsid-cross-context-v1": 4,
+        "capsid-webcrypto-compat-v1": 4,
+        "capsid-workerd-fanout-v1": 8,
+        "capsid-fetch-arguments-v1": 20,
+        "capsid-fetch-boundary-v1": 4,
+        "capsid-fetch-byob-v1": 28,
+        "capsid-fetch-proxy-v1": 4,
+        "capsid-fetch-readers-v1": 4,
+        "capsid-fetch-resources-v1": 4,
+        "capsid-fetch-transition-v1": 4,
+        "capsid-fetch-upgrade-lifetime-v1": 4,
+        "capsid-fetch-upgrade-v1": 4,
+        "capsid-websocket-frame-boundaries-v2": 4,
+        "capsid-headers-compat-v1": 1,
+        "capsid-helper-response-credit-v1": 5,
+        "capsid-http-codec-v1": 8,
+        "capsid-websocket-interop-v1": 8,
+        "capsid-managed-local-owner-v1": 1,
+        "unversioned-resource-report": 27,
+        "capsid-ws-fixtures-v1": 3,
+        "capsid-message-port-order-v1": 3,
+        "capsid-workerd-mutations-v1": 1,
+        "capsid-native-branch-graph-v1": 8,
+        "capsid-native-default-reader-gates-v1": 2,
+        "capsid-native-fetch-abort-prefix-v1": 1,
+        "capsid-native-fetch-arguments-v1": 10,
+        "capsid-native-fetch-branch-prefix-v1": 2,
+        "capsid-native-fetch-deadline-v1": 4,
+        "capsid-native-fetch-encoded-branches-v1": 3,
+        "capsid-native-fetch-gzip-members-v1": 1,
+        "capsid-native-fetch-intrinsic-v1": 2,
+        "capsid-native-fetch-large-gzip-v1": 1,
+        "capsid-native-fetch-limits-v1": 2,
+        "capsid-native-fetch-owner-v1": 2,
+        "capsid-native-fetch-pending-v1": 6,
+        "capsid-native-request-targets-v1": 1,
+        "capsid-native-fetch-response-credit-v1": 1,
+        "capsid-native-reader-context-matrix-v1": 20,
+        "capsid-native-reader-context-v1": 2,
+        "capsid-native-reader-lifecycle-v1": 4,
+        "capsid-ordinary-fetch-v1": 20,
+        "capsid-websocket-owner-lifecycle-v1": 4,
+        "capsid-reader-intrinsics-v1": 4,
+        "capsid-reader-scope-v1": 4,
+        "capsid-workerd-ws-reference-v1": 1,
+        "capsid-response-retirement-v1": 4,
+        "capsid-standard-readers-v1": 12
+      },
+      "rawReportsTarSHA256": "1cc9f8c006a3c5795805d8608f8340e603ccb57d8d87ac01a185312dc88572d5",
+      "recordedHostSHA256": "6df8458581adeb61a4d0548dd96dff47a2da41aec28ada2c38e3ece25ba598f6",
+      "recordedWorkerSHA256": "c1f382b39fb68e734f9b1ea5198a99a8e1f80761cc441e833f19c660ee714443",
+      "ordinaryManagedCore": {
+        "cases": 30,
+        "allNaturalShutdown": true,
+        "inputSHA256": {
+          "runner": "e61e617783c1d89882dc31e6e8ef3203e2eddc2669b4b3923e175da530113d58",
+          "fixture": "699861f614b0aa36b9434075271a49141fdaf34a08d6d628a1f606e03582dc93",
+          "contract": "6a2379b0e5167dcbdef4bcc5d710c8969042da3165f73a38f8e86ed6645777e0",
+          "referenceArchive": "f6fcd4cbf15b06b7bf1c4500fb05589713473fb5ba8d576a4442c55acda96f34",
+          "hostBackend": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+          "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+          "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+          "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
+        },
+        "reportSHA256": "cc1e0abe7acc776b4b6dc9de0c955e4ac58b3a9401695eb55a32f988f4f20235"
+      },
+      "sanitizerBinaryBytesIndependentlyRehashed": false,
+      "opensslCompileCommandsRequireOriginalJobLog": true,
+      "mainReportDigestInventorySHA256": "9aeb8d50da6fb72045b4ccbfec5c8ef4d9b78100f4d81334919d2ed152c9a4ea",
+      "instrumentedRss": {
+        "rawFailed": [
+          "websocket_managed_reclamation-idle",
+          "websocket_managed_replacement-recursion"
+        ],
+        "rawExitCode": 8,
+        "rawOutcome": "failure",
+        "completeResourceProfile": true,
+        "productionRssQualifiedNotClaimed": true,
+        "resources": [
+          {
+            "scenario": "replacement-recursion",
+            "assertions": 297,
+            "naturalShutdown": true,
+            "completeLsan": true,
+            "originalFootprints": [
+              {
+                "passed": false,
+                "message": "16 replacements grow RSS by 207908 KiB; retired pools are reclaimed"
+              },
+              {
+                "passed": false,
+                "message": "16 replacements grow VmSize by 184628 KiB"
+              },
+              {
+                "passed": false,
+                "message": "full retire returns the footprint"
+              }
+            ]
+          },
+          {
+            "scenario": "reclamation-idle",
+            "assertions": 258,
+            "naturalShutdown": true,
+            "completeLsan": true,
+            "originalFootprints": [
+              {
+                "passed": false,
+                "message": "last retired large factory returns memory without another admin operation"
+              }
+            ]
+          }
+        ],
+        "originalAuditorWasRunAgainstActualBinaryBytesInCI": true,
+        "offlineBinaryRehashUnavailable": true
+      }
+    },
+    "tsan": {
+      "artifactId": 14146324772,
+      "archiveSHA256": "c45414f0d365f94511cfe84ed99b94e4fea89ec93400eb8ef6a8185f217febb5",
+      "registered": 1025,
+      "selected": 1017,
+      "passed": 1012,
+      "failed": [],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "host_managed_recovery_rejects_oversized_snapshot",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP: finite RLIMIT_AS recovery probe is unavailable with this sanitizer runtime"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: sanitizer (not production)\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "registrationJUnitAndOriginalLogExact": true,
+      "buildId": "sha256:3b36e6b5d4d6516ad13887b7bd30262e2abdfcf444c8d99113e9cfcac6cd8c7f",
+      "compatibilityId": "sha256:41486ec694f662785dec47250b52ab86f6a64ffe97899b181fe87a348ebb92bc",
+      "compiler": "Clang 18.1.3",
+      "buildType": "Debug",
+      "featureFlags": "lto=OFF asan=OFF ubsan=OFF tsan=ON mimalloc=OFF host=ON worker=ON sandbox_profile=sanitizer",
+      "provenanceDirty": "1",
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": true,
+          "runtimeLto": false
+        }
+      },
+      "caresCompileUnits": 91,
+      "caresSelectedSanitizerPresent": true,
+      "mainReports": 317,
+      "reportSchemas": {
+        "capsid-async-callbacks-v1": 7,
+        "capsid-binding-fetch-arguments-v1": 10,
+        "capsid-binding-fetch-body-v1": 2,
+        "capsid-binding-fetch-cancel-v1": 10,
+        "capsid-binding-fetch-retained-v1": 10,
+        "capsid-binding-fetch-unread-v1": 2,
+        "capsid-binding-quota-v1": 2,
+        "capsid-cross-context-v1": 4,
+        "capsid-webcrypto-compat-v1": 4,
+        "capsid-workerd-fanout-v1": 8,
+        "capsid-fetch-arguments-v1": 20,
+        "capsid-fetch-boundary-v1": 4,
+        "capsid-fetch-byob-v1": 28,
+        "capsid-fetch-proxy-v1": 4,
+        "capsid-fetch-readers-v1": 4,
+        "capsid-fetch-resources-v1": 4,
+        "capsid-fetch-transition-v1": 4,
+        "capsid-fetch-upgrade-lifetime-v1": 4,
+        "capsid-fetch-upgrade-v1": 4,
+        "capsid-websocket-frame-boundaries-v2": 4,
+        "capsid-headers-compat-v1": 1,
+        "capsid-helper-response-credit-v1": 5,
+        "capsid-http-codec-v1": 8,
+        "capsid-websocket-interop-v1": 8,
+        "capsid-managed-local-owner-v1": 1,
+        "unversioned-resource-report": 27,
+        "capsid-ws-fixtures-v1": 3,
+        "capsid-message-port-order-v1": 3,
+        "capsid-workerd-mutations-v1": 1,
+        "capsid-native-branch-graph-v1": 8,
+        "capsid-native-default-reader-gates-v1": 2,
+        "capsid-native-fetch-abort-prefix-v1": 1,
+        "capsid-native-fetch-arguments-v1": 10,
+        "capsid-native-fetch-branch-prefix-v1": 2,
+        "capsid-native-fetch-deadline-v1": 4,
+        "capsid-native-fetch-encoded-branches-v1": 3,
+        "capsid-native-fetch-gzip-members-v1": 1,
+        "capsid-native-fetch-intrinsic-v1": 2,
+        "capsid-native-fetch-large-gzip-v1": 1,
+        "capsid-native-fetch-limits-v1": 2,
+        "capsid-native-fetch-owner-v1": 2,
+        "capsid-native-fetch-pending-v1": 6,
+        "capsid-native-request-targets-v1": 1,
+        "capsid-native-fetch-response-credit-v1": 1,
+        "capsid-native-reader-context-matrix-v1": 20,
+        "capsid-native-reader-context-v1": 2,
+        "capsid-native-reader-lifecycle-v1": 4,
+        "capsid-ordinary-fetch-v1": 20,
+        "capsid-websocket-owner-lifecycle-v1": 4,
+        "capsid-reader-intrinsics-v1": 4,
+        "capsid-reader-scope-v1": 4,
+        "capsid-workerd-ws-reference-v1": 1,
+        "capsid-response-retirement-v1": 4,
+        "capsid-standard-readers-v1": 12
+      },
+      "rawReportsTarSHA256": "204ec93468ef8f0489d95a62d4ba4cc040e7ffffded0f4f2703fe7eed4552512",
+      "recordedHostSHA256": "5b67a8a5d3b4d0deb277c7214f123b53eef90e6f2b8c420b964a5e90ddd9ec31",
+      "recordedWorkerSHA256": "8b836ff6c2a2487b468ec6c466055fd5bbd6e806c366108774f94589a50a1c7f",
+      "ordinaryManagedCore": {
+        "cases": 30,
+        "allNaturalShutdown": true,
+        "inputSHA256": {
+          "runner": "e61e617783c1d89882dc31e6e8ef3203e2eddc2669b4b3923e175da530113d58",
+          "fixture": "699861f614b0aa36b9434075271a49141fdaf34a08d6d628a1f606e03582dc93",
+          "contract": "6a2379b0e5167dcbdef4bcc5d710c8969042da3165f73a38f8e86ed6645777e0",
+          "referenceArchive": "f6fcd4cbf15b06b7bf1c4500fb05589713473fb5ba8d576a4442c55acda96f34",
+          "hostBackend": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+          "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+          "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+          "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
+        },
+        "reportSHA256": "87f4c861f7e996c2ed5fdbdd8fccc68b08e902b01ba110ee5c914a0735c25789"
+      },
+      "sanitizerBinaryBytesIndependentlyRehashed": false,
+      "opensslCompileCommandsRequireOriginalJobLog": true,
+      "mainReportDigestInventorySHA256": "a2d5e376670aeb90ce78fd28a7ed777d67f7014bb4e985ddcbd140236f9b209e",
+      "instrumentedRss": {
+        "rawFailed": [
+          "websocket_managed_reclamation-idle"
+        ],
+        "rawExitCode": 8,
+        "rawOutcome": "failure",
+        "completeResourceProfile": true,
+        "productionRssQualifiedNotClaimed": true,
+        "resources": [
+          {
+            "scenario": "replacement-recursion",
+            "assertions": 423,
+            "naturalShutdown": true,
+            "completeLsan": false,
+            "originalFootprints": [
+              {
+                "passed": true,
+                "message": "16 replacements grow RSS by 4440 KiB; retired pools are reclaimed"
+              },
+              {
+                "passed": true,
+                "message": "16 replacements grow VmSize by 34380 KiB"
+              },
+              {
+                "passed": true,
+                "message": "full retire returns the footprint"
+              }
+            ]
+          },
+          {
+            "scenario": "reclamation-idle",
+            "assertions": 282,
+            "naturalShutdown": true,
+            "completeLsan": false,
+            "originalFootprints": [
+              {
+                "passed": false,
+                "message": "last retired large factory returns memory without another admin operation"
+              }
+            ]
+          }
+        ],
+        "originalAuditorWasRunAgainstActualBinaryBytesInCI": true,
+        "offlineBinaryRehashUnavailable": true
+      },
+      "additionalFatalTsanResourceRepeatsPassed": 20
+    },
+    "release-wpt": {
+      "artifactId": 14146386888,
+      "archiveSHA256": "1fc9ca1971190ce0969b50b85380c757380c4ae6d607a9537ddb731a4ab0c4c0",
+      "registered": 1124,
+      "selected": 1124,
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: production\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "registrationJUnitAndOriginalLogExact": true,
+      "buildId": "sha256:f6583730e3ac9bfc415fca86348395665f76e3524b2eb74f396e50fdb8872cf3",
+      "compatibilityId": "sha256:32e7956a655fcb2fade4c5187bb6abb0aba03fc77986b4dcca7a72bd9b36bcc6",
+      "compiler": "GNU 13.3.0",
+      "buildType": "Release",
+      "featureFlags": "lto=ON asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON sandbox_profile=production",
+      "provenanceDirty": "0",
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": true
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        }
+      },
+      "caresCompileUnits": 91,
+      "caresSelectedSanitizerPresent": false,
+      "mainReports": 317,
+      "reportSchemas": {
+        "capsid-async-callbacks-v1": 7,
+        "capsid-binding-fetch-arguments-v1": 10,
+        "capsid-binding-fetch-body-v1": 2,
+        "capsid-binding-fetch-cancel-v1": 10,
+        "capsid-binding-fetch-retained-v1": 10,
+        "capsid-binding-fetch-unread-v1": 2,
+        "capsid-binding-quota-v1": 2,
+        "capsid-cross-context-v1": 4,
+        "capsid-webcrypto-compat-v1": 4,
+        "capsid-workerd-fanout-v1": 8,
+        "capsid-fetch-arguments-v1": 20,
+        "capsid-fetch-boundary-v1": 4,
+        "capsid-fetch-byob-v1": 28,
+        "capsid-fetch-proxy-v1": 4,
+        "capsid-fetch-readers-v1": 4,
+        "capsid-fetch-resources-v1": 4,
+        "capsid-fetch-transition-v1": 4,
+        "capsid-fetch-upgrade-lifetime-v1": 4,
+        "capsid-fetch-upgrade-v1": 4,
+        "capsid-websocket-frame-boundaries-v2": 4,
+        "capsid-headers-compat-v1": 1,
+        "capsid-helper-response-credit-v1": 5,
+        "capsid-http-codec-v1": 8,
+        "capsid-websocket-interop-v1": 8,
+        "capsid-managed-local-owner-v1": 1,
+        "unversioned-resource-report": 27,
+        "capsid-ws-fixtures-v1": 3,
+        "capsid-message-port-order-v1": 3,
+        "capsid-workerd-mutations-v1": 1,
+        "capsid-native-branch-graph-v1": 8,
+        "capsid-native-default-reader-gates-v1": 2,
+        "capsid-native-fetch-abort-prefix-v1": 1,
+        "capsid-native-fetch-arguments-v1": 10,
+        "capsid-native-fetch-branch-prefix-v1": 2,
+        "capsid-native-fetch-deadline-v1": 4,
+        "capsid-native-fetch-encoded-branches-v1": 3,
+        "capsid-native-fetch-gzip-members-v1": 1,
+        "capsid-native-fetch-intrinsic-v1": 2,
+        "capsid-native-fetch-large-gzip-v1": 1,
+        "capsid-native-fetch-limits-v1": 2,
+        "capsid-native-fetch-owner-v1": 2,
+        "capsid-native-fetch-pending-v1": 6,
+        "capsid-native-request-targets-v1": 1,
+        "capsid-native-fetch-response-credit-v1": 1,
+        "capsid-native-reader-context-matrix-v1": 20,
+        "capsid-native-reader-context-v1": 2,
+        "capsid-native-reader-lifecycle-v1": 4,
+        "capsid-ordinary-fetch-v1": 20,
+        "capsid-websocket-owner-lifecycle-v1": 4,
+        "capsid-reader-intrinsics-v1": 4,
+        "capsid-reader-scope-v1": 4,
+        "capsid-workerd-ws-reference-v1": 1,
+        "capsid-response-retirement-v1": 4,
+        "capsid-standard-readers-v1": 12
+      },
+      "rawReportsTarSHA256": "2f66a2640eb946ea82c2b42c13ab5189dd2153f99e0f6a10b71556b004374bf2",
+      "recordedHostSHA256": "1cea8170b787e78e9613966cd83bd68fbfcf880d95815acdd011dcc76f6e6740",
+      "recordedWorkerSHA256": "bfd60f2877b7e20f8907d3323bb77dccc7e52d01788d43cddeff9142a5e818bd",
+      "ordinaryManagedCore": {
+        "cases": 30,
+        "allNaturalShutdown": true,
+        "inputSHA256": {
+          "runner": "e61e617783c1d89882dc31e6e8ef3203e2eddc2669b4b3923e175da530113d58",
+          "fixture": "699861f614b0aa36b9434075271a49141fdaf34a08d6d628a1f606e03582dc93",
+          "contract": "6a2379b0e5167dcbdef4bcc5d710c8969042da3165f73a38f8e86ed6645777e0",
+          "referenceArchive": "f6fcd4cbf15b06b7bf1c4500fb05589713473fb5ba8d576a4442c55acda96f34",
+          "hostBackend": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+          "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+          "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+          "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
+        },
+        "reportSHA256": "8ca7fc0c38c4b31418204d8ab109217af15796c4c671f8ebcbbb8f6e0f91f101"
+      },
+      "sanitizerBinaryBytesIndependentlyRehashed": false,
+      "opensslCompileCommandsRequireOriginalJobLog": true,
+      "mainReportDigestInventorySHA256": "4e078750eeadf3a898c8ac95337d73eb3fc864d2cce1c8c6f86e897742780c71",
+      "packageSHA256": "a0499df87e4538f6f4a687eb58a76185a5b4a098474dce7914d6d71817d81213",
+      "sbomSHA256": "6ee0f3fea7fe62fd93d23e3ae81225e991b5fa611ca337bce16e75cfc866f4ea",
+      "packagedBinaryBytesIndependentlyRehashed": true,
+      "installedBinarySHA256": {
+        "host": "d58755be7e284495c03db11431a4fd13c45dd99d67fd13bf1728d60bcda38eb8",
+        "worker": "44e1129b3ba2fb9ed50cc9abd4c1ca53e80fd28bc0819d0979c7cb72cc5ce24b"
+      },
+      "buildBinarySHA256AfterExactRpathReversal": {
+        "host": "1cea8170b787e78e9613966cd83bd68fbfcf880d95815acdd011dcc76f6e6740",
+        "worker": "bfd60f2877b7e20f8907d3323bb77dccc7e52d01788d43cddeff9142a5e818bd"
+      },
+      "onlyInstallRpathDifferenceProvedByExactCompleteElfSHA256": true,
+      "archivedCompleteWptProgramAndResponseChecks": 20,
+      "contractReplay": {
+        "complete": true,
+        "status": "archived-native-contracts-and-retained-standard-results-replayed",
+        "actualRuntimeInvocationsNotRepeated": true,
+        "requiredGateTests": 171,
+        "gateFamilies": {
+          "outbound": {
+            "complete": true
+          },
+          "mutations": {
+            "complete": true
+          },
+          "interop": {
+            "complete": true
+          },
+          "fanout": {
+            "complete": true
+          },
+          "frames": {
+            "complete": true
+          },
+          "owners": {
+            "complete": true
+          },
+          "asyncCallbacks": {
+            "complete": true
+          },
+          "crossContext": {
+            "complete": true
+          },
+          "readerIntrinsics": {
+            "complete": true
+          },
+          "nativeReaderLifecycle": {
+            "complete": true
+          },
+          "readerScope": {
+            "complete": true
+          },
+          "standardReaders": {
+            "complete": true
+          },
+          "fetchResources": {
+            "complete": true
+          },
+          "ordinaryFetch": {
+            "complete": true
+          },
+          "fetchUpgrade": {
+            "complete": true
+          },
+          "fetchUpgradeLifetime": {
+            "complete": true
+          },
+          "fetchProxy": {
+            "complete": true
+          },
+          "fetchBoundaries": {
+            "complete": true
+          },
+          "fetchTransitions": {
+            "complete": true
+          },
+          "fetchBYOB": {
+            "complete": true
+          },
+          "crypto": {
+            "complete": true
+          },
+          "httpCodec": {
+            "complete": true
+          }
+        },
+        "gateSummaryReplaySHA256": "14c27e4e8c3f21fd3b35f02ad783b3cf089afef167a7b5284c1bba41347d4e6c",
+        "ordinary": {
+          "selected": 1124,
+          "rawCTestExitCode": 8,
+          "rawStepOutcome": "failure",
+          "failed": [
+            "worker_wpt_fetch_api_headers_headers_basic_any_js",
+            "worker_wpt_fetch_api_headers_headers_errors_any_js",
+            "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+            "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+            "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+          ],
+          "skipped": [
+            "host_managed_executable_active_state_foreign_owner",
+            "worker_sandbox_cgroup_v2",
+            "worker_sandbox_namespaces",
+            "worker_sandbox_network_namespace"
+          ],
+          "ordinarySuitePassed": false,
+          "requiresPrivilegedSandboxCoverage": true
+        },
+        "compatibility": {
+          "compatibilityQualified": true,
+          "standardsConformanceClaimed": false,
+          "ordinarySuitePassed": false
+        },
+        "wpt": {
+          "files": 5,
+          "totalSubtests": 79,
+          "standardConflictSubtests": 23,
+          "standardTimeouts": 4,
+          "modes": [
+            "reference",
+            "single-worker",
+            "static-pool",
+            "managed"
+          ],
+          "actualCompleteReports": 20
+        },
+        "negativeControls": 6,
+        "standardsConformanceClaimed": false,
+        "fullV030GoalComplete": false
+      },
+      "privilegedSandboxOriginalJobLogStillRequired": true
+    }
+  },
+  "standardsConformanceClaimed": false,
+  "fullV030GoalComplete": false,
+  "formalPerformancePoints": 2,
+  "currentMeasuredSourceFormalPointNotClaimed": true,
+  "reviewOutputSuffix": "",
+  "ciEvidenceDoesNotEstablishLocalPerformance": true,
+  "status": "four-core-artifact-reviews-complete-platform-and-privileged-log-closure-still-required",
+  "reviewedConfigurations": [
+    "ubsan",
+    "asan",
+    "tsan",
+    "release-wpt"
+  ],
+  "allFourCoreArchivesReviewed": true,
+  "sourceManifestUnchanged": true
+}

@@ -1,0 +1,68 @@
+{
+  "complete": true,
+  "configurations": [
+    {
+      "kind": "ubsan",
+      "r1Reports": 28,
+      "r1Cases": 1948,
+      "r2IndependentArithmeticChecks": 16014,
+      "r4Transcripts": 2,
+      "r4Rows": 640,
+      "allOriginalOraclesRetained": true
+    },
+    {
+      "kind": "asan",
+      "r1Reports": 28,
+      "r1Cases": 1948,
+      "r2IndependentArithmeticChecks": 16014,
+      "r4Transcripts": 2,
+      "r4Rows": 640,
+      "allOriginalOraclesRetained": true
+    },
+    {
+      "kind": "tsan",
+      "r1Reports": 28,
+      "r1Cases": 1948,
+      "r2IndependentArithmeticChecks": 16014,
+      "r4Transcripts": 2,
+      "r4Rows": 640,
+      "allOriginalOraclesRetained": true
+    },
+    {
+      "kind": "release-wpt",
+      "r1Reports": 28,
+      "r1Cases": 1948,
+      "r2IndependentArithmeticChecks": 16014,
+      "r4Transcripts": 2,
+      "r4Rows": 640,
+      "allOriginalOraclesRetained": true
+    },
+    {
+      "kind": "debug",
+      "r1Reports": 28,
+      "r1Cases": 1948,
+      "r2IndependentArithmeticChecks": 16014,
+      "r4Transcripts": 2,
+      "r4Rows": 640,
+      "allOriginalOraclesRetained": true
+    }
+  ],
+  "sourceBoundLinuxConfigurationsOnly": true,
+  "archivedObservationsNotNewRuntimeExecutions": true,
+  "helperBytesNotIndependentlyRehashed": true,
+  "doesNotAcceptWholeWindowsMatrixOrHistoricalCauses": true,
+  "schema": "capsid-current-source-r1-r2-r4-targeted-review-v1",
+  "reviewedUTC": "2026-11-15T07:53:06.957288+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "sourceInputsRehashed": 5169,
+  "originalRegisteredPassingTestsChecked": 155,
+  "independentlyReplayedByobReports": 140,
+  "independentlyReplayedAbiLimitRows": 3200,
+  "allOriginal20And60And120SecondTestBudgetsRetained": true,
+  "rawFiveWptFailuresAndWindowsFailureNotReclassified": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,35 @@
+{
+  "complete": true,
+  "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
+  "productCheckout": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+  "productTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+  "wholeLocalSessionAccepted": true,
+  "newAcceptedSessions": 1,
+  "physicalWindowsHostExclusivityNotClaimed": true,
+  "fullPlatformOrReleaseAcceptanceNotClaimed": true,
+  "noBaselineRerunOrDataModification": true,
+  "all5171SourceBytesAfterActualExitVerified": true,
+  "lanes": {
+    "cold": {
+      "passed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "52a77bfd3b9a6a520ee0372cbee752175dcef40d61aaa24b1822b0dd2cb797ee"
+    },
+    "qps": {
+      "passed": true,
+      "sealedFiles": 1623,
+      "checksumSHA256": "fe05f98953244fdfaccf2069a21e6e7c133baff8b55a1fb0fc7ba8678fe9fa6d"
+    },
+    "density": {
+      "passed": true,
+      "sealedFiles": 2755,
+      "checksumSHA256": "c3e48864cb69543bc4f7526abe09352488b0c5d88e841b27dfec1dd82af157f7"
+    }
+  },
+  "qualifiedPointSHA256": "ea64bab3ba38f8962f77891df87ce6b73fbc76b03485378822123223e83c71f2",
+  "allFourQuietWindowsRecomputed": true,
+  "allTwelveDensityBudgetBoundaries": true,
+  "allElevenExecutablesRehashed": true,
+  "allOriginalActualExitsZero": true,
+  "reviewedUTC": "2026-11-16T01:32:35.116832+00:00"
+}

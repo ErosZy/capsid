@@ -1,0 +1,71 @@
+{
+  "schema": "capsid-portable-runtime-archive-progress-v1",
+  "observedUTC": "2026-11-14T11:38:00.241384+00:00",
+  "productCheckout": "d6b4ead0d09c75b0b1e04c10d7683b766a6d1cbf",
+  "productTree": "dc5684a08ddc27ef6bf3f5b788aad79ce3bb7937",
+  "sourceFilesRehashed": 5169,
+  "changedFiles": [
+    "bench/density_probe.py",
+    "bench/perf_run.py",
+    "bench/density_evidence.py",
+    "bench/SPEC.md",
+    "tests/test_benchmark_density_control.py",
+    "tests/helpers/density_measurement_fixture.py",
+    "tests/test_perf_evidence.py"
+  ],
+  "other5162InputsByteIdentical": true,
+  "productionRuntimeAndPublicAbiAndSdk78Unchanged": true,
+  "benchmarkOriginalBudgetUnitCases": 112,
+  "benchmarkSkipped": 0,
+  "benchmarkReview": "workerd-runtime-archive-benchmark-review.json",
+  "realLinuxColonFilenameAndEightResealedTarForgeriesCovered": true,
+  "originalPortablePathPolicyNotRelaxed": true,
+  "rawOriginalNamesAndFileBytesPreservedInsideIndexedTar": true,
+  "shortObservationsAlsoValidateSnapshotBeforeFormalLanes": true,
+  "previousSource": "6a9ee0e62b978aeb977526f984ddaead7f4fd552",
+  "previousFormal8Failure": "native-performance-r8-review-r2.json",
+  "previousCold742AndQps2115SealedFilesNotSpliced": true,
+  "previousAll12DensityBudgetRowsDiagnosticOnly": true,
+  "previousWindowsFailure": "workerd-headroom-windows-failure-review.json",
+  "previousWindows": {
+    "passed": 749,
+    "failed": 1,
+    "skipped": 8,
+    "rawFailedSubcaseNotArchivedByOldWorkflow": true,
+    "local31CasePassNotAFix": true
+  },
+  "workflowOnlyPostMatrixReportCaptureAdded": true,
+  "originalWindowsEnvironmentCommandsTimeoutsAnd180MinuteBudgetRetained": true,
+  "actualCaptureHelperPassedAndFailedBytesCheckedWithoutFiltering": true,
+  "originalCtestExitCodeNotReplacedByObserver": true,
+  "privateFrameWireProposalReview": "frame-wire-only-proposal-review.json",
+  "privateFuzzProposalNotIntegratedAndNotAHistoricalFailureFix": true,
+  "historicalFuzzSeedAndTsanLargeGzipAndWindowsMetadataCauseRemainOpen": true,
+  "currentSourceFullMatrixDebugSoakAndFormal9NotYetAccepted": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "mainTagsReleasePagesAndBlockedWslNotModified": true,
+  "workflows": {
+    "archivefull": {
+      "workflowRunId": 43590178801,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43590178801",
+      "observedUTC": "2026-11-14T11:29:53.864660+00:00",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    "archivesupp": {
+      "workflowRunId": 43590178502,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43590178502",
+      "observedUTC": "2026-11-14T11:29:56.502685+00:00",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    "native9": {
+      "workflowRunId": 43590179244,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43590179244",
+      "observedUTC": "2026-11-14T11:29:50.967144+00:00",
+      "status": "in_progress",
+      "conclusion": null
+    }
+  }
+}

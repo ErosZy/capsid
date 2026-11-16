@@ -1,0 +1,204 @@
+{
+  "schema": "capsid-native-performance-r8-independent-review-v2",
+  "complete": true,
+  "workflowRunId": 43577440289,
+  "artifactId": 14110218031,
+  "archiveSHA256": "dfc0c0278469a5b2e30f04b1b25fddac5412f031d37ab2234e72e0a886efd1b4",
+  "productCheckout": "6a9ee0e62b978aeb977526f984ddaead7f4fd552",
+  "originalSessionStatus": "native-session-failed",
+  "originalSessionComplete": false,
+  "originalFailure": "Traceback (most recent call last):\n  File \"<stdin>\", line 159, in <module>\n  File \"<stdin>\", line 18, in run\nAssertionError: ('formal-density', b'density lane failed: invalid archive-relative path: probe-00001-capsid-10k-cold-1/runtime/state/apps/orders/generations/sha256:06a216fd9dda4772a571aeef05896828f97a876326232548128d7af24c133cee/COMPLETE\\n')\n",
+  "rejectedOriginalLanes": {
+    "density": {
+      "reason": "original frozen path contract rejects colon members; no names normalized",
+      "invalidOriginalNames": 1026,
+      "firstInvalidOriginalName": "bench/results/native-v030-43577440289-1-density/probe-00001-capsid-10k-cold-1/runtime/state/apps/orders/generations/sha256:06a216fd9dda4772a571aeef05896828f97a876326232548128d7af24c133cee",
+      "rawDiagnosticSummary": "capsid 10k workers=748 pss_mb=2046.7 phase=cold note=budget\ncapsid 10k workers=738 pss_mb=2046.6 phase=warm note=budget\ncapsid 100k workers=510 pss_mb=2046.4 phase=cold note=budget\ncapsid 100k workers=509 pss_mb=2045.1 phase=warm note=budget\ncapsid 1m workers=129 pss_mb=2047.0 phase=cold note=budget\ncapsid 1m workers=129 pss_mb=2047.4 phase=warm note=budget\nworkerd 10k cells=1041 pss_mb=2046.4 phase=cold note=budget\nworkerd 10k cells=604 pss_mb=2047.1 phase=warm note=budget\nworkerd 100k cells=900 pss_mb=2045.8 phase=cold note=budget\nworkerd 100k cells=553 pss_mb=2047.8 phase=warm note=budget\nworkerd 1m cells=242 pss_mb=1995.5 phase=cold note=budget\nworkerd 1m cells=222 pss_mb=2024.2 phase=warm note=budget\n",
+      "rawDiagnosticsNotFormalPerformance": true
+    }
+  },
+  "reviewedLanes": {
+    "cold": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "14af16025cb8691b1d033c3bd6db26446d0495c290f00307786807911ee22720"
+    },
+    "qps": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 2115,
+      "checksumSHA256": "5d599884741b565e79635d9b41890345f709defff7fcd29e18ff31f4be2e2aaa"
+    }
+  },
+  "formalPerformancePoints": 0,
+  "wholeThreeLaneCandidateAccepted": false,
+  "baselineFormalHistoricalPointNotClaimed": true,
+  "fullV030GoalComplete": false,
+  "originalFrozenPathValidatorRejectionIndependentlyReproduced": true,
+  "baselineSealedObservations": [],
+  "sourceAndProtocolNotModified": true,
+  "allCompleteBaselineArchiveNamesPreservedWithoutNormalization": true,
+  "networkSnapshots": [
+    {
+      "label": "before-preflight",
+      "observedUTC": "2026-11-14T09:07:40.122460+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "71",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-formal-cold",
+      "observedUTC": "2026-11-14T09:09:23.112688+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "9357",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-formal-cold",
+      "observedUTC": "2026-11-14T09:12:32.552915+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "2816",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-formal-qps",
+      "observedUTC": "2026-11-14T09:13:02.555394+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "2828",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "after-formal-qps",
+      "observedUTC": "2026-11-14T09:39:50.217624+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "14677",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "before-formal-density",
+      "observedUTC": "2026-11-14T09:40:20.221270+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "14496",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    },
+    {
+      "label": "original-failure",
+      "observedUTC": "2026-11-14T10:34:00.717974+00:00",
+      "values": {
+        "nfConntrackMax": "1048576",
+        "nfConntrackCount": "217043",
+        "nfTimeWaitSeconds": "120",
+        "tcpMaxTwBuckets": "65536",
+        "tcpTwReuse": "2",
+        "localPortRange": "32768\t60999"
+      },
+      "readOnly": true
+    }
+  ],
+  "networkParametersUnchanged": null,
+  "quietWindows": [
+    {
+      "label": "before-formal-session",
+      "seconds": 30.00032136799996,
+      "before": {
+        "total": 561394,
+        "idle": 255803,
+        "steal": 22
+      },
+      "after": {
+        "total": 573382,
+        "idle": 267760,
+        "steal": 22
+      },
+      "busyFraction": 0.0025859192525858887,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-qps",
+      "seconds": 30.000413621000007,
+      "before": {
+        "total": 649024,
+        "idle": 339177,
+        "steal": 23
+      },
+      "after": {
+        "total": 661011,
+        "idle": 351145,
+        "steal": 23
+      },
+      "busyFraction": 0.0015850504713439406,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-density",
+      "seconds": 30.00045826099995,
+      "before": {
+        "total": 1287226,
+        "idle": 667351,
+        "steal": 25
+      },
+      "after": {
+        "total": 1299213,
+        "idle": 679318,
+        "steal": 25
+      },
+      "busyFraction": 0.0016684741803620895,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    }
+  ],
+  "physicalHostIsolationNotClaimed": true,
+  "finalFullGoalAccepted": false,
+  "wholeSessionAccepted": false,
+  "remainingBaselineNumericalAndWholeProtocolComparisonRequiresSeparateReview": true,
+  "reviewedUTC": "2026-11-14T11:08:31.478796+00:00",
+  "priorAuditRetained": "native-performance-r8-review.json",
+  "finalNetworkGuardNotReached": true,
+  "allRecordedNetworkParameterSnapshotsIdentical": true,
+  "rawDensityDiagnosticRows": 12,
+  "rawDensityDataNotAcceptedAsFormalPoint": true,
+  "archiveRelativePathRuleNotRelaxed": true,
+  "oldArchiveNotRepackedOrNamesNormalized": true,
+  "coldAndQpsMustNotBeSplicedIntoAnotherSession": true,
+  "baselineNotReached": true
+}

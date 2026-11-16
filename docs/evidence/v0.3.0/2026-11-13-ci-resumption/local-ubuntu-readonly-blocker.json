@@ -1,0 +1,59 @@
+{
+  "complete": true,
+  "recordedUTC": "2026-11-15T04:30:06.852658+00:00",
+  "scope": "Same-local-machine performance currently blocked, not a Capsid runtime test failure",
+  "host": {
+    "drives": [
+      {
+        "DeviceID": "C:",
+        "FileSystem": "NTFS",
+        "FreeSpace": 228460593152,
+        "Size": 371057487872
+      },
+      {
+        "DeviceID": "D:",
+        "FileSystem": "NTFS",
+        "FreeSpace": 14897152,
+        "Size": 629128818688
+      },
+      {
+        "DeviceID": "E:",
+        "FileSystem": "NTFS",
+        "FreeSpace": 452242231296,
+        "Size": 499658002432
+      }
+    ],
+    "distros": [
+      {
+        "Distribution": "CapsidV030",
+        "BasePath": "D:\\WSL\\CapsidV030",
+        "Version": 2
+      },
+      {
+        "Distribution": "Ubuntu",
+        "BasePath": "D:\\WSL\\Ubuntu",
+        "Version": 2
+      }
+    ]
+  },
+  "originalPreparationFailureLog": "E:\\capsid-verification-20261113\\evidence\\v030-local-ubuntu-b59-preparation-r4\\checkout-pinned-submodules.stderr.log",
+  "originalPreparationFailureSHA256": "59cd1ae22c14ed3b5df6c106106e37134842eddabcdb6f769e0aa944f44f5aeb",
+  "originalError": "fsync error on mbedtls Git pack: Input/output error; subsequent shallow.lock unlink: Read-only file system",
+  "readOnlyKernelObservation": {
+    "exitCode": 4294967295,
+    "stdout": "~p��'`Ee�� \u0000\r\u0000\n\u0000\u0019���N\u0001x\u001a� \u0000W\u0000s\u0000l\u0000/\u0000S\u0000e\u0000r\u0000v\u0000i\u0000c\u0000e\u0000/\u0000E\u0000_\u0000U\u0000N\u0000E\u0000X\u0000P\u0000E\u0000C\u0000T\u0000E\u0000D\u0000\r\u0000\n\u0000�Y�gdk\u0019��/f\u000fa\u0016Y\u0019��\f���\u0003�Q�\u001cd\"}�s\tg�\u0016b(W \u0000h\u0000t\u0000t\u0000p\u0000s\u0000:\u0000/\u0000/\u0000g\u0000i\u0000t\u0000h\u0000u\u0000b\u0000.\u0000c\u0000o\u0000m\u0000/\u0000m\u0000i\u0000c\u0000r\u0000o\u0000s\u0000o\u0000f\u0000t\u0000/\u0000W\u0000S\u0000L\u0000/\u0000i\u0000s\u0000s\u0000u\u0000e\u0000s\u0000 \u0000�c�N�e�\u00020\r\u0000\n\u0000",
+    "stderr": ""
+  },
+  "localPerformanceLoadsExecuted": 0,
+  "localAcceptedPerformanceSessions": 0,
+  "hostDBackingVolumeCriticallyLow": true,
+  "lowBackingVolumePlausibleContributorNotProvenSoleCause": true,
+  "originalPreparationR1R2OwnershipAndR3BareHeadFailuresPreserved": true,
+  "preparationR4ExactRootCommitCheckedOutButSubmoduleCheckoutFailed": true,
+  "allEvidenceSavedOnE": true,
+  "noFilesystemRepairRemountFsyncBypassDistroTerminationRestartOrMove": true,
+  "noUserFileDeletionOrGlobalConfigurationChange": true,
+  "blockedCapsidV030WasNotTargeted": true,
+  "remainingWork": "Complete current CI qualification independently; local measurement requires safe storage and writable Ubuntu recovery or separately authorized new local Linux environment.",
+  "fullV030GoalComplete": false
+}

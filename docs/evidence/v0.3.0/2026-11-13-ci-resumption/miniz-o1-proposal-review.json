@@ -1,0 +1,31 @@
+{
+  "complete": true,
+  "workflowRunId": 43517116270,
+  "artifactId": 14080514839,
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "originalFullOracleRuns": 4,
+  "privateO1FullOracleRuns": 4,
+  "replayedCompleteContracts": 8,
+  "baselineSeconds": [
+    4.126721068000052,
+    4.197130544999936,
+    4.153762379999989,
+    4.222950787000059
+  ],
+  "privateO1Seconds": [
+    4.105729403999931,
+    4.117712621999999,
+    4.206854656000019,
+    4.198618958999987
+  ],
+  "wallRatio": 0.9957097774869323,
+  "reliablePerformanceGainNotDemonstrated": true,
+  "proposalRejectedAsTimeoutFix": true,
+  "originalSourceAndBinariesUnmodified": true,
+  "fullFatalTsanRetained": true,
+  "originalFiveSecondDeadlineAndAssertionsRetained": true,
+  "canonicalCmakeNotModified": true,
+  "oldFailureCauseStillNotEstablished": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

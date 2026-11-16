@@ -1,0 +1,588 @@
+{
+  "schema": "capsid-listener-readiness-review-v1",
+  "complete": true,
+  "reviewScope": "kernel bind/listen regressions, benchmark controls, current fuzz, preserved prior failures and explicit pending gates",
+  "reviewedUTC": "2026-11-13T21:25:52.284341+00:00",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "productTree": "dd0e4e8fd4454180df0e3917ffd473b7c9d7a588",
+  "fullCI": {
+    "runId": 43502164423,
+    "workflowCommit": "ea7a0e447b0eef5780c14531b314d8446dc71bce",
+    "branch": "codex/v030-listener-readiness-full-20261113-r1",
+    "resultsPending": true
+  },
+  "runtimeImplementationUnchanged": true,
+  "changedFrozenFiles": [
+    "tests/helpers/ws_host_backend.mjs",
+    "tests/test_ws_host_backend_diagnostics.mjs",
+    "bench/density_probe.py",
+    "bench/qps_probe.py",
+    "tests/test_benchmark_qps_probe.py"
+  ],
+  "allOther5164FrozenFilesIdentical": true,
+  "node": {
+    "baselinePassed": 7,
+    "baselineFailed": 1,
+    "candidatePassed": 8,
+    "candidateFailed": 0,
+    "repeatedPassed": 160,
+    "repeatedFailed": 0,
+    "repeatedSkipped": 0,
+    "startupDeadlineMilliseconds": 20000,
+    "caseDeadlineMilliseconds": 10000,
+    "ctestDeadlineSeconds": 30,
+    "onlyStartupENOENTAndECONNREFUSEDWaited": true,
+    "businessPOSTNeverRetried": true,
+    "rawBaseline": {
+      "complete": true,
+      "phase": "baseline",
+      "attempt": "r2",
+      "observedUTC": "2026-11-13T19:46:38.151193+00:00",
+      "inputs": {
+        "tests/helpers/ws_host_backend.mjs": "2ed476c62922be0998182a1ea86fbfe99d18209d46b2aab02f0c97c9dca158ac",
+        "tests/test_ws_host_backend_diagnostics.mjs": "3a152820466c9e2af397f8970080cd56c6ec11567722293bfb90b3d4b95c222b"
+      },
+      "workingTreeInputs": {
+        "tests/helpers/ws_host_backend.mjs": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+        "tests/test_ws_host_backend_diagnostics.mjs": "3a152820466c9e2af397f8970080cd56c6ec11567722293bfb90b3d4b95c222b"
+      },
+      "command": [
+        "wsl.exe",
+        "-d",
+        "CapsidV030",
+        "--exec",
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "--test",
+        "--test-reporter=tap",
+        "/mnt/d/capsid-verification-20261108/evidence/v030-admin-listener-readiness-baseline-r2/source/tests/test_ws_host_backend_diagnostics.mjs"
+      ],
+      "firstBaselineSpecReporterAndDriverInterpretationFailurePreserved": true,
+      "exitCode": 1,
+      "stdoutSHA256": "c3f9c6707fcd1ab1a9c888326bea05171c93d33907cdcf90b69fe6a28b41c418",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Real Unix socket lifecycle test controller regression; fake Host supplies no product conformance evidence",
+      "originalStartupDeadlineMilliseconds": 20000,
+      "originalNodeCaseTimeoutMilliseconds": 10000,
+      "originalCTestTimeoutSeconds": 30,
+      "fullV030GoalComplete": false
+    },
+    "rawCandidate": {
+      "complete": true,
+      "phase": "candidate",
+      "attempt": "r1",
+      "observedUTC": "2026-11-13T19:46:38.178183+00:00",
+      "inputs": {
+        "tests/helpers/ws_host_backend.mjs": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+        "tests/test_ws_host_backend_diagnostics.mjs": "3a152820466c9e2af397f8970080cd56c6ec11567722293bfb90b3d4b95c222b"
+      },
+      "workingTreeInputs": {
+        "tests/helpers/ws_host_backend.mjs": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+        "tests/test_ws_host_backend_diagnostics.mjs": "3a152820466c9e2af397f8970080cd56c6ec11567722293bfb90b3d4b95c222b"
+      },
+      "command": [
+        "wsl.exe",
+        "-d",
+        "CapsidV030",
+        "--exec",
+        "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+        "--test",
+        "--test-reporter=tap",
+        "/mnt/d/capsid-verification-20261108/evidence/v030-admin-listener-readiness-candidate-r1/source/tests/test_ws_host_backend_diagnostics.mjs"
+      ],
+      "firstBaselineSpecReporterAndDriverInterpretationFailurePreserved": false,
+      "exitCode": 0,
+      "stdoutSHA256": "df70862b8c45c9c4efcc441cfabda324b7f803275c60da9249213577dcd5f696",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Real Unix socket lifecycle test controller regression; fake Host supplies no product conformance evidence",
+      "originalStartupDeadlineMilliseconds": 20000,
+      "originalNodeCaseTimeoutMilliseconds": 10000,
+      "originalCTestTimeoutSeconds": 30,
+      "fullV030GoalComplete": false
+    },
+    "repeated": {
+      "complete": true,
+      "inputs": {
+        "tests/helpers/ws_host_backend.mjs": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+        "tests/test_ws_host_backend_diagnostics.mjs": "3a152820466c9e2af397f8970080cd56c6ec11567722293bfb90b3d4b95c222b"
+      },
+      "runs": [
+        {
+          "index": 0,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "a5bdcb7a20bcc086fdd2d2f6819096036074c8b29041c72041fc139e680e0429",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 1,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "21267382d79fa732e7127cb63fb18892157caaf8879c0620f4390b190e3dc0bb",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 2,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "92a8c62ccebd4a26e1884c0c51c267416f93aa831caf31595c9639555d2538c6",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 3,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "76f08f96bf2aa2fc6457f33ef5d4fdbdd463de4dffc4ba109c2a3006af018774",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 4,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "e037fe66e6b2ff87936b183bfd778172691d5d9bb709c2ba1172df8adae8827e",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 5,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "e397ff451a7dcca97949739e44033e50519c5c323077c7c34c841d5b3e44c2b3",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 6,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "cb7dc8db7ca1d21b550f40d425051eb15e2b3c2e5c518c88ea4494958a7e47ba",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 7,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "4060806efe3f891210e8bfbe95ebc6a02367037c53ec7705dd897011b3fafe0b",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 8,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "d1499004dc5e83727d79bd6b90515fd2998a5a37ff25cbb0bb4689d027ee20c6",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 9,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "f08da164dc5f87cb0f56525d741d847eb4bdfc1d8ee1c0f33731ceaa9eb3021e",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 10,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "9b89de2ce4688c7c9601449ca123f5dd9e0e62467ab3ac0757347e9ecdfe1160",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 11,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "bf39d727bc84e4578dac8cdadad111534770c7ee8fdb207d1a962898e3d59da0",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 12,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "f20b35d4dc8e7d0c7b5d0ac5493bb0484ae0f0e754530db5252be6449ae711f1",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 13,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "c3836e3109d6e486ce0c207f8d70a2ac8b5ab96c39e0df3fb94759cd041a09e3",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 14,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "3d6c5aa26aefd05219b987278b52149e2417e15161ba55cc6a0fab1932d680db",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 15,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "8c72d5ded74fb358dfc9eeca34946b57f3b9b1481f0a17bd23b9b8dc7aabc93e",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 16,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "0d05e14180af20950d8292cdda844b588bd39d5fa79ead9addd5656ded321b9d",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 17,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "dce1084417f49100d7447ca1a20b4d9c38efcbd47621e769e159933782dce6cb",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 18,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "032d774fb3dd8804855c8d5ce024f103e1a87268e5c4d2e610ef18615320499a",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "index": 19,
+          "exitCode": 0,
+          "passed": 8,
+          "stdoutSHA256": "5633a7592091d4c9aad8613535ac24ae0b411a502a119062ed3a7d5a9c501c82",
+          "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "scope": "real Unix bound-before-listen and one-shot business refusal controls; not product conformance",
+      "fullV030GoalComplete": false,
+      "passed": 160,
+      "repeats": 20
+    }
+  },
+  "benchmark": {
+    "realUnixPrelistenRefusalReproducedForQpsAndDensity": true,
+    "businessPOSTRefusalStillFatalWithoutRetry": true,
+    "baseline": {
+      "complete": true,
+      "phase": "baseline",
+      "command": [
+        "wsl.exe",
+        "-d",
+        "CapsidV030",
+        "--exec",
+        "python3",
+        "-B",
+        "/mnt/e/capsid/tests/test_benchmark_qps_probe.py",
+        "--probe",
+        "/mnt/e/capsid/bench/qps_probe.py",
+        "--loadgen",
+        "/root/capsid-verification-20261109/build-v030-admin-fragment-fixture-release-r1/benchmark-tools/loadgen",
+        "AdminReadinessTests"
+      ],
+      "inputs": {
+        "bench/density_probe.py": "de05d1e8f22995cdfb1d5dd2304b80a810f9c1bb700063792087255a57847225",
+        "bench/qps_probe.py": "aa07ee77e3ce41b0459bc255e1273d519a8a5ffbf4c7fe5350dadcf3b9c1a82a",
+        "tests/test_benchmark_qps_probe.py": "72ebb2b5d225ff7baea3aab5ac136d35e63c0d3a5d9be1edbde29abfd8d3c99d"
+      },
+      "exitCode": 1,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "45ab39c5d150c10ce3dd7c7237582ac70ac2ec4488de9b96097e5dd40931761e",
+      "actualUnixBindAndListenUsed": true,
+      "sourceAndMeasurementParametersUnchanged": true,
+      "fakeServingAndOwnedTreeSupplyNoPerformanceConformanceEvidence": true,
+      "formalPerformancePoints": 0,
+      "fullV030GoalComplete": false
+    },
+    "candidate": {
+      "complete": true,
+      "phase": "candidate",
+      "command": [
+        "wsl.exe",
+        "-d",
+        "CapsidV030",
+        "--exec",
+        "python3",
+        "-B",
+        "/mnt/e/capsid/tests/test_benchmark_qps_probe.py",
+        "--probe",
+        "/mnt/e/capsid/bench/qps_probe.py",
+        "--loadgen",
+        "/root/capsid-verification-20261109/build-v030-admin-fragment-fixture-release-r1/benchmark-tools/loadgen",
+        "AdminReadinessTests"
+      ],
+      "inputs": {
+        "bench/density_probe.py": "0adf0c4876cc32dc25c9ead529d4f09e1ab9ce6c6cb6ecf5195a3eecfba1879f",
+        "bench/qps_probe.py": "a14b41da134c98029db1e972fff0906bbb7929e5f1c63c90d249c323324da49f",
+        "tests/test_benchmark_qps_probe.py": "72ebb2b5d225ff7baea3aab5ac136d35e63c0d3a5d9be1edbde29abfd8d3c99d"
+      },
+      "exitCode": 0,
+      "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSHA256": "3aa8467fd70f3408ffe30d193bde5fc0c19f08d996e482ab713919298eef2c91",
+      "actualUnixBindAndListenUsed": true,
+      "sourceAndMeasurementParametersUnchanged": true,
+      "fakeServingAndOwnedTreeSupplyNoPerformanceConformanceEvidence": true,
+      "formalPerformancePoints": 0,
+      "fullV030GoalComplete": false
+    },
+    "fullRelevantTestFiles": {
+      "complete": true,
+      "scope": "complete relevant benchmark test files",
+      "tests": [
+        {
+          "label": "qps-probe",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/tests/test_benchmark_qps_probe.py",
+            "--loadgen",
+            "/root/capsid-verification-20261109/build-v030-admin-fragment-fixture-release-r1/benchmark-tools/loadgen",
+            "--probe",
+            "/mnt/e/capsid/bench/qps_probe.py"
+          ],
+          "originalCTestTimeoutSeconds": 90,
+          "exitCode": 0,
+          "seconds": 33.73399999993853,
+          "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrSHA256": "d6399bf6066cf30a261860cc4d6781477cb7beb8013571d8f0d27cf3e49ec7ac"
+        },
+        {
+          "label": "qps-control",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/tests/test_benchmark_qps_control.py"
+          ],
+          "originalCTestTimeoutSeconds": 30,
+          "exitCode": 0,
+          "seconds": 0.1720000000204891,
+          "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrSHA256": "84d8772355e571485804666521d02c4d9d3dc524b3389ba7950c37dc4c70d799"
+        },
+        {
+          "label": "qps-lane",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/tests/test_benchmark_qps_lane.py",
+            "--lane",
+            "/mnt/e/capsid/bench/qps-lane.py"
+          ],
+          "originalCTestTimeoutSeconds": 60,
+          "exitCode": 0,
+          "seconds": 2.452999999979511,
+          "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrSHA256": "363eb7c6d7fb29a8db0cd7097918cd3cb20d932905c3b8570d69cd664de6b8c8"
+        },
+        {
+          "label": "density-control",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/tests/test_benchmark_density_control.py",
+            "--node",
+            "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node"
+          ],
+          "originalCTestTimeoutSeconds": 30,
+          "exitCode": 0,
+          "seconds": 0.3910000000614673,
+          "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrSHA256": "0721d78842b8c09eef75412b20e4047f5bf75f682030af69d546ad1064729832"
+        },
+        {
+          "label": "density-conditioning",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/tests/test_benchmark_density_conditioning.py"
+          ],
+          "originalCTestTimeoutSeconds": 30,
+          "exitCode": 0,
+          "seconds": 0.3279999999795109,
+          "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrSHA256": "835af0e332c7c28605b60aaf742041d36389cb6c85d9bb15bd34b5a19c6c2055"
+        },
+        {
+          "label": "density-lane",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/tests/test_benchmark_density_lane.py",
+            "--lane",
+            "/mnt/e/capsid/bench/density-lane.py"
+          ],
+          "originalCTestTimeoutSeconds": 30,
+          "exitCode": 0,
+          "seconds": 0.9220000000204891,
+          "stdoutSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrSHA256": "e9fcf0dfee1dc2c790b101cf626afd25f6fd60f144aa8ace615be16914673d0d"
+        }
+      ],
+      "formalPerformancePoints": 0,
+      "fullV030GoalComplete": false
+    },
+    "passed": 66,
+    "failed": 0,
+    "skipped": 0,
+    "formalProtocolParametersAndBudgetsUnchanged": true,
+    "syntheticArchivesNotActualPerformanceData": true
+  },
+  "earlierFragmentCandidate": {
+    "productCheckout": "3577e86397de0da71eb7483c3b6d13a45771fda3",
+    "runId": 43477631262,
+    "macOS": {
+      "registered": 766,
+      "passed": 755,
+      "failed": 0,
+      "skipped": 11,
+      "oldControllerTimeouts": 13,
+      "oldControllerRuns": 16,
+      "newControllerPassed": 100
+    },
+    "asanUnexpectedManagedStartupRefusalPreserved": true,
+    "tsan": {
+      "registered": 1017,
+      "passed": 1011,
+      "failed": [
+        "native_fetch_large_gzip"
+      ],
+      "skipped": 5,
+      "rawArtifactSHA256": "5fe770b1972668791060002a15c0d7e94734bc864abdb964d6e6ffa31f2078a9",
+      "largeGzip": {
+        "plan": {
+          "id": "gzip96m-view1m",
+          "bytes": 100663296,
+          "view": 1048576,
+          "gzip": true
+        },
+        "eventDeadlineSeconds": 5,
+        "sourceActualEOF": true,
+        "sourceFixtureEnded": true,
+        "observedStderr": "FAIL: event deadline\n",
+        "actualStateNotProduced": true,
+        "reportComplete": false,
+        "rootCauseNotYetEstablished": true,
+        "notTheAdminStartupRace": true,
+        "notWaived": true
+      }
+    },
+    "localReleaseDebugTimingAndSoak": {
+      "complete": true,
+      "status": "exact-release-debug-and-clock-soak-queue-complete",
+      "createdUTC": "2026-11-13T18:02:00.021233+00:00",
+      "steps": [
+        {
+          "label": "build-fragment-exact-release",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/build-v030-dev/evidence/continuation-20261113/build-fragment-exact-release.py"
+          ],
+          "exitCode": 0,
+          "windowsQpcElapsedSeconds": 796.6631991999457
+        },
+        {
+          "label": "build-fragment-exact-debug",
+          "command": [
+            "wsl.exe",
+            "-d",
+            "CapsidV030",
+            "--exec",
+            "python3",
+            "-B",
+            "/mnt/e/capsid/build-v030-dev/evidence/continuation-20261113/build-fragment-exact-debug.py"
+          ],
+          "exitCode": 0,
+          "windowsQpcElapsedSeconds": 313.6894898000173
+        },
+        {
+          "label": "qualify-fragment-clock-soak",
+          "command": [
+            "C:\\Users\\eros.zhao\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+            "-X",
+            "utf8",
+            "-B",
+            "E:\\capsid\\build-v030-dev\\evidence\\continuation-20261113\\qualify-fragment-clock-soak.py"
+          ],
+          "exitCode": 0,
+          "windowsQpcElapsedSeconds": 1943.303945099935
+        }
+      ],
+      "productCheckout": "3577e86397de0da71eb7483c3b6d13a45771fda3",
+      "fullV030GoalComplete": false,
+      "formalPerformancePoints": 0
+    },
+    "previousSuccessDoesNotAcceptCurrentSource": true
+  },
+  "nativePerformance": {
+    "firstRunId": 43490845803,
+    "firstRawArchiveSHA256": "b2fe75faa45cde88f2a90950921c730fa9a939b6cec0237f85a13af9298d47ea",
+    "originalBaselineObserverCompileFailure": "legacy v0.2.2 public header lacks CAPSID_RESPONSE_HEAD_FLAG_UPGRADE",
+    "firstSessionFailedOriginalDescriptorPrerequisite": true,
+    "firstFormalPerformancePoints": 0,
+    "retryRunId": 43504109882,
+    "retryWorkflowCommit": "4ff951a3b7ee2a0fb17cc99de46da3fd7e0c71f8",
+    "retryResultsPending": true,
+    "legacyObserverUsesExactCurrentPublicUpgradeFlag32NotZero": true,
+    "originalRuntimeAndResponseAssertionsNotModified": true,
+    "retryPreparesOnlyProcessSoftDescriptorLimitWithinUnchangedHardLimit": true,
+    "originalDensity2048MiBAndAllOtherProtocolBudgetsUnchanged": true
+  },
+  "infrastructure": {
+    "wslDistribution": "CapsidV030",
+    "registeredBasePath": "D:/WSL/CapsidV030",
+    "backingVolumeObservedFreeBytes": 3178496,
+    "observedErrors": [
+      "Read-only file system while archiving strict-all build stdout",
+      "Wsl/Service/E_UNEXPECTED"
+    ],
+    "backingVolumeExhaustionConsistentWithFailureButKernelTraceUnavailable": true,
+    "currentLocalBuildNotCountedAsPassed": true,
+    "stoppedAt": "Release ALL output archival; Debug and timing/soak queue not reached",
+    "originalDistroOrArtifactsNotRestartedRepairedMovedOrDeleted": true,
+    "newEvidenceRoot": "E:/capsid-verification-20261113/evidence"
+  },
+  "nativeSupplemental": {
+    "runId": 43510138817,
+    "workflowCommit": "511cc7ed3e96e56b6013e08cadd52a0591f930a9",
+    "branch": "codex/v030-native-debug-soak-diagnostics-20261113-r1",
+    "resultsPending": true,
+    "scopes": [
+      "clean full Debug matrix and unchanged versioned workerd audit",
+      "Release 167 regressions, nine timing tests and real uninterrupted 1800-second soak",
+      "original TSan 96-MiB deadline observations and real CPU stack profiles"
+    ]
+  },
+  "runnerProblemsPreserved": [
+    "initial Node baseline driver expected TAP but saw spec reporter; repeated with explicit TAP and frozen legacy helper",
+    "first full benchmark-control driver omitted required --node before density tests; corrected and reran all six files at original CTest deadlines",
+    "native retry generator AST rejected malformed string substitution before dispatch; original invalid bytes retained",
+    "first post-dispatch read-only run-index query saw no entry; later query identified the exact workflow run"
+  ],
+  "standardsConformanceClaimed": false,
+  "ordinaryWPTAllPassed": false,
+  "fullCombinedAcceptance": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

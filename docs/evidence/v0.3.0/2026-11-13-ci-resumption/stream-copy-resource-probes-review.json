@@ -1,0 +1,89 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T02:59:52.033684+00:00",
+  "workflowRunId": 43669364069,
+  "artifactId": 14143612796,
+  "archiveSHA256": "81e0860ec7b769b59b678864e0b14e20b02f1e0465d1c53da2c4b1efccddf072",
+  "exactOriginalAndPreviouslyReviewedProposalBinaries": true,
+  "declaredSeeds": [
+    1,
+    42,
+    2588777039
+  ],
+  "attempts": [
+    {
+      "index": 1,
+      "seed": 1,
+      "variant": "A",
+      "seconds": 26.431244241,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 442,
+      "stderrSHA256": "fc24643b9406302e0ed703427d24b4e3fe278b83972f9432a851b54559d56e72"
+    },
+    {
+      "index": 2,
+      "seed": 1,
+      "variant": "B",
+      "seconds": 25.683528500000023,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 471,
+      "stderrSHA256": "5e133e6e0120a1a61a1cd153c96d0b776ab8b68876bcf2f56b121cce6d435afa"
+    },
+    {
+      "index": 3,
+      "seed": 42,
+      "variant": "B",
+      "seconds": 22.667209853999964,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 462,
+      "stderrSHA256": "5b3dfecf676b597ceeb95c1da40874d49816554ba53acddfcc09312add4ed6e3"
+    },
+    {
+      "index": 4,
+      "seed": 42,
+      "variant": "A",
+      "seconds": 30.18928204399998,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 442,
+      "stderrSHA256": "e8e33211b521e5b24d7f52b36ae50b5d9a860366ed44775b1828e7b5a521a3da"
+    },
+    {
+      "index": 5,
+      "seed": 2588777039,
+      "variant": "A",
+      "seconds": 29.666271652000034,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 436,
+      "stderrSHA256": "c191d2561787d12a3a9c8e6534640880d5514e864dc6b4daf1bb36d42a53d503"
+    },
+    {
+      "index": 6,
+      "seed": 2588777039,
+      "variant": "B",
+      "seconds": 22.00640791099994,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 468,
+      "stderrSHA256": "fd52ffb3e17358b54b776ef327fba33710352c79298b9f41b02831217fb922d5"
+    }
+  ],
+  "allThreeProposalOriginalBudgetsPassed": true,
+  "originalTimeout60Rss512Runs10000InputTimeout2AndO2FatalInstrumentationVerified": true,
+  "notSuccessOnlySampling": true,
+  "sameSeedDoesNotEstablishSameExecutedMutations": true,
+  "doesNotCloseHistoricalFailureByLaterOriginalPass": true,
+  "proposalNotIntegratedOrCurrentSourceQualification": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,53 @@
+{
+  "complete": true,
+  "workflowRunId": 43618054033,
+  "productCheckout": "42107f444db014dc2089c4b405669c4be623d208",
+  "openssl": [
+    {
+      "kind": "release",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "9606eee71115bf25ff95dbe431ce3055a3a6e171a08eb5f46dbf9eea44920549",
+      "selectedFatalSanitizer": null,
+      "inventorySHA256": "d0ec7fade5e1d5a9002e96d863f057f6adf4ec911b3057a846f3ff1a4b047fae"
+    },
+    {
+      "kind": "tsan",
+      "originalJobConclusion": "failure",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "8786df9f9abe8fb608d1ca31bf3a52f1cb3decde2b1614d2ca7c447428013cd8",
+      "selectedFatalSanitizer": "thread",
+      "inventorySHA256": "e9703366eed5641789101a122c8ec3ce7cbed8f2547792f2907ca4d8e2267c27"
+    },
+    {
+      "kind": "ubsan",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "caff6f673886c2d6a358ad677784171bdd757ef68d21431469e3415ab91cc390",
+      "selectedFatalSanitizer": "undefined",
+      "inventorySHA256": "4a1b7bd0a1e6a6b3ca68b04b4e0717ae0cb073dac970bfbabb78a36ea6ab727d"
+    },
+    {
+      "kind": "asan",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "cd7cb12a964a27a9248608c91950cabe04cdcb4435ad6a1abd0679fa78a42349",
+      "selectedFatalSanitizer": "address",
+      "inventorySHA256": "f8091d6fa9d250bedcff61007df6223b12ce9ab81985d761a402206c6fef1234"
+    }
+  ],
+  "all1187CCommandsPerConfigurationVerified": true,
+  "prior1109LibraryOnlySubsetExpanded": true,
+  "delegatedCgroupV2Passed": true,
+  "delegatedNetworkNamespacePassed": true,
+  "ordinaryPrerequisiteSkipsNotRewritten": true,
+  "actuallyFailedTsanJobNotReclassifiedAsPassing": true,
+  "wholeCiAcceptanceNotClaimed": true,
+  "physicalHostIsolationNotClaimed": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

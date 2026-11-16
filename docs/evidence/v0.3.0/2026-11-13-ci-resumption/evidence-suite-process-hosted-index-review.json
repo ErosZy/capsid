@@ -1,0 +1,30 @@
+{
+  "schema": "capsid-control-hosted-evidence-index-independent-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T19:38:05.581132+00:00",
+  "workflowRunId": 43618054033,
+  "artifactId": 14128705121,
+  "productCheckout": "42107f444db014dc2089c4b405669c4be623d208",
+  "workflowCommit": "20f59e73b69f04b9b7c3bc10cd503ae7cec6f6f4",
+  "indexZipSHA256": "14a6d9413bc7825c8abd2f4b19b82e2bf4329e003fcaee6ae617fb62dc1bad05",
+  "completeEvidenceTreeSHA256": "8b968e6f21fea6c8c59cc96669bcc5afed44e50b78f75c3c5faedb1608c6e6db",
+  "actualArchivedFilesRehashed": 562,
+  "artifactFilesRehashed": {
+    "asan-hosted-evidence": 29,
+    "fuzz-hosted-evidence": 11,
+    "macos-host-library-evidence": 52,
+    "release-wpt-hosted-evidence": 114,
+    "tsan-hosted-evidence": 78,
+    "ubsan-hosted-evidence": 22,
+    "windows-host-library-evidence": 256
+  },
+  "sourcePackageBuildAndCompatibilityIdsBound": true,
+  "fullCiJobConclusionsSuccessful": false,
+  "originalTsanAndWholeIndexGateFailuresRetained": true,
+  "archiveIntegritySuccessIsNotWholeCiAcceptance": true,
+  "rawFiveWptFailuresAndInstrumentedRssExceptionsStillRetained": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

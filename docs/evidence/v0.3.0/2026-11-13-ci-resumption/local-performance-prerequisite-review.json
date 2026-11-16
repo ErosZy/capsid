@@ -1,0 +1,94 @@
+{
+  "complete": true,
+  "recordedUTC": "2026-11-15T03:57:48.961169+00:00",
+  "readOnlyInspection": true,
+  "local": {
+    "cpu": [
+      {
+        "Name": "12th Gen Intel(R) Core(TM) i5-12400F",
+        "NumberOfCores": 6,
+        "NumberOfLogicalProcessors": 12
+      }
+    ],
+    "os": {
+      "Caption": "Microsoft Windows 10 IoT 企业版 LTSC",
+      "Version": "10.0.19044"
+    },
+    "tools": [
+      {
+        "name": "wsl.exe",
+        "available": true,
+        "path": "C:\\Windows\\system32\\wsl.exe"
+      },
+      {
+        "name": "cmake.exe",
+        "available": false,
+        "path": null
+      },
+      {
+        "name": "cl.exe",
+        "available": false,
+        "path": null
+      },
+      {
+        "name": "clang++.exe",
+        "available": false,
+        "path": null
+      },
+      {
+        "name": "docker.exe",
+        "available": false,
+        "path": null
+      },
+      {
+        "name": "VBoxManage.exe",
+        "available": false,
+        "path": null
+      }
+    ]
+  },
+  "baselineReference": {
+    "version": "0.2.x",
+    "release": "v0.2.2",
+    "machine": {
+      "command": "OUT=/tmp/opencode/cold-vmfix BUILD_DIR=build-release COLD=bench/bin/cold-start WORKERD_BIN=/tmp/opencode/workerd-bin/workerd-linux-64 APPS=/tmp/cold-start-apps ROUNDS=5 WARM=50 bash bench/cold-start.sh  # node/workerd pass; deno ran as a separate pass: OUT=/tmp/opencode/cold-deno PATH=/tmp/opencode/deno/bin:$PATH STACKS=\"deno\" (cells.deno.txt)",
+      "commit": "50d0e4287784de6370a287f0396ea2b828e6e047",
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+      "deno": "deno 2.9.7 (stable, release, x86_64-unknown-linux-gnu)",
+      "generated_at": "2026-10-10T22:35:42+08:00",
+      "nginx": "nginx version: nginx/1.24.0 (Ubuntu)",
+      "node": "v24.14.0",
+      "nproc": "12",
+      "php_fpm": "PHP 8.3.6 (fpm-fcgi) (built: Sep  2 2026 12:56:02)",
+      "php_pool": "static max_children=1, opcache on, validate_timestamps=0",
+      "python": "Python 3.13.11",
+      "python_pkgs": "fastapi==0.143.0 Flask==3.1.3 gunicorn==26.2.0 starlette==1.7.0 uvicorn==0.54.0",
+      "rounds": "5 warm: 50 sut_cpuset: 0-3",
+      "uname": "Linux DESKTOP-O54T3AU 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+      "workerd_version": "workerd 2026-10-10"
+    },
+    "git": {
+      "commit": "b35e266cea1948b69268200ea9bd1eeed398b108",
+      "tag": ""
+    }
+  },
+  "existingBaselineDataSHA256": "a2c34270e665787fcc8ae1a8ca285fca829604fcf01d2e073eca8dc1939c350f",
+  "wslList": {
+    "command": [
+      "wsl.exe",
+      "--list",
+      "--verbose"
+    ],
+    "exitCode": 0,
+    "timedOut": false,
+    "stdout": "  NAME          STATE           VERSION\r\n* Ubuntu        Stopped         2\r\n  CapsidV030    Stopped         2\r\n",
+    "stderr": "",
+    "stdoutSHA256": "57536481c2fc076ea4bdd0d9ff2141a1bce0132e746d7576e4ab05f261d84d97",
+    "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "noDistroStartedStoppedRepairedOrModified": true,
+  "noGlobalInstallPathOrNetworkChanges": true,
+  "noMeasurementExecuted": true,
+  "ciPerformanceNotLocalPerformance": true,
+  "fullV030GoalComplete": false
+}

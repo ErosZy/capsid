@@ -1,0 +1,87 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T16:42:17.949334+00:00",
+  "workflowRunId": 43600446268,
+  "artifactId": 14121113640,
+  "archiveSHA256": "eaef3dd7ab1ced1bcfcd48b4a1a24e635d8f6ed9edb17b227c48cb5bdec92ea6",
+  "productCheckout": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+  "registered": 758,
+  "passed": 749,
+  "failed": [
+    "websocket_ordinary_fetch_gated_static-pool"
+  ],
+  "skipped": [
+    "host_single_worker_ab_emits_complete_evidence",
+    "worker_binding_sandbox_write",
+    "worker_binding_sandbox_read",
+    "worker_binding_sandbox_watch",
+    "worker_binding_sandbox_sqlite",
+    "worker_binding_sandbox_network",
+    "worker_binding_sandbox_wasi",
+    "worker_binding_sandbox_union"
+  ],
+  "originalOrdinaryFetchCtestBudgetSeconds": 120,
+  "originalSourceRequestObservationBudgetSeconds": 3,
+  "actualFailedWholeTestSeconds": 21.84,
+  "registrationJUnitAndEveryFinalLastTestOutcomeChecked": true,
+  "allNativeExecutableBytesRehashed": true,
+  "actualOriginalMatrixTemporaryReportsRehashed": 93,
+  "codecReportReplay": {
+    "complete": true,
+    "reports": 6,
+    "cases": 195,
+    "originalFrozenValidatorAndEveryRawCasePassed": true,
+    "windowsCheckoutBytesDerivedFromFrozenGitBlobsAndAttributes": true,
+    "reportReplayNotNewRuntimeExecution": true,
+    "previousWindowsFailureNotErasedOrClaimedFixed": true
+  },
+  "oldMetadataFlakeNotReproducedHereAndNotClaimedFixed": true,
+  "originalFailingBudgetNotRaisedOrExcluded": true,
+  "noWindowsAllPassClaim": true,
+  "actualFailedReports": [
+    {
+      "name": "capsid-ordinary-fetch-gated-b783be12-8cdb-4fd6-abca-0814278f1f2d-static-pool.json",
+      "case": {
+        "id": "ordinary-gated-byob-cancel",
+        "challenge": "ce5c4555-dcee-4d50-98fb-78962ee737ec",
+        "targets": [
+          {
+            "host": "localhost",
+            "port": 52576
+          }
+        ],
+        "initial": {
+          "status": 200,
+          "text": "{\"realm\":\"3f7a75c1-65bb-413a-aa6a-4b735cf075b1\",\"state\":null}"
+        },
+        "upgradea": {
+          "status": 101,
+          "rawHeader": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: vgg+7mxa9N9XSusVDKnvYnPlzhY=",
+          "requestKey": "KhYypxsvZu8QkNMlu3Jr3g==",
+          "rawTail": "",
+          "frames": [],
+          "peerTerminated": false,
+          "transportError": null,
+          "completion": null,
+          "closeReplySent": false
+        },
+        "failure": "AssertionError [ERR_ASSERTION]: actual ordinary HTTP source requests complete before snapshot\n    at file:///D:/a/capsid/capsid/tests/test_websocket_ordinary_fetch.mjs:180:16",
+        "failureState": {
+          "status": 200,
+          "text": "{\"realm\":\"3f7a75c1-65bb-413a-aa6a-4b735cf075b1\",\"state\":{\"kind\":\"ordinary-gated-byob-cancel\",\"challenge\":\"ce5c4555-dcee-4d50-98fb-78962ee737ec\",\"failure\":null}}"
+        },
+        "shutdown": {
+          "code": 0,
+          "signal": null,
+          "forced": false
+        },
+        "stderr": "{\"timestamp\":\"1794670531435\",\"level\":\"info\",\"event\":\"shutdown\",\"duration_ms\":0,\"message\":\"\"}\r\n"
+      },
+      "missingAtFailureUpstreamSnapshot": true
+    }
+  ],
+  "previousBenchmark90SecondTimeoutNotReproducedAndNotClaimedFixedByThisRun": true,
+  "actualBenchmarkSeconds": 82.9711,
+  "formalPerformancePoints": 1,
+  "fullV030GoalComplete": false
+}

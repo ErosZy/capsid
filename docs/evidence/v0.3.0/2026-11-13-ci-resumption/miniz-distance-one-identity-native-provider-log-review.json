@@ -1,0 +1,55 @@
+{
+  "complete": true,
+  "workflowRunId": 43641603893,
+  "productCheckout": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "openssl": [
+    {
+      "kind": "ubsan",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "62b907b180fca3ea0deffa26880e8097e6302ed320784fad30b5f064d4d81c7c",
+      "selectedFatalSanitizer": "undefined",
+      "inventorySHA256": "5b0aac0eb6176587d820c75c1232819cd9b88d061de26ad426dca4d30142f5e6"
+    },
+    {
+      "kind": "asan",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "e0864c7e5e43e98a6d8da94cd1fa47a5109976ea5eb896d72b0f8be042ac5313",
+      "selectedFatalSanitizer": "address",
+      "inventorySHA256": "4776d776542657be48408118fef80eb8bbfdd9ffbb2e265cda6ed3d559bb887b"
+    },
+    {
+      "kind": "tsan",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "2a4acc1ec17d6277c10908968e627361da4d1d5339468c31634622c8253c638c",
+      "selectedFatalSanitizer": "thread",
+      "inventorySHA256": "cc7d4f1a433f4f1a74499c867f7f90480a93ea8b09ac47cf9c3230ea9356c8ca"
+    },
+    {
+      "kind": "release",
+      "originalJobConclusion": "success",
+      "commandsIndividuallyVerified": 1187,
+      "includesAppsAndLibraries": true,
+      "logSHA256": "a47d60da92ba9b34f8c8845baabc9b28862537d6718caf59731ba02134c95b1b",
+      "selectedFatalSanitizer": null,
+      "inventorySHA256": "7f6c3724afe029e2164a63f43306314b331b247266619b33647a7195a2ce4459"
+    }
+  ],
+  "all1187CCommandsPerConfigurationVerified": true,
+  "prior1109LibraryOnlySubsetExpanded": true,
+  "delegatedCgroupV2Passed": true,
+  "delegatedNetworkNamespacePassed": true,
+  "ordinaryPrerequisiteSkipsNotRewritten": true,
+  "originalActualJobConclusionsRetainedWithoutInference": true,
+  "wholeCiAcceptanceNotClaimed": true,
+  "physicalHostIsolationNotClaimed": true,
+  "formalPerformancePoints": 1,
+  "currentSourcePerformanceNotYetMeasured": true,
+  "qualifiedPerformancePointRemainsBoundToPrior77Source": true,
+  "fullV030GoalComplete": false
+}

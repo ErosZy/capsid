@@ -1,0 +1,124 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T09:15:43.010276+00:00",
+  "workflowRunId": 43697788507,
+  "artifactId": 14155570489,
+  "archiveSHA256": "bb2f4721d71681e767bdd1ca214c53a72b71a4678be8dae89bb2c480096f0757",
+  "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "productTree": "f2d6f39f8d0f9fd9345e7e856e7a9e281288e542",
+  "sourceInputsRehashed": 5169,
+  "fullOriginalBudgetFiles": 7,
+  "fullUnitTestsPassed": 120,
+  "unitTestsSkipped": 0,
+  "testFiles": [
+    {
+      "label": "qps-probe",
+      "tests": 7,
+      "budgetSeconds": 90,
+      "actualSeconds": 29.584906394
+    },
+    {
+      "label": "qps-control",
+      "tests": 12,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.1141528429999994
+    },
+    {
+      "label": "qps-lane",
+      "tests": 8,
+      "budgetSeconds": 60,
+      "actualSeconds": 1.8183105340000054
+    },
+    {
+      "label": "density-control",
+      "tests": 37,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.3145301720000191
+    },
+    {
+      "label": "density-conditioning",
+      "tests": 19,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.36483300100002225
+    },
+    {
+      "label": "density-lane",
+      "tests": 5,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.715723048000001
+    },
+    {
+      "label": "perf-evidence",
+      "tests": 32,
+      "budgetSeconds": 90,
+      "actualSeconds": 8.136680815999995
+    }
+  ],
+  "actualWorkerdCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "count": 2048,
+      "pssKiB": 4074130,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "count": 65,
+      "pssKiB": 268927,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "count": 8,
+      "pssKiB": 119199,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    }
+  ],
+  "actualPermanentNativeStreamCases": [
+    {
+      "label": "original",
+      "exitCode": 0,
+      "seconds": 0.2647370470000112,
+      "sourceSHA256": "9071360839e1ba19bb0a4a608fcd826ccc7cc898e5b954ac19c6a32d482ed6e5",
+      "binarySHA256": "98732b51b9c62598bfe3336cb83c0372bb18ec839e9208bb40aabcf37e3dd003",
+      "negative": false
+    },
+    {
+      "label": "integrated",
+      "exitCode": 0,
+      "seconds": 0.26452361400001223,
+      "sourceSHA256": "dcca228f8bc9e8927dc7cfa74e36711e8dfd5f07d66580b17ba60a7ec0b49e9f",
+      "binarySHA256": "f67640a8ed65ab1bbdc8d11137ac97a2e6b1bcdaf583fa99eca21163e652c91e",
+      "negative": false
+    },
+    {
+      "label": "corrupt-copy-negative",
+      "exitCode": 1,
+      "seconds": 0.007851203000001306,
+      "sourceSHA256": "22b7f5660491abddc6b583ac064d83fadb72d8b733982448b8ac36f0c55cf8bc",
+      "binarySHA256": "c1a050e3189a123b5c13edecc55102dfd777b9a0e1104491607f2ffbf57ffaab",
+      "negative": true
+    }
+  ],
+  "rawConditioningAndRuntimeContractsReplayed": true,
+  "currentSourceFormalPerformanceNotYetMeasured": true,
+  "priorCiPointsRemainBoundTo77Dd589B59": true,
+  "noUnrelatedDiagnosticCampaignAdded": true,
+  "notFormalPerformanceEvidence": true,
+  "fullCapsidHostWorkerServiceNotInvokedByBenchmarkQualification": true,
+  "actualPermanentNativeStreamTestsOnOriginalAndIntegratedAndCorruptNegativeReviewed": true,
+  "original711OracleControlsRetainedAnd32NewControls743TotalAndLifecycle8Passed": true,
+  "actualPinnedLinuxResourceReference32CasesPassed": true,
+  "loopbackOwnershipAndRollbackControlsValidated": true,
+  "fullCurrentNativeRuntimeQualificationStillRequired": true,
+  "formalPerformancePoints": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "localPerformanceAcceptedSessionCount": 0,
+  "fullV030GoalComplete": false
+}

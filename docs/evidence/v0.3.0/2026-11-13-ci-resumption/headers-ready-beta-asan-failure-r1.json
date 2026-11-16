@@ -1,0 +1,77 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-16T03:21:09.801597+00:00",
+  "workflowRunId": 43792292425,
+  "jobId": 133053256153,
+  "attempt": 1,
+  "productCheckout": "b2a7d4ef6f77e5d990f5b7e0b2aed6b6bdaf9239",
+  "productTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+  "artifactId": 14193554475,
+  "artifactSHA256": "598919f6ede5c277ef04f95ce858156c335ce4977ef31598d1522a4060ffd9b7",
+  "actualMatrixExit": 8,
+  "selected": 1030,
+  "passed": 1024,
+  "failed": [
+    "soak_memory_waves_smoke"
+  ],
+  "skipped": [
+    "host_managed_executable_active_state_foreign_owner",
+    "host_managed_recovery_rejects_oversized_snapshot",
+    "worker_sandbox_namespaces",
+    "worker_sandbox_cgroup_v2",
+    "worker_sandbox_network_namespace"
+  ],
+  "registrationJUnitAndRawLastTestBound": true,
+  "originalCommand": [
+    "/home/runner/work/capsid/capsid/build-asan/soak-memory-waves",
+    "/home/runner/work/capsid/capsid/build-asan/capsid-worker",
+    "/home/runner/work/capsid/capsid/soak/fixtures/soak-app.js",
+    "4",
+    "50"
+  ],
+  "originalTimeout": 120,
+  "memoryWaveObservation": {
+    "baseline": {
+      "used": 1768821,
+      "objects": 2155,
+      "properties": 6407,
+      "atoms": 4419
+    },
+    "waves": [
+      {
+        "used": 1803730,
+        "objects": 2419,
+        "properties": 6835
+      },
+      {
+        "used": 1770338,
+        "objects": 2169,
+        "properties": 6435
+      },
+      {
+        "used": 1803730,
+        "objects": 2419,
+        "properties": 6835
+      },
+      {
+        "used": 1770338,
+        "objects": 2169,
+        "properties": 6435
+      }
+    ],
+    "converged": false,
+    "reason": "monotonic object/used growth in the final waves"
+  },
+  "rawInstrumentedRssFailures": [
+    "websocket_managed_replacement-recursion",
+    "websocket_managed_reclamation-idle"
+  ],
+  "rawInstrumentedRssExit": 8,
+  "originalJobLogSHA256": "8c7d6b1b9a77f23df6479b0aadc9206e07d6df50c8bd87ee285e16bf99e3095d",
+  "addressOrLeakSanitizerErrorReportPresent": false,
+  "ordinaryMatrixFailureNotAcceptedAsKnownRssException": true,
+  "criterionSource": "soak/soak_memory_waves.cc:230-250 rejects either upward transition in final three waves; original120s/4waves/50requests retained",
+  "observationInterpretation": "Sample alternates between two exactly repeated heap states; this alone does not prove monotonic leakage, quiescence or a harmless test artifact. Cause remains unqualified.",
+  "currentBetaBlocker": true,
+  "noReproductionRetryOrThresholdChange": true
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "capsid-exact-failed-resource-pe-hosted-observation-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T08:04:48.710981+00:00",
+  "workflowRunId": 43691285001,
+  "workflowCommit": "444d696a1538c81d6347a90137c26e8535b582c4",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "artifactId": 14152053825,
+  "archiveSHA256": "e0b405d3eaf629ed1075607397a625faba5ed16b99f397e8bfb573a83037c7f3",
+  "allFourPredeclaredOriginalBudgetAttemptsPassed": true,
+  "actualSeconds": [
+    59.4926,
+    59.8764,
+    59.4447,
+    59.4975
+  ],
+  "frozenOracleReplayCases": 128,
+  "originalFailedArchiveAndNativePeBytesExactlyRehashed": true,
+  "originalAInputDigestsEqualActualFailedReport": true,
+  "privateBOnlyPostFailureSnapshotChangedUnderApprovedTextIdentity": true,
+  "gitApprovedRunnerCRLFIdentityNotRawFrozenWorkingCopyEquality": true,
+  "toolsAndFixtureRawBytesPreserved": true,
+  "missingHiddenSourceFilesNotClaimedFullyRehashed": true,
+  "priorLocalNegativeControlsRemainSeparate": true,
+  "originalWindowsMatrixFailureStillReal": true,
+  "originalHostedFailureNotReproducedAndNotClaimedFixed": true,
+  "noWholeMatrixOrRootCauseAcceptance": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "localPerformanceAcceptedSessionCount": 0,
+  "fullV030GoalComplete": false
+}

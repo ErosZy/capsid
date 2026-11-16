@@ -1,0 +1,52 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T03:33:45.639131+00:00",
+  "workflowRunId": 43671341667,
+  "artifactId": 14144049379,
+  "archiveSHA256": "e414cbe59d6c5ca11daf2e6d17d79cfcba8b8e1e165e34698df3ee938b766e38",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "originalFuzzReviewPreserved": true,
+  "rawPeakRssStatActuallyReparsed": true,
+  "allSevenPeakRssAtOrBelowOriginal512MiB": true,
+  "rows": [
+    {
+      "test": "fuzz-protocol-parser_smoke",
+      "peakRssMiB": 82,
+      "executedUnits": 10000
+    },
+    {
+      "test": "fuzz-response-headers_smoke",
+      "peakRssMiB": 42,
+      "executedUnits": 10000
+    },
+    {
+      "test": "fuzz-worker-protocol_smoke",
+      "peakRssMiB": 214,
+      "executedUnits": 10000
+    },
+    {
+      "test": "fuzz-audit-decode_smoke",
+      "peakRssMiB": 45,
+      "executedUnits": 10000
+    },
+    {
+      "test": "fuzz-channel-registry_smoke",
+      "peakRssMiB": 408,
+      "executedUnits": 10000
+    },
+    {
+      "test": "fuzz-websocket-frames_smoke",
+      "peakRssMiB": 398,
+      "executedUnits": 10000
+    },
+    {
+      "test": "fuzz-websocket-handshake_smoke",
+      "peakRssMiB": 304,
+      "executedUnits": 10000
+    }
+  ],
+  "notCrossSeedMemoryImprovementClaim": true,
+  "noFuzzReexecution": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,330 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T02:09:30.697021+00:00",
+  "originalSampleRecoveryOnlyNoNewSutExecution": true,
+  "originalProfileCollectorFailureAndIncompleteAbbaRetained": true,
+  "originalElfSHA256": "6f5ce576afee67f823c4ad165ba1f673772772334a335c65e244352e8d070e78",
+  "originalPerfDataSHA256": "d5ddedb1c3acc4c17f395d937f83e4bad415f7c34d55ab8438149fcb40d274eb",
+  "all1888SamplesDecoded": true,
+  "samplesLost": 0,
+  "totalUserEventPeriod": 38530611744,
+  "comparisonHookPeriod": 28040815962,
+  "comparisonHookUserEventWeightPercent": 72.77542372881356,
+  "allComparisonHookPeriodsAttributedToFirstAvailableRetainedNonHookFrame": true,
+  "callerFrameNotClaimedExactLeafComparisonInstruction": true,
+  "functionWeights": [
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "totalUserEventWeightPercent": 36.59957627118644,
+      "comparisonHookWeightPercent": 50.29112081513828
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_15validEPKhmbbb",
+      "totalUserEventWeightPercent": 15.413135593220339,
+      "comparisonHookWeightPercent": 21.17903930131004
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEEixEm",
+      "totalUserEventWeightPercent": 7.997881355932203,
+      "comparisonHookWeightPercent": 10.98981077147016
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16streamERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEmb",
+      "totalUserEventWeightPercent": 4.184322033898305,
+      "comparisonHookWeightPercent": 5.749636098981077
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6Parser4nextEPNS1_5FrameE",
+      "totalUserEventWeightPercent": 3.972457627118644,
+      "comparisonHookWeightPercent": 5.458515283842795
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6encodeERKNS1_5FrameENS1_4RoleEjPSt6vectorIhSaIhEE",
+      "totalUserEventWeightPercent": 2.5953389830508473,
+      "comparisonHookWeightPercent": 3.566229985443959
+    },
+    {
+      "symbol": "LLVMFuzzerTestOneInput",
+      "totalUserEventWeightPercent": 0.7944915254237288,
+      "comparisonHookWeightPercent": 1.0917030567685588
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16parserERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEPKS0_INS_6PacketESaIS9_EEb",
+      "totalUserEventWeightPercent": 0.5826271186440678,
+      "comparisonHookWeightPercent": 0.8005822416302766
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIPKhEEvN9__gnu_cxx17__normal_iteratorIPhS1_EET_S9_St20forward_iterator_tag",
+      "totalUserEventWeightPercent": 0.15889830508474578,
+      "comparisonHookWeightPercent": 0.21834061135371177
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6Parser6appendEPKhm",
+      "totalUserEventWeightPercent": 0.1059322033898305,
+      "comparisonHookWeightPercent": 0.1455604075691412
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIN9__gnu_cxx17__normal_iteratorIPhS1_EEEEvS6_T_S7_St20forward_iterator_tag",
+      "totalUserEventWeightPercent": 0.1059322033898305,
+      "comparisonHookWeightPercent": 0.1455604075691412
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE17_M_default_appendEm",
+      "totalUserEventWeightPercent": 0.1059322033898305,
+      "comparisonHookWeightPercent": 0.1455604075691412
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIN9__gnu_cxx17__normal_iteratorIPKhS1_EEEEvNS4_IPhS1_EET_SA_St20forward_iterator_tag",
+      "totalUserEventWeightPercent": 0.05296610169491525,
+      "comparisonHookWeightPercent": 0.0727802037845706
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE8_M_eraseEN9__gnu_cxx17__normal_iteratorIPhS1_EES5_",
+      "totalUserEventWeightPercent": 0.05296610169491525,
+      "comparisonHookWeightPercent": 0.0727802037845706
+    },
+    {
+      "symbol": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag",
+      "totalUserEventWeightPercent": 0.05296610169491525,
+      "comparisonHookWeightPercent": 0.0727802037845706
+    }
+  ],
+  "callerOffsetWeights": [
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x1387",
+      "totalUserEventWeightPercent": 5.879237288135593
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x11b9",
+      "totalUserEventWeightPercent": 5.826271186440677
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEEixEm",
+      "offset": "0x4c",
+      "totalUserEventWeightPercent": 4.9258474576271185
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_15validEPKhmbbb",
+      "offset": "0xdeb",
+      "totalUserEventWeightPercent": 4.4491525423728815
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_15validEPKhmbbb",
+      "offset": "0xd01",
+      "totalUserEventWeightPercent": 4.23728813559322
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16streamERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEmb",
+      "offset": "0x6ca",
+      "totalUserEventWeightPercent": 4.025423728813559
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_15validEPKhmbbb",
+      "offset": "0xd13",
+      "totalUserEventWeightPercent": 3.972457627118644
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x13fe",
+      "totalUserEventWeightPercent": 3.972457627118644
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x131d",
+      "totalUserEventWeightPercent": 3.8135593220338984
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x112d",
+      "totalUserEventWeightPercent": 3.8135593220338984
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x1334",
+      "totalUserEventWeightPercent": 3.5487288135593222
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x1144",
+      "totalUserEventWeightPercent": 3.389830508474576
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6Parser4nextEPNS1_5FrameE",
+      "offset": "0x8de",
+      "totalUserEventWeightPercent": 3.3368644067796613
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x1410",
+      "totalUserEventWeightPercent": 3.1779661016949152
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEEixEm",
+      "offset": "0x5e",
+      "totalUserEventWeightPercent": 3.0720338983050848
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x11cb",
+      "totalUserEventWeightPercent": 3.0190677966101696
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_15validEPKhmbbb",
+      "offset": "0xd71",
+      "totalUserEventWeightPercent": 2.5953389830508473
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6encodeERKNS1_5FrameENS1_4RoleEjPSt6vectorIhSaIhEE",
+      "offset": "0xddf",
+      "totalUserEventWeightPercent": 2.5423728813559325
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6Parser4nextEPNS1_5FrameE",
+      "offset": "0x909",
+      "totalUserEventWeightPercent": 0.6355932203389831
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16parserERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEPKS0_INS_6PacketESaIS9_EEb",
+      "offset": "0x388",
+      "totalUserEventWeightPercent": 0.4766949152542373
+    },
+    {
+      "symbol": "LLVMFuzzerTestOneInput",
+      "offset": "0x8dc",
+      "totalUserEventWeightPercent": 0.26483050847457623
+    },
+    {
+      "symbol": "LLVMFuzzerTestOneInput",
+      "offset": "0x915",
+      "totalUserEventWeightPercent": 0.211864406779661
+    },
+    {
+      "symbol": "LLVMFuzzerTestOneInput",
+      "offset": "0x8f7",
+      "totalUserEventWeightPercent": 0.15889830508474578
+    },
+    {
+      "symbol": "LLVMFuzzerTestOneInput",
+      "offset": "0x936",
+      "totalUserEventWeightPercent": 0.15889830508474578
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_15validEPKhmbbb",
+      "offset": "0xff1",
+      "totalUserEventWeightPercent": 0.15889830508474578
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0x1c9b",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0xbe4",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16parserERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEPKS0_INS_6PacketESaIS9_EEb",
+      "offset": "0x335",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIPKhEEvN9__gnu_cxx17__normal_iteratorIPhS1_EET_S9_St20forward_iterator_tag",
+      "offset": "0x51a",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6Parser6appendEPKhm",
+      "offset": "0x112",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIN9__gnu_cxx17__normal_iteratorIPKhS1_EEEEvNS4_IPhS1_EET_SA_St20forward_iterator_tag",
+      "offset": "0x51a",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6Parser6appendEPKhm",
+      "offset": "0x1dc",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16streamERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEmb",
+      "offset": "0x3ea",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIN9__gnu_cxx17__normal_iteratorIPhS1_EEEEvS6_T_S7_St20forward_iterator_tag",
+      "offset": "0x51a",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIN9__gnu_cxx17__normal_iteratorIPhS1_EEEEvS6_T_S7_St20forward_iterator_tag",
+      "offset": "0x7cc",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16streamERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEmb",
+      "offset": "0x670",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE8_M_eraseEN9__gnu_cxx17__normal_iteratorIPhS1_EES5_",
+      "offset": "0x18c",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12_M_constructIPcEEvT_S7_St20forward_iterator_tag",
+      "offset": "0x23a",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16parserERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEPKS0_INS_6PacketESaIS9_EEb",
+      "offset": "0x313",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE17_M_default_appendEm",
+      "offset": "0xbb",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws6encodeERKNS1_5FrameENS1_4RoleEjPSt6vectorIhSaIhEE",
+      "offset": "0x2e9",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN6capsid4host2ws13StreamDecoder7consumeEPKhmPmmPNS2_4ItemE",
+      "offset": "0xc45",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE17_M_default_appendEm",
+      "offset": "0x359",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIPKhEEvN9__gnu_cxx17__normal_iteratorIPhS1_EET_S9_St20forward_iterator_tag",
+      "offset": "0x7ad",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZNSt6vectorIhSaIhEE15_M_range_insertIPKhEEvN9__gnu_cxx17__normal_iteratorIPhS1_EET_S9_St20forward_iterator_tag",
+      "offset": "0x99",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    },
+    {
+      "symbol": "_ZN12_GLOBAL__N_16streamERKSt6vectorIhSaIhEEN6capsid4host2ws4RoleEmb",
+      "offset": "0xbc2",
+      "totalUserEventWeightPercent": 0.05296610169491525
+    }
+  ],
+  "rawDecodedSampleRowsSHA256": "4b61200254ef1602e3e3f7be42ddf3de852f90a241a0202ce701e393b1a1e0f9",
+  "fixedNineSeedWireAllocationControlNotMeasuredBeneficial": true,
+  "notStatisticalWallTimeCausalProofAndHistoricalSeedStillOpen": true,
+  "sourceAndOriginalBudgetAndInstrumentationNotModified": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

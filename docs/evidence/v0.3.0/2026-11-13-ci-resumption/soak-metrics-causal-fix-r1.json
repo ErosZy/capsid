@@ -1,0 +1,95 @@
+{
+  "complete": true,
+  "stage": "causal-fix-before-new-clean-qualification",
+  "originalFailedCi": 43792292425,
+  "originalSource": "b2a7d4ef6f77e5d990f5b7e0b2aed6b6bdaf9239",
+  "originalTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+  "rootHeadUnchanged": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "rootBeforeStatusSHA256": "756ac1a9d17dd345248d124729247287bca3268ca5d8448a0832a3a2c84000ea",
+  "baselineOriginalReleaseTrials": 20,
+  "baselineOriginalAsanTrials": 20,
+  "baselineFailures": 0,
+  "controlledSchedule": "75ms hold inside the owned worker last-cancel callback in waves 1 and 3; original 4x50/120s/5s/60s and convergence assertions retained",
+  "controlledStates": {
+    "beforeReclaim": {
+      "used": 1803730,
+      "objects": 2419,
+      "pending": true,
+      "tokens": 50,
+      "responses": 0
+    },
+    "afterOrdinaryTick": {
+      "used": 1770338,
+      "objects": 2169,
+      "pending": false,
+      "tokens": 0
+    }
+  },
+  "matchingOriginalCiHeapSignature": true,
+  "notProofOfExactHistoricalRunnerScheduling": true,
+  "oldNewNewOldActualExits": [
+    1,
+    0,
+    0,
+    1
+  ],
+  "reachableLeakOriginalSoakStillRejected": true,
+  "permanentRegression": "Heads, CANCEL and two snapshots in a single flush; no injected delay or quiet heuristic",
+  "permanentOldNewRetainedOldActualExits": [
+    1,
+    0,
+    0,
+    1
+  ],
+  "fixedOriginalAsanSoak20of20": true,
+  "fix": "Defer each host-only metrics reply past the next already-scheduled ordinary reclaim tick; no extra GC, waiting for live work, or deadline changes",
+  "publicAbiVersion": 7,
+  "fetchRpcVersion": 3,
+  "sdkPatchCount": 78,
+  "vendorUnchanged": true,
+  "thresholdsUnchanged": true,
+  "allCiPassed": false,
+  "packagePreflightPassed": false,
+  "betaPublished": false,
+  "diagnosticRelinksNotFinalReleaseQualification": true,
+  "evidence": {
+    "baseline-preparation-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\baseline-preparation-r1\\review.json",
+      "sha256": "d567e9656bbec21ab72494bfe6df80f552b8cbe95f1bba18eb7ffe7315d0d98b"
+    },
+    "baseline-asan-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\baseline-asan-r1\\review.json",
+      "sha256": "7b3b6b71cd464aa333800db334d1a62aeb2497976d0d150dc0fddd4720f62aa9"
+    },
+    "controlled-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\controlled-r1\\review.json",
+      "sha256": "036e2e77cc420e3dc80bd6c29be60faceb6b70c62b08c967dc757070100a14e1"
+    },
+    "controlled-r2/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\controlled-r2\\review.json",
+      "sha256": "eb64adb2ef84c88fef177221d4494e879dd331130ff0ad9b22d45951e09ab942"
+    },
+    "controlled-r3/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\controlled-r3\\review.json",
+      "sha256": "dd9f6e90b50eece1a21a5a0dea7d105c3f3a6f4f537b2fd5ae055e94322e1699"
+    },
+    "controlled-r4/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\controlled-r4\\review.json",
+      "sha256": "06f24b778b4392baad6a8ced1805f4a140ed5d9c6838be23f921fec3cedeee8f"
+    },
+    "controlled-fix-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\controlled-fix-r1\\review.json",
+      "sha256": "bcf9faed5e802562324a2e978fd13ab68266d941f0fc14b81f9113fa9f508f26"
+    },
+    "permanent-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-soak-convergence-fix-r1\\permanent-r1\\review.json",
+      "sha256": "3b1eeeb6cb0775d06241c936f59df5cb844bac6914f60ae36040c803ab53be3f"
+    }
+  },
+  "retainedUnactivatedBarrierAttempts": [
+    "controlled-r1",
+    "controlled-r2",
+    "controlled-r3"
+  ],
+  "note": "Earlier environment-guarded barriers did not activate; only r4 and fix-r1 prove the controlled schedule. All attempts are retained."
+}

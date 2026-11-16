@@ -1,0 +1,43 @@
+{
+  "schema": "capsid-windows-complete-matrix-budget-cancellation-v1",
+  "complete": true,
+  "workflowRunId": 43537934097,
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "originalBudgetMinutes": 180,
+  "jobConclusion": "cancelled",
+  "cancelledJob": {
+    "id": 132271351987,
+    "name": "Exact-source complete Windows retry after original hosted-runner communication loss",
+    "startedAt": "2026-11-14T01:01:17Z",
+    "completedAt": "2026-11-14T04:06:17Z",
+    "runner": "GitHub Actions 1000002800",
+    "annotations": [
+      {
+        "path": ".github",
+        "blob_href": "https://github.com/ErosZy/capsid/blob/c16491108bf3a3e931a7cf5a127ecf542b236206/.github",
+        "start_line": 1,
+        "start_column": null,
+        "end_line": 1,
+        "end_column": null,
+        "annotation_level": "failure",
+        "title": "",
+        "message": "The job has exceeded the maximum execution time of 3h0m0s",
+        "raw_details": ""
+      }
+    ]
+  },
+  "originalLogTransfer": {
+    "jobId": 132271351987,
+    "name": "Exact-source complete Windows retry after original hosted-runner communication loss",
+    "jobConclusion": "cancelled",
+    "exitCode": 22,
+    "summary": "404 0",
+    "stderrSHA256": "0959a4c792fe3b5ea2eb25698647ca2b8ee79b912b15b276d8d836c3761e4eee",
+    "file": "E:\\capsid-verification-20261113\\evidence\\v030-native-platform-recovery-r1\\job-logs-20261114T042041111822Z\\132271351987.log",
+    "complete": false
+  },
+  "noCompleteWindowsMatrixVerdict": true,
+  "notAcceptedAsWindowsPass": true,
+  "productOrResourceCauseNotExcluded": true,
+  "testsNotInterruptedByOperator": true
+}

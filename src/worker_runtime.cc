@@ -857,6 +857,7 @@ public:
           poison_triggers_(0),
           poison_exit_started_(false),
           reclaim_pending_(false),
+          pending_memory_metrics_(0),
           retained_refs_(0),
           interrupted_request_id_(0),
           audit_window_started_ns_(0),
@@ -2422,6 +2423,13 @@ private:
             self->reclaim_settled_tokens();
         }
         self->check_poison();
+        while (!self->shutting_down_ && self->pending_memory_metrics_ > 0) {
+            --self->pending_memory_metrics_;
+            if (!self->write_memory_metrics()) {
+                self->shutdown();
+                return;
+            }
+        }
         if (!self->diag_enabled_) {
             self->expire_requests();
             return;
@@ -8874,6 +8882,21 @@ private:
         if (request.request_id != 0 || !request.payload.empty()) {
             return false;
         }
+        // Input silence does not acknowledge cancellation or the token GC
+        // already scheduled for the next deadline tick. Do not snapshot that
+        // transient heap before its ordinary reclaim round has run. This does
+        // not force an extra GC, await live work, or extend any token deadline.
+        if (reclaim_pending_) {
+            if (pending_memory_metrics_ == std::numeric_limits<uint64_t>::max()) {
+                return false;
+            }
+            ++pending_memory_metrics_;
+            return true;
+        }
+        return write_memory_metrics();
+    }
+
+    bool write_memory_metrics() {
         JSMemoryUsage usage;
         std::memset(&usage, 0, sizeof(usage));
         JS_ComputeMemoryUsage(JS_GetRuntime(ctx_), &usage);
@@ -10130,6 +10153,9 @@ private:
     // re-arms itself while a token's completion chain is still actively
     // unwinding. Each RequestToken owns its non-extendable retry budget.
     bool reclaim_pending_;
+    // Host diagnostic requests must cross an already-scheduled reclaim tick.
+    // Count replies without retaining frames or changing the wire protocol.
+    uint64_t pending_memory_metrics_;
     // Sum of refs over live tokens (registry owner + captured jobs and
     // native resources). Must reach zero before exit; printed in diag.
     uint64_t retained_refs_;

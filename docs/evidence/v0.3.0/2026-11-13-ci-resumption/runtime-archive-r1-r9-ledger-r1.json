@@ -1,0 +1,125 @@
+{
+  "schema": "capsid-runtime-archive-r1-r9-ledger-v1",
+  "observedUTC": "2026-11-14T11:38:00.241384+00:00",
+  "productCheckout": "d6b4ead0d09c75b0b1e04c10d7683b766a6d1cbf",
+  "productTree": "dc5684a08ddc27ef6bf3f5b788aad79ce3bb7937",
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "prior6ef4CandidateEvidence": {
+        "sameSourceCompleteLinuxReportsReplayed": true,
+        "sameSourceReplayReference": "workerd-control-r3-r5-r6-native-contract-review.json"
+      },
+      "prior6a9CandidateEvidence": {
+        "sameSourceCompleteLinuxReportsReplayed": true,
+        "sameSourceReplayReference": "workerd-headroom-r3-r5-r6-native-contract-review.json"
+      }
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "prior6ef4CandidateEvidence": {
+        "sameSourceCompleteLinuxReportsReplayed": true,
+        "sameSourceReplayReference": "workerd-control-r3-r5-r6-native-contract-review.json"
+      },
+      "prior6a9CandidateEvidence": {
+        "sameSourceCompleteLinuxReportsReplayed": true,
+        "sameSourceReplayReference": "workerd-headroom-r3-r5-r6-native-contract-review.json"
+      }
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "prior6ef4CandidateEvidence": {
+        "sameSourceCompleteLinuxReportsReplayed": true,
+        "sameSourceReplayReference": "workerd-control-r3-r5-r6-native-contract-review.json"
+      },
+      "prior6a9CandidateEvidence": {
+        "sameSourceCompleteLinuxReportsReplayed": true,
+        "sameSourceReplayReference": "workerd-headroom-r3-r5-r6-native-contract-review.json"
+      }
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "historicalFuzzAndTsanDeadlineCausalQuestionsRemainOpen": true,
+      "historicalSeed4191328252ReproducedTwiceAtOriginal60Seconds": true,
+      "historicalPassingOtherSeedsNotAcceptedAsFix": true,
+      "historicalTsanDeadlineStillRetained": true,
+      "previousWindows749PassedOneFailedEightSkipped": true,
+      "failedCodecSubcaseCauseNotEstablished": true,
+      "passingLocalRepeatNotAcceptedAsFix": true
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "status": "in_progress",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true,
+      "formalPerformanceBaselineAndFinalViewportsStillPending": true,
+      "prior6ef4CandidateEvidence": {
+        "sameSourceLinuxDebugMacosProviderAndSoakReviewed": true,
+        "windowsFinalMatrixPending": false,
+        "allPlatformFunctionalCiAndDebugSoakReviewed": true
+      },
+      "windowsFullMatrixPending": true,
+      "prior6a9CandidateEvidence": {
+        "currentNewSourceFullCiDebugSoakPending": true,
+        "currentNewSourceBenchmark108AndIntegratedABAReviewed": true,
+        "currentNewSourceFullCiDebugSoakInProgress": true,
+        "formalSession8InProgressNotAccepted": true,
+        "sameSourceLinuxDebugMacosProviderAndSoakReviewed": true
+      },
+      "currentRuntimeArchiveBenchmark112Reviewed": true,
+      "currentFullCiAndDebugSoakInProgress": true,
+      "currentFormal9InProgressNotAccepted": true,
+      "previousFormal8ArchiveFailureNotRepackedOrRenamed": true
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "status": "incomplete",
+      "historicalDirectedEvidenceRetained": true,
+      "finalSourceCombinedClosurePending": true
+    }
+  ],
+  "closureProgress": "runtime-archive-progress-r1.json",
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "previousQualifiedCandidateLedger": "workerd-control-platform-r1-r9-ledger.json",
+  "previousQualifiedScopeLedger": "workerd-headroom-r1-r9-ledger-r3.json"
+}

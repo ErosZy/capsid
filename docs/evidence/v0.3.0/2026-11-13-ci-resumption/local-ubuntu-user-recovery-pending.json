@@ -1,0 +1,30 @@
+{
+  "complete": true,
+  "observedUTC": "2026-11-15T08:11:33.302348+00:00",
+  "latestUserQuestionnaireSelection": "space-only-not-restored",
+  "userExplicitlyConfirmedOnlyDBackingSpaceReleased": true,
+  "ubuntuNotYetRestoredByUser": true,
+  "actualWindowsOnlyBackingGuard": {
+    "complete": true,
+    "observedUTC": "2026-11-15T08:11:33.566140+00:00",
+    "readOnlyHostBackingVolumeGuard": true,
+    "distribution": "Ubuntu",
+    "basePath": "D:\\WSL\\Ubuntu",
+    "backingVolume": "D:\\",
+    "availableBytes": 23737335808,
+    "minimumFreeBytes": 8589934592,
+    "minimumReason": "Original formal raw-archive preparation requires at least8GiB; guest filesystem free bytes do not guarantee expandable VHD backing space.",
+    "admitted": true,
+    "wslNotLaunched": true,
+    "noFilesystemWritesRepairOrGlobalConfiguration": true
+  },
+  "actualGuardExit": 0,
+  "hostSpaceAdmissionNotGuestFilesystemOrServiceRecovery": true,
+  "ubuntuLaunchAndPreparationStillNotAuthorizedUntilRecoveryConfirmation": true,
+  "wslNotLaunched": true,
+  "noRepairRestartMoveOrCompactionPerformed": true,
+  "localPerformanceLoadsExecuted": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "previousIoReadOnlyAndServiceFailuresPreserved": true,
+  "fullV030GoalComplete": false
+}

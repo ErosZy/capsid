@@ -1,0 +1,51 @@
+{
+  "complete": true,
+  "observedUTC": "2026-11-14T00:58:46.991480+00:00",
+  "workflowRunId": 43502164423,
+  "jobId": 132150496199,
+  "jobConclusion": "failure",
+  "started": "2026-11-13T20:30:28Z",
+  "completed": "2026-11-13T23:15:39Z",
+  "checkOutput": {
+    "title": null,
+    "summary": null,
+    "text": null,
+    "annotations_count": 1,
+    "annotations_url": "https://api.github.com/repos/ErosZy/capsid/check-runs/132150496199/annotations"
+  },
+  "annotations": [
+    {
+      "path": ".github",
+      "blob_href": "https://github.com/ErosZy/capsid/blob/ea7a0e447b0eef5780c14531b314d8446dc71bce/.github",
+      "start_line": 1,
+      "start_column": null,
+      "end_line": 1,
+      "end_column": null,
+      "annotation_level": "failure",
+      "title": "",
+      "message": "The hosted runner lost communication with the server. Anything in your workflow that terminates the runner process, starves it for CPU/Memory, or blocks its network access can cause this error.",
+      "raw_details": ""
+    }
+  ],
+  "requests": [
+    {
+      "path": "actions/jobs/132150496199",
+      "status": 200,
+      "sha256": "928a3c20d416739ef5941bbf79150c3eed4037eec2f195ed47e986bd6309b74a"
+    },
+    {
+      "path": "check-runs/132150496199",
+      "status": 200,
+      "sha256": "c2f0a5731ce5922e0336507f7e87a3d3ffb5e2db6f1882ba9f206491565967a7"
+    },
+    {
+      "path": "check-runs/132150496199/annotations?per_page=100",
+      "status": 200,
+      "sha256": "16e28c1ebff02d8865ebcd86c6123c003c46929635e01fcd1a9b70c423826da0"
+    }
+  ],
+  "activeStepNotFalselyCountedPassed": true,
+  "wholeSourceAcceptance": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

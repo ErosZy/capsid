@@ -1,0 +1,89 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T13:38:16.599728+00:00",
+  "workflowRunId": 43600025775,
+  "artifactId": 14116510398,
+  "archiveSHA256": "43063765f6c2d775daccc8452341a33b7e3f4cd847d2ce2cd5cbd3d2d695b0b0",
+  "productCheckout": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+  "productTree": "64495703d4194aec0e006abb9c50d7a6b180c27c",
+  "sourceInputsRehashed": 5169,
+  "fullOriginalBudgetFiles": 7,
+  "fullUnitTestsPassed": 120,
+  "unitTestsSkipped": 0,
+  "testFiles": [
+    {
+      "label": "qps-probe",
+      "tests": 7,
+      "budgetSeconds": 90,
+      "actualSeconds": 28.464255721
+    },
+    {
+      "label": "qps-control",
+      "tests": 12,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.06397448100000247
+    },
+    {
+      "label": "qps-lane",
+      "tests": 8,
+      "budgetSeconds": 60,
+      "actualSeconds": 1.817397781000011
+    },
+    {
+      "label": "density-control",
+      "tests": 37,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.3645772550000004
+    },
+    {
+      "label": "density-conditioning",
+      "tests": 19,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.3644470769999941
+    },
+    {
+      "label": "density-lane",
+      "tests": 5,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.8152048349999745
+    },
+    {
+      "label": "perf-evidence",
+      "tests": 32,
+      "budgetSeconds": 90,
+      "actualSeconds": 14.992358438999986
+    }
+  ],
+  "actualWorkerdCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "count": 2048,
+      "pssKiB": 4074332,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "count": 65,
+      "pssKiB": 269073,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "count": 8,
+      "pssKiB": 119405,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    }
+  ],
+  "rawConditioningAndRuntimeContractsReplayed": true,
+  "actualCapsid192WorkerValidationStillPendingInFormal10Preflight": true,
+  "noUnrelatedDiagnosticCampaignAdded": true,
+  "notFormalPerformanceEvidence": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,172 @@
+{
+  "schema": "capsid-current-r1-r9-gate-ledger-v1",
+  "observedUTC": "2026-11-14T01:10:48.209550+00:00",
+  "classification": "progress-not-complete",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "productTree": "dd0e4e8fd4454180df0e3917ffd473b7c9d7a588",
+  "allR1ThroughR9Retained": true,
+  "sameSourceNativeSemanticReplay": {
+    "review": "r3-r5-r6-native-contract-review.json",
+    "configurations": ["release-wpt", "asan", "ubsan", "tsan", "debug"],
+    "uniqueReports": 205,
+    "caseObservations": 3340,
+    "originalReferenceLocksInputsOraclesAndDeadlinesRetained": true,
+    "helperExecutableBytesIndependentlyRehashed": false,
+    "doesNotReplacePendingPlatformOrFormalPerformanceAcceptance": true
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "requirement": "Standard byte-stream partial/unaligned EOF, zero EOF backing, high-minimum cancellation, and the36 deferred combinations",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R2",
+      "requirement": "Global BigInt.asUintN/asIntN limb boundaries, conversion ordering, allocation limits, independent regression and upstream provenance",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R3",
+      "requirement": "Real native-fetch-body argument/released/detached/invalid-view matrices, all available view families and constructor paths, retry/data/owner/credit/cleanup, concurrency/context/abort/intrinsic controls",
+      "status": "in_progress",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R4",
+      "requirement": "Actual nonzero C ABI response-body limits through Upgrade, known/unknown length, below/equal/above, Default/BYOB, cancellation and resource cleanup",
+      "status": "complete_for_targeted_requirement",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R5",
+      "requirement": "Ordinary fetch metadata and tee/clone/values/pipe branch/resource/reader cancellation ownership graphs",
+      "status": "in_progress",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true
+    },
+    {
+      "id": "R6",
+      "requirement": "DefaultReader exact chunk sequence/timeliness, credit control and Linux rich-JSON invalid IPC frame root cause",
+      "status": "in_progress",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true,
+      "historicalInvalidIpc": {
+        "exactOriginalPairCausalProofVerified": true,
+        "proofSHA256": "39ea538b02ecc36684c4ea86335e05480cb291989ebed8e85ce19d19f441c5d6",
+        "sourceCorrection": "already validated discarded ChannelData must reach pump/ACK retirement rather than rejection whitelist",
+        "originalAndRestoredVariantsFailedAndCorrectedPassed14": true,
+        "originalRawArtifactsNotRecreatedOrRelabeled": true,
+        "exactChunkTimelinessAndFinalCombinedClosureNotImplied": true
+      }
+    },
+    {
+      "id": "R7",
+      "requirement": "Fix the historical15 failed combinations and resolve genuine skip prerequisites; preserve original failure and WPT/profile evidence",
+      "status": "in_progress",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true,
+      "openCausalFailures": [
+        "historical frame-fuzz seed 4191328252 original 60-second timeout",
+        "earlier candidate TSan gzip96m-view1m original five-second event deadline",
+        "Windows original runner communication loss; product/resource cause not excluded"
+      ]
+    },
+    {
+      "id": "R8",
+      "requirement": "Prepare validated final clean Debug/Release/Linux LTO/CI, dependency instrumentation/fuzz/soak, formal performance/density/four-viewport acceptance commands and inputs",
+      "status": "in_progress",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true,
+      "independentlyObserved": {
+        "linuxReleaseLto": {
+          "passed": 1115,
+          "rawWptFilesFailed": 5,
+          "skipped": 4
+        },
+        "cleanDebugMatrix": {
+          "passed": 1115,
+          "rawWptFilesFailed": 5,
+          "skipped": 4,
+          "originalJobFailedReleaseOnlyReporter": true,
+          "configurationRecoveryRun": 43537934097,
+          "recoveryDebugJobPassed": true,
+          "recoveryArtifactIndependentReview": "recovered-debug-matrix-review.json",
+          "recoveryWorkerBytesIdenticalToPriorDebug": true
+        },
+        "asan": {
+          "passed": 1024,
+          "skipped": 5,
+          "rawRssFailuresRetained": true
+        },
+        "ubsan": {
+          "passed": 1024,
+          "skipped": 4
+        },
+        "tsan": {
+          "passed": 1012,
+          "skipped": 5,
+          "rawRssFailuresRetained": true
+        },
+        "fuzz": {
+          "passed": 9,
+          "failed": 0,
+          "originalBudgetsRetained": true,
+          "oldTimeoutCauseNotExplained": true
+        },
+        "macos": {
+          "passed": 755,
+          "skipped": 11,
+          "failed": 0
+        },
+        "opensslCCommandsVerifiedPerConfiguration": 1187,
+        "delegatedCgroupAndNetworkPassed": true,
+        "nativeRegressions": 167,
+        "nativeTimingCases": 9,
+        "nativeSoakSeconds": 1800.051,
+        "nativeSoakRounds": 4376,
+        "nativeRawClockIntervalsRecomputed": 1876
+      },
+      "pending": {
+        "windowsCompleteRetryRun": 43537934097,
+        "formalThreeLaneRun": 43536350850,
+        "formalThreeLaneRunFailedDensity": true,
+        "partialColdAndQpsValidatedButNotFormalPoint": true,
+        "densityTimeoutDiagnosticRun": 43549267806,
+        "diagnosticRequestAndWaveAndCoverageBudgetsNotRelaxed": true,
+        "formalPerformancePoints": 0,
+        "finalViewports": [
+          1280,
+          960,
+          820,
+          600
+        ],
+        "finalFourViewportAcceptance": false
+      }
+    },
+    {
+      "id": "R9",
+      "requirement": "Finish R1-R8, freeze a complete candidate and execute the final combined acceptance required for the current full v0.3.0 goal; do not publish without authorization.",
+      "status": "incomplete",
+      "historicalDirectedEvidenceNotDiscarded": true,
+      "finalSourceCombinedClosurePending": true,
+      "cannotAccept": {
+        "originalFullCiFailed": true,
+        "windowsNoCompleteMatrixVerdict": true,
+        "formalThreeLaneAndBaselineStillPending": true,
+        "standardsConformanceClaimed": false
+      }
+    }
+  ],
+  "formalPerformancePoints": 0,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "fullV030GoalComplete": false,
+  "originalFailuresAndUnsuccessfulRunnersRetained": true,
+  "mainTagsReleasesAndPagesNotModified": true
+}

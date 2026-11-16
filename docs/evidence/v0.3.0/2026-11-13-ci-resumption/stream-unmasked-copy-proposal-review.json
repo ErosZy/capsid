@@ -1,0 +1,182 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T02:33:24.290867+00:00",
+  "workflowRunId": 43667389306,
+  "artifactId": 14142389603,
+  "archiveSHA256": "f8b737bbac2b9375d8799809e4ccdcd3a452da592757494acbe14899dfb6e0e6",
+  "source": "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+  "privateUnmaskedStreamCopyOnly": true,
+  "allocationResizeMaskCreditChunkControlAndStatePathsPreserved": true,
+  "zeroAmountAndOverlapFallbackNotRemoved": true,
+  "actualCopyChunkCreditEmptyAndAliasCasesPassedPerVariant": 66,
+  "actualCorruptedIndependentWireOracleRejected": true,
+  "allOriginalFuzzerSourceAndOraclesUnchangedBetweenAB": true,
+  "fixedInputs": 9,
+  "fixedCallsPerAttempt": 10000,
+  "fixedSequenceDigest": "fdfa6fd5a633d92f",
+  "fixedOriginalEntryThreadCpuRatio": 0.8208741319891447,
+  "fixedPeakRssMiB": [
+    346,
+    347,
+    347,
+    346
+  ],
+  "normalOriginalBudgetMutationAttempts": [
+    {
+      "index": 1,
+      "variant": "A",
+      "seconds": 28.66398366100003,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 478,
+      "observedProgressLowerBound": 10000,
+      "quiet": {
+        "before": [
+          12948,
+          240,
+          2788,
+          125066,
+          3072,
+          0,
+          38,
+          0
+        ],
+        "after": [
+          12955,
+          240,
+          2800,
+          137036,
+          3073,
+          0,
+          38,
+          0
+        ],
+        "seconds": 30.000315169000032,
+        "busyFraction": 0.001584653878231812,
+        "stealFraction": 0.0
+      },
+      "binarySHA256": "6f5ce576afee67f823c4ad165ba1f673772772334a335c65e244352e8d070e78",
+      "stderrSHA256": "de4f1e08b1699494830d2544bcbfe4364495a664016db8ba3b449f14d916b71c"
+    },
+    {
+      "index": 2,
+      "variant": "B",
+      "seconds": 16.143609130000016,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 496,
+      "observedProgressLowerBound": 10000,
+      "quiet": {
+        "before": [
+          15365,
+          240,
+          3307,
+          145575,
+          3073,
+          0,
+          40,
+          0
+        ],
+        "after": [
+          15372,
+          240,
+          3321,
+          157545,
+          3073,
+          0,
+          41,
+          0
+        ],
+        "seconds": 30.000247937999973,
+        "busyFraction": 0.001834556370913898,
+        "stealFraction": 0.0
+      },
+      "binarySHA256": "d9c45943ae58a8900172ca68efeb2f2ff017e1ff34d2536e62fc32f0c57a93ec",
+      "stderrSHA256": "cce6ee6761fb2f17211d0727705385065042140a1e53a20ee6504cca98c9246d"
+    },
+    {
+      "index": 3,
+      "variant": "B",
+      "seconds": 18.700599255999975,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 493,
+      "observedProgressLowerBound": 10000,
+      "quiet": {
+        "before": [
+          16706,
+          240,
+          3636,
+          162346,
+          3073,
+          0,
+          42,
+          0
+        ],
+        "after": [
+          16716,
+          240,
+          3650,
+          174310,
+          3073,
+          0,
+          43,
+          0
+        ],
+        "seconds": 30.000305456000035,
+        "busyFraction": 0.002085244807740416,
+        "stealFraction": 0.0
+      },
+      "binarySHA256": "d9c45943ae58a8900172ca68efeb2f2ff017e1ff34d2536e62fc32f0c57a93ec",
+      "stderrSHA256": "0e193dea23cb953e9644698355240431b5d49cb6bbb4f38bbf4b40e6abfc255e"
+    },
+    {
+      "index": 4,
+      "variant": "A",
+      "seconds": 30.01345500100001,
+      "exitCode": 0,
+      "timedOut": false,
+      "executedUnits": 10000,
+      "peakRssMiB": 485,
+      "observedProgressLowerBound": 10000,
+      "quiet": {
+        "before": [
+          18270,
+          240,
+          3999,
+          179880,
+          3073,
+          0,
+          43,
+          0
+        ],
+        "after": [
+          18278,
+          240,
+          4013,
+          191849,
+          3073,
+          0,
+          45,
+          0
+        ],
+        "seconds": 30.00029769799994,
+        "busyFraction": 0.002001167347619459,
+        "stealFraction": 0.0
+      },
+      "binarySHA256": "6f5ce576afee67f823c4ad165ba1f673772772334a335c65e244352e8d070e78",
+      "stderrSHA256": "652a59c2d97de4a3ed7fdeaff1cbac763a7ce8f8a1f125675b7f71a002d66fa0"
+    }
+  ],
+  "originalStandaloneHashPreserved": true,
+  "observedFixedWorkPracticalBenefitThresholdMet": true,
+  "onlyTwoCpuPairsNoStatisticalSignificanceClaim": true,
+  "differentNormalCoverageMutationPathsNotPairedWorkload": true,
+  "notCurrentSourceQualificationOrHistoricalCausalClosure": true,
+  "proposalNotIntegrated": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,334 @@
+{
+  "schema": "capsid-hosted-core-independent-review-v1",
+  "complete": true,
+  "phase": "archive-debug",
+  "reviewedUTC": "2026-11-14T13:47:32.348871+00:00",
+  "workflowRunId": 43590178502,
+  "productCheckout": "d6b4ead0d09c75b0b1e04c10d7683b766a6d1cbf",
+  "productTree": "dc5684a08ddc27ef6bf3f5b788aad79ce3bb7937",
+  "measuredSourceManifestSHA256": "aa107608e773aeee8ca73ef895df26ece1deb05559d5dbdec4ac933e03c01561",
+  "originalArchiveBytesUnchanged": true,
+  "reviews": {
+    "debug": {
+      "artifactId": 14114496227,
+      "archiveSHA256": "9210abd156358828911a9a35077179a37f34840cb5e4076230a013275ed419ef",
+      "registered": 1124,
+      "selected": 1124,
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": [
+        {
+          "name": "host_managed_executable_active_state_foreign_owner",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "SKIP (chown to a foreign uid is not permitted)"
+        },
+        {
+          "name": "worker_sandbox_cgroup_v2",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "cgroup v2 delegation unavailable: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_namespaces",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "Sandbox probe profile: production\nnamespace sandbox unavailable: /proc/self/setgroups: Permission denied"
+        },
+        {
+          "name": "worker_sandbox_network_namespace",
+          "registeredReturnCode": 77,
+          "actualPrerequisiteDiagnostic": "network namespace creation unavailable"
+        }
+      ],
+      "registrationJUnitAndOriginalLogExact": true,
+      "buildId": "sha256:d6647cecdce8eec17c9b8297e494c4dbc0160cd78e5c8d6df152455e9f6eb753",
+      "compatibilityId": "sha256:37a1fdadba2cb2952ed4dade01ec09e9dd1de15fe64032c70227208affc7a0c9",
+      "compiler": "GNU 13.3.0",
+      "buildType": "Debug",
+      "featureFlags": "lto=OFF asan=OFF ubsan=OFF tsan=OFF mimalloc=OFF host=ON worker=ON sandbox_profile=production",
+      "provenanceDirty": "1",
+      "sourceTreeClean": true,
+      "compileCoverage": {
+        "runtime": {
+          "translationUnits": 12,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "host": {
+          "translationUnits": 47,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "txiki": {
+          "translationUnits": 48,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "quickjs": {
+          "translationUnits": 17,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "libuv": {
+          "translationUnits": 70,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        },
+        "libwebsockets": {
+          "translationUnits": 98,
+          "selectedSanitizerPresent": false,
+          "runtimeLto": false
+        }
+      },
+      "caresCompileUnits": 91,
+      "caresSelectedSanitizerPresent": false,
+      "mainReports": 317,
+      "reportSchemas": {
+        "capsid-async-callbacks-v1": 7,
+        "capsid-binding-fetch-arguments-v1": 10,
+        "capsid-binding-fetch-body-v1": 2,
+        "capsid-binding-fetch-cancel-v1": 10,
+        "capsid-binding-fetch-retained-v1": 10,
+        "capsid-binding-fetch-unread-v1": 2,
+        "capsid-binding-quota-v1": 2,
+        "capsid-cross-context-v1": 4,
+        "capsid-webcrypto-compat-v1": 4,
+        "capsid-workerd-fanout-v1": 8,
+        "capsid-fetch-arguments-v1": 20,
+        "capsid-fetch-boundary-v1": 4,
+        "capsid-fetch-byob-v1": 28,
+        "capsid-fetch-proxy-v1": 4,
+        "capsid-fetch-readers-v1": 4,
+        "capsid-fetch-resources-v1": 4,
+        "capsid-fetch-transition-v1": 4,
+        "capsid-fetch-upgrade-lifetime-v1": 4,
+        "capsid-fetch-upgrade-v1": 4,
+        "capsid-websocket-frame-boundaries-v2": 4,
+        "capsid-headers-compat-v1": 1,
+        "capsid-helper-response-credit-v1": 5,
+        "capsid-http-codec-v1": 8,
+        "capsid-websocket-interop-v1": 8,
+        "capsid-managed-local-owner-v1": 1,
+        "unversioned-resource-report": 27,
+        "capsid-ws-fixtures-v1": 3,
+        "capsid-message-port-order-v1": 3,
+        "capsid-workerd-mutations-v1": 1,
+        "capsid-native-branch-graph-v1": 8,
+        "capsid-native-default-reader-gates-v1": 2,
+        "capsid-native-fetch-abort-prefix-v1": 1,
+        "capsid-native-fetch-arguments-v1": 10,
+        "capsid-native-fetch-branch-prefix-v1": 2,
+        "capsid-native-fetch-deadline-v1": 4,
+        "capsid-native-fetch-encoded-branches-v1": 3,
+        "capsid-native-fetch-gzip-members-v1": 1,
+        "capsid-native-fetch-intrinsic-v1": 2,
+        "capsid-native-fetch-large-gzip-v1": 1,
+        "capsid-native-fetch-limits-v1": 2,
+        "capsid-native-fetch-owner-v1": 2,
+        "capsid-native-fetch-pending-v1": 6,
+        "capsid-native-request-targets-v1": 1,
+        "capsid-native-fetch-response-credit-v1": 1,
+        "capsid-native-reader-context-matrix-v1": 20,
+        "capsid-native-reader-context-v1": 2,
+        "capsid-native-reader-lifecycle-v1": 4,
+        "capsid-ordinary-fetch-v1": 20,
+        "capsid-websocket-owner-lifecycle-v1": 4,
+        "capsid-reader-intrinsics-v1": 4,
+        "capsid-reader-scope-v1": 4,
+        "capsid-workerd-ws-reference-v1": 1,
+        "capsid-response-retirement-v1": 4,
+        "capsid-standard-readers-v1": 12
+      },
+      "rawReportsTarSHA256": "0510580566c055211e83012114997d8ecac88bf00b64357452c554afd3e06194",
+      "recordedHostSHA256": "e997e9caa611e4806b45161649c77b4240ed4f9d5cf9825a9de433fce984c10b",
+      "recordedWorkerSHA256": "0238c34281223dd211b8f21e93f4c9194119ec8088a607cd6ffb4359fa6216d1",
+      "ordinaryManagedCore": {
+        "cases": 30,
+        "allNaturalShutdown": true,
+        "inputSHA256": {
+          "runner": "b24c7f06ebb30a747b4da999d3b3e85c966af83c8eff85286a119ddee21063a9",
+          "fixture": "699861f614b0aa36b9434075271a49141fdaf34a08d6d628a1f606e03582dc93",
+          "contract": "6a2379b0e5167dcbdef4bcc5d710c8969042da3165f73a38f8e86ed6645777e0",
+          "referenceArchive": "f6fcd4cbf15b06b7bf1c4500fb05589713473fb5ba8d576a4442c55acda96f34",
+          "hostBackend": "820a9b90b46b28385497cb6b489cab2d73f99b5e093c2a1f283f4b8776358c93",
+          "peer": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+          "listenerControl": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+          "listenerContract": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1"
+        },
+        "reportSHA256": "dc17a9c80b9b9b7ba5a4386fd6ba1ca838f91b8ac7a7ae20f22f81584e7871af"
+      },
+      "sanitizerBinaryBytesIndependentlyRehashed": false,
+      "opensslCompileCommandsRequireOriginalJobLog": true,
+      "mainReportDigestInventorySHA256": "0831f0dc82d891d5b5b673b20f9eb6f19fc19ac27413ad72c52b8b2357a2a926",
+      "strictDebugConfigurationProof": {
+        "complete": true,
+        "configuration": "Debug",
+        "sourceTreeClean": true,
+        "provenanceDirtyOneIsRequiredForNonRelease": true,
+        "requiredConfiguration": {
+          "CMAKE_BUILD_TYPE": "Debug",
+          "BUILD_TJS_RESTRICTED_CORE": "ON",
+          "BUILD_WITH_FFI": "OFF",
+          "BUILD_WITH_SQLITE": "ON",
+          "CAPSID_ENABLE_LTO": "OFF",
+          "CAPSID_USE_MIMALLOC": "OFF",
+          "CAPSID_ENABLE_ASAN": "OFF",
+          "CAPSID_ENABLE_UBSAN": "OFF",
+          "CAPSID_ENABLE_TSAN": "OFF"
+        },
+        "runtimeUnitsWithoutLto": 12,
+        "originalReleaseOnlyUpgradeReportNotApplicable": true,
+        "releaseLtoQualificationNotClaimed": true,
+        "rawFiveWptFailuresRetained": true,
+        "standardsConformanceClaimed": false,
+        "ordinarySuitePassed": false,
+        "formalPerformancePoints": 0,
+        "fullV030GoalComplete": false
+      },
+      "debugMatrixDoesNotQualifyReleaseLto": true,
+      "packageSHA256": "fb538fb9a57cfcec15f3bd375fed24e72a932994513e45c305a98c28a796604e",
+      "sbomSHA256": "09855296fa43b92e0534586b94baab0f15670ba221b756854f73c6e5ed548487",
+      "packagedBinaryBytesIndependentlyRehashed": true,
+      "installedBinarySHA256": {
+        "worker": "528b35637fc4bfccea1097e110d0311e04697d97f78722f422bcc05c172fbcaa",
+        "host": "c6b7af7ac09bb93381624b71be152df33c17bee73a0d767a7602ec46da4817c8"
+      },
+      "buildBinarySHA256AfterExactRpathReversal": {
+        "worker": "0238c34281223dd211b8f21e93f4c9194119ec8088a607cd6ffb4359fa6216d1",
+        "host": "e997e9caa611e4806b45161649c77b4240ed4f9d5cf9825a9de433fce984c10b"
+      },
+      "onlyInstallRpathDifferenceProvedByExactCompleteElfSHA256": true,
+      "archivedCompleteWptProgramAndResponseChecks": 20,
+      "contractReplay": {
+        "complete": true,
+        "status": "archived-native-contracts-and-retained-standard-results-replayed",
+        "actualRuntimeInvocationsNotRepeated": true,
+        "requiredGateTests": 171,
+        "gateFamilies": {
+          "outbound": {
+            "complete": true
+          },
+          "mutations": {
+            "complete": true
+          },
+          "interop": {
+            "complete": true
+          },
+          "fanout": {
+            "complete": true
+          },
+          "frames": {
+            "complete": true
+          },
+          "owners": {
+            "complete": true
+          },
+          "asyncCallbacks": {
+            "complete": true
+          },
+          "crossContext": {
+            "complete": true
+          },
+          "readerIntrinsics": {
+            "complete": true
+          },
+          "nativeReaderLifecycle": {
+            "complete": true
+          },
+          "readerScope": {
+            "complete": true
+          },
+          "standardReaders": {
+            "complete": true
+          },
+          "fetchResources": {
+            "complete": true
+          },
+          "ordinaryFetch": {
+            "complete": true
+          },
+          "fetchUpgrade": {
+            "complete": true
+          },
+          "fetchUpgradeLifetime": {
+            "complete": true
+          },
+          "fetchProxy": {
+            "complete": true
+          },
+          "fetchBoundaries": {
+            "complete": true
+          },
+          "fetchTransitions": {
+            "complete": true
+          },
+          "fetchBYOB": {
+            "complete": true
+          },
+          "crypto": {
+            "complete": true
+          },
+          "httpCodec": {
+            "complete": true
+          }
+        },
+        "gateSummaryReplaySHA256": "1958e3395bfc41a4ff7391516643ab0b068150e147a4aee510e445d5a6cf4e07",
+        "ordinary": {
+          "selected": 1124,
+          "rawCTestExitCode": 8,
+          "rawStepOutcome": "failure",
+          "failed": [
+            "worker_wpt_fetch_api_headers_headers_basic_any_js",
+            "worker_wpt_fetch_api_headers_headers_errors_any_js",
+            "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+            "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+            "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+          ],
+          "skipped": [
+            "host_managed_executable_active_state_foreign_owner",
+            "worker_sandbox_cgroup_v2",
+            "worker_sandbox_namespaces",
+            "worker_sandbox_network_namespace"
+          ],
+          "ordinarySuitePassed": false,
+          "requiresPrivilegedSandboxCoverage": true
+        },
+        "compatibility": {
+          "compatibilityQualified": true,
+          "standardsConformanceClaimed": false,
+          "ordinarySuitePassed": false
+        },
+        "wpt": {
+          "files": 5,
+          "totalSubtests": 79,
+          "standardConflictSubtests": 23,
+          "standardTimeouts": 4,
+          "modes": [
+            "reference",
+            "single-worker",
+            "static-pool",
+            "managed"
+          ],
+          "actualCompleteReports": 20
+        },
+        "negativeControls": 6,
+        "standardsConformanceClaimed": false,
+        "fullV030GoalComplete": false
+      },
+      "privilegedSandboxOriginalJobLogStillRequired": true
+    }
+  },
+  "standardsConformanceClaimed": false,
+  "fullV030GoalComplete": false,
+  "formalPerformancePoints": 0,
+  "status": "selected-core-artifact-reviews-complete-not-full-core-acceptance",
+  "reviewedConfigurations": [
+    "debug"
+  ],
+  "allFourCoreArchivesReviewed": false,
+  "sourceManifestUnchanged": true
+}

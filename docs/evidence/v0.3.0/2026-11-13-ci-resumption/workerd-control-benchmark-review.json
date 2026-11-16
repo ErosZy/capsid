@@ -1,0 +1,51 @@
+{
+  "schema": "capsid-workerd-control-readiness-benchmark-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T03:58:26.725547+00:00",
+  "workflowRunId": 43553551301,
+  "artifactId": 14096449418,
+  "archiveSHA256": "6250fb888a787bb01c129b13dee1d2e586be30f5d43ad9d1cf4004f6d58e7e3b",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "productTree": "ad81fef535ab4c0bb3ca52618ddf9fe084834ea4",
+  "sourceFileCount": 5169,
+  "productionRuntimeUnchanged": true,
+  "completeOriginalBudgetFiles": 7,
+  "fullUnitTestsPassed": 100,
+  "unitTestsSkipped": 0,
+  "actualPinnedWorkerdCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "count": 2048,
+      "validatedResponses": 2048,
+      "wholeTreePssKiB": 4074515,
+      "rawStartupAndConditioningAndPssAndCleanupIndependentlyReplayed": true
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "count": 65,
+      "validatedResponses": 6500,
+      "wholeTreePssKiB": 269255,
+      "rawStartupAndConditioningAndPssAndCleanupIndependentlyReplayed": true
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "count": 8,
+      "validatedResponses": 8,
+      "wholeTreePssKiB": 119515,
+      "rawStartupAndConditioningAndPssAndCleanupIndependentlyReplayed": true
+    }
+  ],
+  "maxRequestSeconds": 5,
+  "startupSeconds": 120,
+  "coverageSeconds": 300,
+  "memoryBudgetMiB": 2048,
+  "fullDensityWaveAndWorkerCountsNotChanged": true,
+  "cold2048IsValidOverBudgetUpperProbeNotAFinalDensityMaximum": true,
+  "syntheticFixturesNotPromotedToPerformance": true,
+  "fullCandidateCiAndSameSessionPerformanceStillRequired": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

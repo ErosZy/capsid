@@ -1,0 +1,119 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T03:12:30.983502+00:00",
+  "workflowRunId": 43670876710,
+  "artifactId": 14143833942,
+  "archiveSHA256": "70594c984f244b89018bd20f4725c2e8c0fd9e880f4cd0c6cfb1290ba41a890a",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "sourceInputsRehashed": 5169,
+  "fullOriginalBudgetFiles": 7,
+  "fullUnitTestsPassed": 120,
+  "unitTestsSkipped": 0,
+  "testFiles": [
+    {
+      "label": "qps-probe",
+      "tests": 7,
+      "budgetSeconds": 90,
+      "actualSeconds": 30.621581214000003
+    },
+    {
+      "label": "qps-control",
+      "tests": 12,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.1141276209999944
+    },
+    {
+      "label": "qps-lane",
+      "tests": 8,
+      "budgetSeconds": 60,
+      "actualSeconds": 2.2681093570000144
+    },
+    {
+      "label": "density-control",
+      "tests": 37,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.41488794899998993
+    },
+    {
+      "label": "density-conditioning",
+      "tests": 19,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.41469963100001905
+    },
+    {
+      "label": "density-lane",
+      "tests": 5,
+      "budgetSeconds": 30,
+      "actualSeconds": 0.8152897440000118
+    },
+    {
+      "label": "perf-evidence",
+      "tests": 32,
+      "budgetSeconds": 90,
+      "actualSeconds": 9.988214243000016
+    }
+  ],
+  "actualWorkerdCases": [
+    {
+      "size": "10k",
+      "phase": "cold",
+      "count": 2048,
+      "pssKiB": 4074535,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "10k",
+      "phase": "warm",
+      "count": 65,
+      "pssKiB": 269011,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    },
+    {
+      "size": "1m",
+      "phase": "cold",
+      "count": 8,
+      "pssKiB": 119518,
+      "actualStrictConditioningEvidenceReplayed": true,
+      "sourceRuntimeUnmodified": true
+    }
+  ],
+  "actualPermanentNativeStreamCases": [
+    {
+      "label": "original",
+      "exitCode": 0,
+      "seconds": 0.4149067440000067,
+      "sourceSHA256": "9071360839e1ba19bb0a4a608fcd826ccc7cc898e5b954ac19c6a32d482ed6e5",
+      "binarySHA256": "98732b51b9c62598bfe3336cb83c0372bb18ec839e9208bb40aabcf37e3dd003",
+      "negative": false
+    },
+    {
+      "label": "integrated",
+      "exitCode": 0,
+      "seconds": 0.26454983799999354,
+      "sourceSHA256": "dcca228f8bc9e8927dc7cfa74e36711e8dfd5f07d66580b17ba60a7ec0b49e9f",
+      "binarySHA256": "f67640a8ed65ab1bbdc8d11137ac97a2e6b1bcdaf583fa99eca21163e652c91e",
+      "negative": false
+    },
+    {
+      "label": "corrupt-copy-negative",
+      "exitCode": 1,
+      "seconds": 0.015866600999999037,
+      "sourceSHA256": "22b7f5660491abddc6b583ac064d83fadb72d8b733982448b8ac36f0c55cf8bc",
+      "binarySHA256": "c1a050e3189a123b5c13edecc55102dfd777b9a0e1104491607f2ffbf57ffaab",
+      "negative": true
+    }
+  ],
+  "rawConditioningAndRuntimeContractsReplayed": true,
+  "currentSourceFormalPerformanceNotYetMeasured": true,
+  "qualifiedPointBoundToPrior77Source": true,
+  "noUnrelatedDiagnosticCampaignAdded": true,
+  "notFormalPerformanceEvidence": true,
+  "fullCapsidHostWorkerServiceNotInvokedByBenchmarkQualification": true,
+  "actualPermanentNativeStreamTestsOnOriginalAndIntegratedAndCorruptNegativeReviewed": true,
+  "fullCurrentNativeRuntimeQualificationStillRequired": true,
+  "formalPerformancePoints": 1,
+  "fullV030GoalComplete": false
+}

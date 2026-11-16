@@ -1,0 +1,89 @@
+{
+  "schema": "capsid-native-performance-r4-independent-review-v1",
+  "complete": true,
+  "workflowRunId": 43536350850,
+  "artifactId": 14094996206,
+  "archiveSHA256": "90eb183408c7e4bf21d04b6026f76c4d0ef430dd72144ffa072ff24f21578370",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "originalSessionStatus": "native-session-failed",
+  "originalSessionComplete": false,
+  "originalFailure": "Traceback (most recent call last):\n  File \"<stdin>\", line 140, in <module>\n  File \"<stdin>\", line 18, in run\nAssertionError: ('formal-density', b'density lane failed: density wave failed: timed out\\n')\n",
+  "reviewedLanes": {
+    "cold": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 742,
+      "checksumSHA256": "13f45f1b747eff1068e6a4eb486dbecb2ffccb6608545ae9407ded5fae2d44cf"
+    },
+    "qps": {
+      "originalFrozenValidatorPassed": true,
+      "sealedFiles": 2115,
+      "checksumSHA256": "c48b5328c43e04074c8dc3b3377e5b63344e95b3ff34c705c0036dfe02515562"
+    }
+  },
+  "formalPerformancePoints": 0,
+  "wholeThreeLaneCandidateAccepted": false,
+  "baselineFormalHistoricalPointNotClaimed": true,
+  "fullV030GoalComplete": false,
+  "baselineSealedObservations": [],
+  "sourceAndProtocolNotModified": true,
+  "quietWindows": [
+    {
+      "label": "before-formal-session",
+      "seconds": 30.000310392999836,
+      "before": {
+        "total": 711973,
+        "idle": 279621,
+        "steal": 0
+      },
+      "after": {
+        "total": 723943,
+        "idle": 291548,
+        "steal": 0
+      },
+      "busyFraction": 0.0035923141186299246,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-qps",
+      "seconds": 30.000341070000104,
+      "before": {
+        "total": 801471,
+        "idle": 362651,
+        "steal": 0
+      },
+      "after": {
+        "total": 813441,
+        "idle": 374586,
+        "steal": 0
+      },
+      "busyFraction": 0.0029239766081871066,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    },
+    {
+      "label": "between-formal-density",
+      "seconds": 30.000316958999974,
+      "before": {
+        "total": 1434963,
+        "idle": 647836,
+        "steal": 0
+      },
+      "after": {
+        "total": 1446937,
+        "idle": 659769,
+        "steal": 0
+      },
+      "busyFraction": 0.0034240855186237207,
+      "stealFraction": 0.0,
+      "observedQuiet": true,
+      "scope": "dedicated hosted native-Linux guest; physical-host isolation not claimed"
+    }
+  ],
+  "physicalHostIsolationNotClaimed": true,
+  "finalFullGoalAccepted": false,
+  "wholeSessionAccepted": false,
+  "remainingBaselineNumericalAndWholeProtocolComparisonRequiresSeparateReview": true
+}

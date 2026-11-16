@@ -1,0 +1,108 @@
+{
+  "schema": "capsid-evidence-suite-process-windows-full-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T19:32:06.362113+00:00",
+  "workflowRunId": 43618054033,
+  "artifactId": 14128402682,
+  "archiveSHA256": "14858002eea015a6c5e2ef6ebfa78d341270210e44f7537314980b9a3f8c6f0e",
+  "productCheckout": "42107f444db014dc2089c4b405669c4be623d208",
+  "productTree": "f4f1278e025f526041e29d9a8b84b63775de6fb2",
+  "registered": 758,
+  "passed": 750,
+  "failed": 0,
+  "skipped": [
+    {
+      "name": "host_single_worker_ab_emits_complete_evidence",
+      "code": 77,
+      "diagnostic": "perf is not usable in this environment",
+      "nonLinuxSandboxPrerequisite": false
+    },
+    {
+      "name": "worker_binding_sandbox_write",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_read",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_watch",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_sqlite",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_network",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_wasi",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    },
+    {
+      "name": "worker_binding_sandbox_union",
+      "code": 77,
+      "diagnostic": null,
+      "nonLinuxSandboxPrerequisite": true
+    }
+  ],
+  "registrationJUnitAndFinalLastTestAndConsoleExact": true,
+  "mixedEncodingLastTestParsedAsRawAsciiEnvelopeWithoutReplacement": true,
+  "allThreeActualNativeExecutableBytesIndependentlyRehashed": true,
+  "nativeExecutableIdentities": {
+    "expected": [
+      "capsid-host.exe",
+      "capsid-worker.exe",
+      "test-spawn-failure-recovery.exe"
+    ],
+    "found": {
+      "capsid-host.exe": {
+        "bytes": 8898560,
+        "sha256": "9e091fb4f4584859900d28a5b24a44c5c9db2b2d1aca939e26bd610abf29e416"
+      },
+      "capsid-worker.exe": {
+        "bytes": 6230528,
+        "sha256": "7a4b9fe1c5ee0ee0127ccdc88034315c3ce435bde75ea5287fb3679bd8f4db8f"
+      },
+      "test-spawn-failure-recovery.exe": {
+        "bytes": 339456,
+        "sha256": "34635c4430978d70f8fde5b2c96bd7e5c1c3a9a988354e259651b96922dd2b5f"
+      }
+    }
+  },
+  "platformRequiredCompatibilityTestsReplayed": 134,
+  "actualMatrixTemporaryReports": 93,
+  "allCapturedOriginalReportBytesRehashedWithoutFiltering": true,
+  "ordinaryMatrixHttpCodecReportsReplayed": {
+    "complete": true,
+    "reports": 6,
+    "cases": 195,
+    "originalFrozenValidatorAndEveryRawCasePassed": true,
+    "windowsCheckoutBytesDerivedFromFrozenGitBlobsAndAttributes": true,
+    "reportReplayNotNewRuntimeExecution": true,
+    "previousWindowsFailureNotErasedOrClaimedFixed": true
+  },
+  "previousWindowsMetadataFailureRootCauseNotClaimedClosed": true,
+  "originalWindows180MinuteJobBudgetRetained": true,
+  "partialCheckpointsNotUsedAsFinalVerdict": true,
+  "olderLostRunnerAnd180MinuteCancelledRunsNotRewritten": true,
+  "windowsLinuxStrictSandboxNotClaimed": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,34 @@
+{
+  "schema": "capsid-loopback-owned-fixture-integrated-local-controls-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T09:00:52.012627+00:00",
+  "parentProductCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "changedFiles": [
+    "tests/helpers/ws_host_backend.mjs",
+    "tests/test_websocket_fetch_resources.mjs",
+    "tools/workerd-fetch-resource-contract.mjs",
+    "tests/test_workerd_fetch_resource_contract.mjs"
+  ],
+  "allOtherNonDocumentationInputsUnchanged": true,
+  "allOriginalRunnerStatementsAndAssertionsRetainedExceptListenerConstruction": true,
+  "onlyAddressOracleExtensionToActuallyOwnedIPv6AndNumericIpv4StillStrict": true,
+  "allOriginalContractControlTestsRetained": true,
+  "all32OriginalCasesAndAll120SecondAnd3SecondBudgetsRetained": true,
+  "allOriginal10SecondContractBudgetRetained": true,
+  "actualPinnedNativeWindowsReferenceAndTwoProductModesPassed": 96,
+  "absoluteNativeDifferentialComparisonPassed": true,
+  "realDualBindForeignOwnerAndRollbackSocketControlsPassed": true,
+  "sourceFixtureRawBytesAndReferenceLockBytesUnchanged": true,
+  "causalAbaReview": "loopback-owner-causal-aba-review.json",
+  "historicalFailureSoleCauseNotAssumed": true,
+  "parentNativePeNotFreshProductBuildQualification": true,
+  "publicAbiSdk78AndVendorBytesNotChanged": true,
+  "sourceFileHashes": {
+    "tests/helpers/ws_host_backend.mjs": "33544ad8fdaa796009916bf19345218664eea7ead9cc5898ef26cb5b5efe0a38",
+    "tests/test_websocket_fetch_resources.mjs": "6ccb7a1a2837ff189be37450c67470366b668d15d65384a7039cf81d5f778ee4",
+    "tools/workerd-fetch-resource-contract.mjs": "3ab19fffc3345e9cef5ea5881025fd32a331c24c9c09f767831889ceb3555b61",
+    "tests/test_workerd_fetch_resource_contract.mjs": "fbc2ad4e17f3647435afc6eebb55dfac7a46d0a836c6280fdf9545179f558530"
+  },
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false
+}

@@ -1,0 +1,101 @@
+{
+  "schema": "capsid-current-ci-fuzz-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-13T16:23:15.297967+00:00",
+  "workflowRunId": 43452545549,
+  "jobId": 131978189222,
+  "artifactId": 14053690407,
+  "archiveSHA256": "33f584c11d0250bbb8b6254c2bf8ffd8d17fd58d44380bc910daac72fe0a3afd",
+  "productCheckout": "cf60ee1b17144c862d1891937fad60ff544aef87",
+  "productTree": "7dd60949ca28f4fc915525fa08173a5d5ba7297a",
+  "passed": 9,
+  "failed": 0,
+  "skipped": 0,
+  "registrationAndJUnitExact": true,
+  "fullyInstrumentedProjectUnits": 27,
+  "frameO2ProjectUnits": 4,
+  "rounds": [
+    {
+      "name": "fetchrpc_fuzz_corpus_generated",
+      "seconds": 0.0317976,
+      "timeout": 10.0
+    },
+    {
+      "name": "fuzz-protocol-parser_smoke",
+      "seconds": 0.471088,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 4008199821
+    },
+    {
+      "name": "fuzz-response-headers_smoke",
+      "seconds": 0.0970698,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 185279631
+    },
+    {
+      "name": "fuzz-worker-protocol_smoke",
+      "seconds": 0.997314,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 282892086
+    },
+    {
+      "name": "fuzz-audit-decode_smoke",
+      "seconds": 0.104007,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 1280162601
+    },
+    {
+      "name": "fuzz-channel-registry_smoke",
+      "seconds": 4.18384,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 1384011774
+    },
+    {
+      "name": "fuzz-websocket-frames_smoke",
+      "seconds": 33.5152,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 1273285675
+    },
+    {
+      "name": "fuzz-websocket-handshake_smoke",
+      "seconds": 4.88919,
+      "timeout": 60.0,
+      "executedUnits": 10000,
+      "seed": 430144233
+    },
+    {
+      "name": "channel_websocket_fuzz_corpus_generated",
+      "seconds": 0.0294562,
+      "timeout": 10.0
+    }
+  ],
+  "executedUnits": 70000,
+  "corpusFiles": {
+    "before": 192,
+    "after": 1492
+  },
+  "replayTarSHA256": {
+    "before": "6eb1fa34e87b5cf736ab7266eb43871d2867967932c90562b12926e4ded409e4",
+    "after": "99b58f295621345fa106aee003ec930fad3ac99aa1e5b1c8635f226012771b97"
+  },
+  "binarySHA256": {
+    "fuzz-audit-decode": "2b78a1f972205a4a2eb65fcee09a2fcc195ad4c71d60a621a4b45f858dd8045c",
+    "fuzz-channel-registry": "8fb256c9fbb2bb3fa7c59b192df50a1e969c89d6955bf26d4bf284cfbf8c3303",
+    "fuzz-protocol-parser": "678519b180920277ba56c7c54cc7ad9f7a14d1537fe91d610c673c64182c3eac",
+    "fuzz-response-headers": "432d6de77019ed94ac47fa028dc78b68783ef074a6205a6a88754f34e0842a17",
+    "fuzz-websocket-frames": "6f5ce576afee67f823c4ad165ba1f673772772334a335c65e244352e8d070e78",
+    "fuzz-websocket-handshake": "809b22dd6c358316b268c4c951f1adb4d42d35ed087cfd4e55995da520d15bfe",
+    "fuzz-worker-protocol": "0206275205dd58aba9443909d7e32c4a2ae5b9714470cd1f15024c0de01802ea"
+  },
+  "beforeAfterBinaryBytesIdentical": true,
+  "oldCandidate23TimeoutNotErased": true,
+  "rejectedPrivatePrototypesNotIntegrated": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

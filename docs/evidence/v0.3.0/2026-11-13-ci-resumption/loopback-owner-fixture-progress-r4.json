@@ -1,0 +1,207 @@
+{
+  "schema": "capsid-loopback-owned-fixture-current-progress-v1",
+  "complete": true,
+  "revision": 4,
+  "observedUTC": "2026-11-15T12:12:10.322655+00:00",
+  "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "productTree": "f2d6f39f8d0f9fd9345e7e856e7a9e281288e542",
+  "localSnapshot": "614c8c93799ba45ae9daf5a2c1b334a65fcabad0",
+  "frozenInputs": 5169,
+  "allFrozenInputsAndWorkspaceNonDocumentationInputsRehashed": true,
+  "changedFilesFromB59": [
+    "tests/helpers/ws_host_backend.mjs",
+    "tests/test_websocket_fetch_resources.mjs",
+    "tools/workerd-fetch-resource-contract.mjs",
+    "tests/test_workerd_fetch_resource_contract.mjs"
+  ],
+  "allOther5165InputsIdenticalToB59": true,
+  "productionSourcesPublicAbiSdk78VendorAndOverlayIdentityLockUnchanged": true,
+  "allOriginal32ResourceCasesAnd3Second120SecondBudgetsRetained": true,
+  "allOriginal711OrderedContractControlNamesRetainedWith32Added": true,
+  "sourceRuntimePoliciesAndResponseBytesAndActualEofAndHealthyReuseChecksUnchanged": true,
+  "testFixtureNowOwnsIpv4AndIpv6LoopbackOnSamePortBeforeSutStartup": true,
+  "realPartialBindFailureReleasesOnlyOwnedResources": true,
+  "controlledForeignIpv6EndpointAba": [
+    "fail",
+    "pass",
+    "fail"
+  ],
+  "sameExactNativePeAndCommonIndependentOracleUsedForAba": true,
+  "originalHistoricCiCollisionNotProvenAndNotClaimed": true,
+  "originalB59WindowsMatrixFailureRemainsFailed": true,
+  "privatePhaseTimelineAndThreeReadOnlyOsSocketControlsRecorded": true,
+  "localActualPinnedWindowsReferenceAndParentNativePeResourceCasesMatched": 96,
+  "localNotFreshCurrentProductBuildQualification": true,
+  "currentSource120BenchmarkTestsPassedZeroSkipped": true,
+  "currentSource743ResourceAnd8LifecycleOracleTestsPassedZeroSkipped": true,
+  "currentSourceActualPinnedLinuxResourceReferenceCases": 32,
+  "currentSourceActualPinnedWorkerdServiceCases": 3,
+  "currentSourceActualPermanentCpp66CasesOriginalAndIntegratedAndCorruptNegativePassed": true,
+  "currentFullCorePlatformAndDebugSoakStillPending": true,
+  "priorB59FullResultsAndTargetedLinuxAcceptanceNotMigrated": true,
+  "workflowObservations": [
+    {
+      "purpose": "full",
+      "workflowRunId": 43698560215,
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43698560215",
+      "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+      "workflowCommit": "f67ededd18934b92e3b6f50476a8798057235725",
+      "rawSnapshotSHA256": "217edc3b833f9cdece7b225c230340a834014e4fdfe0980e2141799ed9eba31d",
+      "jobs": [
+        {
+          "id": 132764390766,
+          "name": "fuzz",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390917,
+          "name": "sanitizers (asan, CAPSID_ENABLE_ASAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*|we...",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390920,
+          "name": "sanitizers (tsan, CAPSID_ENABLE_TSAN, clang, 1, 1, ^(wpt_conformance_not_configured|worker_packag...",
+          "status": "completed",
+          "conclusion": "failure"
+        },
+        {
+          "id": 132764390942,
+          "name": "sanitizers (ubsan, CAPSID_ENABLE_UBSAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*)$)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390950,
+          "name": "Release/LTO + workerd compatibility (raw WPT failures retained)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764390983,
+          "name": "windows-host-library",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 132764391029,
+          "name": "posix-host-library",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "purpose": "debug-soak",
+      "workflowRunId": 43698559782,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ErosZy/capsid/actions/runs/43698559782",
+      "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+      "workflowCommit": "510b87db781fc85c80ea6d85459ba5f2d018d9df",
+      "rawSnapshotSHA256": "2e7bea33d3b91503032a66766c9d400e434ccd0473368da482efb051ed4bba4f",
+      "jobs": [
+        {
+          "id": 132764389304,
+          "name": "Debug + workerd compatibility (raw WPT failures retained)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 132764389476,
+          "name": "Native Release/LTO regression, timing and real 1800-second soak",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "formalPerformancePoints": 0,
+  "localPerformanceAcceptedSessionCount": 0,
+  "ciProtocolValidatedSessionCount": 3,
+  "ciProtocolValidatedSources": [
+    "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+    "dd589d51bcadd2cbf56b2a061d14f521e23451bf",
+    "b59af527a9be5cea50bd1bb8550e7b459c817841"
+  ],
+  "currentSourceCiPerformanceNotMeasuredAndNotPlanned": true,
+  "legacyUserAcceptedV022ReferenceUnchangedAndNotRerun": true,
+  "localBlockingEvidence": "local9c-build-and-prerequisites-review.json",
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "mainTagsReleasesAndPagesNotModified": true,
+  "fullV030GoalComplete": false,
+  "supportingRecords": [
+    {
+      "file": "loopback-owner-causal-aba-review.json",
+      "sha256": "ab5780cb943d8c169c9ae804fba69a4d692d16d96b390314defaec4a8def9fe6"
+    },
+    {
+      "file": "loopback-owned-fixture-local-review.json",
+      "sha256": "724cb0a235f8b0166ca086850ab7513c858f52cb2349fd5308a2362793ce1fd8"
+    },
+    {
+      "file": "loopback-owner-fixture-benchmark-review.json",
+      "sha256": "419b71479f4587af0c779c6d0924faacaeffcf4fc0e60b474d052a301501cae9"
+    }
+  ],
+  "actualOriginalAndIntegratedOracleInventory": {
+    "file": "E:\\capsid-verification-20261113\\evidence\\v030-loopback-fixture-oracle-inventory-r2\\review.json",
+    "sha256": "fbba76650e3e92857830564b35ae7e9071963e71b102c3e63231f0dde1a52117"
+  },
+  "failed735CountAuditorAndMixedEncodingInspectionPreserved": true,
+  "rawStatusBeforeThisProgress": {
+    "file": "qualification-before-loopback-fuzz-progress-r2.md.txt",
+    "sha256": "13020ba86777f3ae65b4034c219a5cb4c97fa12265a1ec7749a7a5f97969b243"
+  },
+  "previousProgressPreserved": {
+    "file": "loopback-owner-fixture-progress-r3.json",
+    "sha256": "fbb0e732b4180511c26a9738ec7713e4dd86abe13b6feac47bcaa77bae6986e1"
+  },
+  "currentSourceFuzz": {
+    "review": "loopback-owner-fixture-fuzz-review.json",
+    "reviewSHA256": "e07bdda005fcaa7fc9755ea66c8f7b066a9e5f4edb105bd4246c0b631e2d06d9",
+    "passed": 9,
+    "failed": 0,
+    "skipped": 0,
+    "executedUnits": 70000,
+    "original60Second512MiBAnd10000UnitPerSmokeBudgets": true,
+    "rawPeakRssMiB": [
+      84,
+      42,
+      201,
+      46,
+      411,
+      399,
+      325
+    ],
+    "allSevenExactB59BinaryBytes": true,
+    "notCrossSeedPerformanceOrHistoricalCauseClosure": true
+  },
+  "latestUserSuppliedUbuntuBootAndReadWriteMountObserved": true,
+  "actualGuestScratchWriteVerificationStillPending": false,
+  "currentFullCiTsanJobFailedCauseNotAudited": false,
+  "currentWindowsStillInProgress": true,
+  "nativeDebugSoakWorkflowCompletedButArtifactAuditPending": true,
+  "currentTsanRunnerShutdownObservedButIncompleteNotAccepted": true,
+  "localCleanBuildAnd43SelectedTestsZeroSkips": true,
+  "actualAllFiveQpsAndBothDensityShortPrerequisitesPassed": true,
+  "localFirstWholeThreeLaneSession": {
+    "session": "local-wsl-v030-9c-20261115T120539Z-74c7b8a3",
+    "statusAtObservation": "formal-qps-running",
+    "completeAtObservation": false,
+    "sourceRoot": "/var/tmp/capsid-local9c-20261115-r2/source",
+    "coordinatorDirectory": "E:\\capsid-verification-20261113\\evidence\\v030-local9c-execution-r1\\formal-session",
+    "rawLinuxLanes": {
+      "cold": "/var/tmp/capsid-local9c-20261115-r2/source/bench/results/local-wsl-v030-9c-20261115T120539Z-74c7b8a3-cold",
+      "qps": "/var/tmp/capsid-local9c-20261115-r2/source/bench/results/local-wsl-v030-9c-20261115T120539Z-74c7b8a3-qps"
+    },
+    "rawLaneEvidenceToBeCopiedToEAfterSessionExitWithoutRepackingInnerArchives": true,
+    "quietWindowsObserved": 2,
+    "quietScope": "WSL guest counters, not proof of physical Windows host exclusivity",
+    "observedSessionSnapshotSHA256": "ac5d9799bcdfd7deee961a0f11325939126be47657d5bf4bf3165d7db3fc8c9d"
+  }
+}

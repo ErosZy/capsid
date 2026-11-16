@@ -1,0 +1,33 @@
+{
+  "schema": "capsid-native-performance-r5-warm-failure-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T06:44:39.747414+00:00",
+  "workflowRunId": 43555973603,
+  "artifactId": 14101954192,
+  "archiveSHA256": "f44b64c711739e521a71829b1506a6b298e4edb1ae9a6b0bda718bcd5393fbb6",
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "failedProbe": 150,
+  "stack": "workerd",
+  "size": "10k",
+  "phase": "warm",
+  "count": 768,
+  "error": {
+    "code": "request-failed",
+    "message": "density wave failed: timed out"
+  },
+  "all768ExactControlEventsBeforeTraffic": true,
+  "validatedResponses": 63744,
+  "completeWaves": 83,
+  "requiredRequestsPerWorker": 100,
+  "exactUniqueWorkers": 768,
+  "eachWorkerObservedExactly83SequentialCounters": true,
+  "notStartupBeforeServiceReadinessFailure": true,
+  "connectSendHeaderOrBodyStageNotRecordedByOriginalController": true,
+  "causeUnestablished": true,
+  "ownedPidsRemaining": 0,
+  "originalFiveSecondRequestAnd300SecondCoverageAnd120SecondStartupDeadlinesUnchanged": true,
+  "originalWaveAndConnectParallelismUnchanged": true,
+  "partialColdAndQpsNotSplicedIntoFormalPoint": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

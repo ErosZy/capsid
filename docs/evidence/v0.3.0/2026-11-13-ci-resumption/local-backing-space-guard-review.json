@@ -1,0 +1,36 @@
+{
+  "complete": true,
+  "recordedUTC": "2026-11-15T04:36:47.750556+00:00",
+  "actualReadOnlyBackingSpaceGuard": {
+    "complete": true,
+    "observedUTC": "2026-11-15T04:36:47.750490+00:00",
+    "readOnlyHostBackingVolumeGuard": true,
+    "distribution": "Ubuntu",
+    "basePath": "D:\\WSL\\Ubuntu",
+    "backingVolume": "D:\\",
+    "availableBytes": 14897152,
+    "minimumFreeBytes": 8589934592,
+    "minimumReason": "Original formal raw-archive preparation requires at least8GiB; guest filesystem free bytes do not guarantee expandable VHD backing space.",
+    "admitted": false,
+    "wslNotLaunched": true,
+    "noFilesystemWritesRepairOrGlobalConfiguration": true
+  },
+  "actualGuardExit": 2,
+  "knownFailureNowRejectedBeforeAnyFutureWslLaunch": true,
+  "guestFreeSpaceNotUsedAsHostVhdCapacity": true,
+  "originalReadOnlyAndIoAndServiceErrorsRetained": true,
+  "originalServiceErrorDecodedWithoutChangingRawBytes": "灾难性故障 \r\n错误代码： Wsl/Service/E_UNEXPECTED\r\n如果此错误是意外错误，请考虑搜索现有问题或在 https://github.com/microsoft/WSL/issues 提交新问题。\r\n",
+  "originalServiceStdoutSHA256": "2ff833627a02c94b7f6f268e24c2aa91fa921cc7127c5a773ad4adde1f102d00",
+  "newGuardDoesNotRepairStopRestartMoveOrWriteWsl": true,
+  "linuxPreparationFailuresPreserved": [
+    "v030-local-ubuntu-b59-preparation-r1",
+    "v030-local-ubuntu-b59-preparation-r2",
+    "v030-local-ubuntu-b59-preparation-r3",
+    "v030-local-ubuntu-b59-preparation-r4"
+  ],
+  "privatePinnedRuntimeAndBoostArchivesReadyOnE": true,
+  "localPerformanceLoadsExecuted": 0,
+  "localAcceptedSessions": 0,
+  "noGlobalInstallationOrKernelNetworkChange": true,
+  "fullV030GoalComplete": false
+}

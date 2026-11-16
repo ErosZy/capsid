@@ -1,0 +1,250 @@
+{
+  "complete": true,
+  "viewports": [
+    {
+      "width": 1280,
+      "height": 1000,
+      "wholePageHorizontalOverflow": false,
+      "chartCount": 7,
+      "charts": [
+        {
+          "index": 0,
+          "width": 1046,
+          "height": 505.5625,
+          "outsideLabels": []
+        },
+        {
+          "index": 1,
+          "width": 1046,
+          "height": 351.34375,
+          "outsideLabels": []
+        },
+        {
+          "index": 2,
+          "width": 1046,
+          "height": 351.34375,
+          "outsideLabels": []
+        },
+        {
+          "index": 3,
+          "width": 1046,
+          "height": 348.65625,
+          "outsideLabels": []
+        },
+        {
+          "index": 4,
+          "width": 1046,
+          "height": 505.5625,
+          "outsideLabels": []
+        },
+        {
+          "index": 5,
+          "width": 1046,
+          "height": 505.5625,
+          "outsideLabels": []
+        },
+        {
+          "index": 6,
+          "width": 1046,
+          "height": 348.65625,
+          "outsideLabels": []
+        }
+      ],
+      "pointCommit": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+      "verified": "verified",
+      "heroMemory": "18.3MB PSS",
+      "calloutUsesMeasuredTotals": true,
+      "calloutUsesActualWarmCounts": true,
+      "wholeAcceptanceLimitationVisible": true,
+      "screenshot": "viewport-1280.png",
+      "screenshotSHA256": "fe58b1d9f4803a71c44a400b84e48ecb1e8d608abc98cd058606e0892826202c"
+    },
+    {
+      "width": 960,
+      "height": 1000,
+      "wholePageHorizontalOverflow": false,
+      "chartCount": 7,
+      "charts": [
+        {
+          "index": 0,
+          "width": 846,
+          "height": 408.890625,
+          "outsideLabels": []
+        },
+        {
+          "index": 1,
+          "width": 846,
+          "height": 284.15625,
+          "outsideLabels": []
+        },
+        {
+          "index": 2,
+          "width": 846,
+          "height": 284.15625,
+          "outsideLabels": []
+        },
+        {
+          "index": 3,
+          "width": 846,
+          "height": 282,
+          "outsideLabels": []
+        },
+        {
+          "index": 4,
+          "width": 846,
+          "height": 408.890625,
+          "outsideLabels": []
+        },
+        {
+          "index": 5,
+          "width": 846,
+          "height": 408.890625,
+          "outsideLabels": []
+        },
+        {
+          "index": 6,
+          "width": 846,
+          "height": 282,
+          "outsideLabels": []
+        }
+      ],
+      "pointCommit": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+      "verified": "verified",
+      "heroMemory": "18.3MB PSS",
+      "calloutUsesMeasuredTotals": true,
+      "calloutUsesActualWarmCounts": true,
+      "wholeAcceptanceLimitationVisible": true,
+      "screenshot": "viewport-960.png",
+      "screenshotSHA256": "f0f1638f62c9f9fd5785ab35e4d37f5f0d0448c1017efb0cacc7e13b9a66024c"
+    },
+    {
+      "width": 820,
+      "height": 1000,
+      "wholePageHorizontalOverflow": false,
+      "chartCount": 7,
+      "charts": [
+        {
+          "index": 0,
+          "width": 706,
+          "height": 341.21875,
+          "outsideLabels": []
+        },
+        {
+          "index": 1,
+          "width": 706,
+          "height": 237.140625,
+          "outsideLabels": []
+        },
+        {
+          "index": 2,
+          "width": 706,
+          "height": 237.140625,
+          "outsideLabels": []
+        },
+        {
+          "index": 3,
+          "width": 706,
+          "height": 235.328125,
+          "outsideLabels": []
+        },
+        {
+          "index": 4,
+          "width": 706,
+          "height": 341.21875,
+          "outsideLabels": []
+        },
+        {
+          "index": 5,
+          "width": 706,
+          "height": 341.21875,
+          "outsideLabels": []
+        },
+        {
+          "index": 6,
+          "width": 706,
+          "height": 235.328125,
+          "outsideLabels": []
+        }
+      ],
+      "pointCommit": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+      "verified": "verified",
+      "heroMemory": "18.3MB PSS",
+      "calloutUsesMeasuredTotals": true,
+      "calloutUsesActualWarmCounts": true,
+      "wholeAcceptanceLimitationVisible": true,
+      "screenshot": "viewport-820.png",
+      "screenshotSHA256": "8c8175d736e6fb77c8650113893db3acbffd496ff736609eae263317ea4c6153"
+    },
+    {
+      "width": 600,
+      "height": 1000,
+      "wholePageHorizontalOverflow": false,
+      "chartCount": 7,
+      "charts": [
+        {
+          "index": 0,
+          "width": 700,
+          "height": 338.328125,
+          "outsideLabels": []
+        },
+        {
+          "index": 1,
+          "width": 700,
+          "height": 235.125,
+          "outsideLabels": []
+        },
+        {
+          "index": 2,
+          "width": 700,
+          "height": 235.125,
+          "outsideLabels": []
+        },
+        {
+          "index": 3,
+          "width": 700,
+          "height": 233.328125,
+          "outsideLabels": []
+        },
+        {
+          "index": 4,
+          "width": 700,
+          "height": 338.328125,
+          "outsideLabels": []
+        },
+        {
+          "index": 5,
+          "width": 700,
+          "height": 338.328125,
+          "outsideLabels": []
+        },
+        {
+          "index": 6,
+          "width": 700,
+          "height": 233.328125,
+          "outsideLabels": []
+        }
+      ],
+      "pointCommit": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+      "verified": "verified",
+      "heroMemory": "18.3MB PSS",
+      "calloutUsesMeasuredTotals": true,
+      "calloutUsesActualWarmCounts": true,
+      "wholeAcceptanceLimitationVisible": true,
+      "screenshot": "viewport-600.png",
+      "screenshotSHA256": "34de07be492839bca352b22451069d0cfed1b6cff74a16b54675714954ed1c71"
+    }
+  ],
+  "sourcePoint": "77c8c7aa853dafaaf4689c54e4d4219764ae64f9",
+  "initialMcpAbsolutePathDeniedAndPreserved": true,
+  "screenshotsCopiedFromAllowedCacheWithoutRemovingOriginals": true,
+  "postFreezePresentationOnlyFix": true,
+  "wholeV030AcceptanceNotClaimed": true,
+  "presentationSource": "42107f444db014dc2089c4b405669c4be623d208",
+  "presentationSourceSHA256": "87f6ec5db0d84632f1b4a6ab7b23a9fbde299f531e482d082611e87fc95d59f6",
+  "all5592EvidenceFilesRehashed": true,
+  "sixRepresentativeHttpArchiveLinksAndDigestsChecked": true,
+  "browserConsoleErrors": 0,
+  "allFourScreenshotsVisuallyInspected": true,
+  "onlyOwnedHttpServersStoppedWithCreationIdentityChecks": true,
+  "notDeployed": true
+}

@@ -1,0 +1,28 @@
+{
+  "schema": "capsid-control-hosted-evidence-index-independent-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T07:05:39.896857+00:00",
+  "workflowRunId": 43555865031,
+  "artifactId": 14102967995,
+  "productCheckout": "6ef4eb9e0e6e9103c58a963ac103d244714637f3",
+  "workflowCommit": "502b8814125d1995cfd18060531b832cf5bf2917",
+  "indexZipSHA256": "f6c1a109103000f7082c7e4ea970fa77c9090522d2a0469be0dcedad9b93a8b2",
+  "completeEvidenceTreeSHA256": "36ac11386ce66e966d7a0be29513c0dce85097baf4fc238d6caede3facf07269",
+  "actualArchivedFilesRehashed": 469,
+  "artifactFilesRehashed": {
+    "asan-hosted-evidence": 29,
+    "fuzz-hosted-evidence": 11,
+    "macos-host-library-evidence": 52,
+    "release-wpt-hosted-evidence": 114,
+    "tsan-hosted-evidence": 79,
+    "ubsan-hosted-evidence": 22,
+    "windows-host-library-evidence": 162
+  },
+  "sourcePackageBuildAndCompatibilityIdsBound": true,
+  "fullCiJobConclusionsSuccessful": true,
+  "rawFiveWptFailuresAndInstrumentedRssExceptionsStillRetained": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

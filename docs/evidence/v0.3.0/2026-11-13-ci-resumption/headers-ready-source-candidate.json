@@ -1,0 +1,38 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-15T23:13:53.161466+00:00",
+  "productCheckout": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+  "productTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+  "privateSource": "E:\\capsid-verification-20261113\\evidence\\v030-headers-ready-integration-r1\\source",
+  "sourceManifest": "E:\\capsid-verification-20261113\\evidence\\v030-headers-ready-integration-r1\\source-manifest.json",
+  "sourceFileCount": 5171,
+  "parentLocalSnapshot": "614c8c93799ba45ae9daf5a2c1b334a65fcabad0",
+  "parentProduct": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "changedFiles": [
+    "js/fetch.js",
+    "bench/qps_probe.py",
+    "bench/density_probe.py",
+    "tests/test_benchmark_qps_probe.py",
+    "bench/SPEC.md",
+    "cmake/build_tests.cmake",
+    "tests/test_headers_fastpaths.mjs",
+    "tests/fixtures/headers-fastpaths.mjs"
+  ],
+  "changedFileSHA256": {
+    "js/fetch.js": "1c70643f933ccd55a23b0c6a94ce23b2d399df6a9f1ac9fc4e01ea0382264564",
+    "bench/qps_probe.py": "0bf3c0c7d8939e1ab6a503eb252f9bb06216fb2d0a82de28c5fd10fa95bc4bd4",
+    "bench/density_probe.py": "e383a480a9d01b997c25b6b4ef1ecdb6feb29b3823bcf9c8c541484f838af6e8",
+    "tests/test_benchmark_qps_probe.py": "9c0de9a4b75930b363224364ae7fcf4ad8e386b2c71ab41a2ff46acef1db761e",
+    "bench/SPEC.md": "ad2f202dd129f0e7649c1a2cab6fff6518c343c91aae7c1c1f7ffe654f6007da",
+    "cmake/build_tests.cmake": "5b40ce93d9dc6a89c945a05782c9bc06e10e7ffe0b8982109e30e3e9dcad378c",
+    "tests/test_headers_fastpaths.mjs": "3f96e558e6041116457e7f7b3179e48a25bbbf89edd7588494f95ac4da0a55ef",
+    "tests/fixtures/headers-fastpaths.mjs": "31f599f89754ada10f2d83ceeb50a36757ebbee238df11eafddb00c203a2f3cc"
+  },
+  "sdkPatches": 78,
+  "rootHEADUnchanged": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+  "privateSnapshotOnlyNoRootCommit": true,
+  "oldPreFixReadinessFailurePreserved": true,
+  "oldAndDiagnosticVmBoundaryRegressionPassed": true,
+  "cleanNewSourceBuildAndBenchmarkStillRequired": true,
+  "acceptedPerformancePoints": 0
+}

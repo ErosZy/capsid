@@ -1,0 +1,33 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-15T11:49:21.639273+00:00",
+  "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "workflowRunId": 43698560215,
+  "jobId": 132764390920,
+  "originalLogSHA256": "5b43604c2bc26ee99ad3e3ef5eb33d4749aed10580232356b7f5746f38ad02d5",
+  "originalMetadataSHA256": "c3c1437df259826e531be5709357b468ba9a6cbf5d20acc3d20e893b173555f8",
+  "mainMatrix": {
+    "selected": 1017,
+    "completedEntries": 684,
+    "lastCompleted": "websocket_native_reader_lifecycle_managed",
+    "entryOutcomes": {
+      "Passed": 682,
+      "***Skipped": 2
+    },
+    "actualFinalCtestExitNotAvailable": true,
+    "runnerShutdownMessage": "The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.",
+    "cancelledMatrixStep": true,
+    "notCompletedNotAccepted": true
+  },
+  "rawPreliminaryReclamationRssFailurePreserved": true,
+  "predeclaredTsanResourceSpecificReclamationPassedTenTimes": true,
+  "noThreadSanitizerWarningFatalOrSummaryInAvailableLog": true,
+  "noDataRaceProvenOrRuledOutByIncompleteRun": true,
+  "shutdownInitiatorOrUnderlyingInfrastructureCauseNotProven": true,
+  "archiveAndFinalTsanAcceptanceStepsNotExecuted": true,
+  "currentTsanQualificationAccepted": false,
+  "currentLocalBenchmarkSafetyGate": "Local production/strict correctness and resource tests still required; incomplete TSan is a final qualification limitation, not evidence of a newly established production race.",
+  "newCiRunsLaunched": 0,
+  "localAcceptedPerformanceSessions": 0,
+  "fullV030GoalComplete": false
+}

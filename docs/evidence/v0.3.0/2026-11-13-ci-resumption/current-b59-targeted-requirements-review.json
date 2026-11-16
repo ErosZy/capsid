@@ -1,0 +1,61 @@
+{
+  "schema": "capsid-current-b59-scoped-targeted-requirements-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-15T07:55:29.225006+00:00",
+  "productCheckout": "b59af527a9be5cea50bd1bb8550e7b459c817841",
+  "productTree": "ccb6fede9abecee1c24c2fd15b85b0ba9e3c4b84",
+  "all5169FrozenInputsRehashed": true,
+  "workspaceNonDocumentationInputsStillMatch": true,
+  "targetedRequirementsCompletedInReviewedLinuxScope": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R6"
+  ],
+  "R5FiveLinuxConfigurationGraphReportsValidatedButCurrentWindowsResourceFailureUnresolved": true,
+  "currentNativeSemanticReports": 205,
+  "currentNativeSemanticObservations": 3340,
+  "currentR1ByobReports": 140,
+  "currentR4AbiRows": 3200,
+  "currentR1R2R4OriginalCTestResults": 155,
+  "historicalExactOriginalIpcAuditSHA256": "39ea538b02ecc36684c4ea86335e05480cb291989ebed8e85ce19d19f441c5d6",
+  "currentWorkerRuntimeSourceSHA256": "b4fd51490c4ade9ce8dac10fc03e67187be9e96d71baaf2864b0467cd50a5a25",
+  "currentWindowsActualFailureNotReclassified": true,
+  "wholePlatformOrCombinedAcceptanceNotClaimed": true,
+  "sourceAndBinaryClosureDoesNotMigratePriorDd589Acceptance": true,
+  "subsequentFrozenOracleReplaysNotFreshRuntimeInvocations": true,
+  "helperBinaryIndependentRehashStillUnavailable": true,
+  "originalRemovedIpcBinariesAndTracesNotNewlyRecovered": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "doesNotCloseR7HistoricalFrameWindowsAndTsanCauses": true,
+  "formalPerformancePointsAdded": 0,
+  "fullV030GoalComplete": false,
+  "supportingRecords": [
+    {
+      "file": "ci-core-review-streamfull.json",
+      "sha256": "546c80b2d6102df35fc08342b2228bee7a9fd014dfeac34426da4cd1c1eeb5e1"
+    },
+    {
+      "file": "ci-core-review-stream-debug.json",
+      "sha256": "09ffc8fbfd7a3967a6b1a0dcc435e14e9c8f3be01d82b666bb8b0c3487009295"
+    },
+    {
+      "file": "stream-unmasked-copy-r1-r2-r4-current-review.json",
+      "sha256": "c9ff91b7816efe31898d9040ec1225cbbde39282b099ea71f8ea054a078af38d"
+    },
+    {
+      "file": "stream-unmasked-copy-r3-r5-r6-native-contract-review-r2.json",
+      "sha256": "2632f0b007ae14bb87a011bc04c951140e6df52ee742676fa7eaf7f1ad69f166"
+    },
+    {
+      "file": "stream-unmasked-copy-failed-hosted-index-integrity-review.json",
+      "sha256": "189763837e854587feda0ba56522d4e14db16d20de695c1a6a817fd2a3535b2e"
+    },
+    {
+      "file": "stream-unmasked-copy-windows-failure-review-r1.json",
+      "sha256": "25125f038d4930d2c5bcc4aada331515f000932d1347df0bc6aa44cfa63aa226"
+    }
+  ]
+}

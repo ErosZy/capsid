@@ -1,0 +1,176 @@
+{
+  "schema": "capsid-pinned-workerd-density-timeout-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T03:07:52.191399+00:00",
+  "workflowRunId": 43549267806,
+  "artifactId": 14095353126,
+  "archiveSHA256": "25d614f74906d4015c309a283deeeec5831b4cdbc170c3faf0e2b78b91564613",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "pinnedWorkerdSHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "exactSourceCodeAndWorkerdUnmodified": true,
+  "originalWaveSizeAndParallelConnectAndFiveSecondRequestAnd300SecondCoverageUnchanged": true,
+  "originalHttpResponseHeaderReadTimeoutReproduced": true,
+  "observations": [
+    {
+      "count": 1024,
+      "profiled": false,
+      "seconds": 5.625550756999985,
+      "originalFiveSecondHttpHeaderReadTimedOut": true,
+      "recordedSuccessResponses": 0,
+      "recordedBusinessCounters": 0,
+      "ownedPidsRemaining": 0,
+      "firstObserved": [
+        {
+          "elapsed": 0.00019650999999498708,
+          "phase": "wait-ready",
+          "userCpuTicks": 0,
+          "systemCpuTicks": 0,
+          "pssKiB": 22150,
+          "state": "R",
+          "fds": 6
+        },
+        {
+          "elapsed": 0.26238699200001747,
+          "phase": "coverage",
+          "userCpuTicks": 20,
+          "systemCpuTicks": 11,
+          "pssKiB": 146311,
+          "state": "R",
+          "fds": 1035
+        }
+      ],
+      "lastObserved": [
+        {
+          "elapsed": 4.771023836000012,
+          "phase": "coverage",
+          "userCpuTicks": 312,
+          "systemCpuTicks": 124,
+          "pssKiB": 1825055,
+          "state": "R",
+          "fds": 1035
+        },
+        {
+          "elapsed": 5.112579492000009,
+          "phase": "coverage",
+          "userCpuTicks": 332,
+          "systemCpuTicks": 132,
+          "pssKiB": 1936907,
+          "state": "R",
+          "fds": 1035
+        }
+      ],
+      "observations": 18,
+      "partialPssNotDensityEvidence": true
+    },
+    {
+      "count": 2048,
+      "profiled": false,
+      "seconds": 6.093326732999998,
+      "originalFiveSecondHttpHeaderReadTimedOut": true,
+      "recordedSuccessResponses": 0,
+      "recordedBusinessCounters": 0,
+      "ownedPidsRemaining": 0,
+      "firstObserved": [
+        {
+          "elapsed": 0.00012912500000084037,
+          "phase": "wait-ready",
+          "userCpuTicks": 0,
+          "systemCpuTicks": 0,
+          "pssKiB": 23499,
+          "state": "R",
+          "fds": 6
+        },
+        {
+          "elapsed": 0.26416354099998784,
+          "phase": "wait-ready",
+          "userCpuTicks": 12,
+          "systemCpuTicks": 14,
+          "pssKiB": 125719,
+          "state": "R",
+          "fds": 3
+        }
+      ],
+      "lastObserved": [
+        {
+          "elapsed": 5.1926689149999845,
+          "phase": "coverage",
+          "userCpuTicks": 334,
+          "systemCpuTicks": 141,
+          "pssKiB": 1905363,
+          "state": "R",
+          "fds": 2059
+        },
+        {
+          "elapsed": 5.527133601000003,
+          "phase": "coverage",
+          "userCpuTicks": 354,
+          "systemCpuTicks": 149,
+          "pssKiB": 2016615,
+          "state": "R",
+          "fds": 2059
+        }
+      ],
+      "observations": 19,
+      "partialPssNotDensityEvidence": true
+    },
+    {
+      "count": 2048,
+      "profiled": true,
+      "seconds": 6.899404798000006,
+      "originalFiveSecondHttpHeaderReadTimedOut": true,
+      "recordedSuccessResponses": 0,
+      "recordedBusinessCounters": 0,
+      "ownedPidsRemaining": 0,
+      "firstObserved": [
+        {
+          "elapsed": 0.00014244999999846186,
+          "phase": "wait-ready",
+          "userCpuTicks": 0,
+          "systemCpuTicks": 0,
+          "pssKiB": 23105,
+          "state": "R",
+          "fds": 6
+        },
+        {
+          "elapsed": 0.2635384820000013,
+          "phase": "wait-ready",
+          "userCpuTicks": 13,
+          "systemCpuTicks": 13,
+          "pssKiB": 98742,
+          "state": "R",
+          "fds": 6
+        }
+      ],
+      "lastObserved": [
+        {
+          "elapsed": 6.028426810000013,
+          "phase": "coverage-failed",
+          "userCpuTicks": 373,
+          "systemCpuTicks": 165,
+          "pssKiB": 2042831,
+          "state": "D",
+          "fds": 2059
+        },
+        {
+          "elapsed": 6.431197561000005,
+          "phase": "coverage-failed",
+          "userCpuTicks": 392,
+          "systemCpuTicks": 176,
+          "pssKiB": 2154879,
+          "state": "R",
+          "fds": 2059
+        }
+      ],
+      "observations": 21,
+      "partialPssNotDensityEvidence": true
+    }
+  ],
+  "actualCpuProfile": "232 cpu-clock:u samples; V8 snapshot/code deserialization appears in the workerd CPU stacks",
+  "causalBoundary": "response header read exceeded the original five-second request deadline; profile alone does not prove whether eager startup or first-request lazy initialization is responsible",
+  "nextControl": "2048-cell ABA with no requests during a five-second passive startup hold, still within the original 120-second startup deadline; no response deadline or cold/warm count is changed",
+  "nextWorkflowCommit": "7dde345edf6fff512396ca2316099be9ba82c65a",
+  "dispatchMetadataClassificationCorrection": "privateCompilerExperimentOnly was inherited from the generic dispatcher; this run is an unmodified-runtime process/CPU diagnostic, not a compiler experiment",
+  "diagnosticSuccessDoesNotMeanProductOrDensityPassed": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

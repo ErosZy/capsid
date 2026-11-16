@@ -1,0 +1,33 @@
+{
+  "schema": "capsid-workerd-density-control-fd-aba-review-v1",
+  "complete": true,
+  "reviewedUTC": "2026-11-14T03:37:14.836167+00:00",
+  "workflowRunId": 43550930065,
+  "artifactId": 14096426317,
+  "archiveSHA256": "af5b451d1eea83e28378b773ecb95c8492aa5dbe618139e8aead8177f634122d",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "pinnedWorkerdSHA256": "50f31156a9a4c7d549f1b4753dd61eb527e1b6b0cd416e5ba3d02d64dfdee5dd",
+  "observedABA": [
+    false,
+    true,
+    false
+  ],
+  "all2048ReadySocketAndPortEventsBeforeAnyBusinessTraffic": true,
+  "all2048FirstResponsesAndExactUniqueWorkerCountersReplayed": true,
+  "benchmarkProgramIdenticalApartFromOriginalPerProbeNonce": true,
+  "additionalGlobalReadyMarkerNotUsed": true,
+  "fixedSleepNotUsed": true,
+  "originalRequestFiveSecondsAndCoverage300SecondsAndWave2048AndColdCountOneRetained": true,
+  "originalStartupDeadline120SecondsRetained": true,
+  "actualStartupControlWaitSeconds": 12.056058788000087,
+  "wholeTreePssKiB": 4074325,
+  "overBudgetUpperProbeNotFinalMeasurement": true,
+  "everyOwnedProcessCleaned": true,
+  "sourceRuntimeAndPinnedReferenceUnmodified": true,
+  "sourceWitness": "https://github.com/cloudflare/workerd/blob/8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f/src/workerd/server/server.c++",
+  "sourceOrdering": "bindSockets -> startServices -> listenOnSockets -> control event listen; raw kernel LISTEN precedes service initialization",
+  "acceptedAsControllerReadinessFixEvidence": true,
+  "notProductQualificationOrCompleteFormalDensity": true,
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false
+}

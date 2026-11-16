@@ -1,0 +1,34 @@
+{
+  "complete": true,
+  "kind": "original-observer-controller-and-auditor-failures-retained",
+  "formalPerformancePoints": 0,
+  "fullV030GoalComplete": false,
+  "failures": [
+    {
+      "command": "audit-large-gzip-diagnostics.py r1",
+      "failure": "StopIteration from assuming test-fetch-response-limits rather than reading registered test-native-fetch-response-limits",
+      "fixedBy": "use actual selected-registration command; successful review r2 retained"
+    },
+    {
+      "command": "audit-ci-core.py readiness release asan ubsan tsan",
+      "failure": "unsupported release token rejected before archive inspection",
+      "fixedBy": "use registered release-wpt CLI token"
+    },
+    {
+      "command": "audit-ci-core.py native-debug first attempt",
+      "failure": "Release provenanceDirty==0 expectation rejected actual clean Debug provenanceDirty==1",
+      "fixedBy": "apply exact existing ComputeBuildIdentity.cmake:279-283 non-Release rule; Release check remains unchanged"
+    },
+    {
+      "workflowRunId": 43516344828,
+      "failure": "private ABBA helper absent because different CMake executable target was built",
+      "originalLogSHA256": "4cffbe3055e7fde8ac18865bd54577ea48cc084bfaea0f1ea4164a3bfed8e7f4",
+      "fixedBy": "build the actual CTest-registered helper in independent run 43517116270"
+    },
+    {
+      "command": "collect-job-logs.py --readiness --partial --platforms --include-failed",
+      "failure": "original Windows signed log download returned 404; transfer row and metadata retained",
+      "actualTestVerdictNotInvented": true
+    }
+  ]
+}

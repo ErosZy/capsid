@@ -1,0 +1,227 @@
+{
+  "schema": "capsid-prior-candidate-clock-soak-review-v1",
+  "complete": true,
+  "productCheckout": "cf60ee1b17144c862d1891937fad60ff544aef87",
+  "productTree": "7dd60949ca28f4fc915525fa08173a5d5ba7297a",
+  "originalLinuxResult": {
+    "complete": true,
+    "status": "same-source-release-clock-regression-timing-and-soak-passed",
+    "productCheckout": "cf60ee1b17144c862d1891937fad60ff544aef87",
+    "productTree": "7dd60949ca28f4fc915525fa08173a5d5ba7297a",
+    "sourceManifestSHA256": "faa02041e424b0158ce9c8322290fe94b2f256db1d9607363c2d8cd2527fca70",
+    "inputs": {
+      "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libssl.a": "980fe86a76599e8b1981d289ec498c5292ac0a4aa53ec43d8018ceac08dd6413",
+      "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib64/libcrypto.a": "63940ed4380eb5f8f47993e72d4e872849774c214d6f68b31bcfc43e2eac5fb6",
+      "/root/capsid-verification-20261109/r8-sdk78-production-providers-linux-r4/providers/lib/libcares.a": "66c9e01d07c9d8dd98d117e19c304bf7a7e82888aa0361879433821785c113d9",
+      "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-host": "9953f82bb5e17e187ef92c14cb9ded5ad28723ed9ff79a284a7b2d5e6ec828be",
+      "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-worker": "5bb8ac1b30445b29235776be22daa76cd0b961701b20bdfaeb473fc948cd2a09",
+      "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-bytecode-compile": "8e503a60181bdc15999c7ab4716d761483f5cc08f2659cc5803552feb8756b7b",
+      "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/CMakeCache.txt": "9739df2e13190c4de7622458057a056437c2cc7e92b57fa2c7a415137553d972"
+    },
+    "steps": [
+      {
+        "label": "release-related-regression",
+        "exitCode": 0,
+        "seconds": 58.60921757199999,
+        "clockRate": {
+          "complete": true,
+          "samples": 58,
+          "observedRateViolations": 0,
+          "windowsWithThresholdOverlap": 0,
+          "aggregate": {
+            "minimumRate": 1.0000000763122003,
+            "maximumRate": 1.0000001155604297,
+            "violation": false,
+            "uncertaintyOverlapsThreshold": false,
+            "monotonicElapsedSeconds": 58.601381172,
+            "rawElapsedSecondsBounds": {
+              "minimum": 58.6013744,
+              "maximum": 58.6013767
+            },
+            "realtimeMinusMonotonicChangeSeconds": -2e-07
+          },
+          "observerError": null,
+          "rawClockReadsBracketEachMonotonicRead": true,
+          "diagnosticRateTolerance": 0.001,
+          "logSHA256": "f52de810c21bb554441787a1ac3c125c0cae86cd959e20bdbf3a808a62b1cbd4",
+          "helperSourceSHA256": "accfc8328b78cdcce2b33f84e0f27342ce5bfff39edf891c4fddb25abf6f2769",
+          "helperSourceUnchanged": true,
+          "clockRateQualified": true
+        },
+        "stdoutSHA256": "9406b9e4817221e4864dde1af8a72377207da38a88aaf35346fa3a034c4c6b96",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "post-clock-timing",
+        "exitCode": 0,
+        "seconds": 23.48542716099999,
+        "clockRate": {
+          "complete": true,
+          "samples": 23,
+          "observedRateViolations": 0,
+          "windowsWithThresholdOverlap": 0,
+          "aggregate": {
+            "minimumRate": 0.9999999600069367,
+            "maximumRate": 1.0000001175941056,
+            "violation": false,
+            "uncertaintyOverlapsThreshold": false,
+            "monotonicElapsedSeconds": 23.479070761,
+            "rawElapsedSecondsBounds": {
+              "minimum": 23.479068,
+              "maximum": 23.4790717
+            },
+            "realtimeMinusMonotonicChangeSeconds": 1e-07
+          },
+          "observerError": null,
+          "rawClockReadsBracketEachMonotonicRead": true,
+          "diagnosticRateTolerance": 0.001,
+          "logSHA256": "86062721597a9779fd5c5a0934b6d1ed50cc93cbbe87c100994c2db78edf0454",
+          "helperSourceSHA256": "accfc8328b78cdcce2b33f84e0f27342ce5bfff39edf891c4fddb25abf6f2769",
+          "helperSourceUnchanged": true,
+          "clockRateQualified": true
+        },
+        "stdoutSHA256": "afe320dbaa71b0ee8c7127b5983dd151d2549637d3004919202994659aa92daa",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "thirty-minute-soak",
+        "exitCode": 0,
+        "seconds": 1800.405158287,
+        "clockRate": {
+          "complete": true,
+          "samples": 1798,
+          "observedRateViolations": 0,
+          "windowsWithThresholdOverlap": 0,
+          "aggregate": {
+            "minimumRate": 0.9999999987152823,
+            "maximumRate": 0.999999999937236,
+            "violation": false,
+            "uncertaintyOverlapsThreshold": false,
+            "monotonicElapsedSeconds": 1800.395644687,
+            "rawElapsedSecondsBounds": {
+              "minimum": 1800.3956448,
+              "maximum": 1800.395647
+            },
+            "realtimeMinusMonotonicChangeSeconds": 8e-07
+          },
+          "observerError": null,
+          "rawClockReadsBracketEachMonotonicRead": true,
+          "diagnosticRateTolerance": 0.001,
+          "logSHA256": "6265f0da1618528b6a7f5fb02691d81f0a95bbc777270dd261f44be7f09650d1",
+          "helperSourceSHA256": "accfc8328b78cdcce2b33f84e0f27342ce5bfff39edf891c4fddb25abf6f2769",
+          "helperSourceUnchanged": true,
+          "clockRateQualified": true
+        },
+        "stdoutSHA256": "b2e2e21ff2243d09431e19658f68d7fa360077b67a4a76a8391eb2aa7e445872",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "sameLinuxBootAsHostClockProof": true,
+    "fullV030GoalComplete": false,
+    "formalPerformanceEvidence": false,
+    "activeCommand": [
+      "/root/capsid-verification-20261109/toolchains/node-v24.14.0-linux-x64/bin/node",
+      "/root/capsid-verification-20261109/source-v030-admin-ownership-r1/tools/run_managed_websocket_soak.mjs",
+      "--source-root",
+      "/root/capsid-verification-20261109/source-v030-admin-ownership-r1",
+      "--host",
+      "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-host",
+      "--worker",
+      "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-worker",
+      "--runtime-dir",
+      "/root/c26soak1",
+      "--output",
+      "/mnt/d/capsid-verification-20261108/evidence/v030-admin-ownership-clock-timing-soak-r1/soak",
+      "--seconds",
+      "1800",
+      "--min-rounds",
+      "200",
+      "--memory-mode",
+      "production"
+    ],
+    "relatedPassed": 167,
+    "timingPassed": 9,
+    "soakResult": {
+      "schema": "capsid-managed-websocket-soak-v1",
+      "status": "passed",
+      "complete": true,
+      "durationSecondsRequired": 1800,
+      "minimumRoundsRequired": 200,
+      "memoryMode": "production",
+      "hostSHA256": "9953f82bb5e17e187ef92c14cb9ded5ad28723ed9ff79a284a7b2d5e6ec828be",
+      "workerSHA256": "5bb8ac1b30445b29235776be22daa76cd0b961701b20bdfaeb473fc948cd2a09",
+      "inputs": {
+        "/root/capsid-verification-20261109/source-v030-admin-ownership-r1/tools/run_managed_websocket_soak.mjs": "f54f7701a6b1a1cdd0293dedd957bc61c6825261adf3414a35bcb9b0913ad5a6",
+        "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-host": "9953f82bb5e17e187ef92c14cb9ded5ad28723ed9ff79a284a7b2d5e6ec828be",
+        "/root/capsid-verification-20261109/build-v030-admin-ownership-release-r1/capsid-worker": "5bb8ac1b30445b29235776be22daa76cd0b961701b20bdfaeb473fc948cd2a09",
+        "/root/capsid-verification-20261109/source-v030-admin-ownership-r1/tests/helpers/ws_host_backend.mjs": "2ed476c62922be0998182a1ea86fbfe99d18209d46b2aab02f0c97c9dca158ac",
+        "/root/capsid-verification-20261109/source-v030-admin-ownership-r1/tests/helpers/ws_interop_node_sdk.mjs": "dafba2e5535b84e6dcf10b86e2a4bc01302984d7fcdef2c074be95bc2ff0a35a"
+      },
+      "client": {
+        "node": "v24.14.0",
+        "undici": "7.21.0",
+        "ws": "8.22.0",
+        "sourceFiles": 17,
+        "sourceSHA256": "08e12bcda8c3f769a26e08ab31eb7c732e94fa226e9f0a60ab83ce8e7cdf9ce0"
+      },
+      "formalPerformanceEvidence": false,
+      "fullV030GoalComplete": false,
+      "rounds": 4361,
+      "echoes": 69776,
+      "outboundEchoes": 4361,
+      "pendingDialCancellations": 4361,
+      "deployments": 2181,
+      "workerReplacements": 2180,
+      "queueRefusals": 4361,
+      "pausedReaders": 4361,
+      "elapsedSeconds": 1800.126,
+      "deliberateRetainedChannelControl": false,
+      "hostPid": 5226,
+      "handshakeTransportEofs": 2180,
+      "maximumHostRssKiB": 25436,
+      "finalHostSample": {
+        "rssKiB": 25192,
+        "threads": 10,
+        "descriptors": 18
+      },
+      "finalResources": {
+        "channels": 0,
+        "active": 0,
+        "dials": 0,
+        "queue": 0,
+        "http": 0,
+        "drains": 2181,
+        "queueRejected": 4361,
+        "queueHighWater": 385
+      },
+      "shutdown": {
+        "code": 0,
+        "signal": null,
+        "forced": false
+      }
+    },
+    "soakResultSHA256": "4ebee71c7852b312294dfaf79b286f4f50e21e8bcd22140fbc660cff1a4da84c",
+    "sourceAndBinaryInputsUnchanged": true
+  },
+  "controller": {
+    "complete": true,
+    "status": "same-source-30-minute-native-soak-qualified",
+    "clockProofSHA256": "da854f07502365d6293551d412a4eecb9111171c99fd328b130a397ea424d1ca",
+    "linuxResultSHA256": "b0e9176adef17596e2d9eb8158b6418bfd9eb1a456fef983ec622b8af895c351",
+    "sameGuestProcessAndBootRetained": true,
+    "windowsQpcMeasuredFullSoak": true,
+    "fullV030GoalComplete": false,
+    "formalPerformanceEvidence": false
+  },
+  "hostClockProofSHA256": "da854f07502365d6293551d412a4eecb9111171c99fd328b130a397ea424d1ca",
+  "sourceRecordSHA256": "b0e9176adef17596e2d9eb8158b6418bfd9eb1a456fef983ec622b8af895c351",
+  "counts": {
+    "relatedPassed": 167,
+    "timingPassed": 9,
+    "soakRounds": 4361,
+    "soakElapsedSeconds": 1800.126
+  },
+  "newCandidateAcceptanceNotClaimed": true,
+  "formalPerformanceEvidence": false,
+  "fullV030GoalComplete": false
+}

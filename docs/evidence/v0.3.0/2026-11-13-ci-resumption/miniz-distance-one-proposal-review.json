@@ -1,0 +1,34 @@
+{
+  "complete": true,
+  "reviewedUTC": "2026-11-14T20:21:14.000664+00:00",
+  "workflowRunId": 43635623985,
+  "artifactId": 14129294492,
+  "archiveSHA256": "800e53589799417bd91adb724cd0418e22d3f0a53bec71e44455f01a06618ec7",
+  "baseProduct": "42107f444db014dc2089c4b405669c4be623d208",
+  "privateProposedMinizSHA256": "8bc36ab5aac03d23140b1eeeeaa2d69667181d2dcff300acde3bcdccb10c8152",
+  "privateWorkerSHA256": "cbaea1272c57ee7e6d5fe93ba0b09e6095610845cd4ecef5be7622d24e6cdd7f",
+  "all82ActualStreamingDifferentialsIndependentlyRevalidated": true,
+  "validIndependentZlibDecodedCases": 76,
+  "invalidIndependentZlibRejectedCases": 6,
+  "everyStatusAndConsumedProducedAndRawAdlerTraceMatched": true,
+  "onlyOneContiguousDistanceOneCopyBranchChanged": true,
+  "originalCompileFlagsAndO0AndFatalTsanPreserved": true,
+  "originalExactFailedNativeABytesMatched": true,
+  "actualFourFrozenNativeReportsAndEightCasesReplayed": true,
+  "allOriginalFiveSecondAndSixtySecondDeadlinesAndAssertionsRetained": true,
+  "abbaOrder": "ABBA",
+  "originalWallSeconds": [
+    4.375042011000005,
+    4.374201262000042
+  ],
+  "proposalWallSeconds": [
+    3.622860145000004,
+    3.573210427000049
+  ],
+  "observedWallRatio": 0.8224791959102283,
+  "observedChildUserCpuRatio": 0.8161147318258027,
+  "noStatisticalSignificanceOrFormalPerformanceClaim": true,
+  "originalAlsoPassedThisRunnerAndHistoricalFailureNotClaimedCausallyClosed": true,
+  "notIntegratedOrCompleteCandidateQualification": true,
+  "fullV030GoalComplete": false
+}

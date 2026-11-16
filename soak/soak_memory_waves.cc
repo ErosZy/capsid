@@ -170,9 +170,10 @@ static constexpr std::uint64_t kWaveBatch = 64;
 // memory snapshot. A driver cancel produces no terminal frame client-side
 // (the client erased the request states; late frames for canceled ids are
 // dropped), so the drain waits for the channel to go quiet — bounded by a
-// deadline — instead of counting terminals. Quiescence means the worker
-// processed the cancels (the abort settled each chain; the reclaim tick
-// runs after, on the worker's own loop). An EXIT here fails fast.
+// deadline — instead of counting terminals. Input silence alone does not
+// acknowledge cancellation or its later reclaim tick. The subsequent metrics
+// request crosses any already-scheduled reclaim round on the worker's own loop.
+// An EXIT here fails fast.
 void run_wave(capsid_worker *worker, std::uint64_t first_id,
               std::uint64_t count) {
     std::uint64_t remaining = count;
@@ -216,7 +217,7 @@ void run_wave(capsid_worker *worker, std::uint64_t first_id,
             if (ready == 0) {
                 quiet_rounds += 1;
                 if (quiet_rounds >= 2) {
-                    break;  // channel idle: the cancels were processed
+                    break;  // input idle; request_metrics still crosses pending reclaim
                 }
             } else {
                 quiet_rounds = 0;

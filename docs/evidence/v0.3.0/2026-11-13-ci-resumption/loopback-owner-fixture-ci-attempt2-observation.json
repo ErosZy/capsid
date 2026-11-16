@@ -1,0 +1,20 @@
+{
+  "complete": true,
+  "observedUTC": "2026-11-15T12:14:39.693338+00:00",
+  "workflowRunId": 43698560215,
+  "observedRunAttempt": 2,
+  "productCheckout": "9c37658aec50bcb1d4e1397830dbd5367b88ba1d",
+  "workflowCommit": "f67ededd18934b92e3b6f50476a8798057235725",
+  "status": "in_progress",
+  "conclusion": null,
+  "sourceStatusSHA256": "2929b8496a1bc8c294cbdf989f6c1b5c4341584b83b6e697ddf452ce57694345",
+  "originalAttempt1TsanJob": 132764390920,
+  "currentAttempt2TsanJob": 132790944971,
+  "originalAttempt1ShutdownAndRawRssFailurePreserved": true,
+  "attempt2NotLaunchedByThisContinuation": true,
+  "queryWasReadOnly": true,
+  "noInferenceOfWhoRequestedRerun": true,
+  "attempt1ReviewNotMigratedToAttempt2": true,
+  "currentAttempt2ArtifactsAndFinalMatrixNotYetAccepted": true,
+  "localBenchmarkRunsIndependentlyAndNoCiPerfRunRequested": true
+}

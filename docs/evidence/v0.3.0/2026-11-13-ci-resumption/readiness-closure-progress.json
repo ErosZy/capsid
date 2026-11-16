@@ -1,0 +1,198 @@
+{
+  "schema": "capsid-readiness-combined-closure-progress-v1",
+  "complete": true,
+  "classification": "progress-not-final-acceptance",
+  "observedUTC": "2026-11-14T01:04:33.532470+00:00",
+  "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+  "productTree": "dd0e4e8fd4454180df0e3917ffd473b7c9d7a588",
+  "fullCiRunId": 43502164423,
+  "originalFullCiConclusion": "failure",
+  "originalWindowsRunnerLostCommunication": true,
+  "windowsMatrixNoVerdictAndNoArtifact": true,
+  "windowsCauseNotExoneratedByInfrastructureAnnotation": true,
+  "fourCoreArchivesIndependentlyReviewed": true,
+  "configurations": {
+    "release-wpt": {
+      "passed": 1115,
+      "failed": [
+        "worker_wpt_fetch_api_headers_headers_basic_any_js",
+        "worker_wpt_fetch_api_headers_headers_errors_any_js",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+        "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+        "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+      ],
+      "skipped": 4,
+      "reports": 317
+    },
+    "asan": {
+      "passed": 1024,
+      "failed": [],
+      "skipped": 5,
+      "reports": 317
+    },
+    "ubsan": {
+      "passed": 1024,
+      "failed": [],
+      "skipped": 4,
+      "reports": 317
+    },
+    "tsan": {
+      "passed": 1012,
+      "failed": [],
+      "skipped": 5,
+      "reports": 317
+    }
+  },
+  "debugMatrixIndependentlyReviewed": {
+    "passed": 1115,
+    "failed": [
+      "worker_wpt_fetch_api_headers_headers_basic_any_js",
+      "worker_wpt_fetch_api_headers_headers_errors_any_js",
+      "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_promise_rejection_event_constructor_html",
+      "worker_wpt_html_webappapis_scripting_processing_model_2_unhandled_promise_rejections_support_promise_rejection_events_js",
+      "worker_wpt_webmessaging_MessagePort_initial_disabled_any_js"
+    ],
+    "skipped": 4,
+    "originalJobFailedBecauseReleaseOnlyUpgradeReportRequiresLtoOn": true,
+    "debugProvenanceDirtyOneDoesNotMeanDirtySource": true
+  },
+  "macos": {
+    "registered": 766,
+    "passed": 755,
+    "failed": 0,
+    "skipped": 11
+  },
+  "fullProviderCommandLogClosure": {
+    "complete": true,
+    "workflowRunId": 43502164423,
+    "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+    "openssl": [
+      {
+        "kind": "release",
+        "commandsIndividuallyVerified": 1187,
+        "includesAppsAndLibraries": true,
+        "logSHA256": "792e6e2c26f973e99e42444d71c8dbf247d57675025c20caa3abcda526ad4328",
+        "selectedFatalSanitizer": null,
+        "inventorySHA256": "cbf374c6b50c6fa59e25518b6807ca23a4e0885594476eda47cca70baa4f434a"
+      },
+      {
+        "kind": "asan",
+        "commandsIndividuallyVerified": 1187,
+        "includesAppsAndLibraries": true,
+        "logSHA256": "5d92307a2b03a11dadf8bec1a9cdb339b5cd959c760152032fea941da2411a6e",
+        "selectedFatalSanitizer": "address",
+        "inventorySHA256": "47597b0209efb8692ffddad12130adc620e1ba9a1e16192e860d1a77dda30dec"
+      },
+      {
+        "kind": "ubsan",
+        "commandsIndividuallyVerified": 1187,
+        "includesAppsAndLibraries": true,
+        "logSHA256": "0919e20b49e126b62ee4374300526521f061501f49b110cefcbe13cc82f0d170",
+        "selectedFatalSanitizer": "undefined",
+        "inventorySHA256": "a1ac4da5db4f20818ab60bf08048b3b356a5644583b068a34d1baacb4b61765b"
+      },
+      {
+        "kind": "tsan",
+        "commandsIndividuallyVerified": 1187,
+        "includesAppsAndLibraries": true,
+        "logSHA256": "0cb5e8c22ff6333629197f4152c6efe3ee089a317e1f1bf8d506a8eea29acf65",
+        "selectedFatalSanitizer": "thread",
+        "inventorySHA256": "f43931d628d6c4ab95bda5d327c5e0d78a0fe424312309e542b90fb4195714f0"
+      }
+    ],
+    "all1187CCommandsPerConfigurationVerified": true,
+    "prior1109LibraryOnlySubsetExpanded": true,
+    "delegatedCgroupV2Passed": true,
+    "delegatedNetworkNamespacePassed": true,
+    "ordinaryPrerequisiteSkipsNotRewritten": true,
+    "physicalHostIsolationNotClaimed": true,
+    "formalPerformancePoints": 0,
+    "fullV030GoalComplete": false
+  },
+  "nativeSoak": {
+    "complete": true,
+    "workflowRunId": 43510138817,
+    "artifactId": 14080883605,
+    "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+    "sourceFilesRechecked": 5169,
+    "exactSourceAndRuntimeLtoUnits": 12,
+    "relatedRegressionsPassed": 167,
+    "timingCasesPassed": 9,
+    "soakSeconds": 1800.051,
+    "soakRounds": 4376,
+    "rawBracketedClockIntervalsIndependentlyRecomputed": 1876,
+    "clockViolations": 0,
+    "hostSHA256": "15bcebea27271034c0ac108580bcee1f93a14e3c7a7ee0661de8c5fd0beb95d6",
+    "workerSHA256": "331e2197d35aa9f569b0217c6b16378df3c81337200499bc4f4c37f7fcda2118",
+    "maximumHostRssKiB": 26936,
+    "naturalExit": true,
+    "sourceAndBinaryGuardsUnchanged": true,
+    "externalWindowsQpcProofNotClaimed": true,
+    "formalPerformancePoints": 0,
+    "fullV030GoalComplete": false
+  },
+  "rejectedO1Proposal": {
+    "complete": true,
+    "workflowRunId": 43517116270,
+    "artifactId": 14080514839,
+    "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+    "originalFullOracleRuns": 4,
+    "privateO1FullOracleRuns": 4,
+    "replayedCompleteContracts": 8,
+    "baselineSeconds": [
+      4.126721068000052,
+      4.197130544999936,
+      4.153762379999989,
+      4.222950787000059
+    ],
+    "privateO1Seconds": [
+      4.105729403999931,
+      4.117712621999999,
+      4.206854656000019,
+      4.198618958999987
+    ],
+    "wallRatio": 0.9957097774869323,
+    "reliablePerformanceGainNotDemonstrated": true,
+    "proposalRejectedAsTimeoutFix": true,
+    "originalSourceAndBinariesUnmodified": true,
+    "fullFatalTsanRetained": true,
+    "originalFiveSecondDeadlineAndAssertionsRetained": true,
+    "canonicalCmakeNotModified": true,
+    "oldFailureCauseStillNotEstablished": true,
+    "formalPerformancePoints": 0,
+    "fullV030GoalComplete": false
+  },
+  "thirdPerformanceSession": {
+    "complete": true,
+    "workflowRunId": 43512501017,
+    "artifactId": 14079724098,
+    "archiveSHA256": "c5e79026113119b2c4b4f6b3c4d89d3d841f8b26f67872dd1b163594a37fb810",
+    "productCheckout": "be19fc0848c9b9640e618743a9c45dc26894a31a",
+    "wholeSessionPassed": false,
+    "formalLanesEntered": 0,
+    "quietWindows": 0,
+    "strictSandboxPrerequisitesPassed": 26,
+    "failure": "Gunicorn 23.0.0 rejects --control-socket before Flask readiness; preflight fails closed",
+    "actualFlaskExitCode": 2,
+    "ownedPidsRemaining": 0,
+    "runtimeSourceAndAssertionsUnchanged": true,
+    "nextWorkflowCommit": "830519571856a9d6116d88d928ce2f320cf4bfc8",
+    "nextGunicornVersion": "26.2.0",
+    "officialVersionAddedControlSocket": "25.1.0",
+    "officialReference": "https://github.com/benoitc/gunicorn/blob/26.2.0/docs/content/reference/settings.md",
+    "originalFiveFormalQpsRoundsAndOtherProtocolsUnchanged": true,
+    "formalPerformancePoints": 0,
+    "fullV030GoalComplete": false
+  },
+  "fourthPerformanceWorkflowCommit": "830519571856a9d6116d88d928ce2f320cf4bfc8",
+  "platformRecoveryWorkflowCommit": "c16491108bf3a3e931a7cf5a127ecf542b236206",
+  "unchangedBudgetsAssertionsAndProductSource": true,
+  "allStandardsWptPassedNotClaimed": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "originalWslEnvironmentNotRestartedRepairedOrDeleted": true,
+  "mainTagsReleasesAndPagesNotModified": true,
+  "formalPerformancePoints": 0,
+  "finalFourViewportAcceptance": false,
+  "fullV030GoalComplete": false
+}
