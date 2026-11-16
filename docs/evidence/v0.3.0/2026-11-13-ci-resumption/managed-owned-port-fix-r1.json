@@ -1,0 +1,69 @@
+{
+  "complete": true,
+  "stage": "source-fix-before-final-full-qualification",
+  "originalFailedRun": 43823339075,
+  "originalProduct": "fdc960c1f43503d7ad9399af4217594aceca10b8",
+  "artifact": {
+    "id": 14208131959,
+    "name": "asan-hosted-evidence",
+    "bytes": 48306169,
+    "digest": "sha256:dc63a393cffc8e8a62f08b549f3775c110a8da930e473f935aa3ef96f200f842",
+    "expired": false
+  },
+  "originalFailedTest": [
+    "websocket_standard_readers_transfers_managed"
+  ],
+  "originalCase": "standard|subclass|default|transfer_returned_transfer_8",
+  "failurePhase": "capsid-startup managed data listener bind, before business request",
+  "originalStartupFailure": {
+    "phase": "capsid-startup",
+    "mode": "managed",
+    "pid": 122646,
+    "adminRequest": null,
+    "stderr": "{\"timestamp\":\"1794816598648\",\"level\":\"error\",\"event\":\"startup\",\"result\":\"fail\",\"message\":\"cannot bind the data plane listener: listener public: bind failed: Address already in use\"}\n",
+    "shutdown": {
+      "code": 2,
+      "signal": null,
+      "forced": false
+    },
+    "failure": {
+      "name": "AssertionError",
+      "message": "admin startup: {\"timestamp\":\"1794816598648\",\"level\":\"error\",\"event\":\"startup\",\"result\":\"fail\",\"message\":\"cannot bind the data plane listener: listener public: bind failed: Address already in use\"}\n",
+      "code": "ERR_ASSERTION",
+      "stack": "AssertionError [ERR_ASSERTION]: admin startup: {\"timestamp\":\"1794816598648\",\"level\":\"error\",\"event\":\"startup\",\"result\":\"fail\",\"message\":\"cannot bind the data plane listener: listener public: bind failed: Address already in use\"}\n\n    at waitForAdminListener (file:///home/runner/work/capsid/capsid/tests/helpers/ws_host_backend.mjs:50:16)\n    at async startCapsid (file:///home/runner/work/capsid/capsid/tests/helpers/ws_host_backend.mjs:137:13)\n    at async file:///home/runner/work/capsid/capsid/tests/test_websocket_standard_readers.mjs:73:64",
+      "causeStack": null
+    },
+    "cleanupFailure": null
+  },
+  "ordinaryMemorySoakPassed": true,
+  "originalReportSHA256": "ab4794ebea96695c4a3dcd1ea4dee08be0ca854d6cab33c0836e15f1ba5159e9",
+  "controlledOldNewNewOld": true,
+  "controlledUnderlyingHostProductionBinaryUnmodified": true,
+  "noSpecificHistoricalCompetingProcessClaim": true,
+  "fix": "actual managed Host binds IPv4 loopback port0 for lifetime; Linux captures child PID/start and socket inode membership, then actual owned LISTEN port; no namespace LISTEN guess",
+  "nonLinuxProductManagedModeUnchangedUnavailable": true,
+  "nonLinuxDiagnosticHostsUsePrivateReadyPipe": true,
+  "abiSdkVendorAndProductionCppUnchanged": true,
+  "originalDeadlinesCasesAndAssertionsUnchanged": true,
+  "startupRetriesAdded": false,
+  "businessRetriesAdded": false,
+  "actualSourceOverlayRuntimeCases": 400,
+  "startupAndMetadataControls": 11,
+  "localAsanSystemDependenciesNotFullHostedInstrumentation": true,
+  "allRequiredFinalCiPassed": false,
+  "betaPublished": false,
+  "evidence": {
+    "original-failure.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-standard-readers-failure-r1\\original-failure.json",
+      "sha256": "e8dca9eb076374955e41f5a428040802156aa50d41b9fc00ac5c48fc4228adc4"
+    },
+    "real-host-aba-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-standard-readers-failure-r1\\real-host-aba-r1\\review.json",
+      "sha256": "107c400eb531ddf08a23f1da01048246a094e3cce13a398c1cf5b39f4938d712"
+    },
+    "native-validation-r1/review.json": {
+      "path": "E:\\capsid-verification-20261113\\evidence\\v030-standard-readers-failure-r1\\native-validation-r1\\review.json",
+      "sha256": "07457cd6bbbd3b4e7f5c17b1b62eef04e25ff661827ce2d9a4bff784e756c593"
+    }
+  }
+}

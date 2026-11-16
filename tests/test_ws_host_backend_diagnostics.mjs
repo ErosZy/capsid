@@ -13,6 +13,7 @@ import {startCapsid,stopCapsid} from './helpers/ws_host_backend.mjs';
 const fakeHost=`#!${process.execPath}
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 const config=JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf('--host-config')+1]));
 const fault=process.env.CAPSID_TEST_ADMIN_FAULT;
 const server=http.createServer((request,response)=>{
@@ -34,11 +35,15 @@ const server=http.createServer((request,response)=>{
         response.end(JSON.stringify(request.url==='/v1/deploy'?{operationId:'operation-1'}:{state:'active'}));
     });
 });
+const data=net.createServer();
 process.on('SIGTERM',()=>{
     process.stderr.write('diagnostic host stopped\\n');
-    server.close(()=>process.exit(0));
+    server.close(()=>data.close(()=>process.exit(0)));
 });
-server.listen(config.admin.unix,()=>process.stderr.write('diagnostic host ready\\n'));
+data.listen({host:'127.0.0.1',port:Number(config.listeners[0].tcp.split(':').at(-1)),exclusive:true},()=>{
+    fs.writeSync(3,JSON.stringify({schema:'capsid-host-ready-v1',port:data.address().port})+'\\n');
+    server.listen(config.admin.unix,()=>process.stderr.write('diagnostic host ready\\n'));
+});
 `;
 
 async function fixture(operation) {
@@ -82,10 +87,21 @@ for(const [fault,method,target] of [
 
 test('healthy managed startup still deploys and stops normally',
     {skip:process.platform==='win32',timeout:10000},async()=>fixture(async({directory,host,bundle})=>{
-        const backend=await startCapsid(host,'unused-worker',bundle,directory,'managed',
-            {env:{CAPSID_TEST_ADMIN_FAULT:'healthy'}});
-        try {assert.ok(backend.port>0);assert.equal((await backend.admin('/v1/operations/operation-1')).json.state,'active');}
-        finally {assert.deepEqual(await stopCapsid(backend.child),{code:0,signal:null,forced:false});}
+        const foreign=net.createServer();
+        await new Promise((resolve,reject)=>{foreign.once('error',reject);foreign.listen(0,'127.0.0.1',resolve);});
+        let backend;
+        try {
+            backend=await startCapsid(host,'unused-worker',bundle,directory,'managed',
+                {env:{CAPSID_TEST_ADMIN_FAULT:'healthy'}});
+            assert.equal(JSON.parse(fs.readFileSync(path.join(directory,'host.json'),'utf8')).listeners[0].tcp,'127.0.0.1:0');
+            assert.ok(backend.port>0);assert.notEqual(backend.port,foreign.address().port,'not an unrelated namespace listener');
+            const competitor=net.createServer();
+            await assert.rejects(new Promise((resolve,reject)=>{competitor.once('error',reject);competitor.listen(backend.port,'127.0.0.1',resolve);}),{code:'EADDRINUSE'});
+            assert.equal((await backend.admin('/v1/operations/operation-1')).json.state,'active');
+        } finally {
+            if(backend)assert.deepEqual(await stopCapsid(backend.child),{code:0,signal:null,forced:false});
+            await new Promise(resolve=>foreign.close(resolve));
+        }
     }));
 
 // A real AF_UNIX socket can exist after bind() but before listen(). Keep
@@ -100,6 +116,10 @@ import http.server,json,os,signal,socket,socketserver,sys,time
 from pathlib import Path
 config=json.loads(Path(sys.argv[sys.argv.index('--host-config')+1]).read_text())
 address=config['admin']['unix'];folder=Path(address).parent
+data=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+data.bind(('127.0.0.1',int(config['listeners'][0]['tcp'].rsplit(':',1)[1])))
+data.listen()
+os.write(3,(json.dumps({'schema':'capsid-host-ready-v1','port':data.getsockname()[1]})+'\\n').encode())
 refused=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
 refused.bind(str(folder/'refuse.sock'))
 requests=[]
@@ -120,7 +140,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers();self.wfile.write(body)
 server=socketserver.UnixStreamServer(address,Handler,bind_and_activate=False)
 def stop(*args):
-    server.server_close();refused.close()
+    server.server_close();refused.close();data.close()
     print('diagnostic host stopped',file=sys.stderr,flush=True)
     sys.exit(0)
 signal.signal(signal.SIGTERM,stop)
@@ -212,3 +232,38 @@ setTimeout(()=>{
             return true;
         });
     }));
+
+// Product managed mode and its /proc ownership path are Linux-only. Corrupt
+// only observer metadata here, never an HTTP response or the child's sockets.
+if(process.platform==='linux')for(const fault of ['changed-start','foreign-inodes','ambiguous-listeners']) {
+    test(`managed listener capture rejects ${fault} without guessing a port`,
+        {timeout:10000},async()=>fixture(async({directory,host,bundle})=>{
+            const originalRead=fs.readFileSync;let statReads=0,corrupted=0,backend;
+            fs.readFileSync=function(file,...args){
+                const value=originalRead.call(fs,file,...args);
+                if(typeof file!=='string')return value;
+                if(fault==='changed-start'&&/^\/proc\/\d+\/stat$/.test(file)&&++statReads===2) {
+                    ++corrupted;const end=value.lastIndexOf(')'),fields=value.slice(end+2).trim().split(/\s+/);
+                    fields[19]=String(BigInt(fields[19])+1n);return value.slice(0,end+2)+fields.join(' ')+'\n';
+                }
+                if(fault!=='changed-start'&&/^\/proc\/\d+\/net\/tcp$/.test(file)) {
+                    ++corrupted;const lines=value.trim().split('\n'),rows=lines.slice(1).map(line=>line.trim().split(/\s+/));
+                    if(fault==='foreign-inodes')return lines[0]+'\n'+rows.map(row=>{row[9]='0';return row.join(' ');}).join('\n')+'\n';
+                    const extra=rows.filter(row=>row[3]==='0A'&&row[1].startsWith('0100007F:')).map(row=>{
+                        const copy=[...row];copy[1]='0100007F:'+(row[1].endsWith(':0001')?'0002':'0001');return copy.join(' ');
+                    });
+                    assert.ok(extra.length>0);return value+'\n'+extra.join('\n')+'\n';
+                }
+                return value;
+            };
+            try {
+                await assert.rejects(startCapsid(host,'unused-worker',bundle,directory,'managed')
+                    .then(value=>{backend=value;return value;}),error=>{
+                        assert.match(error.message,fault==='changed-start'?/same owned host process/:/one owned IPv4 loopback data listener/);
+                        assert.deepEqual(error.observation.shutdown,{code:0,signal:null,forced:false});
+                        assert.equal(error.observation.cleanupFailure,null);return true;
+                    });
+                assert.equal(corrupted,1,'the intended metadata boundary was exercised');
+            } finally {fs.readFileSync=originalRead;if(backend)await stopCapsid(backend.child);}
+        }));
+}

@@ -75,11 +75,42 @@ async function waitForAdminListener(child,socketPath,deadline,stderr) {
         }
     }
 }
-async function unusedPort() {
-    const listener=net.createServer();
-    await new Promise((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',resolve);});
-    const port=listener.address().port;
-    await new Promise(resolve=>listener.close(resolve)); return port;
+function processStart(pid) {
+    const stat=fs.readFileSync(`/proc/${pid}/stat`,'utf8');
+    const start=stat.slice(stat.lastIndexOf(')')+2).trim().split(/\s+/)[19];
+    assert.match(start,/^\d+$/,'owned host process start identity');
+    return start;
+}
+async function managedListenerPort(child,start,deadline,stderr) {
+    if(process.platform==='linux') {
+        assert.equal(processStart(child.pid),start,'same owned host process');
+        const inodes=new Set();
+        for(const fd of fs.readdirSync(`/proc/${child.pid}/fd`)) {
+            let target;
+            try {target=fs.readlinkSync(`/proc/${child.pid}/fd/${fd}`);}
+            catch(error) {if(error.code==='ENOENT')continue;throw error;}
+            const socket=/^socket:\[(\d+)\]$/.exec(target);
+            if(socket)inodes.add(socket[1]);
+        }
+        const ports=new Set();
+        for(const line of fs.readFileSync(`/proc/${child.pid}/net/tcp`,'utf8').trim().split('\n').slice(1)) {
+            const fields=line.trim().split(/\s+/),local=/^0100007F:([0-9A-F]{4})$/i.exec(fields[1]);
+            if(fields[3]==='0A'&&local&&inodes.has(fields[9]))ports.add(Number.parseInt(local[1],16));
+        }
+        assert.equal(processStart(child.pid),start,'host identity unchanged during listener capture');
+        assert.ok(child.exitCode===null&&child.signalCode===null,'owned host still running');
+        assert.equal(ports.size,1,'one owned IPv4 loopback data listener, not a namespace-wide LISTEN guess');
+        const [port]=ports;assert.ok(port>0&&port<=65535);return port;
+    }
+    // Product managed mode is Linux-only. Non-Linux diagnostic hosts use
+    // their existing private ready pipe, never a released port reservation.
+    const line=await new Promise((resolve,reject)=>{
+        let buffer='';const timer=setTimeout(()=>reject(new Error(`managed ready deadline: ${stderr()}`)),Math.max(1,deadline-Date.now()));
+        child.stdio[3].setEncoding('utf8');child.stdio[3].on('data',chunk=>{buffer+=chunk;if(buffer.includes('\n')){clearTimeout(timer);resolve(buffer.split('\n')[0]);}});
+        child.once('error',reject);child.once('exit',()=>{clearTimeout(timer);reject(new Error(`host exited: ${stderr()}`));});
+    });
+    const ready=JSON.parse(line);assert.equal(ready.schema,'capsid-host-ready-v1');
+    assert.ok(Number.isInteger(ready.port)&&ready.port>0&&ready.port<=65535);return ready.port;
 }
 export async function startCapsid(host,worker,bundle,dir,mode='single-worker',options={}) {
     let socketPath, port;
@@ -102,7 +133,9 @@ export async function startCapsid(host,worker,bundle,dir,mode='single-worker',op
         args.push('--capsid-json',config);
     }
     if(mode==='managed') {
-        port=await unusedPort();
+        // Let the actual Host own the kernel-selected endpoint for its entire
+        // lifetime. bind(0)/close in this driver leaves a real TOCTOU window.
+        port=0;
         const applicationsRoot=path.join(dir,'apps'),stateRoot=path.join(dir,'state'),runRoot=path.join(dir,'run'),secrets=path.join(dir,'secrets');
         for(const root of [applicationsRoot,stateRoot,runRoot,path.join(secrets,'orders')]) fs.mkdirSync(root,{recursive:true,mode:0o700});
         const version=path.join(applicationsRoot,'orders','v1');fs.mkdirSync(version,{recursive:true,mode:0o700});
@@ -134,6 +167,7 @@ export async function startCapsid(host,worker,bundle,dir,mode='single-worker',op
     try {
         if(mode==='managed') {
             const deadline=Date.now()+20000;
+            const start=process.platform==='linux'?processStart(child.pid):null;
             await waitForAdminListener(child,socketPath,deadline,()=>stderr);
             const deploy=await admin(socketPath,'/v1/deploy',{app:'orders',version:'v1'});
             assert.equal(deploy.status,202,JSON.stringify(deploy.json));
@@ -143,6 +177,7 @@ export async function startCapsid(host,worker,bundle,dir,mode='single-worker',op
                 if(operation.json.state==='active') break;
                 assert.ok(Date.now()<deadline,`deploy deadline: ${stderr}`);await delay(25);
             }
+            port=await managedListenerPort(child,start,deadline,()=>stderr);
         } else {
             const line=await new Promise((resolve,reject)=>{
                 let buffer='';const timer=setTimeout(()=>reject(new Error(`ready timeout: ${stderr}`)),15000);
