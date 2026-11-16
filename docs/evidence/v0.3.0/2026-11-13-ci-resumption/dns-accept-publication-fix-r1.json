@@ -1,0 +1,86 @@
+{
+  "complete": true,
+  "stage": "narrow-test-observation-fix-before-final-source-ci",
+  "originalFailure": {
+    "complete": true,
+    "source": "fdc960c1f43503d7ad9399af4217594aceca10b8",
+    "run": 43823339075,
+    "attempt": 1,
+    "artifact": {
+      "id": 14215222574,
+      "name": "windows-host-library-evidence",
+      "bytes": 42736669,
+      "digest": "sha256:dd372394a8c45f094d2809079baea8af326b8efb694163328f2b461729e7168b",
+      "expired": false
+    },
+    "registration": {
+      "backtrace": 2127,
+      "command": [
+        "D:/a/capsid/capsid/build-windows/test-host-dns-dialer.exe"
+      ],
+      "name": "host_dns_dialer_lifecycle",
+      "properties": [
+        {
+          "name": "ENVIRONMENT",
+          "value": [
+            "LOCALDOMAIN=search.capsid.test",
+            "RES_OPTIONS=ndots:5"
+          ]
+        },
+        {
+          "name": "LABELS",
+          "value": [
+            "host",
+            "lifecycle",
+            "websocket"
+          ]
+        },
+        {
+          "name": "TIMEOUT",
+          "value": 30.0
+        },
+        {
+          "name": "WORKING_DIRECTORY",
+          "value": "D:/a/capsid/capsid/build-windows"
+        }
+      ]
+    },
+    "originalAssertion": "exactly one ACCEPT",
+    "actualTestSeconds": 6.35,
+    "selectedWindowsCases": 761,
+    "originalTestExecutableArchived": false,
+    "beforeSourceSHA256": "bdcf952a3d44e1bc390db7bf622118daae93f389ccbfffd38049c5ed7e637177"
+  },
+  "originalQueueContentsNotCaptured": true,
+  "exactHistoricalWindowsSchedulingOrEmptyQueueNotClaimedProven": true,
+  "sourceOrder": {
+    "file": "src/host/websocket_dialer.cc",
+    "provisionalPhaseNotificationLine": 265,
+    "actualSendCallbackLine": 266
+  },
+  "provedMechanism": "phase hook may be observed before ACCEPT reaches the callback queue; phase alone is not a publication barrier",
+  "controlledSchedule": "50ms hold in private test on_phase callback after recording provisional phase, before unmodified production send",
+  "actualOldNewNewOldExits": [
+    1,
+    0,
+    0,
+    1
+  ],
+  "missingAcceptRejected": true,
+  "wrongTypeAcceptRejected": true,
+  "duplicateAcceptRejected": true,
+  "originalExactlyOneAndTypeAssertionRetained": true,
+  "originalCombinedWaitBudgetMs": 3000,
+  "originalCTestBudgetSeconds": 30,
+  "noAdditionalWaitWindowOrDeadlineExtension": true,
+  "noProductionCppOrProtocolAbiVendorChange": true,
+  "localAsanActualExit": 0,
+  "privateDiagnosticRelinkNotCleanFinalSourceQualification": true,
+  "currentRootTestSHA256": "665ad141685ea1e810aa0faf8dffd7c391a072ae8c9518045eb26a676620d850",
+  "allFinalSourceCiStillRequired": true,
+  "betaPublished": false,
+  "evidence": {
+    "controlledReview": "E:\\capsid-verification-20261113\\evidence\\v030-dns-accept-observation-r1\\controlled-r1\\review.json",
+    "controlledSHA256": "5e7f1c05437217e11fd515703b17fae06c931ce16eba4f8dc523443faf6bf457"
+  }
+}

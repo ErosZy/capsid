@@ -279,8 +279,15 @@ void dial_stage(DialPhase stage, Action action) {
     if (stage == DialPhase::kHandshake) require(wait_until([&] { return peer.read_head(); }), "actual HTTP handshake received");
     if (stage == DialPhase::kProvisional) {
         peer.upgrade();
-        require(wait_until([&] { return recorder.at(1, stage); }), "provisional ACCEPT reached");
-        auto commands = recorder.take(); require(commands.size() == 1 && commands[0].type == CommandType::kDialAccept, "exactly one ACCEPT");
+        // on_phase runs before the dialer's send callback. The phase marker
+        // is not a publication barrier: wait for the actual command in the
+        // same original wait window, preserving cardinality/type checks.
+        std::vector<Command> commands;
+        require(wait_until([&] {
+            if (commands.empty()) commands = recorder.take();
+            return recorder.at(1, stage) && !commands.empty();
+        }), "provisional ACCEPT reached");
+        require(commands.size() == 1 && commands[0].type == CommandType::kDialAccept, "exactly one ACCEPT");
         WorkerEvent ready; ready.type = WorkerEvent::Type::kChannelReady; ready.dial_id = 1; ready.channel_id = 71; dialer.post(std::move(ready));
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         require(peer.socket->available() == 0 && recorder.at(1, DialPhase::kProvisional), "no network WS IO before result ACK");
