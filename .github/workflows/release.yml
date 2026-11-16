@@ -1,7 +1,8 @@
 name: Release
 
-# Tag pushes (v*) package the pinned checkout and attach the CPack TGZ +
-# SHA256 to a GitHub Release. Three platform packages ship:
+# Tag pushes (v*) validate and package the pinned checkout. Stable tags
+# attach CPack archives + SHA256 to a Release; prereleases retain verified
+# artifacts for all-platform review before operator publication. Three ship:
 #   - linux-musl: fully static (musl) built in an Alpine container —
 #     one portable binary, no libc version matrix to manage;
 #   - darwin-arm64: native macOS build (Apple ships no static libSystem);
@@ -217,7 +218,34 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem build/capsid-*
 
+      # Prereleases are verified and collected first. The operator publishes
+      # once every required validation/package job and artifact review passes.
+      # GITHUB_TOKEN cannot update a Release whose target changes workflows
+      # relative to main; do not partially publish from parallel package jobs.
+      - name: Verify prerelease package before artifact upload
+        if: contains(github.ref_name, '-')
+        shell: bash
+        env:
+          PRODUCT_SHA: ${{ github.sha }}
+        run: python tools/verify-release-package.py
+
+      - name: Preserve verified prerelease package for gated publication
+        if: contains(github.ref_name, '-')
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: prerelease-package-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            build/capsid-*.tar.gz
+            build/capsid-*.tar.gz.sha256
+            build/capsid-*.zip
+            build/capsid-*.zip.sha256
+            build-musl/capsid-*.tar.gz
+            build-musl/capsid-*.tar.gz.sha256
+            beta-package-review.json
+
       - name: Publish package to GitHub Release
+        if: ${{ !contains(github.ref_name, '-') }}
         # The bash script must not run under the Windows default shell:
         # pwsh parses `--title` as the unary `--` operator and the step
         # dies with a ParserError before gh even runs.
