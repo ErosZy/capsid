@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -347,6 +348,87 @@ class CTestContract(unittest.TestCase):
                 with patch.object(report, "run", return_value=json.dumps(self.catalog)):
                     with self.assertRaisesRegex(RuntimeError, "exactly the five"):
                         report.ctest_evidence(self.build, self.junit, changed)
+
+
+class SurfaceInventoryContract(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for name in ["js", "docs", "src"]:
+            (self.root / name).mkdir()
+        (self.root / "docs/capability-manifest.json").write_text(
+            json.dumps(
+                {
+                    "modules": {
+                        "built_and_available": ["capsid:permissions"],
+                        "known_but_not_built": [],
+                        "permanently_forbidden": ["tjs:core"],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.root / "src/txiki_restricted_core.c").write_text(
+            "void capsid_fixture(void);\n", encoding="utf-8"
+        )
+        self.profile = self.root / "js/profile-manifest.js"
+
+    def write_profile(self, expression):
+        self.profile.write_bytes(
+            (
+                "export const profileId = 'CAPSID-MIN-2025-subset-v0';\n"
+                "export const profileGlobalNames = " + expression + ";\n"
+            ).encode("utf-8")
+        )
+
+    def test_compact_wrapped_and_crlf_arrays_preserve_the_same_inventory(self):
+        for expression in [
+            "Object.freeze(['Object', 'Array', 'WebSocketPair'].sort())",
+            "Object.freeze(\n  ['Object', 'Array', 'WebSocketPair'].sort(),\n)",
+            "Object.freeze(\r\n\t[\r\n 'Object',\r\n 'Array',\r\n 'WebSocketPair',\r\n ]\r\n .sort( )\r\n ,\r\n)",
+        ]:
+            with self.subTest(expression=expression):
+                self.write_profile(expression)
+                before = self.profile.read_bytes()
+                value = report.surface_inventory(self.root)
+                self.assertEqual(value["profile"], "CAPSID-MIN-2025-subset-v0")
+                self.assertEqual(value["globals"]["names"], ["Array", "Object", "WebSocketPair"])
+                self.assertEqual(value["globals"]["count"], 3)
+                self.assertEqual(
+                    value["globals"]["manifest_sha256"], hashlib.sha256(before).hexdigest()
+                )
+                self.assertEqual(self.profile.read_bytes(), before)
+
+    def test_actual_manifest_retains_the_pre_format_exported_surface(self):
+        # Independently captured from the actual module exports at 5d9ab83,
+        # before formatting, not derived through this source-text parser.
+        value = report.surface_inventory(SOURCE.parents[1])
+        self.assertEqual(value["profile"], "CAPSID-MIN-2025-subset-v0")
+        self.assertEqual(value["globals"]["count"], 127)
+        encoded = json.dumps(value["globals"]["names"], separators=(",", ":")).encode()
+        self.assertEqual(
+            hashlib.sha256(encoded).hexdigest(),
+            "b2940ab14b449d55a63d5253dd9b1bb49dee8a7297a7f229c0d8b890d55b1fcc",
+        )
+
+    def test_duplicate_globals_remain_a_failure(self):
+        self.write_profile("Object.freeze(['Object', 'Object'].sort())")
+        with self.assertRaisesRegex(RuntimeError, "duplicate profile globals"):
+            report.surface_inventory(self.root)
+
+    def test_nonliteral_empty_or_malformed_surfaces_cannot_produce_partial_inventory(self):
+        for expression in [
+            "Object.freeze(['Object', dynamicNames].sort())",
+            "Object.freeze(['Object', ...otherNames].sort())",
+            "Object.freeze([].sort())",
+            "Object.freeze(['Object'].reverse())",
+            "Object.freeze(['Object'].sort()",
+        ]:
+            with self.subTest(expression=expression):
+                self.write_profile(expression)
+                with self.assertRaises(RuntimeError):
+                    report.surface_inventory(self.root)
 
 
 class PublicationContract(unittest.TestCase):

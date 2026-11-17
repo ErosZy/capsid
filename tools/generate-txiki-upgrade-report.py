@@ -418,13 +418,19 @@ def surface_inventory(root: Path) -> dict[str, Any]:
     profile_text = profile_path.read_text(encoding="utf-8")
     profile_match = re.search(r"profileId\s*=\s*'([^']+)'", profile_text)
     block_match = re.search(
-        r"profileGlobalNames\s*=\s*Object\.freeze\(\[(.*?)\]\.sort\(\)\)",
+        r"\bprofileGlobalNames\s*=\s*Object\s*\.\s*freeze\s*\(\s*"
+        r"\[(.*?)\]\s*\.\s*sort\s*\(\s*\)\s*,?\s*\)",
         profile_text,
         re.DOTALL,
     )
     if not profile_match or not block_match:
         raise RuntimeError("cannot parse profile manifest")
-    globals_list = re.findall(r"'([^']+)'", block_match.group(1))
+    globals_block = block_match.group(1)
+    # Accept source formatting, not arbitrary JavaScript expressions. Never
+    # silently omit dynamic/spread elements from the claimed public surface.
+    if not re.fullmatch(r"\s*'[^'\\\r\n]+'(?:\s*,\s*'[^'\\\r\n]+')*\s*,?\s*", globals_block):
+        raise RuntimeError("profile globals must be a nonempty static string array")
+    globals_list = re.findall(r"'([^']+)'", globals_block)
     if len(globals_list) != len(set(globals_list)):
         raise RuntimeError("duplicate profile globals")
 
