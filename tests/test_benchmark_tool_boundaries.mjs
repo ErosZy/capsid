@@ -87,20 +87,25 @@ try {
     const html = fs.readFileSync(path.join(siteRoot, 'index.html'), 'utf8');
     const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
     const dataContext = { window: {} };
-    vm.runInNewContext(fs.readFileSync(path.join(siteRoot, 'data.js'), 'utf8'), dataContext);
+    for (const asset of ['data.js', 'status.js', 'archive-index.js']) {
+        vm.runInNewContext(fs.readFileSync(path.join(siteRoot, asset), 'utf8'), dataContext);
+    }
     function render(data) {
         const elements = new Map();
+        const element = () => ({
+            textContent: '', innerHTML: '', value: '', style: {}, children: [],
+            appendChild(child) { this.children.push(child); return child; },
+            getContext: () => ({ measureText: s => ({ width: String(s).length * 8 }) }),
+        });
         const context = {
-            window: { CAPSID_PERF_DATA: data },
+            window: { ...dataContext.window, CAPSID_PERF_DATA: data },
             document: {
                 body: {},
                 getElementById(id) {
-                    if (!elements.has(id)) elements.set(id, { textContent: '', innerHTML: '', style: {} });
+                    if (!elements.has(id)) elements.set(id, element());
                     return elements.get(id);
                 },
-                createElement() {
-                    return { getContext: () => ({ measureText: s => ({ width: String(s).length * 8 }) }) };
-                },
+                createElement: element,
             },
             getComputedStyle: () => ({ fontFamily: 'sans-serif' }),
         };
@@ -108,8 +113,10 @@ try {
         return elements;
     }
     const historical = JSON.parse(JSON.stringify(dataContext.window.CAPSID_PERF_DATA));
-    const oldPoint = historical.points[historical.points.length - 1];
-    delete oldPoint.verification;
+    // Use the actual legacy record, not the newly appended accepted snapshot.
+    const oldPoint = historical.points.find(point => point.verification?.status !== 'verified');
+    assert.ok(oldPoint, 'the retained historical observation is required');
+    historical.points = [oldPoint];
     let elements = render(historical);
     assert.match(elements.get('nav-meta').textContent, /unverified/);
     assert.match(elements.get('method-card').innerHTML, /checks have not passed/);
@@ -125,7 +132,7 @@ try {
     assert.doesNotMatch(elements.get('nav-meta').textContent, /unverified/);
     assert.match(elements.get('method-card').innerHTML,
         /href="evidence\/bench\/results\/synthetic%20fixture\/raw.jsonl"/);
-    assert.match(elements.get('verification-note').textContent, /checks passed/);
+    assert.match(elements.get('verification-note').textContent, /Complete archive and protocol replay passed/);
     assert.match(elements.get('budget-table').innerHTML, /cap reached/);
     assert.doesNotMatch(elements.get('budget-table').innerHTML, /largest pool|gap widens|never returns/);
     newPoint.origins = { 'cold-start': { protocol: { httpClient: 'python-http-exact-v1' } } };
@@ -133,6 +140,35 @@ try {
     assert.match(elements.get('warm-note').innerHTML, /C-ABI IPC/);
     assert.match(elements.get('warm-note').innerHTML, /loopback HTTP/);
     assert.doesNotMatch(elements.get('warm-chart').innerHTML, /curl floor|unresolved/);
+
+    // Current packed evidence and user selection exercise the actual page,
+    // using committed generated assets without inventing raw-file links.
+    const current = JSON.parse(JSON.stringify(dataContext.window.CAPSID_PERF_DATA));
+    const acceptedIndex = current.points.findIndex(point => point.verification?.status === 'verified');
+    const historicalIndex = current.points.findIndex(point => point.verification?.status !== 'verified');
+    assert.ok(acceptedIndex >= 0 && historicalIndex >= 0);
+    elements = render(current);
+    const selector = elements.get('record-select');
+    assert.equal(selector.children.length, current.points.length);
+    assert.equal(selector.value, String(acceptedIndex));
+    assert.match(elements.get('nav-meta').textContent, /dev snapshot/);
+    assert.match(elements.get('release-context').innerHTML, /no matching complete performance measurement/);
+    const packedLinks = () => elements.get('method-card').innerHTML;
+    const parts = dataContext.window.CAPSID_PERF_ARCHIVES.bundles.flatMap(bundle => bundle.parts);
+    assert.equal((packedLinks().match(/class="archive-download"/g) || []).length, parts.length);
+    for (const part of parts) {
+        const href = part.path.replace(/^perf-site\//, '').split('/').map(encodeURIComponent).join('/');
+        assert.ok(packedLinks().includes(`href="${href}"`), part.path);
+    }
+    assert.match(packedLinks(), /href="evidence-index.json"/);
+    assert.doesNotMatch(packedLinks(), /href="evidence\/bench\/results\//);
+    selector.value = String(historicalIndex);
+    selector.onchange();
+    assert.match(elements.get('nav-meta').textContent, /unverified/);
+    assert.doesNotMatch(packedLinks(), /archive-download|href="evidence\//);
+    selector.value = String(acceptedIndex);
+    selector.onchange();
+    assert.equal((packedLinks().match(/class="archive-download"/g) || []).length, parts.length);
 } finally {
     fs.rmSync(work, { recursive: true, force: true });
 }
