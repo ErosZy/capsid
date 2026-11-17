@@ -1,5 +1,9 @@
 # H3 v2 reference app
 
+> Reviewed 2026-11-17 against the pinned beta.2 fixture. Commands below run in
+> this directory; use npm.cmd on Windows. Prepare the complete test dependencies
+> using the [source-build guide](../../docs/building.md) before configuring CMake.
+
 This directory pins the H3 version used by the Capsid Runtime compatibility suite. Install dependencies and generate the self-contained ESM:
 
 ```sh

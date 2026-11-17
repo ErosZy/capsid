@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { archivedQualification } from "./documentation_archive.mjs";
@@ -28,6 +29,10 @@ const documentPaths = [
   "ROADMAP.md",
   "CONTRIBUTING.md",
   "SECURITY.md",
+  "bench/README.md",
+  "bench/SPEC.md",
+  "bench/perf-evidence.md",
+  "perf-site/README.md",
   ...await markdownFiles("docs"),
   ...await markdownFiles("examples"),
 ].map((value) => value.split(path.sep).join("/")).sort();
@@ -50,6 +55,27 @@ for (const relativePath of documentPaths) {
     ),
   );
 }
+
+// Mixed current-reference/journal pages were migrated without rewriting the
+// captured source. Keep the original frozen contract checks against exact bytes,
+// while current pages describe the delivered release rather than old M1 status.
+const sourceSnapshots = new Map();
+const migration = JSON.parse(await readFile(
+  path.join(root, "docs/history/archives/2026-11-17/index.json"), "utf8"));
+assert.equal(migration.schema, 1, "known historical-document migration schema");
+for (const snapshot of migration.snapshots) {
+  const target = path.resolve(root, snapshot.path);
+  assert.ok(target.startsWith(path.join(root, "docs/history/archives/2026-11-17") + path.sep),
+    "historical source stays in its inventoried archive");
+  assert.ok(documents.has(snapshot.originalPath) && !sourceSnapshots.has(snapshot.originalPath),
+    "one historical source per maintained entry page");
+  const bytes = await readFile(target);
+  assert.equal(bytes.length, snapshot.bytes, "historical source length is exact");
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), snapshot.sha256,
+    "historical source bytes were not rewritten");
+  sourceSnapshots.set(snapshot.originalPath, bytes.toString("utf8").replace(/\r\n/g, "\n"));
+}
+assert.equal(sourceSnapshots.size, 6, "all six mixed journals retain captured source");
 
 function localLinks(relativePath, content) {
   const links = [];
@@ -149,7 +175,7 @@ for (const permissionName of Object.keys(capabilityManifest.permissions)) {
 }
 
 for (const requiredFragment of [
-  "> **Status**: `0.2.2`, ABI v7.",
+  "> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta.2`. Public C ABI v7.",
   "cmake --install build-release",
   "<capsid/runtime.hpp>",
   "When `egress_policy == NULL`, all egress Fetch requests are denied.",
@@ -172,8 +198,8 @@ for (const [documentName, content] of [
   ["SECURITY.md", securityPolicy],
 ]) {
   assert.ok(
-    content.includes("`0.2.2`"),
-    `${documentName} does not state the current release status`,
+    content.includes("`0.2.2`") && content.includes("`0.3.0-beta.2`"),
+    `${documentName} must distinguish stable from the experimental prerelease`,
   );
 }
 assert.ok(
@@ -251,9 +277,10 @@ for (const [documentName, content, requiredFragments] of [
     ],
   ],
 ]) {
+  const contractContent = sourceSnapshots.get(documentName) ?? content;
   for (const fragment of requiredFragments) {
     assert.ok(
-      content.includes(fragment),
+      contractContent.includes(fragment),
       `${documentName} is missing the frozen platform contract: ${fragment}`,
     );
   }
@@ -290,6 +317,39 @@ for (const staleFragment of [
     !currentDocs.includes(staleFragment),
     `current documentation contains stale fragment: ${staleFragment}`,
   );
+}
+
+const currentStatus = JSON.parse(await readFile(path.join(root, "docs/current-status.json"), "utf8"));
+const profileV2 = JSON.parse(await readFile(path.join(root, "tests/wpt/workerd-default-profile-v2.json"), "utf8"));
+assert.equal(currentStatus.developmentBranch, "dev/v0.3.0");
+assert.equal(currentStatus.prerelease.tag, "v0.3.0-beta.2");
+assert.equal(currentStatus.runtime.publicAbi, 7);
+assert.equal(currentStatus.runtime.defaultWireVersion, 3);
+assert.equal(currentStatus.conformance.referenceProfile, profileV2.id);
+assert.deepEqual(currentStatus.conformance.rawFailingFiles.map(value => value.path),
+  profileV2.conflicts.map(value => value.path));
+assert.equal(currentStatus.qualification.ordinarySuitePassed, false);
+assert.equal(currentStatus.qualification.standardsConformanceClaimed, false);
+assert.equal(currentStatus.performance.publishedBetaPerformanceMeasured, false,
+  "the older measured snapshot is not relabeled as beta.2");
+assert.ok(documents.get("docs/conformance.md").includes("workerd-default-profile-v2.json"));
+assert.ok(documents.get("docs/host-integration.md").includes("capsid_worker_channel_confirm"));
+
+const coverage = JSON.parse(await readFile(path.join(root, "docs/documentation-coverage.json"), "utf8"));
+assert.equal(coverage.schema, 1);
+const coveredDocs = coverage.documents.filter(value => value.path.startsWith("docs/") && value.path.endsWith(".md"));
+assert.deepEqual(coveredDocs.map(value => value.path).sort(),
+  documentPaths.filter(value => value.startsWith("docs/")).sort(), "every docs page has a review disposition");
+for (const document of coverage.documents) {
+  assert.ok(["current-reference", "historical-plan-or-journal", "immutable-evidence", "release-history"].includes(document.kind));
+  assert.equal(document.reviewed, true, `${document.path}: review is incomplete`);
+  assert.ok(["exact-bytes", "canonical-lf-text"].includes(document.hashMode),
+    `${document.path}: known coverage digest semantics`);
+  const bytes = await readFile(path.join(root, document.path));
+  const input = document.hashMode === "exact-bytes" ? bytes :
+    Buffer.from(bytes.toString("utf8").replace(/\r\n/g, "\n"), "utf8");
+  assert.equal(createHash("sha256").update(input).digest("hex"), document.sha256,
+    `${document.path}: coverage data is stale`);
 }
 
 console.log(

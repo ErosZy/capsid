@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Capsid — Performance</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2334d399'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='15' font-weight='800' text-anchor='middle' fill='%2306060a'%3EC%3C/text%3E%3C/svg%3E">
-<meta name="description" content="Capsid performance record: throughput, cold start, and memory across releases, measured with a frozen protocol on dedicated hardware.">
+<meta name="description" content="Source-bound Capsid performance: accepted development-snapshot data, complete archived evidence, explicit release boundaries and preserved historical observations.">
 <style>
   :root {
     --bg: #09090b;
@@ -115,6 +115,13 @@
   }
   .tag b { color: var(--text); font-weight: 600; }
   .tag.live { background: var(--brand-bg); border-color: var(--brand-border); color: var(--brand); }
+
+  .record-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+  .record-controls label { color: var(--text); font-weight: 600; }
+  .record-controls select { max-width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: 13px var(--font); }
+  .archive-list { padding-left: 20px; margin-top: 12px; }
+  .archive-list li { margin-bottom: 14px; }
+  .archive-list .digest { display: block; overflow-wrap: anywhere; font: 11px var(--mono); color: var(--text-3); }
 
   /* ---------- kpi cards ---------- */
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -272,10 +279,16 @@
     </div>
   </noscript>
 
-  <div class="callout" id="verification-note" role="status" style="margin-top:24px">
-    <b>Historical observation — unverified.</b> This point has not passed the
-    current archive, provenance, and protocol checks. Treat the displayed
-    numbers as historical observations; a verified 0.3.0 point is still pending.
+  <div class="callout" id="release-context" role="status" style="margin-top:24px">
+    Release and measured-source context is loading. Stable and experimental
+    release status are separate from a measured development snapshot.
+  </div>
+  <div class="record-controls">
+    <label for="record-select">Measured record</label>
+    <select id="record-select" aria-describedby="verification-note"></select>
+  </div>
+  <div class="callout" id="verification-note" role="status" style="margin-top:16px">
+    Verification status is loading. Read source identities before interpreting numbers.
   </div>
 
   <!-- ================= hero ================= -->
@@ -286,8 +299,8 @@
         <h1>Isolation that<br><em>outlasts</em> the hype.</h1>
         <p>Throughput, cold start, and process-level memory under a frozen
            protocol. Each point states its verification status; historical
-           observations remain available while complete release evidence
-           is collected.</p>
+           observations remain available. The latest accepted data is a
+           development snapshot, not a benchmark of published beta.2.</p>
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
@@ -335,14 +348,14 @@
     <div class="card chart">
       <h3>At a trickle — 10 req/s</h3>
       <div class="sub">process-tree PSS after 15 s of gentle traffic on a fresh
-        process, before any load — the at-rest footprint, MB</div>
+        process, before any load — the at-rest footprint, MiB</div>
       <div class="scroll-x" id="mem-low-chart"></div>
       <div class="legend" id="mem-low-legend" style="margin-top:14px;margin-bottom:0"></div>
     </div>
 
     <div class="card chart">
       <h3>Under load — 64 connections</h3>
-      <div class="sub">process-tree PSS stacked by component, MB — lower is better</div>
+      <div class="sub">process-tree PSS stacked by component, MiB — lower is better</div>
       <div class="scroll-x" id="mem-chart"></div>
       <div class="legend" id="mem-legend" style="margin-top:14px;margin-bottom:0"></div>
     </div>
@@ -352,7 +365,7 @@
       <div class="sub">the worker process alone — amortized infrastructure
         (capsid host, nginx, masters) excluded. workerd runs worker and
         server inside one process, so its bar is that whole process — an
-        upper bound on its per-worker cost. MB — lower is better</div>
+        upper bound on its per-worker cost. MiB — lower is better</div>
       <div class="legend" id="wc-legend"></div>
       <div class="scroll-x" id="worker-cost-chart"></div>
     </div>
@@ -389,7 +402,7 @@
     </div>
     <div class="card chart">
       <h3>Runtime memory by bundle size</h3>
-      <div class="sub">PSS, MB — lower is better</div>
+      <div class="sub">PSS, MiB — lower is better</div>
       <div class="scroll-x" id="cold-pss-chart"></div>
     </div>
 
@@ -415,16 +428,20 @@
   <footer>
     <p>Verified points require clean-tree Release measurements from
        <span class="mono">bench/cold-start.sh</span>,
-       <span class="mono">bench/qps-lane.sh</span>, and
+       <span class="mono">bench/qps-lane.sh</span>,
+       <span class="mono">bench/density-lane.sh</span>, and
        <span class="mono">bench/collect-perf-point.py</span>. Each point
        carries measured source and binary identities, a machine fingerprint,
        and revalidated archive digests. Historical observations without
        complete evidence are marked unverified. Evidence files for verified
-       points are included in this site.</p>
+       points are included in this site as complete hashed transports.
+       Quiet WSL guest windows do not prove physical Windows-host exclusivity.</p>
   </footer>
 </div>
 
 <script src="data.js"></script>
+<script src="status.js"></script>
+<script src="archive-index.js"></script>
 <script>
 "use strict";
 
@@ -459,9 +476,28 @@ var WL = { "matrix-json-1k": "JSON 1 KiB", "matrix-json-16k": "JSON 16 KiB", "st
 
 var DATA = window.CAPSID_PERF_DATA;
 var PTS = (DATA && DATA.points) || [];
-var P = PTS.length ? PTS[PTS.length - 1] : null;
-var VERIFIED = !!(P && P.verification && P.verification.status === "verified" &&
-  P.verification.contract === "capsid-perf-lane-v1");
+var STATUS = window.CAPSID_SITE_STATUS;
+var ARCHIVES = window.CAPSID_PERF_ARCHIVES;
+var POINT_INDEX = PTS.length - 1;
+var acceptedDate = "";
+for (var pi = 0; pi < PTS.length; pi++) {
+  if (isVerified(PTS[pi]) && PTS[pi].date >= acceptedDate) {
+    POINT_INDEX = pi;
+    acceptedDate = PTS[pi].date;
+  }
+}
+var P = null;
+var VERIFIED = false;
+
+function isVerified(point) {
+  return !!(point && point.verification && point.verification.status === "verified" &&
+    point.verification.contract === "capsid-perf-lane-v1");
+}
+function pointLabel(point) {
+  if (isVerified(point) && !(point.git && point.git.tag))
+    return point.version + " dev snapshot · " + String(point.git && point.git.commit || "").slice(0, 8);
+  return point.release + (isVerified(point) ? "" : " · historical / unverified");
+}
 
 /* ============ helpers ============ */
 function $(id) { return document.getElementById(id); }
@@ -489,20 +525,47 @@ function stacksOf(cells) {
   return out;
 }
 
+/* ============ release and record scope ============ */
+function renderReleaseContext() {
+  if (!STATUS) {
+    $("release-context").textContent = "Release metadata unavailable. Do not infer a release benchmark from these numbers.";
+    return;
+  }
+  var s = STATUS;
+  $("release-context").innerHTML = "<b>Release status:</b> stable " +
+    '<a href="' + esc(s.stable.url) + '">' + esc(s.stable.tag) + "</a>; experimental " +
+    '<a href="' + esc(s.prerelease.url) + '">' + esc(s.prerelease.tag) + "</a>." +
+    " Latest accepted local measurement: <b>" + esc(s.performance.displayLabel) + "</b>, " + esc(s.performance.date) + "." +
+    (s.performance.publishedBetaPerformanceMeasured ? "" :
+      " <b>Published beta.2 has no matching complete performance measurement.</b>") +
+    " The archival v0.3.0 label is not a stable-release claim. " +
+    '<a href="https://github.com/ErosZy/capsid/blob/dev/v0.3.0/docs/current-status.md">Sources and limits</a>' +
+    " · status captured " + esc(s.asOfUTC.slice(0, 10)) + ".";
+}
+function renderRecordSelector() {
+  var select = $("record-select");
+  for (var i = PTS.length - 1; i >= 0; i--) {
+    var option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = pointLabel(PTS[i]) + " · " + PTS[i].date;
+    select.appendChild(option);
+  }
+  select.value = String(POINT_INDEX);
+  select.onchange = function () { selectPoint(parseInt(select.value, 10)); };
+}
+
 /* ============ hero ============ */
 function renderHero() {
-  if (VERIFIED) {
-    $("verification-note").textContent = "Archive and protocol checks passed. Source, binary identities, and raw evidence are listed below.";
-  }
+  $("verification-note").textContent = VERIFIED ?
+    "Selected record: " + pointLabel(P) + ". Complete archive and protocol replay passed; source, binary identities and raw evidence follow. This is not release qualification." :
+    "Selected historical record — unverified. The current complete archive/provenance contract has not passed for this point. Do not infer a qualified release trend or paired gain.";
   if (P && P.notes) $("verification-note").textContent += " " + P.notes;
   var m = (P && P.machine) || {};
   var cpu = (m.cpu || "").replace(/\(R\)|\(TM\)/g, "").trim();
   cpu = cpu.split(" ").slice(-1)[0] || "—";
   var lane = (m.uname || "").indexOf("WSL2") >= 0 ? "WSL2" : "Linux";
   var tags = [
-    [P ? P.release + (P.git && P.git.tag ? "" :
-        " · commit " + String(P.git && P.git.commit || "").slice(0, 8))
-      : "—", VERIFIED ? "verified measurement point" : "unverified historical observation", VERIFIED],
+    [P ? pointLabel(P) : "—", VERIFIED ? "verified measured source, not necessarily a release" : "unverified historical observation", VERIFIED],
     [P ? P.date : "—", VERIFIED ? "measured on" : "recorded date; unverified", false],
     [VERIFIED ? "Verified archive" : "Unverified observation", "evidence status", VERIFIED],
     [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", false]
@@ -511,10 +574,7 @@ function renderHero() {
     return '<span class="tag' + (t[2] ? " live" : "") + '" title="' +
            esc(t[1]) + '"><b>' + esc(t[0]) + "</b></span>";
   }).join("");
-  $("nav-meta").textContent = P ? P.release +
-    (P.git && P.git.tag ? "" :
-      " · commit " + String(P.git && P.git.commit || "").slice(0, 8)) +
-    " · " + P.date + (VERIFIED ? "" : " · unverified") : "";
+  $("nav-meta").textContent = P ? pointLabel(P) + " · " + P.date : "";
 
   var q = P && P.qps, c = P && P.coldStart;
   var cards = "";
@@ -534,9 +594,9 @@ function renderHero() {
     var b = memoryTotal(q.servingPss, "workerd", q.servingPssMb);
     cards +=
       '<div class="kpi hero-kpi"><div class="k-label">Memory @ 64 conns</div>' +
-      '<div class="k-value">' + fmt(a, 1) + '<small>MB PSS</small></div>' +
+      '<div class="k-value">' + fmt(a, 1) + '<small>MiB PSS</small></div>' +
       '<div class="k-sub"><b>' + fmt(b / a, 0) + '× lighter</b> than workerd\u2019s ' +
-      fmt(b, 1) + ' MB in the loaded sampling window; throughput differs</div></div>';
+      fmt(b, 1) + ' MiB in the loaded sampling window; throughput differs</div></div>';
   }
   if (c && c.cells) {
     var bc = null;
@@ -735,7 +795,7 @@ function rk(st, role) {
 }
 
 /* Prefer the measured whole-tree total: individually rounded roles can
-   differ by 0.1 MB. Older observations may only have component records. */
+   differ by 0.1 MiB. Older observations may only have component records. */
 function memoryTotal(sp, stack, totals) {
   if (totals && typeof totals[stack] === "number" && isFinite(totals[stack]) && totals[stack] > 0)
     return totals[stack];
@@ -785,11 +845,11 @@ function memStackedChart(sp, chartId, legendId, measuredTotals) {
     out += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[s2] || s2) + "</text>";
     if (broken && s2 === "workerd") {
       var bw = plot;
-      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + bw + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC.proc || "#888") + '" opacity="0.45"><title>workerd: ' + fmt(myTot, 1) + " MB (clipped; axis scaled to the other stacks)</title></rect>";
+      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + bw + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC.proc || "#888") + '" opacity="0.45"><title>workerd: ' + fmt(myTot, 1) + " MiB (clipped; axis scaled to the other stacks)</title></rect>";
       var bx = left + plot * 0.86, by1 = y0 + 9, by2 = y0 + rowH - 13;
       out += '<line x1="' + (bx - 5) + '" y1="' + by2 + '" x2="' + (bx + 5) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
       out += '<line x1="' + (bx + 4) + '" y1="' + by2 + '" x2="' + (bx + 14) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
-      out += '<text class="v" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 - 3) + '">' + fmt(myTot, 1) + " MB</text>";
+      out += '<text class="v" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 - 3) + '">' + fmt(myTot, 1) + " MiB</text>";
       out += '<text class="vw2" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 + 13) + '">clipped \u00b7 ' + fmt(myTot / mx, 0) + "\u00d7 axis</text>";
       return;
     }
@@ -797,10 +857,10 @@ function memStackedChart(sp, chartId, legendId, measuredTotals) {
       var w = Math.max(1, plot * (p.mb / mx));
       var key = rk(s2, p.role);
       if (keys.indexOf(key) < 0) keys.push(key);
-      out += '<rect x="' + cx.toFixed(1) + '" y="' + (y0 + 10) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC[key] || "#888") + '"><title>' + esc(RL[key] || p.role) + ": " + fmt(p.mb, 1) + " MB</title></rect>";
+      out += '<rect x="' + cx.toFixed(1) + '" y="' + (y0 + 10) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC[key] || "#888") + '"><title>' + esc(RL[key] || p.role) + ": " + fmt(p.mb, 1) + " MiB</title></rect>";
       cx += w;
     });
-    out += '<text class="v" x="' + (cx + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(myTot, 1) + " MB</text>";
+    out += '<text class="v" x="' + (cx + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(myTot, 1) + " MiB</text>";
   });
   out += "</svg>";
   $(chartId).innerHTML = out;
@@ -904,7 +964,7 @@ function renderBudget(sp, spLow) {
   var cap = measured
     ? "observed final pools under 2048 MiB — final PSS in parentheses; cap-reached entries are lower bounds"
     : "floor((2048 − " + fmt(host, 1) +
-      " MB host) ÷ cold worker PSS) — theoretical ceiling";
+      " MiB host) ÷ cold worker PSS) — theoretical ceiling";
   el.innerHTML = head + "</tbody></table>" + '<div class="tbl-cap">' + cap + "</div>" +
     (measured ? '<div class="footnote" style="margin-top:12px">' +
       (VERIFIED ? "Cold and warm rows have separate per-worker coverage records. " :
@@ -935,14 +995,14 @@ function renderMem() {
         "several times more requests than Capsid in the same window — ";
     var msg = "<b>Density is the product.</b> " + phase +
       "Capsid's full serving path — one host plus one <b>isolated tenant " +
-      "worker</b> — holds <span class=\"hl\">" + fmt(ca, 1) + " MB</span> " +
+      "worker</b> — holds <span class=\"hl\">" + fmt(ca, 1) + " MiB</span> " +
       "resident: " + fmt(cw / ca, 1) + "× less than workerd's single " +
-      "process (" + fmt(cw, 1) + " MB).";
+      "process (" + fmt(cw, 1) + " MiB).";
     if (spc.php) {
       var ph = memoryTotal(spc, "php", totals);
       msg += ph < ca
-        ? " The php-fpm pool sits at " + fmt(ph, 1) + " MB."
-        : " The php-fpm pool is heavier at " + fmt(ph, 1) + " MB — and " +
+        ? " The php-fpm pool sits at " + fmt(ph, 1) + " MiB."
+        : " The php-fpm pool is heavier at " + fmt(ph, 1) + " MiB — and " +
           "every Capsid tenant is additionally a separate, sandboxable " +
           "process. That is the boundary being measured.";
     }
@@ -952,7 +1012,7 @@ function renderMem() {
   if (cw2 != null) {
     $("mem-callout").innerHTML +=
       " Each additional Capsid tenant adds <b>" + fmt(cw2, 1) +
-      " MB</b> of measured worker PSS.";
+      " MiB</b> of measured worker PSS.";
     var dc = P.density && P.density.capsid && P.density.capsid["warm@10k"];
     var dw = P.density && P.density.workerd && P.density.workerd["warm@10k"];
     if (dc && dw && dc.limit === "budget" && dw.limit === "budget") {
@@ -1014,7 +1074,7 @@ function renderCold() {
   head += '</tr><tr>';
   sizes.forEach(function (z, i) {
     head += '<th scope="col"' + (i ? ' class="gsep"' : "") + '>total ms</th>' +
-            '<th scope="col">ready ms</th><th scope="col">PSS MB</th>';
+            '<th scope="col">ready ms</th><th scope="col">PSS MiB</th>';
   });
   head += "</tr></thead><tbody>";
   var body = "";
@@ -1117,12 +1177,28 @@ function renderMethod() {
   var n = 0;
   for (var k in ev) n++;
   var links = "";
-  if (VERIFIED) {
+  var packed = VERIFIED && ARCHIVES && P.git && ARCHIVES.measurementCommit === P.git.commit;
+  if (packed) {
+    ARCHIVES.bundles.forEach(function (bundle) {
+      links += "<li><b>" + esc(bundle.lane) + "</b> · " + fmt(bundle.files) + " original files · " +
+        fmt(bundle.uncompressedBytes / 1048576, 1) + " MiB restored" +
+        '<span class="digest">Combined gzip SHA-256: ' + esc(bundle.sha256) + "</span>";
+      bundle.parts.forEach(function (part, index) {
+        var name = part.path.replace(/^perf-site\//, "");
+        var href = name.split("/").map(function (segment) { return encodeURIComponent(segment); }).join("/");
+        links += '<a class="archive-download" download href="' + esc(href) + '" title="' + esc(name) + '">Download ' +
+          esc(bundle.lane) + (bundle.parts.length > 1 ? " part " + (index + 1) + "/" + bundle.parts.length : "") +
+          " (" + fmt(part.bytes / 1048576, 1) + " MiB)</a>" +
+          '<span class="digest">' + esc(part.sha256) + "</span>";
+      });
+      links += "</li>";
+    });
+  } else if (VERIFIED) {
     Object.keys(ev).sort().forEach(function (name) {
       if (name.indexOf("bench/results/") !== 0 || /(^|\/)\.\.(\/|$)/.test(name)) return;
       var href = name.split("/").map(function (part) { return encodeURIComponent(part); }).join("/");
       links += '<li><a href="evidence/' + esc(href) + '">' + esc(name) +
-        '</a> <span class="mono">' + esc(ev[name]) + '</span></li>';
+        '</a> <span class="digest">' + esc(ev[name]) + "</span></li>";
     });
   }
   /* dl rows: label column fixed, value ellipsized to one line with the
@@ -1169,18 +1245,28 @@ function renderMethod() {
     "</div>" +
     (VERIFIED ? '<div class="footnote" style="margin-top:20px">Evidence for this point: ' + n +
       ' archived files rehashed before staging. Binary identities are recorded in each lane manifest.</div>' +
-      '<details style="margin-top:12px"><summary>Archive files and SHA-256</summary>' +
-      '<div class="scroll-x"><ul>' + links + '</ul></div></details>' :
+      (packed ? '<p class="footnote">Complete compressed transport; restore into a new scratch root, then replay the ordinary validators. ' +
+        '<a href="evidence-index.json">Full original file/digest index</a> · <a href="archive-index.json">Transport/part index</a> · ' +
+        '<a href="https://github.com/ErosZy/capsid/blob/dev/v0.3.0/perf-site/README.md">Replay instructions</a></p>' : "") +
+      '<details style="margin-top:12px"><summary>Archive downloads and SHA-256</summary>' +
+      '<ul class="archive-list">' + links + "</ul></details>" :
       '<div class="footnote" style="margin-top:20px">Historical observation: the current provenance and ' +
       'archive checks have not passed. Historical digest labels in data.js are not verified archive links.</div>');
 }
 
 /* ============ boot ============ */
-renderHero();
-renderQps();
-renderMem();
-renderCold();
-renderMethod();
+function selectPoint(index) {
+  P = PTS[index] || null;
+  VERIFIED = isVerified(P);
+  renderHero();
+  renderQps();
+  renderMem();
+  renderCold();
+  renderMethod();
+}
+renderReleaseContext();
+renderRecordSelector();
+selectPoint(POINT_INDEX);
 </script>
 </body>
 </html>

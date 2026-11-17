@@ -1,0 +1,10 @@
+{
+  "files": {
+    "candidate.json": "7323d02241c4dd27731935a8c3bcb6f87ae7eac41a23f29c4915dec684ee9c89",
+    "goal-ledger-at-capture.json": "c9ad3cbbdd6aee3dfbb4be24cd954c025b7cf44ce83deb59cffbb3c4dfb14b4e",
+    "hosted-release-raw.json": "524e120a0584360c994f886c3abdc71b0fb042d3ffdeb7bf048b90b054bd8e84",
+    "hosted-windows-gate.json": "0fb805f75c5bd62c99c606a5f3aeb075c0c5230f660fae65ce17c52aadf18909",
+    "qualification-before.md": "9ac39c8a582bcc710d893e317f23900bb456c639ca77993b3287ab85d87cb97c",
+    "root-owner-selection.json": "b739df1b8053902fab896a88bf68892ccf95dd239e32d124a1da13c258f10d23"
+  }
+}

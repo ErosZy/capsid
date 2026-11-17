@@ -1,5 +1,8 @@
 # Elysia compatibility
 
+> Source/profile reviewed 2026-11-17. The exact pinned app configuration below
+> is part of the beta.2 matrix; see [current status](../current-status.md).
+
 ## Status
 
 Capsid Runtime validates pinned **Elysia 1.4.29** as an ordinary bundle. The
@@ -14,13 +17,14 @@ framework-specific branch.
 ## Build and verification
 
 ```sh
-npm ci --ignore-scripts --prefix vendor/txiki.js
-npm ci --ignore-scripts --prefix examples/elysia-reference
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-cmake --build build --target test-elysia-worker-driver
-ctest --test-dir build -L elysia --output-on-failure
+# Prepare every locked framework dependency and configure build-dev using building.md.
+cmake --build build-dev --target capsid-worker test-elysia-worker-driver
+ctest --test-dir build-dev --no-tests=error -L elysia --output-on-failure
 ```
+
+Follow the complete [source-build prerequisites](../building.md); installing only
+Elysia leaves the other declared framework test inputs missing. Use npm.cmd and
+the native toolchain on Windows. These commands are focused tests, not full CI.
 
 The differential suite covers the same vector categories as the Hono suite,
 including multipart `FormData`, JSON/text bodies, streaming, middleware,

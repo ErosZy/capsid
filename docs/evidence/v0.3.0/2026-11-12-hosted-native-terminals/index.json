@@ -1,0 +1,23 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-12T04:25:30.090520+00:00",
+  "snapshotCommit": "45bb9f47d7955a0ccd1e2297a8d422aae2809eea",
+  "currentLedgerSHA256": "ef63300985567840ef6e969ce08251fd452ed5dc3d466a82fa81d61beba43c0e",
+  "qualificationDocumentSHA256": "5e9a43a7692378947ccd1c366f9f9e05dd3c4d55e6c885dd3120d57e4688a9c1",
+  "files": {
+    "all-prior-hosted-job-terminal-states.json": "81fd7b9ac8a3263854235e076f6fdc7b0fe35255cb654e4924feb2541daad279",
+    "checkpoint.json": "71bc4ab4b9c11be0c21bb5afb20b482f36856c2fbb6400d8f77fd08ef36efcb9",
+    "goal-ledger-before.json": "cb62d6121f3072b10833eb1685c616385fc98874f7c8fcd020274fac1e617657",
+    "qualification-before.md": "1c8dac4058f388a36ace22383f11f8d67d8f50ad9f9f65f676f680d75796663b",
+    "tsan-job.log": "e3a7b0c5bfa693dd0b35d6d41f1812de9e2748596cda62cc572fb9c772e44f12",
+    "tsan-terminal.json": "473d95335f094e76c6aeaaf91c208de86f106b2b58fe0b2c80f7554753ad21a9",
+    "windows-actual-codec-metadata-reference.json": "4a56504cac61babf3595d61b86c23dac694ed50e2a4630f52dc547b08005afcb",
+    "windows-failed-websocket_http_codec_metadata_reference.txt": "aa59de638c885299667cddc4ae1d535c5c6853c3616d2c17049f23fae2c7fadf",
+    "windows-failed-workerd_ws_gate_archive_controls.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "windows-gate-job.log": "e6b62c46be7de9a8bf94317fac9c646e272f4859f6409ad8d14a17211230407d",
+    "windows-gate-junit.xml": "b714dd8b6030e3279ba52a8a1b5c549922ce40aac499558d5501cefe2e2a49aa",
+    "windows-gate-original.zip": "cda5cd480241bc1770877a731cd3fdad4331f1752fbd4de258eb69456662051c",
+    "windows-gate-terminal.json": "70d704ae63f1c74980b07360778cf60eb449fc97afd37161e8067aa803ac59ff"
+  },
+  "fullV030GoalComplete": false
+}

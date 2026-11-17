@@ -1,5 +1,8 @@
 # Hono compatibility
 
+> Source/profile reviewed 2026-11-17. This is the pinned beta.2 scope, not a
+> promise for every Hono release. See [current status](../current-status.md).
+
 ## Status
 
 Capsid Runtime validates pinned **Hono 4.12.32** as an ordinary bundle. The exact version and integrity are pinned by `examples/hono-reference/package.json` and the lockfile; this conclusion does not automatically cover other 4.x or future versions.
@@ -9,13 +12,14 @@ All three entry bundles must be single-file ESM with zero external imports and m
 ## Build and verification
 
 ```sh
-npm ci --ignore-scripts --prefix vendor/txiki.js
-npm ci --ignore-scripts --prefix examples/hono-reference
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-cmake --build build --target test-hono-worker-driver test-module-denial
-ctest --test-dir build -L hono --output-on-failure
+# First prepare all locked dependency trees and configure build-dev as in building.md.
+cmake --build build-dev --target capsid-worker test-hono-worker-driver test-module-denial
+ctest --test-dir build-dev --no-tests=error -L hono --output-on-failure
 ```
+
+Use the complete [source-build prerequisites](../building.md), not just one
+framework's npm tree: the test configuration also declares the other locked
+framework fixtures. Windows uses npm.cmd and the native toolchain in that guide.
 
 The differential suite contains 68 deterministic vectors, 11 of which have independent absolute assertions. The reference side calls unmodified Hono, while the runtime side runs through a real `capsid-worker`, FetchRPC, and the same application logic.
 
@@ -40,7 +44,7 @@ Applications can bundle the Web-standard Hono Core paths above into an ESM and e
 Explicit exclusions:
 
 - `@hono/node-server`, Node built-ins, and Node/Bun/Deno/Cloudflare adapters;
-- HTTP/WebSocket server and upgrade APIs;
+- framework-specific server/Upgrade adapters outside this pinned Core matrix;
 - static-file adapter that depends on the filesystem;
 - Cloudflare bindings, `ExecutionContext`, cache, Durable Object;
 - context storage/`AsyncLocalStorage`;

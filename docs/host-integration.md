@@ -1,5 +1,9 @@
 # Host Embedding and Integration Specification
 
+> Reviewed against the v0.3.0-beta.2 public headers/source on 2026-11-17.
+> ABI v7 remains frozen; the additive v4 APIs below do not imply ABI v8.
+> [Current status](current-status.md) separates this API baseline from measured snapshots.
+
 This document is for gateways, servers, worker pools, and other embedders that link
 `libcapsid_runtime.a` directly. It combines the embedding interface (C ABI) with the
 integration specification (threading/event loop/backpressure/ABI upgrades).
@@ -38,14 +42,27 @@ frozen config struct:
 
 ```c
 capsid_protocol_options options;
-capsid_protocol_options_init(&options, sizeof(options));
-options.wire_version = 4;              /* v4 carriage */
+capsid_result r = capsid_protocol_options_init(&options, sizeof(options));
+/* Check r before proceeding; config was initialized separately. */
+options.wire_version = 4;
+options.capabilities = CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL |
+    CAPSID_PROTOCOL_CAP_UPGRADE |
+    CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2 |
+    CAPSID_PROTOCOL_CAP_CHANNEL_CONFIRM |
+    CAPSID_PROTOCOL_CAP_CHANNEL_CLOSE_FINAL;
 capsid_worker *worker = NULL;
-capsid_result r = capsid_worker_spawn_ex(&config, &options, &worker);
+r = capsid_worker_spawn_ex(&config, &options, &worker);
 /* after READY: */
 capsid_protocol_info info;
 capsid_worker_get_protocol_info(worker, &info, sizeof(info));
 ```
+
+The snippet is an integration fragment, not a complete pump. Check every
+result, load the bundle, and wait for READY before querying/using the negotiated
+capability intersection. Wire version 4 with zero capabilities is carriage
+only, not permission to call channel APIs. Add optional HALF_CLOSE,
+FETCH_UPGRADE or CONNECTION_LIFETIME only when the Host implements their
+contracts and verifies the effective bits.
 
 `options == NULL` is exactly the legacy v3 entry. Every option field is
 validated **before** any process, socketpair, or handle is created, so
@@ -215,9 +232,10 @@ Later calls retain that same interval. An unresponsive process is terminated at
 the next empty-read check after the interval ends. Keep flushing and reading so
 request cancellation and cleanup can complete.
 
-`capsid_worker_destroy()` is a bounded reclamation path that escalates from graceful
-shutdown to SIGTERM and SIGKILL. The host should not rely on the application bundle
-exiting on its own.
+`capsid_worker_destroy()` is a bounded reclamation path. POSIX teardown can
+escalate through SIGTERM/SIGKILL; Windows uses its native process termination
+path, not POSIX signal semantics. The Host must not rely on the bundle exiting
+on its own, and a forced destroy is not proof of graceful application shutdown.
 
 ## Network and security configuration
 
@@ -241,9 +259,11 @@ strict sandbox and controlled cgroup; benchmark data without strict mode must no
 presented as production isolation evidence.
 
 `capsid_worker_request_memory_metrics()` is a diagnostic interface that walks the
-QuickJS heap. It is not part of regular telemetry sampling, is not on the request hot
-path, and is not exposed to JavaScript. Process RSS/PSS should be read from the worker
-PID rather than measuring only the gateway or repeatedly spreading the whole gateway
+QuickJS heap. It is not regular telemetry, is not on the request hot path, and is
+not exposed to JavaScript. If cancellation reclamation is already queued, the
+reply waits for that ordinary reclaim boundary; this does not force GC or turn
+heap counters into process memory. Read RSS/PSS from the owned worker/service
+forest rather than measuring only the gateway or spreading one gateway's memory
 across every worker.
 
 ## ABI version policy
@@ -257,8 +277,10 @@ The current ABI is v7. The compatibility rules are:
 - Extending an existing struct requires an ABI version bump unless that struct defined
   both-sides-verified size negotiation from the start;
 - Existing exported symbols are not removed or renamed within the same ABI version;
-- The library initializer may only write within the range allowed by the caller's
-  `struct_size`;
+- Frozen v7 structs require their full declared allocation and matching `*_init()`;
+  separately sized descriptors/views honor the explicit caller size and never
+  write outside that range. Do not assume an uninitialized `struct_size` controls
+  the ordinary frozen config initializer;
 - The library must pass the `abi_v7_current_header_current_library` test compiled and
   linked against the frozen v7 header.
 
@@ -277,7 +299,7 @@ them every entry point answers `CAPSID_PROTOCOL_ERROR` (a plain
 
 | entry point | direction | notes |
 | --- | --- | --- |
-| `capsid_worker_upgrade_begin(w, request_id, channel_id, max_message_bytes)` | host->worker | reserves the pending channel through the registry; the head composition rides the ordinary request path (host wiring: T09) |
+| `capsid_worker_upgrade_begin(w, request_id, channel_id, max_message_bytes)` | host->worker | reserves the pending channel; the next bodyless request carries its Upgrade head; the first-party Host wiring is implemented |
 | `capsid_worker_dial_accept(w, dial_id, channel_id, max_message_bytes, selected_protocol)` | host->worker | assigns the id; wire-validated through the registry before queueing |
 | `capsid_worker_dial_reject(w, dial_id, reason_code, diagnostic)` | host->worker | reason codes 0..9 (contract 3.2 table) |
 | `capsid_worker_channel_send(w, channel_id, data, size, flags)` | host->worker | fragment flags `CAPSID_CHANNEL_FLAG_{START,END,TEXT}`; bytes are copied before return |
@@ -285,9 +307,24 @@ them every entry point answers `CAPSID_PROTOCOL_ERROR` (a plain
 | `capsid_worker_channel_half_close(w, channel_id)` | host->worker | requires the `CAP_HALF_CLOSE` bit |
 | `capsid_worker_channel_close(w, channel_id, code, reason)` | host->worker | code/reason follow the contract close matrix (reason <= 123 bytes) |
 | `capsid_worker_channel_cancel(w, channel_id, reason)` | host->worker | terminal; reason `CAPSID_CANCEL_REASON_*` |
+| `capsid_worker_channel_confirm(w, channel_id, dial_id, kind)` | host->worker | acknowledge dial result, cancelled pending dial or drained transport according to the CONFIRM contract |
+| `capsid_worker_channel_close_ex(w, channel_id, kind, code, reason)` | host->worker | explicit initiated/observed/transport/final kind; FINAL requires its capability |
+| `capsid_worker_channel_close_bytes(w, channel_id, kind, code, reason, reason_size)` | host->worker | counted UTF-8, including permitted embedded NUL; input copied |
+| `capsid_worker_dial_accept_http(w, dial_id, channel_id, max_message_bytes, response)` | host->worker | FETCH_UPGRADE response metadata and an ordinary HTTP fallback body, not constructor-WebSocket ACCEPT |
+
+Upgrade reservation followed by either begin-request variant is bodyless and
+already ended: do not send a request body or call `end_request` again for that
+handshake. A non-101 reply releases the reservation.
+
+With CONFIRM, ACCEPT is provisional until `ACK_DIAL_RESULT` is pumped; no DATA
+may be sent before that barrier. Stop the channel producer and drain/cancel its
+I/O before acknowledging CANCEL or transport close. A queue refusal consumes no
+state; retry only through the normal writable/control-priority pump, not by
+repeating business/deployment requests. Pending-dial confirmation uses channel
+ID zero plus its nonzero dial ID; assigned channels use the reverse.
 
 Events arrive on the ordinary pump as `CAPSID_EVENT_CHANNEL_DIAL`,
-`_DATA`, `_CREDIT`, `_HALF_CLOSE`, `_CLOSE`, `_CANCEL`; the
+`_DATA`, `_CREDIT`, `_HALF_CLOSE`, `_CLOSE`, `_CANCEL`, and `_ACK`; the
 `capsid_event` layout itself is unchanged. Decode with
 `capsid_channel_event_decode(event, &out, caller_size)` (two-way size
 negotiation, `CAPSID_CHANNEL_EVENT_VERSION 1`): `message`/`url`/

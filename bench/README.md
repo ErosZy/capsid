@@ -1,75 +1,102 @@
-# Bench Directory Layout
+# Benchmark Tools, Records and Publication
 
-Everything under `bench/results/` is immutable run evidence referenced by
-[docs/performance-benchmarks.md](../docs/performance-benchmarks.md); it is
-never cleaned up or regenerated.
+Updated 2026-11-17. All three producers are implemented. The latest complete
+accepted local session is `local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
+measured snapshot `485b29b`, not the published beta.2 binary. See
+[current status](../docs/current-status.md) and
+[current performance data](../docs/performance-benchmarks.md).
 
-**The measurement protocol is specified in [SPEC.md](SPEC.md)** — lanes,
-data pipeline, evidence rules, and site conventions. When a script and the
-spec disagree, fix one of them in the same change.
+The normative [SPEC.md](SPEC.md) defines the protocol; [perf-evidence.md](perf-evidence.md)
+defines the sealed record/acceptance contract. Scripts, declarations and test
+fixtures are not measurements by themselves. Immutable evidence is preserved;
+availability/removal at older capture dates remains documented in the history
+rather than being described as still present everywhere.
 
-## Active harness (current release lanes)
+## Active Tools
 
-| Path | Purpose |
+| Path | Responsibility |
 | --- | --- |
-| `loadgen/` | Frozen closed-loop load generator (Go): keep-alive, fixed inflight, exact-body verdicts, warmup/measured phases. Build into `bin/loadgen` via `build.sh`. |
-| `qps-lane.sh` + `qps-lane.py` + `qps_probe.py` + `qps_inputs.py` | Owned five-stack serving producer: managed/strict one-worker pool, exact responses, fresh trickle/loaded forests, recursive PSS, per-round Go identities and sealed dependency provenance. See [QPS producer](perf-evidence.md#qps-producer). |
-| `cold-start.sh` + `cold-start.py` + `cold_probe.py` + `cold-start.cc` | Owned cold-start lane: exact first/warm responses, discarded + measured rounds, recursive stable PSS and sealed contract producer; strict C-ABI source/bytecode vs Node/Deno/workerd. See [cold producer](perf-evidence.md#cold-producer). |
-| `density-lane.sh` | Python-controlled managed/strict density lane: recursive owned-process PSS, proved per-worker cold/warm coverage, bounded final verification and explicit cap status. Formal mode requires build/session metadata; restricted `--observation` output cannot qualify publication. See [archive contract](perf-evidence.md#density-producer). |
-| `density_conditioning.py` + `density_evidence.py` | One-request-per-instance prewarm waves, owned worker dispatch/resume barriers and independent replay of responses, counters, process membership, whole-tree PSS and cleanup. The original 300-second coverage budget and request ceilings remain. |
-| `collect-perf-point.py` | Validates and merges the lanes into `perf-site/data.js` (one append-only point per release; duplicate cells and uncorroborated identities abort). |
-| `bench-apps/` | Reference-stack fixtures for the QPS lane (FastAPI, Flask, PHP Slim with vendored deps). |
-| `build.sh` | Builds `bin/loadgen` (active lanes) and `bin/baseline-gateway` (A/B harness below). |
+| `loadgen/`, `build.sh` | Frozen closed-loop client; exact response bytes, fixed inflight, warm-up and measured phases |
+| `cold-start.sh` / `cold-start.py` / `cold_probe.py` / `cold-start.cc` | Owned strict C-ABI source/bytecode and independent runtime cold probes, discarded + five measured runs, 50 warm requests |
+| `qps-lane.sh` / `qps-lane.py` / `qps_probe.py` / `qps_inputs.py` | Five-stack managed/strict serving producer, fresh trickle then loaded forests, raw rounds, dependency provenance and recursive PSS |
+| `density-lane.sh` / `density-lane.py` / `density_probe.py` | Managed/strict cold/warm pool search, per-instance coverage, PSS, original budgets, explicit cap/budget result |
+| `density_conditioning.py` / `density_evidence.py` | Owned dispatch/resume barriers and independent replay of responses, memberships, counters, cleanup and original request ceilings |
+| `collect-perf-point.py` / `perf_evidence.py` | Complete sealed-lane/point validation and deterministic metric derivation |
+| `perf_archive.py` | Bounded hashed transport restoration; never grants acceptance or repairs a record |
+| `prepare-perf-site.py` | Revalidate complete original evidence and stage charts plus real downloadable archives |
+| `bench-apps/` | Reference QPS applications/dependency fixtures |
 
-On Linux testing configurations with local Go 1.22 or newer, CMake also builds
-the repository `benchmark-loadgen` target as part of ALL, without downloading a
-toolchain or modules. Run the actual short HTTP correctness fixtures and portable
-round rules with:
+The public controllers expose `--help`; formal mode requires actual clean
+build/session metadata and the full declared protocol. `--observation` is
+explicitly restricted and cannot generate a qualifying publication envelope.
+There is no instruction here to hand-author a quiet-session or binary identity
+for an old/dirty build.
+
+## Source and Platform Prerequisites
+
+Use the [source-build guide](../docs/building.md) and exact pinned Node, Deno,
+workerd, Python and reference-stack inputs. Actual process/PSS/Go/protocol
+measurement requires the Linux posture and CPU/resource prerequisites in the
+spec. Windows can run portable models/transport controls, not substitute for
+native Linux measurement or native Windows product qualification.
+
+With the corresponding prepared Linux testing build:
 
 ```sh
 cmake --build BUILD --target benchmark-loadgen
-ctest --test-dir BUILD -R '^benchmark_(loadgen_correctness|qps_control|qps_producer|qps_probe)$' --no-tests=error --output-on-failure
+ctest --test-dir BUILD --no-tests=error --output-on-failure \
+  -R '^benchmark_(loadgen_correctness|qps_control|qps_producer|qps_probe)$'
+
+cmake --build BUILD --target benchmark-cold-start test-benchmark-cold-measurement
+ctest --test-dir BUILD --no-tests=error --output-on-failure \
+  -R '^benchmark_cold_(measurement|tool)$'
 ```
 
-The executable is `BUILD/benchmark-tools/loadgen`. An existing `bench/bin/loadgen`
-is not rewritten by this target; select the new path explicitly. Portable QPS rules and producer preflight
-checks run on Windows too; actual process/PSS/Go tests require Linux. Synthetic
-full-archive tests are explicitly confined to temporary repositories. The
-public producer defaults to five rounds, 5 s warmup + 15 s measurement, 64/64,
-15 s at 10 Hz trickle and managed/strict posture. `--observation` can restrict
-the protocol but produces no publication `lane.json`. Short fixtures, actual
-five-stack smoke and synthetic archives are correctness evidence; the formal
-quiet-session three-lane qualification remains pending.
+These test selections validate tools/fixtures, not a full benchmark session.
+The build-tree clients are `BUILD/benchmark-tools/loadgen` and `BUILD/cold-start`;
+existing `bench/bin/*` programs are not silently rebuilt or selected in their
+place. A missing target/prerequisite or empty selection is a failure, not a
+reason to omit a required gate.
 
-The Linux C-ABI cold probe can now be built from the configured testing tree:
+## Existing Accepted Data and Replay
+
+The current site includes the original three-lane record in compressed,
+hash-indexed transports rather than a 2.74 GB raw Git/Pages payload. Restoring
+those 5123 files and replaying the existing validators is distinct from running
+a SUT again. See [site replay instructions](../perf-site/README.md).
 
 ```sh
-cmake --build BUILD --target benchmark-cold-start test-benchmark-cold-measurement
-ctest --test-dir BUILD -R '^benchmark_cold_(measurement|tool)$' --no-tests=error --output-on-failure
+python3 tests/test_perf_archive.py
+python3 bench/prepare-perf-site.py --repo . --output /path/to/new-site-output
 ```
 
-The resulting probe is `BUILD/cold-start`; select it through `COLD`/`--cold`
-(default `$BUILD_DIR/cold-start`). The portable measurement model also runs on Windows.
-Actual worker/PSS tests require Linux and a host/worker testing configuration.
-The probe verifies exact first/warm responses, public child PID, stable positive
-recursive PSS and failure/cancellation cleanup of its C-ABI worker. This is a
-probe plus an owned controller and archive producer. Formal cold mode requires
-clean measured-build/session metadata and the complete protocol; restricted
-`--observation` runs cannot qualify publication. Actual same-session formal three-lane measurements remain pending.
+At least 8 GiB of scratch space is recommended. Complete archives retain raw
+samples, failure/search probes, discarded cold runs, exact programs, process and
+response evidence, dependency identities and checksums. No part is redacted,
+normalized or resealed to turn a failed run into success.
 
-## A/B evidence harness (exercised by tests)
+The schema-1 collector has one active point per version and historically
+replaces an existing version. This is **not permission to rewrite published
+history**: this update adds the first 0.3.0 record and preserves the earlier
+0.2.x point exactly. Future remeasurement of an already accepted version needs
+a reviewed separate series/schema/archive plan that retains its old result.
+An archival release label with no source tag must be displayed as a development
+snapshot, never as a measured stable/prerelease artifact.
 
-| Path | Purpose |
-| --- | --- |
-| `run-ab.sh` + `evidence.py` + `fake/` + `wrappers/` + `baseline-gateway/` | The A/B evidence harness driven and validated by `tests/test_host_single_worker_ab_evidence.mjs`. Do not modify without updating that test. |
+## Full-Session Requirements
 
-## Conventions
+Keep source/build/binary/tool/fixture identities, strict posture, original CPU
+set, four quiet windows, exact responses, complete round inventories, recursive
+owned-tree PSS and final cleanup together. Do not combine separate sessions,
+count errors as successful work, increase budgets, retry a failed lane until
+green, or promote diagnostic ABBA samples into a whole-session result. Physical
+host exclusivity is not inferred from quiet guest readings.
 
-- Lanes pin every server and the client to `SUT_CPUSET` (4-core protocol).
-- Every run directory records `manifest.txt` (environment, versions,
-  SHA-256 of binaries/fixtures/runner) and a final `sha256sums.txt`;
-  archived under `results/<lane>-v<version>-<date>/` and whitelisted in
-  `.gitignore` (results are ignore-by-default, opt-in by evidence).
-- Superseded session scripts (the v0.2.0 four-stack QPS session and its
-  fixtures) were removed; git history and the recorded artifacts under
-  `results/` preserve the published v0.2.0 tables.
+## A/B Tool Controls
+
+`run-ab.sh`, `evidence.py`, `fake/`, `wrappers/` and `baseline-gateway/` provide
+the older A/B evidence harness exercised by
+`tests/test_host_single_worker_ab_evidence.mjs`. Fake-component controls validate
+the harness and failure detection; they are not product speed measurements.
+A genuine missing perf prerequisite stays an explicit skip, not a performance
+conclusion.

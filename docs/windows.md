@@ -1,6 +1,9 @@
 # Windows Build and Platform Capabilities
 
-> For a cross-platform capability overview and selection guidance, see [Platform Support Overview](platform-support.md).
+> Start with [releases and installation](releases.md), the
+> [PowerShell quick start](getting-started.md#windows-powershell), or the shared
+> [source build guide](building.md). This page covers Windows-specific contracts;
+> [platform support](platform-support.md) compares the systems.
 
 Capsid v0.1.2+ provides Windows x86_64 support: the Runtime static library, `capsid-worker`, `capsid-bytecode-compile`, and the first-party `capsid-host` (`--mode single-worker` / `static-pool`) build natively under MSVC and ship with Releases as `capsid-<version>-windows-x86_64.zip`. This page describes build prerequisites, the capability matrix, and known limitations.
 
@@ -82,17 +85,22 @@ VC runtime companions must come from the matching toolchain directory.
 
 ### Steps
 
+The Release example requires a prepared **clean Git checkout** and the locked
+runtimes above. Use a separate Debug build for an edited working tree; do not
+reset work or bypass provenance checks. The local CTest command below explicitly
+omits the missing-WPT sentinel and is not a substitute for full hosted CI.
+
 ```powershell
 # 1. Dependencies: static OpenSSL and Boost.System/Asio (Boost ≥1.87 is header-only;
 #    boost-asio is a separate port; the Host data plane needs <boost/asio.hpp>)
 vcpkg install openssl c-ares boost-system boost-asio boost-beast --triplet x64-windows-static
 
 # 2. Lock JS dependencies (esbuild)
-npm ci --ignore-scripts --prefix vendor/txiki.js
-npm ci --ignore-scripts --prefix examples/hono-reference
-npm ci --ignore-scripts --prefix examples/itty-router-reference
-npm ci --ignore-scripts --prefix examples/h3-v2-reference
-npm ci --ignore-scripts --prefix examples/elysia-reference
+npm.cmd ci --ignore-scripts --prefix vendor/txiki.js
+npm.cmd ci --ignore-scripts --prefix examples/hono-reference
+npm.cmd ci --ignore-scripts --prefix examples/itty-router-reference
+npm.cmd ci --ignore-scripts --prefix examples/h3-v2-reference
+npm.cmd ci --ignore-scripts --prefix examples/elysia-reference
 
 # 3. Install the locked independent clients, using the full Python 3.12.3
 #    installation and Node 24.14.0 on PATH. The setup verifies package digests.
@@ -113,25 +121,31 @@ cmake -S . -B build -G Ninja `
   -DCAPSID_BUILD_WORKER=ON `
   -DCAPSID_STRICT_WARNINGS=ON `
   -DCAPSID_USE_MIMALLOC=OFF `
+  -DBUILD_TESTING=ON `
   "-DCAPSID_WS_INTEROP_PYTHON=$env:CAPSID_WS_INTEROP_PYTHON" `
   "-DCAPSID_WS_INTEROP_NODE_PACKAGE=$env:CAPSID_WS_INTEROP_NODE_PACKAGE" `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static
+if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
 
-# 5. Build and execute the current native CI profile
+# 5. Build and execute the broad local native profile (without configured WPT)
 cmake --build build --parallel 2
+if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
 ctest --test-dir build --no-tests=error --output-on-failure -E '^wpt_conformance_not_configured$'
+if ($LASTEXITCODE -ne 0) { throw 'CTest failed; preserve its raw reports' }
 
 # 6. Package (the build command does not establish package smoke acceptance)
 cmake --build build --target package   # Produces build/capsid-<version>-windows-x86_64.zip + .sha256
 ```
 
-The current native test failures and package fixture limits are recorded in the
-[takeover audit, section 33](v0.3.0-glm-takeover-review.md#33-2026-10-16-测试入口原生-windows-与仍然失败的验收).
+Use the [testing guide](testing-guide.md) for current validation instructions and
+[release qualification](v0.3.0-current-qualification.md) for the beta's actual
+source-bound results. The [older takeover audit](v0.3.0-glm-takeover-review.md#33-2026-10-16-测试入口原生-windows-与仍然失败的验收)
+retains its historical failures and package-fixture limits, not today's status.
 A successful build or registration check does not establish complete Windows
-WebSocket interoperability. The current profile executes the package gates;
-keep all failed and skipped results visible. Earlier audit profiles that
-excluded four package tests retain their original scope and results.
+WebSocket interoperability. Package tests remain in the native profile; keep all
+failed and skipped results visible. Earlier profiles with package exclusions
+retain only their original evidence scope.
 
 Configuration notes:
 
@@ -186,12 +200,12 @@ Configuration notes:
 - **Multi-shard scenario tests** (`host_static_pool_server_shared_port_lifecycle`, `host_admission_pool_forwards_options`, `host_concurrent_pool_wait`) are registered and run on Windows; single-shard drain scenarios are also registered. Only two m2-group scenarios are not registered because of POSIX dependencies; see "Test coverage differences on Windows" below.
 - **Parent-controlled normal exit**: local modes accept an optional `--stop-fd` pointing to an inherited readable pipe, distinct from `--ready-fd`. Writing any byte or closing the parent's end requests the same normal stop as console events. The Host owns a non-inheritable duplicate and cancels its watcher on startup failure. Active inbound WebSockets receive a 1001 Close and have at most one second to reply before their transport closes; Workers are then stopped and joined. Node `child.kill('SIGTERM')` on Windows terminates the process and does not exercise this normal shutdown path. The test backend uses the explicit parent pipe and still requires exit code 0, no signal, and no forced cleanup.
 - **managed mode**: the Windows build keeps the `--mode managed` CLI entry, but the runtime directly prints "managed coordinator requires Linux strict sandbox" and exits, matching macOS behavior; the coordinator implementation remains Linux-only and is not included in the Windows package. Process snapshots (RSS/CPU) on Windows are provided through `GetProcessMemoryInfo`/`GetProcessTimes` (PSS has no equivalent; RSS is the fallback).
-- **File owner/permission checks** (trusted key store, deployment reads, state directory): Windows has no uid/mode bits, so owner checks are skipped; the boundary is provided by NTFS ACLs, and deployment reads retain the reparse-point (symlink/junction) rejection semantics.
+- **File owner/permission checks**: Windows has no POSIX uid/mode contract. Local `capsid.json` reads do not perform the POSIX `geteuid()` comparison; this must not be generalized into a blanket ownership bypass. The Binding registry has explicit trusted-owner, ACL and reparse checks below. Managed deployment/state paths remain Linux-only; native Windows development is not equivalent production isolation.
 
 ### Binding v1 (Windows)
 
 - **Local Binding development is supported**: `single-worker` and `static-pool` accept `--bindings-root` and run the same production registry scanner, manifest validator, manifest/App intersection, `LOAD_BINDING` ordering, Binding Runtime, and `capsid:binding/*` facade as Linux/macOS.
-- **Registry trust boundary**: Windows rejects reparse points (symlink/junction) and hard links, requires the root/package/file owner to be the current user, rejects Everyone/Users writable ACLs, enforces the 1 MiB manifest / 16 MiB source / 64 MiB aggregate limits, and rechecks identities after every read.
+- **Registry trust boundary**: Windows rejects reparse points (symlink/junction) and hard links, checks root/package/file ownership against the process's trusted owner SIDs, rejects Everyone/Users writable ACLs, enforces the 1 MiB manifest / 16 MiB source / 64 MiB aggregate limits, and rechecks identities after every read. The owner check admits the current process identity and privileged Administrators/SYSTEM owners only as allowed by its token; broad user groups are not trusted owners.
 - **Sandbox profiles are Linux-only**: a Windows Binding package may declare profiles so the same package can run under Linux, but Windows does not enforce seccomp/Landlock. Packages must keep `sandbox.requires` empty when Windows-native behavior is the only environment, and profile enforcement must be validated on Linux.
 - **Managed mode remains unavailable** on Windows, so Binding `secrets.valueFrom` is rejected in local modes (there is no managed secret provider).
 - Tests: `host_binding_registry_win` (registry security fixtures) and `worker_binding_windows_smoke` (real worker LOAD_BINDING → Binding Runtime → facade response) run in the `windows-host-library` job; the full POSIX zero-binding regression stays Linux/macOS-only.
@@ -208,7 +222,7 @@ Configuration notes:
 ## CI
 
 - The `windows-host-library` job in `.github/workflows/testing-validity.yml` builds Runtime/worker/Host and runs all platform-neutral tests (Linux-only tests are absent per the "not registered means skipped" or `SKIP_RETURN_CODE 77` principle, following the same strategy as macOS), produces JUnit evidence, and participates in the `hosted-evidence-index` hard gate.
-- The Windows matrix entry in `.github/workflows/release.yml` produces `capsid-<version>-windows-x86_64.zip` and `.sha256` and uploads them to the Release.
+- The Windows matrix entry in `.github/workflows/release.yml` produces `capsid-<version>-windows-x86_64.zip` and `.sha256`. Prerelease jobs verify and retain their artifacts for all-platform review before operator publication; they do not independently publish a partial prerelease.
 
 The Worker process receives only `SystemRoot`, resolved through the operating
 system API. It does not copy the parent's value or other process variables.
@@ -231,7 +245,7 @@ The following contracts are not fully covered on Windows (Linux CI retains all s
 - **m2-group POSIX-dependent scenarios**: `host_static_pool_activation_barrier` wraps the worker with a POSIX shell script (mkdir/sleep/exec semantics), and `host_static_pool_worker_exit_isolation` needs `/proc` exit evidence; both are not registered on Windows. Multi-shard and single-shard static-pool scenarios are already registered and run on Windows.
 - **generation pool kill-injection scenario**: without `/proc/<pid>/status`, the "killed worker is replaced" path cannot be verified; after the create/drain and startup-failure scenarios run normally, the test reports the skip honestly with SKIP_RETURN_CODE 77 overall (same on Windows and macOS).
 - **A/B benchmark evidence contract** (`host_single_worker_ab_emits_complete_evidence`): the runner is a POSIX shell wrapper (`bench/run-ab.sh`), and Windows has no usable perf path, so it is skipped with 77.
-- **worker_package_\* bundling trio** (`contents` / `smoke` / `reproducibility`): excluded by the default ctest command with `-E` (see the build steps above), and CI does not run them either; they must be run explicitly. `worker_install_tree` is not in that exclusion regex and runs by default.
+- **Package gates are not excluded**: the local command above and the native hosted profile exclude only `wpt_conformance_not_configured`, not `worker_package_*`. Package contents, smoke, metadata and reproducibility checks must actually execute with their required fixtures; an earlier profile's exclusion cannot be presented as current coverage.
 
 ## Update checklist
 

@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "observedAtUTC": "2026-11-17T04:51:19.379176+00:00",
+  "readOnly": true,
+  "repository": "ErosZy/capsid",
+  "developmentBranch": "dev/v0.3.0",
+  "stable": {
+    "tag": "v0.2.2",
+    "releaseId": 380229548,
+    "prerelease": false,
+    "url": "https://github.com/ErosZy/capsid/releases/tag/v0.2.2"
+  },
+  "prerelease": {
+    "tag": "v0.3.0-beta.2",
+    "releaseId": 447836060,
+    "draft": false,
+    "prerelease": true,
+    "publishedAt": "2026-11-17T00:43:50Z",
+    "url": "https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.2",
+    "sourceCommit": "87ed4630fa57e360ac0a3a8158218398250c8035",
+    "sourceTree": "96bef3a7b0a1acec0cd37be9d470a312046386cb",
+    "runtimeVersion": "0.3.0",
+    "assets": [
+      {
+        "id": 757042810,
+        "name": "capsid-0.3.0-darwin-arm64.tar.gz",
+        "size": 9770499,
+        "digest": "sha256:999649d3d6a1482505cac8fb26487fe2a4a8ea029a47e2df45101ea0ceec58f3",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-darwin-arm64.tar.gz"
+      },
+      {
+        "id": 757042993,
+        "name": "capsid-0.3.0-darwin-arm64.tar.gz.sha256",
+        "size": 99,
+        "digest": "sha256:f43fcf6598248b5b85ee4b60b95809a80218d4a66a591e45f6c6ef11c5134168",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-darwin-arm64.tar.gz.sha256"
+      },
+      {
+        "id": 757043046,
+        "name": "capsid-0.3.0-linux-musl.tar.gz",
+        "size": 22836091,
+        "digest": "sha256:fa96d8a07779662e2f11c23a29e9aa91ed5947bddbb18e233966025ca1521c0e",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-linux-musl.tar.gz"
+      },
+      {
+        "id": 757043390,
+        "name": "capsid-0.3.0-linux-musl.tar.gz.sha256",
+        "size": 97,
+        "digest": "sha256:69998a48a04a9d6485cc047bea44ec8b66957876ab48e9735d332082491d03eb",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-linux-musl.tar.gz.sha256"
+      },
+      {
+        "id": 757043428,
+        "name": "capsid-0.3.0-windows-x86_64.zip",
+        "size": 9587431,
+        "digest": "sha256:f948bdba060a271732d91fdd015d7bb2029129c387e3c0834910a75715bca1c0",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-windows-x86_64.zip"
+      },
+      {
+        "id": 757043581,
+        "name": "capsid-0.3.0-windows-x86_64.zip.sha256",
+        "size": 99,
+        "digest": "sha256:b149713a0c3befc20d241db76860b2dd94b7f22c20f4067949ede7d9b915f17b",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-windows-x86_64.zip.sha256"
+      },
+      {
+        "id": 757043630,
+        "name": "install.sh",
+        "size": 7456,
+        "digest": "sha256:a651e2c8c8955977c8c836d848949ba2fa41f41352dc34631fdbd65cc6357d08",
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/install.sh"
+      }
+    ]
+  },
+  "noReleaseOrTagMutation": true
+}

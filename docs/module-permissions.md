@@ -1,5 +1,8 @@
 # JavaScript Modules and Permissions Reference
 
+> Reviewed against the v0.3.0-beta.2 source/API on 2026-11-17. See the
+> [current status and data scope](current-status.md) for the pinned profile and release identity.
+
 This article is for users writing bundles and configuring host policy. It
 answers two questions:
 
@@ -26,8 +29,10 @@ dependencies, sandbox profiles, and resource gates are documented in
 - `allowed_modules` only decides whether a module can be imported; it does not
   automatically allow resource operations inside the module;
 - `fetch()` is not `capsid:net`; it uses a separate egress policy;
-- Most Web APIs that do not require a module import need no capability rule,
-  with the exception of `fetch()`;
+- Most Web APIs without a module import need no operation grant; outbound
+  `fetch()` and `WebSocket` additionally require their effective egress policy;
+- Inbound `WebSocketPair`/101 does not grant a listener: the Host owns Upgrade,
+  admission and channel lifetime under negotiated FetchRPC v4;
 - deny rules always take precedence, and unknown or malformed policy makes
   worker startup fail.
 
@@ -129,6 +134,8 @@ module cache. `globalThis.tjs`, `process`, `Deno`, and `Bun` do not exist.
 | `fs.stat(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | This path and its subtree |
 | `fs.list(path)` | `capsid:fs` | `CAPSID_PERMISSION_READ` | canonical absolute path | This path and its subtree |
 | Global `fetch(url, init)` | None | `capsid_egress_policy`; also recommended to configure capability `net_policy` | hostname/IP/CIDR + port | The two policy layers intersect |
+| Global `new WebSocket(url, protocols)` | None | Host-mediated outbound channel with effective egress policy | ws/wss target and port | Requires the negotiated v4 path; no raw socket authority |
+| `WebSocketPair` and Response 101 | None | Host listener/Upgrade admission and channel ownership | An admitted inbound request | No application-owned server/listener |
 | Six pure utility modules | Corresponding `capsid:*` | No operation rule | None | Module gate only |
 
 `CAPSID_PERMISSION_NET` cannot be written into an ordinary
@@ -328,7 +335,7 @@ supported descriptor fields are:
 | `name` | Resource field |
 | --- | --- |
 | `read`, `write`, `ffi` | `path` |
-| `net` | `host` and `port`, both required |
+| `net` | `host` and `port` together for one target, or neither for an aggregate query |
 | `env` | `variable` |
 | `sys` | `kind` |
 | `stdio` | `stream` |
@@ -359,8 +366,11 @@ profile, while `capsid:stdio` is a stdout/stderr channel that requires an
 explicit module + stream rule. The host still needs to keep draining or dropping
 log events and handle redaction and rate limiting itself.
 
-Global `fetch()` is the only standard Web API that directly connects to the
-capability/egress policy.
+Global `fetch()` uses the worker's direct native Fetch egress path. The global
+`WebSocket` constructor and Upgrade-fetch channel path are Host-mediated and
+have their own effective egress and ownership checks. The unbuilt
+`capsid:websocket` module is not required to use these v4 APIs. No path grants
+untrusted code an ambient listener or a native descriptor.
 
 ## Errors and audit
 

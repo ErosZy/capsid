@@ -1,0 +1,234 @@
+{
+  "complete": true,
+  "publicationReviewSHA256": "e1cf873bcde92d0fdbbc430d0fea442b506a6dfb820f7c03b378d06ac506eba1",
+  "readOnlyVerificationNoFurtherPublicationWrites": true,
+  "published": true,
+  "prerelease": true,
+  "draft": false,
+  "makeLatestFalseRecorded": true,
+  "url": "https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.2",
+  "releaseId": 447836060,
+  "productCheckout": "87ed4630fa57e360ac0a3a8158218398250c8035",
+  "productTree": "96bef3a7b0a1acec0cd37be9d470a312046386cb",
+  "sourceFileCount": 5347,
+  "allRequiredCiGatesAndActualTagPackagesPassed": true,
+  "effectiveTagJobProvenance": {
+    "githubPreservedSuccessfulCheckRunAliases": [
+      {
+        "originalJobId": 133458707397,
+        "attempt2AliasId": 133716098853,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133458707729,
+        "attempt2AliasId": 133716157432,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133458707994,
+        "attempt2AliasId": 133716099769,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133458708011,
+        "attempt2AliasId": 133716099470,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133458708108,
+        "attempt2AliasId": 133716097912,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133458708233,
+        "attempt2AliasId": 133716153410,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133458708262,
+        "attempt2AliasId": 133716146838,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133565812202,
+        "attempt2AliasId": 133716099848,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133565929050,
+        "attempt2AliasId": 133716100324,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      },
+      {
+        "originalJobId": 133565929082,
+        "attempt2AliasId": 133716099691,
+        "executionTimesStepsRunnerAndAllNonAliasFieldsExact": true
+      }
+    ],
+    "originalCancelledMacJobId": 133565929203,
+    "authorizedRetryMacJobId": 133716098279,
+    "onlyOneMacosJobRerun": true,
+    "otherTenJobsRemainOriginalSuccessfulAttempt1": true,
+    "originalCancellationRetained": true,
+    "effectiveRequiredJobs": [
+      {
+        "id": 133458707397,
+        "name": "validation / release-wpt-and-delegated-sandbox",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133458707729,
+        "name": "validation / sanitizers (asan, CAPSID_ENABLE_ASAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*|we...",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133458707994,
+        "name": "validation / sanitizers (ubsan, CAPSID_ENABLE_UBSAN, 1, 2, ^(wpt_conformance_not_configured|worker_package_.*)$)",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133458708011,
+        "name": "validation / sanitizers (tsan, CAPSID_ENABLE_TSAN, clang, 1, 1, ^(wpt_conformance_not_configured|worker_packag...",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133458708108,
+        "name": "validation / fuzz",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133458708233,
+        "name": "validation / windows-host-library",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133458708262,
+        "name": "validation / posix-host-library",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133565812202,
+        "name": "validation / hosted-evidence-index",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133565929050,
+        "name": "package (windows-latest)",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133565929082,
+        "name": "package (ubuntu-24.04)",
+        "runAttempt": 1,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 133716098279,
+        "name": "package (macos-15, brew install ninja boost c-ares)",
+        "runAttempt": 2,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "oneExplicitlyAuthorizedMacosCapacityRetryOnly": true,
+  "rawCancelledJobAndAllPreviousFailuresPreserved": true,
+  "assets": [
+    {
+      "name": "capsid-0.3.0-darwin-arm64.tar.gz",
+      "assetId": 757042810,
+      "bytes": 9770499,
+      "digest": "sha256:999649d3d6a1482505cac8fb26487fe2a4a8ea029a47e2df45101ea0ceec58f3"
+    },
+    {
+      "name": "capsid-0.3.0-darwin-arm64.tar.gz.sha256",
+      "assetId": 757042993,
+      "bytes": 99,
+      "digest": "sha256:f43fcf6598248b5b85ee4b60b95809a80218d4a66a591e45f6c6ef11c5134168"
+    },
+    {
+      "name": "capsid-0.3.0-linux-musl.tar.gz",
+      "assetId": 757043046,
+      "bytes": 22836091,
+      "digest": "sha256:fa96d8a07779662e2f11c23a29e9aa91ed5947bddbb18e233966025ca1521c0e"
+    },
+    {
+      "name": "capsid-0.3.0-linux-musl.tar.gz.sha256",
+      "assetId": 757043390,
+      "bytes": 97,
+      "digest": "sha256:69998a48a04a9d6485cc047bea44ec8b66957876ab48e9735d332082491d03eb"
+    },
+    {
+      "name": "capsid-0.3.0-windows-x86_64.zip",
+      "assetId": 757043428,
+      "bytes": 9587431,
+      "digest": "sha256:f948bdba060a271732d91fdd015d7bb2029129c387e3c0834910a75715bca1c0"
+    },
+    {
+      "name": "capsid-0.3.0-windows-x86_64.zip.sha256",
+      "assetId": 757043581,
+      "bytes": 99,
+      "digest": "sha256:b149713a0c3befc20d241db76860b2dd94b7f22c20f4067949ede7d9b915f17b"
+    },
+    {
+      "name": "install.sh",
+      "assetId": 757043630,
+      "bytes": 7456,
+      "digest": "sha256:a651e2c8c8955977c8c836d848949ba2fa41f41352dc34631fdbd65cc6357d08"
+    }
+  ],
+  "allSevenPublishedAssetDigestsMatched": true,
+  "latestStableUnchanged": true,
+  "latestStableTag": "v0.2.2",
+  "mainUnchanged": true,
+  "beta1TagPreserved": true,
+  "rootHEADUnchanged": true,
+  "rootStatusPreservedBeforePostPublicationDocs": true,
+  "vendorClean": true,
+  "historicalPerformanceDataUnchanged": true,
+  "noNewPerformanceAcceptance": true,
+  "ordinarySuitePassed": false,
+  "standardsConformanceClaimed": false,
+  "fullV030HistoricalGoalsNotClaimedComplete": true,
+  "verifiedUTC": "2026-11-17T00:45:07.376146+00:00",
+  "externalFinalVerification": {
+    "path": "E:\\capsid-verification-20261113\\evidence\\v030-beta2-tag-checkout-r1\\published-verification-r1\\review.json",
+    "sha256": "3a1a9704b45bd7f7e7f5778e9a50ba9c1ee26159df17e1e67bcdd2840efe6e1b"
+  },
+  "publicationReview": {
+    "path": "E:\\capsid-verification-20261113\\evidence\\v030-beta2-tag-checkout-r1\\tag-release-r1\\publication-r2\\review.json",
+    "sha256": "e1cf873bcde92d0fdbbc430d0fea442b506a6dfb820f7c03b378d06ac506eba1"
+  },
+  "sourceQualificationRuns": {
+    "full": 43881121477,
+    "debugOriginal1800sSoak": 43881141077,
+    "threePlatformPreflight": 43881160382,
+    "attempt": 1
+  },
+  "tagReleaseRun": 43912740060,
+  "tagReleaseActualMacJobAttempt": 2,
+  "otherTagJobsActualExecutionAttempt": 1,
+  "beta1Tag": "v0.3.0-beta.1",
+  "beta1PreservedCommit": "16f4354d353e6ab044394efe85438f040741c033",
+  "beta2Tag": "v0.3.0-beta.2",
+  "postPublicationDocumentationNotPartOfFrozenProduct": true
+}

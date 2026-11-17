@@ -1,85 +1,93 @@
 # Documentation
 
-Capsid documentation is organized around selection → integration → configuration → validation. If you are new, start with the [project homepage](../README.md); see [CONTRIBUTING.md](../CONTRIBUTING.md) for contributions and [SECURITY.md](../SECURITY.md) for security issues.
+Start with the task you want to complete. User guides explain how to use Capsid;
+references define its contracts; dated reviews preserve what was observed for
+specific inputs. A historical review is not a current deployment instruction.
 
-## Find by Task
+The stable line is `0.2.2`; `0.3.0-beta.2` is an experimental prerelease.
+[Current status and data scope](current-status.md) is the maintained entry point
+for delivered scope, source identities and the latest accepted measurement.
+[Release selection](releases.md) explains the channels. The
+[qualification record](v0.3.0-current-qualification.md) binds beta acceptance to
+its exact source and artifacts without claiming full standards conformance.
 
-**Selection and Architecture**
+## Run an Application
 
-- Product boundary: [architecture.md](architecture.md)
-- Platform differences and selection: [platform-support.md](platform-support.md);
-  Linux isolation: [linux-sandbox.md](linux-sandbox.md);
-  Windows build: [windows.md](windows.md)
+| Task | Read |
+| --- | --- |
+| Install and serve a minimal Fetch handler | [Getting started](getting-started.md) |
+| Select stable or beta; verify downloaded assets | [Releases and installation](releases.md) |
+| Choose Linux, macOS or Windows | [Platform support](platform-support.md) |
+| Request modules, egress and worker resources | [capsid.json guide](capsid-json.md) |
+| Select a Host mode or configure managed applications | [Host configuration reference](host-config.md) |
+| Use a Web-standard framework | [Framework compatibility](framework-compatibility/README.md) |
 
-**Host Integration and Deployment**
+## Integrate and Secure a Host
 
-- Embedding a C/C++ host: [host-integration.md](host-integration.md)
-- First-party Host configuration: [host-config.md](host-config.md) ·
-  [capsid-json.md](capsid-json.md)
-- Capability policies and module permissions: [capability-policy.md](capability-policy.md) ·
-  [module-permissions.md](module-permissions.md)
-- managed Host design: [host-technical-design-review.md](host-technical-design-review.md)
-- Host-authored Binding packages and isolated runtimes:
-  [binding-technical-design.md](binding-technical-design.md) ·
-  [binding-modules.md](binding-modules.md)
-- Binding v1 adversarial audit and TDD remediation plan:
-  [2026-08-16-binding-v1-security-audit-remediation.md](superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md)
+| Task | Read |
+| --- | --- |
+| Understand the Host/worker split | [Architecture](architecture.md) |
+| Drive the C/C++ runtime API | [Host integration](host-integration.md) |
+| Define authority and resource rules | [Capability policy](capability-policy.md) · [Module permissions](module-permissions.md) |
+| Enforce production isolation | [Linux strict sandbox](linux-sandbox.md) · [Security policy](../SECURITY.md) |
+| Implement a trusted Binding package | [Binding modules](binding-modules.md) · [Binding design](binding-technical-design.md) |
 
-**Compatibility and Quality**
+Native development support is not a production isolation guarantee. The local
+`single-worker` and `static-pool` examples use trusted application code;
+`managed` and strict sandbox enforcement are Linux-only.
 
-- Standards/framework compatibility: [conformance.md](conformance.md) ·
-  [framework-compatibility/README.md](framework-compatibility/README.md)
-- Native stream observations and request lifetime:
-  [native-stream-observation.md](native-stream-observation.md)
-- Gzip in HTTP upgrade fallback responses:
-  [native-upgrade-response-gzip.md](native-upgrade-response-gzip.md)
-- Array and string iterator storage:
-  [native-iterator-storage.md](native-iterator-storage.md)
-- Test gate: [testing.md](testing.md)
-- Performance evidence: [performance-benchmarks.md](performance-benchmarks.md)
+## Build and Verify
 
-**审校**
+- [Building from source](building.md): toolchains, dependencies, clean Release
+  inputs, development builds and SDK installation.
+- [Windows](windows.md): native MSVC/static-CRT requirements and platform limits.
+- [Testing guide](testing-guide.md): developer checks, full CI, raw results and
+  prerequisite skips.
+- [Standards and conformance](conformance.md): the selected Web API profile,
+  reference revisions and explicit deviations.
+- [Performance methodology](performance-benchmarks.md): benchmark protocol and
+  source/build/environment identities, not a release-independent speed claim.
+- [Contributing](../CONTRIBUTING.md): change scope, validation and documentation
+  maintenance.
 
-- AI 审计简报（v0.2.2 后两阶段总结）:
-  [ai-review-brief-v0.2.2-to-v0.3.0.md](ai-review-brief-v0.2.2-to-v0.3.0.md)
+## Behavioral References
 
-- GLM 实现审校、接棒整改与剩余阻塞：
-  [v0.3.0-glm-takeover-review.md](v0.3.0-glm-takeover-review.md)
+- [FetchRPC v4 wire contract](fetchrpc-v4.md): channel and Upgrade negotiation;
+  do not infer an ABI or default protocol version from a document title.
+- [workerd WebSocket semantics](workerd-websocket-semantics.md): observed
+  behavior and the pinned compatibility boundary.
+- [Native stream observation](native-stream-observation.md): body consumers and
+  request lifetime.
+- [Upgrade fallback gzip responses](native-upgrade-response-gzip.md).
+- [Native iterator storage](native-iterator-storage.md).
 
-- GLM 当前工作区续接说明、验证顺序与执行命令：
-  [v0.3.0-glm-continuation-handoff.md](v0.3.0-glm-continuation-handoff.md)
+## Release Evidence and History
 
-- 0.3.0 测试完整性、workerd 同输入观察与增补清单：
-  [v0.3.0-test-completeness-review.md](v0.3.0-test-completeness-review.md)
+Use [history and evidence](history/README.md) for dated qualification snapshots,
+implementation plans, audits and agent handoffs. Original paths and archived
+bytes are retained; old progress text does not supersede a later release record.
+In particular, a passing beta campaign does not erase earlier failures or close
+all historical v0.3.0 goals.
 
-- 最新 generation 回收实现、兼容差异与测试集合并反馈：
-  [v0.3.0-latest-combined-review.md](v0.3.0-latest-combined-review.md)
+## How This Documentation Is Maintained
 
-- GLM 第三、四轮修复复审与新增边界回归：
-  [v0.3.0-glm-fix-review.md](v0.3.0-glm-fix-review.md)
+1. Put tutorials in guides, option/ABI semantics in references, and dated
+   results in evidence records. Avoid appending execution diaries to tutorials.
+2. Prefer public headers, capability manifests, build/configuration code and
+   actual source-bound artifacts over prose when they conflict. A current
+   checkout is not automatically the same input as a released binary.
+3. Link every maintained Markdown document from this index, directly or through
+   a linked sub-index. Keep existing anchors and paths unless migration is
+   explicitly planned.
+4. Preserve historical evidence, failed runs and their source identities. Never
+   rewrite old counts, hashes, timing budgets or outcomes as current results.
+5. Run `node tests/audit-current-docs.mjs .` after edits. It checks local links,
+   index reachability, security guidance and SHA-256 of archived qualification
+   snapshots. It is not a replacement for executing documented commands.
 
-- GLM 第五至七轮历史审校、回收复现与后续修复入口：
-  [v0.3.0-glm-round5-7-review.md](v0.3.0-glm-round5-7-review.md)
-
-**v0.3.0 (FetchRPC v4 / WebSocket foundation)**
-
-- Current qualification, implementation progress, and remaining release gates:
-  [v0.3.0-current-qualification.md](v0.3.0-current-qualification.md)
-- Milestone plan:
-  [v0.3.0-fetchrpc-v4-plan.md](v0.3.0-fetchrpc-v4-plan.md)
-- Implementation design and audit remediation:
-  [v0.3.0-implementation-design.md](v0.3.0-implementation-design.md)
-- GLM execution plan with task dependencies and acceptance gates:
-  [2026-10-12-v0.3.0-remediation-and-delivery.md](superpowers/plans/2026-10-12-v0.3.0-remediation-and-delivery.md)
-- FetchRPC v4 wire contract:
-  [fetchrpc-v4.md](fetchrpc-v4.md)
-- workerd WebSocket semantics dossier:
-  [workerd-websocket-semantics.md](workerd-websocket-semantics.md)
-
-## Maintenance Rules
-
-- Maintain only the contracts and reproducible conclusions of the current commit; do not preserve review processes, status snapshots, or generated reports.
-- Source-of-truth priority: public headers and build configuration > raw test/benchmark artifacts > Markdown.
-- Every `docs/*.md` file must be reachable from this page; relative links are validated by `tests/audit-current-docs.mjs`.
-
-- Dated `docs/evidence/v0.3.0/*/qualification-before.md` files preserve earlier qualification text verbatim. Their adjacent `index.json` must contain the exact SHA256; the documentation audit checks those bytes as archives. Other Markdown files retain the ordinary link and reachability checks.
+The [per-file coverage inventory](documentation-coverage.json) records the
+content-review disposition and canonical-text/exact-evidence digest of every
+page. Dated plans/reviews are explicitly marked historical. Six mixed journal
+pages now have current reference fronts, with their original bytes and 483 old
+anchors inventoried under [history](history/README.md). No old result is
+silently relabeled as a current measurement.

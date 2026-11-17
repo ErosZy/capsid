@@ -1,0 +1,12 @@
+{
+  "files": {
+    "byob-native-matrices.json": "d7f7371b9c5270e031f5ab701f5222fb83f6a04291f97eac87ec9aea78fc89da",
+    "candidate.json": "1ec1913204d92c5b9bddb8c8018b64bb10aa5f3ce00c12235c39b6ce08558834",
+    "density-eight-workers.json": "73d19be5164827a34b3d9ec7a04087ce53b5441637756d96931e30078d4e4bca",
+    "density-sixty-five-worker-boundary.json": "e40353ad5cf32e503c7bf2cdf6c239d30217de3ab89ea97ecaf2f0662f3bb3e4",
+    "goal-ledger-at-capture.json": "bf1ade267ea2f31bc0d3e1e6f4715bb3be87cf166a03f0ad61bac582e6be12db",
+    "port-handoff-counterfactual.json": "3d6f7403db6fc80f8bda739166299ec440d50cfe11b984af632be6627752c18f",
+    "qualification-before.md": "d0933d8321260b280c6c6491e166b53df0bf0c10629cb8ecf80e6ec8fd20204e",
+    "workerd-native-control-pipe.json": "67c3a20b425c13095ebd3df137b7e4f151a2227e6c17a20d2a69374afb7bcd84"
+  }
+}

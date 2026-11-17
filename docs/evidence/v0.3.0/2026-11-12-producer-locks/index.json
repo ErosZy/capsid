@@ -1,0 +1,9 @@
+{
+  "files": {
+    "candidate.json": "6cf76979bcba3ea77c44c9d105416291bad87a8f70b1755d2f0daeb167c9e6df",
+    "goal-ledger-at-capture.json": "ae2b0b5f7e07d8de83da3af4d8ad6197e8efcce544c4c9ed49e5fbfd82a12cb6",
+    "original-lock-reproduction.json": "86095104aa5324a4eedc8b1d2402d20cd6b18128d14d8523f1a52b417e3e0f27",
+    "parallel-and-negative-controls.json": "763202afb478364dbd7da123c58ad1b135f74248a1ceda46a98380db285221c1",
+    "qualification-before.md": "251895fc32e38b54fbeab8d74d4756bd6c8302fd1e6a37784f24dbabf227ad4d"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-12T05:11:13.468436+00:00",
+  "snapshotCommit": "3a324a9303e57f508b64bf903f73d17cf130b0bc",
+  "currentLedgerSHA256": "ddfcd56461487d9b9202ad0888139ff18bf81325649b025d6ab0e635620de94d",
+  "qualificationDocumentSHA256": "a555f631f6ddeba16e2b2a6a93abc67d5dab94775d63f3616952a0a6d3cc8f13",
+  "files": {
+    "checkpoint.json": "c6d8adc4f79eb9d74e56b18d51f8fba848448047aeef658b64f0bf0071b09419",
+    "failed-setup-job.log": "395b0e5563798e125cd00bbe3d0a3d91fcd1b47d81a84175660a6b2d9cf8dbbb",
+    "goal-ledger-before.json": "86ce1c81acfd5c13cf1685fb8e63a50a7219e1ec674e8d32b30cb5a524aef494",
+    "qualification-before.md": "cece3fe618bf609b561b60ff0597cecd3ceaad17dcdf91b2722a11990bedc6de",
+    "same-source-retry-dispatch.json": "fb763130449c884e2f246316ce43e15c2b2410b76c6c8610a4e91ac86731aaf7",
+    "same-source-retry-workflow.yml": "ed3c608fe56946dbc33e0ebf09a604d166a3f042d71a22bfb22e11618484f683"
+  },
+  "fullV030GoalComplete": false
+}

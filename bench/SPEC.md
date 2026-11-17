@@ -1,5 +1,9 @@
 # Performance benchmark & perf-site specification
 
+> Reviewed 2026-11-17. The latest accepted local record is measured snapshot
+> 485b29b (2026-11-16), not beta.2. See [current status](../docs/current-status.md).
+> Protocol constants and original measurement budgets below are unchanged.
+
 This document is the normative spec for the performance measurement
 system behind <https://eroszy.github.io/capsid/>: the three benchmark
 lanes, the data pipeline into `perf-site/data.js`, the evidence rules,
@@ -19,9 +23,13 @@ two disagree, this file wins and the docs are stale.
 3. **Evidence-linked.** Each data point carries git commit/tag, a
    machine fingerprint, and SHA-256 digests of binaries, fixtures, and
    raw samples, archived under `bench/results/`.
-4. **Append-only history.** `data.js` keeps one point per version;
-   re-measuring a version replaces its point, earlier points are never
-   edited.
+4. **Preserve accepted history.** Schema 1 keeps one active point per version
+   and its legacy CLI replaces a repeated version. That is not permission to
+   overwrite a published accepted record: a future remeasurement needs a
+   reviewed separate series/schema/archive plan retaining the old result.
+   The current update adds the first 0.3.0 record and leaves 0.2.x values exact.
+   A clean untagged source can qualify the existing archive contract, but must
+   be visibly labeled a measured development snapshot, never a released binary.
 5. **Production posture.** Serving and density measure capsid through the
    managed coordinator with the mandatory Linux strict sandbox (namespaces,
    Landlock, seccomp). Cold-start uses the public C ABI with strict workers;
@@ -129,7 +137,7 @@ apart and requires two equal positive readings. Raw output includes round,
 correctness counts, PID/start identities, both PSS samples and warm latencies.
 SIGINT/SIGTERM and request failures reap the C-ABI worker through abortive
 destroy. This does not qualify graceful shutdown or complete descendant cleanup;
-the future lane controller must also own and clean its entire launched tree.
+the implemented owned lane controller must also clean its entire launched tree.
 
 `cold-start.sh` execs the Python controller. Every cell launches a fresh process
 for one discarded run and five measured rounds. All six runs require exact
@@ -164,8 +172,9 @@ deployment still needs an outer staging generation directory.
 Formal mode requires clean measured-build/session metadata, all five stacks and
 three sizes, complete sealed raw/correctness/identity evidence and self-validation
 against the collector. Restricted `--observation` output has no publication
-envelope. Actual quiet-session candidate/v0.2.2/workerd measurements remain T17
-work; controller tests and restricted smoke do not qualify a performance point.
+envelope. The accepted 2026-11-16 local snapshot has a complete quiet session;
+there is no fresh paired v0.2.2 rebuild/requalification or beta.2-specific point.
+Controller tests and restricted smoke still do not qualify a performance point.
 
 ### 2.3 Density lane — `bench/density-lane.sh`
 
@@ -279,11 +288,10 @@ fixtures and their logs; public response bytes/headers and the production
 protocol are unchanged. Counters record actual per-worker request totals, with
 at least one cold or 100 warm requests each; a shared total is insufficient.
 
-The density producer has small-pool managed/strict and locked-workerd smoke
-coverage plus synthetic complete-archive validation. Actual fill-to-budget
-measurement and same-session T17 qualification are
-still pending. Do not promote the smoke or synthetic fixtures to performance
-conclusions.
+The density producer has small-pool managed/strict/reference smoke and
+synthetic complete-archive controls, separate from the accepted real 2026-11-16
+fill-to-budget/three-lane record. The latter belongs only to snapshot 485b29b.
+Do not promote the smoke or synthetic fixtures into performance conclusions.
 
 ## 3. Data pipeline
 
@@ -292,8 +300,9 @@ The publication contract is now specified in
 rules below: all supplied lanes need complete sealed `lane.json` records,
 raw samples, correctness and isolation records. The CLI has no legacy or
 parser-only publication bypass. All three lanes now have producers for this
-contract; independent build and complete-session qualification remain. No new qualified
-0.3.0 point has been measured. Historical points remain unverified observations.
+contract. The 485b29b record passed independent build/source/binary and
+complete-session review. It is not beta.2 qualification or a newly run benchmark.
+Earlier missing-contract points remain unverified historical observations.
 
 - `bench/collect-perf-point.py --cold-start D1 --qps D2 [--density D3]`
   parses the three `cells.txt` formats, validates, and merges the point
@@ -310,9 +319,12 @@ contract; independent build and complete-session qualification remain. No new qu
   identity and explicit generation time are separate. The site
   shows `release · commit <sha8>` unless a tag verifies the release.
 - Do not hand-edit `data.js`; regenerate it.
-- `prepare-perf-site.py` revalidates qualified points and stages their actual
-  evidence files beside the page before upload. Missing-contract historical
-  points are labeled unverified and have no fabricated evidence links.
+- `prepare-perf-site.py` revalidates qualified points and publishes actual
+  evidence. Directory-backed records retain direct files; complete large records
+  may use hashed bounded compressed transports under the original namespace.
+  Restore, raw/point replay, every checksum and published transport bytes must
+  all pass. Compression cannot grant acceptance or repair a failed record.
+  Missing-contract historical points remain unverified, with no invented links.
 
 ## 4. Evidence
 
@@ -342,13 +354,15 @@ contract; independent build and complete-session qualification remain. No new qu
 - The lane fingerprint panel normalizes `absent`/`n/a` to
   "not measured"; the protocol copy must match the lanes as actually
   run (rounds, warm phases, sandbox posture).
-- Deployment: GitHub Actions, actions pinned to release SHAs, artifact
-  upload + `deploy-pages`; pushes touching `perf-site/**` deploy.
+- Deployment: GitHub Actions, pinned action SHAs, artifact upload + deploy-pages;
+  the retained `dev/v0.3.0` push branch and the actual site/data/tool paths in
+  `.github/workflows/perf-pages.yml` trigger validation and publication.
 
 ## 6. Release procedure
 
 1. Build a clean Release tree (the build identity gate requires
-   `git status --porcelain` empty; stash CRLF noise, never commit it).
+   a clean source identity). Prepare a separate clean checkout; do not reset,
+   stash or overwrite someone else's work merely to satisfy this gate.
 2. Run the three lanes in one quiet session on the release commit;
    capsid rows through the managed/strict posture.
 3. Archive evidence, whitelist it, run the collector, audit the site at
@@ -364,6 +378,7 @@ contract; independent build and complete-session qualification remain. No new qu
 - Sustained per-tenant traffic density (every resident worker serving
   concurrently) is future work; fill-to-budget counts bound the
   at-rest cost.
-- The celld comparison is paused: serving and cold lanes produced
+- Historical celld diagnostic only (not a current accepted comparison): serving
+  and cold lanes produced
   verdict-clean data (json-1k 48,895 QPS; stream 31,769; cold ~9 ms),
   the density comparison was not completed and no celld rows ship.

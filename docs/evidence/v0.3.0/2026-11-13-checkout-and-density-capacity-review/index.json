@@ -1,0 +1,274 @@
+{
+  "files": {
+    "actual-large-http-wave-and-ntfs-failure.json": {
+      "bytes": 4494,
+      "sha256": "9644977e30601ee5b376d437a4c8cdb302ac9589f17f4316d645322f31d74f74"
+    },
+    "actual-loopback-capacity.json": {
+      "bytes": 1274,
+      "sha256": "8b6202e5e840d149b8683309cf3ad01f55c7f57fa9792b6d0b64c10d6740f286"
+    },
+    "actual-parallel-hot-failure-independent-review.json": {
+      "bytes": 294,
+      "sha256": "f64f25d61ca3ea8d442ae94242f800e55e7f833b91835c4081e455816e0e3478"
+    },
+    "candidate.diff": {
+      "bytes": 1800,
+      "sha256": "166444557e49a6ec6826005055f3ec93eb479f543554655940bbd81bb965ca7a"
+    },
+    "candidate.json": {
+      "bytes": 2079,
+      "sha256": "ecdd38e543fa23175ef111efb4d1f7ae95e8963e8e2e4355fe95c7e2628f10fc"
+    },
+    "checkpoint.json": {
+      "bytes": 2583,
+      "sha256": "06b80eb6af3356e2eba4cda462954f394b3be223893b6deb4402ce0c2af9b469"
+    },
+    "corrected-fuzz-ci-dispatch.json": {
+      "bytes": 2430,
+      "sha256": "2fce47961d0886b86482061ffd85180f1a585ece3107022c3c121e5f97e33058"
+    },
+    "current-full-ci-dispatch.json": {
+      "bytes": 2716,
+      "sha256": "54b8a469dfed494738f932aa2be31dda8d79196f6aae37bcadbe94169794042b"
+    },
+    "current-fuzz-junit.xml": {
+      "bytes": 10475,
+      "sha256": "01cbd911eb721ce400b15db5df1363c488ebc3bd007abb27aaaf97b2c184abf8"
+    },
+    "current-fuzz-LastTest.log": {
+      "bytes": 287557,
+      "sha256": "35b42796be88de8a230767aa352818af508fbf3e533b2699b6170d86c74cb98e"
+    },
+    "current-fuzz-original.zip": {
+      "bytes": 21860867,
+      "sha256": "571c5c76b5b615089a32dfefafd9dd7a09228a2d3bc32678eecf0e6c7f3e8855"
+    },
+    "current-fuzz-review.json": {
+      "bytes": 3000,
+      "sha256": "813d1393e080cdb66b0f6924d038f3ec4c3465d76601683dc4146b990b608380"
+    },
+    "current16-local-preparation.json": {
+      "bytes": 5335,
+      "sha256": "2e1fe2f8adf910efc3f3c242c1b83d6bcf6123d6b4babf643ee7c0567e00177f"
+    },
+    "current16-local-queue-observation.json": {
+      "bytes": 1657,
+      "sha256": "7aba53e78cfbb794204a140e66d7bd48ccf37eb304721a05c9002e0c5d3f9dbf"
+    },
+    "density-controls.stderr.log": {
+      "bytes": 121,
+      "sha256": "df6ac155b0fe08c9ebbf4fe739bce65a30be6d9b8fce2dbcc77e6caa0f9ecad8"
+    },
+    "density-producer-controls.stderr.log": {
+      "bytes": 103,
+      "sha256": "c9669d2aea94724d44636a40847988eafe7249d22805637d7ad5aa6aa80520f4"
+    },
+    "ext4-sequential-sender-failure.json": {
+      "bytes": 2955,
+      "sha256": "2e38880526ef4fe33d4b8528944b8d972bbc10594636d30ddee43d8dbd5dce76"
+    },
+    "goal-ledger-before.json": {
+      "bytes": 1561729,
+      "sha256": "9797f321e83feada6e5652661822a19f70dc7829f7976fc32bf0bb2339ff26e9"
+    },
+    "native-os-corrected-dispatch.json": {
+      "bytes": 2446,
+      "sha256": "cd4200cf909e27cfbe813ea9b5b1302a6e2558c9fb29219bf9ca3e4ead5684e5"
+    },
+    "native-os-first-preparation-dispatch.json": {
+      "bytes": 2446,
+      "sha256": "1ae0fec40dab81143e9ee5e98eb3d87126c16aff37c6adb4d7b9671a94467c99"
+    },
+    "original-archive-index.json": {
+      "bytes": 2327,
+      "sha256": "320ca57535295a04f64571fe004a5ad4c589fc8fe8993ac424bdd70821f28c73"
+    },
+    "parallel-sender-actual-hot-coverage-failure.json": {
+      "bytes": 3441,
+      "sha256": "8c19d42fcfb8261f0ff3e26c5b620269d5cba22a505384a6a251b78b34e7a9a5"
+    },
+    "parallel-sender-high-fd-preparation-failure.json": {
+      "bytes": 2440,
+      "sha256": "6df7b8819d8720683844c5c8c0e56c1ad17262e6601204bfd24dc7a86372e8b3"
+    },
+    "parent14-completed-soak.json": {
+      "bytes": 7236,
+      "sha256": "aa77c9fc48eea7517d4bd2e04e1ea18d1686b9fa0a6131161325b1151b840ccf"
+    },
+    "previous-complete-run-logs.json": {
+      "bytes": 2616,
+      "sha256": "a84519419ace9ac8980fdad052ff1331018c8ac0c801b0880a92bd8fa1e05ea4"
+    },
+    "previous-complete-run-logs.zip": {
+      "bytes": 828309,
+      "sha256": "e590c7b22fc2df4219ee3a027ce6a1220eaf812c95f9bad66c63884f647a3e89"
+    },
+    "previous-full-matrix-review.json": {
+      "bytes": 15586,
+      "sha256": "48dee595c68556b4742275f461b7e5cec3f48fff80cdaf0daa07d6705b109e06"
+    },
+    "previous15-failed-local-queue.json": {
+      "bytes": 3635,
+      "sha256": "45543d9e9d3ef9b56dfb5dac1a47cddd58b8b3c7da368a93347188a1aec268f5"
+    },
+    "private-connection-proposal.json": {
+      "bytes": 521,
+      "sha256": "7e45baa332779e0869c362ce4a950eefec9c9a5faf7b613062c7c89067bbe334"
+    },
+    "private-parallel-proposal.json": {
+      "bytes": 810,
+      "sha256": "a7cdc752632aa26425d9c6890074aa0c02e9c7f7b58b9046096b669875f9889f"
+    },
+    "qualification-before.md": {
+      "bytes": 26508,
+      "sha256": "25bbd073c9fdc2496857198bbf9ab94d9f2d971077d21de1d9f1f54d52bf9fbf"
+    },
+    "source-manifest.json": {
+      "bytes": 732769,
+      "sha256": "570b68626d329ff9716069f852ed04e88f23a190744096750eb8153a71af7ba6"
+    },
+    "windows-autocrlf-controls.json": {
+      "bytes": 744481,
+      "sha256": "7c0cb77f8a8152a5829443a9771beb55f5385dcded23b1f9f41518ca0786ba52"
+    },
+    "windows-autocrlf-controls.stdout.log": {
+      "bytes": 23228,
+      "sha256": "e3c98a090e5561409a4222cd8560e2fe799167905f5b2e4004f20e8d73dea13a"
+    },
+    "windows-failed-binding_fetch_arguments_contract_controls.txt": {
+      "bytes": 333,
+      "sha256": "793f8563a874956e353b211056f5ab0ad15df845e4495369512f56046f2dce8f"
+    },
+    "windows-failed-headers_compatibility_actual_vms.txt": {
+      "bytes": 1222,
+      "sha256": "f39140846707e1b6d2cb3e6c724ce1e487965a9527a12fa87b536578c3a9af9b"
+    },
+    "windows-failed-headers_contract_controls.txt": {
+      "bytes": 1570,
+      "sha256": "bd70cf73798ebe707287f1535607e2aa58f92bbfe10d9a9b8ba734f80a8e57c9"
+    },
+    "windows-failed-headers_expected_model_source.txt": {
+      "bytes": 688,
+      "sha256": "6a6b7591a02e30669d8c5c56c7eb17e00dfc5363a741db2a73645cf9c2cfd98c"
+    },
+    "windows-failed-native_fetch_abort_prefix.txt": {
+      "bytes": 1251,
+      "sha256": "3f591f05cc95c66958aba5c2e2f1698684aaac565d4959b3f734b643c80cd5f5"
+    },
+    "windows-failed-native_fetch_abort_prefix_contract_controls.txt": {
+      "bytes": 1689,
+      "sha256": "d2f1faf9b409df37375f5ad67645afb2feeb6894b1f066a5c79092fc4147f57d"
+    },
+    "windows-failed-native_fetch_branch_prefix_contract_controls.txt": {
+      "bytes": 6821,
+      "sha256": "80343037610599fc480fa408abd6c5c0ab58dc4c33d3e09bf18c205d0285a58e"
+    },
+    "windows-failed-native_fetch_branch_prefix_full.txt": {
+      "bytes": 1267,
+      "sha256": "f9f8534fe32fd739d7814202aad1b62a07e5b2cdd0b7d662a2a16cda4298a432"
+    },
+    "windows-failed-native_fetch_branch_prefix_wide.txt": {
+      "bytes": 1267,
+      "sha256": "8ea35d1ec1c3289187aea4bc9c0055588261ba1f6dede0640bed8453711d6143"
+    },
+    "windows-failed-native_fetch_deadline_contract_controls.txt": {
+      "bytes": 4535,
+      "sha256": "a7cd36b085da41a1a12b7df20c69d2e9cfb3f5a320a1bd45591dd7741d1f2113"
+    },
+    "windows-failed-native_fetch_deadline_gzip_host.txt": {
+      "bytes": 1136,
+      "sha256": "2ea870a70dafea4519fadcefb3df268e2b096c1aaf8f809cf078df1c581398f5"
+    },
+    "windows-failed-native_fetch_deadline_gzip_signal.txt": {
+      "bytes": 1140,
+      "sha256": "600250511f088c40f0e1eb83f9579cd0bf48fc9027dab9df9022c9ea82f7ec37"
+    },
+    "windows-failed-native_fetch_deadline_raw_host.txt": {
+      "bytes": 1134,
+      "sha256": "8f073dc171e6fef892be7d6a0b13fd90828922f8b11dac36158e1c189fb70d0b"
+    },
+    "windows-failed-native_fetch_deadline_raw_signal.txt": {
+      "bytes": 1138,
+      "sha256": "da5a43f7292ec76935a3adf19aae3ee7fd8f438456d6c682eb19e544adad3ca2"
+    },
+    "windows-failed-native_fetch_intrinsic_contract_controls.txt": {
+      "bytes": 5122,
+      "sha256": "ae1e8317c41321b413783f5ceea75b4ba0c30d83a70b311ef225c2d04a785e35"
+    },
+    "windows-failed-native_fetch_intrinsic_gzip.txt": {
+      "bytes": 1258,
+      "sha256": "8d1015b9e8d1145fb78b4e53d4500efe79c067ca275c3fc97ba426963f3fbf44"
+    },
+    "windows-failed-native_fetch_intrinsic_raw.txt": {
+      "bytes": 1256,
+      "sha256": "3e861ae58b2f041e1c4efa19cc872cdd850a61078531e39dd98b47cc4ca27363"
+    },
+    "windows-failed-native_fetch_pending_contract_controls.txt": {
+      "bytes": 1598,
+      "sha256": "1ef309c53678d00857f5d39e6e19763b10ca716403cbc529e70f094c16c4d6e2"
+    },
+    "windows-failed-native_fetch_pending_gzip_abort.txt": {
+      "bytes": 1021,
+      "sha256": "7f8f033cecbe41d6043a648bd60c904b05a7e38bff0f4365e1d069ce72e25adc"
+    },
+    "windows-failed-native_fetch_pending_gzip_cancel.txt": {
+      "bytes": 1023,
+      "sha256": "b7f876bd726ed22dee1625c7eb53d38d9cec5dbc5011c71171b4530854df1554"
+    },
+    "windows-failed-native_fetch_pending_gzip_overlap.txt": {
+      "bytes": 1025,
+      "sha256": "18a6425a18ad93f684dfe277dc2523db9ade0dcf3e669e8b072b06764ce16940"
+    },
+    "windows-failed-native_fetch_pending_raw_abort.txt": {
+      "bytes": 1019,
+      "sha256": "0df0cb9d94576cc81981ceda14430e7f4f5e7866154c3bd2e893988b2660c678"
+    },
+    "windows-failed-native_fetch_pending_raw_cancel.txt": {
+      "bytes": 1021,
+      "sha256": "046d16890daf7a64bc933b0cb2695cb74f15d8c9afa81348093373fa225c5071"
+    },
+    "windows-failed-native_fetch_pending_raw_overlap.txt": {
+      "bytes": 1023,
+      "sha256": "e95016d4f7be0200170fa8f3d52ff324776c88d1f71eec037d7c48d55716c2c0"
+    },
+    "windows-failed-spawn_failure_recovery.txt": {
+      "bytes": 663,
+      "sha256": "3d252135fa668c923318ebf416f60943bfea15389b2a857d8c1d9f11eaee64e4"
+    },
+    "windows-failed-web_streams_source_contract.txt": {
+      "bytes": 4307,
+      "sha256": "3da2101164cffa00c10013441491af4dfb2c2041367704661431e3bfc0f3f671"
+    },
+    "documentation-audit.stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "documentation-audit.stdout.log": {
+      "bytes": 84,
+      "sha256": "50f630df8823ed4d5d1577c2445a2d56657f0d85f4c9754ea7d698860be75428"
+    },
+    "native-os-independent-original.zip": {
+      "bytes": 89893,
+      "sha256": "28dbce6c1060247971703dad1728da089046446df540bb1d01659c67ada9f7be"
+    },
+    "native-os-independent-review.json": {
+      "bytes": 1892,
+      "sha256": "0025cfcffbcc76fb00964a1fa69347d2de32724acca2fff2d88875a1d03ab808"
+    },
+    "native-os-prerequisite-dispatch.json": {
+      "bytes": 2469,
+      "sha256": "874e6baf58cc5dc516b20225ece2010b52f51ed34c28edc7684054f82faad1d3"
+    },
+    "native-os-prerequisite-proposal.cc": {
+      "bytes": 36721,
+      "sha256": "ab71ccb61064e6fab692f82368e928ffbc153d28c994d41cd0da247c58c3ff58"
+    },
+    "current-active-observation.json": {
+      "bytes": 2016,
+      "sha256": "c707ff03ce8cdf0a37f40e01a2e717ccf7e96ba927b065562c66f7500f7e8bb8"
+    }
+  },
+  "allOriginalFailuresPreserved": true,
+  "fullGoalComplete": false
+}

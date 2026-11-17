@@ -1,5 +1,9 @@
 # Gzip in an HTTP upgrade fallback response
 
+> Technical reference source-checked for beta.2 on 2026-11-17. Named controls
+> and original budgets below describe the implemented contract, not a new test
+> execution or performance acceptance. See [current status](current-status.md).
+
 A fetch request with `Upgrade: websocket` can receive an ordinary HTTP response.
 Its body uses the existing credit-controlled native channel and its single
 transport owner. A gzip response is decoded before its bytes reach the Fetch

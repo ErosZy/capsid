@@ -1,0 +1,12 @@
+{
+  "createdUTC": "2026-11-11T17:11:39.264337+00:00",
+  "files": {
+    "candidate.json": "7d491774c8da200e56c59ced8bafeb5b29def3fc2c83a4b01a0748bc163f7d6d",
+    "checkout-fixed-controls.json": "c85d05bff35e610e7218fff4c74c7381aea476304eef24b10b5112bf234b8e00",
+    "checkout-original-rejected.json": "7488d3c96d9309f19c62170fb2ec294364f23e27e0f13fc9a5dc5d475c4f7152",
+    "goal-ledger-at-capture.json": "9642043bc5223d47610debb654da73b6bee9db06da292876b004714f84fa38b5",
+    "hosted-dispatch.json": "ae3c9305eabe5b29243452b6f1a35f0bcd21f85232d92d8f0e999a76f413f1ef",
+    "progress.json": "8c37092c14088ec67bfb7945acbebf52897d03f9122bff304142195402d8d5dd",
+    "qualification-before.md": "1b7ebeeaa1f6335a40dbc530446024cf384972f5b511a8cd20534092e3521e0a"
+  }
+}

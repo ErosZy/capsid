@@ -1,15 +1,19 @@
 # Performance archive contract
 
+> Reviewed 2026-11-17. The latest accepted complete local record is snapshot
+> 485b29b, not the beta.2 binary; see [current status](../docs/current-status.md).
+> This contract and its original raw assertions/budgets remain mandatory.
+
 `collect-perf-point.py` publishes only complete archives under
 `bench/results/`. Its parser helpers are separate from publication. A
 `cells.txt` fixture, a historical digest list, or a successful parser test
 does not qualify a measurement point.
 
 The current validator and site staging path implement the T16 collection
-boundary. All three controllers now produce this contract; **independent build
-and actual complete-session qualification remain pending.**
-Do not create missing records retrospectively or
-mark the 0.3.0 performance work complete based on synthetic contract tests.
+boundary. All three controllers produce this contract. The 2026-11-16 snapshot
+passed independent source/build/binary and complete-session acceptance; that
+acceptance is not inherited by beta.2 or another code/build. Do not create missing
+records retrospectively or claim measurement acceptance from synthetic tests.
 
 ## Lane envelope
 
@@ -147,7 +151,8 @@ when comparing the shell summary with raw values.
 
 ## Collection and site staging
 
-After the updated controllers produce complete archives:
+After the controllers produce complete archives (the paths/time below are
+schema examples, not a command that manufactures an actual session):
 
 ```sh
 python3 -B bench/collect-perf-point.py \
@@ -157,16 +162,20 @@ python3 -B bench/collect-perf-point.py \
 ```
 
 Remove `--check` to atomically update `perf-site/data.js`. An explicit
-generation time makes unchanged inputs reproducible. A same-version point
-is replaced; other versions retain their data. Invalid history is an error,
+generation time makes unchanged inputs reproducible. Schema 1's legacy CLI
+replaces a repeated version; do not use that behavior to erase accepted history.
+Future remeasurement needs a reviewed separate series/schema retaining the old
+record. Other versions retain their data. Invalid history is an error,
 never an empty history fallback. Omitted density is permitted; supplied
 density must pass every check and contributes all of its provenance/digests.
 
 `prepare-perf-site.py --output NEW_DIRECTORY` replays every verified point
-from its actual archives, rejects edited numbers or changed files, and copies
-the exact evidence bytes under `evidence/bench/results/...`. The page links
-to those local files. The Pages workflow stages this artifact before upload;
-running the staging tool locally does not publish anything.
+from its actual archives and rejects edited numbers or changed files.
+Directory-backed records copy exact files under `evidence/bench/results/...`.
+Large complete records can instead use the bounded compressed transport below;
+the staged site then links real downloadable parts plus a full digest index,
+not nonexistent individual raw URLs. The Pages workflow stages the artifact
+before upload; local staging does not itself deploy.
 
 Historical points without this contract remain **unverified observations**.
 The page labels them explicitly and does not turn their old digest aliases
@@ -174,9 +183,9 @@ into archive links. No historical raw files or missing provenance are
 rewritten. Tests use synthetic complete archives only in temporary
 directories; those values never enter the checked-in performance history.
 
-Actual same-session measurements, independent build qualification and the T17
-full release matrix remain required. Archive
-validation alone is not 0.3.0 release qualification.
+Same-session measurement and independent build qualification remain required
+for each claimed source. The accepted 485b29b session does not qualify another
+binary, and archive validation alone is not full release qualification.
 
 ## QPS producer
 
@@ -324,7 +333,8 @@ SIGINT/SIGTERM; portable tests cover ports, parsing and search failures.
 Formal producer tests inject synthetic probes only in a temporary repository.
 They execute the real metadata checks, search, archive writer and validator,
 and never create checked-in performance data. Actual small-pool smoke remains
-separate from the still-pending 2 GiB density and three-lane measurements.
+separate from the real accepted 2 GiB/three-lane snapshot and from any future
+source's required measurements.
 
 ## Cold producer
 
@@ -387,5 +397,35 @@ bash bench/cold-start.sh --observation --sizes 10k --rounds 1 --warm 2
 OUT must be new. Observation mode writes no `lane.json`; formal mode additionally
 requires metadata and an OUT under `bench/results/`. Missing stacks or metadata
 fail before any SUT launch. Synthetic full-archive tests stay in temporary
-repositories and do not qualify an actual performance point. Same-session T17
-measurements and fill-to-budget density remain outstanding.
+repositories and do not qualify an actual performance point. The existing
+accepted session is a separate original measurement, not the output of these
+fixtures or a fresh beta.2 benchmark.
+
+## Compressed publication transport
+
+`perf-site/archive-index.json` uses `capsid-perf-packed-archives-v1`. Each bundle
+binds one original `bench/results/` prefix, lane, file count, uncompressed byte
+count, complete gzip/TAR SHA-256 and ordered part lengths/digests. Part files
+stay below GitHub's per-file limit. The measured lane.json, samples, fixtures,
+checksums and metadata are byte-identical; only their transport is compressed.
+
+`bench/perf_archive.py` restores into a **new** scratch root. It verifies part
+and combined digests before accepting regular portable members, refuses
+links/devices/traversal/ADS/absolute paths, duplicate/case-aliased names and
+undeclared sizes/counts, bounds member/aggregate/decompression bytes, and
+checks written bytes. Nested runtime-nonportable.tar remains opaque here and
+is handled by the existing streaming validator, never extracted as Windows
+filenames. Inputs and failed scratch remain available for inspection.
+
+Successful extraction is not acceptance: `prepare-perf-site.py` parses the
+restored summaries and invokes the unchanged complete lane/point validators,
+then compares the restored evidence map and original file digests to the
+point. It also rehashes the exact compressed bytes copied into the site.
+Missing/corrupt parts, altered metrics, missing raw records, changed origins,
+responses, process ownership, rounds or budgets still fail the original gate.
+
+The published evidence-index.json maps every original file digest to its
+complete transport and measured session. The raw record is about 2.74 GB, but
+the published compressed transports total about 163 MB. Allow at least 8 GiB
+of scratch space for replay; memory/sanitizer/performance test budgets are not
+changed by this publication transport.

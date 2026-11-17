@@ -1,0 +1,243 @@
+{
+  "asOfUTC": "2026-11-17T04:51:19.379176+00:00",
+  "conformance": {
+    "executedFiles": 84,
+    "profile": "CAPSID-MIN-2025-subset-v0",
+    "rawFailingFiles": [
+      {
+        "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+        "recordedConflicts": 6,
+        "subtests": 36
+      },
+      {
+        "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+        "recordedConflicts": 1,
+        "subtests": 1
+      },
+      {
+        "path": "webmessaging/MessagePort_initial_disabled.any.js",
+        "recordedConflicts": 1,
+        "subtests": 1
+      },
+      {
+        "path": "fetch/api/headers/headers-basic.any.js",
+        "recordedConflicts": 5,
+        "subtests": 23
+      },
+      {
+        "path": "fetch/api/headers/headers-errors.any.js",
+        "recordedConflicts": 10,
+        "subtests": 18
+      }
+    ],
+    "referenceProfile": "CAPSID-WORKERD-v1.20261010.1-default-v2",
+    "standardsConformanceClaimed": false,
+    "wptCommit": "1985b47aa8972a970f005957f2bfa036da1787c6"
+  },
+  "developmentBranch": "dev/v0.3.0",
+  "historicalPerformancePoints": [
+    {
+      "date": "2026-10-11",
+      "release": "v0.2.2",
+      "status": "unverified-historical-observation",
+      "version": "0.2.x"
+    }
+  ],
+  "performance": {
+    "archiveReleaseLabel": "v0.3.0",
+    "contract": "capsid-perf-lane-v1",
+    "cpuSet": "0,1,2,3",
+    "date": "2026-11-16",
+    "density": {
+      "cold@100k": {
+        "count": 510,
+        "limit": "budget",
+        "pssMb": 2047.6,
+        "unit": "workers"
+      },
+      "cold@10k": {
+        "count": 746,
+        "limit": "budget",
+        "pssMb": 2045.0,
+        "unit": "workers"
+      },
+      "cold@1m": {
+        "count": 128,
+        "limit": "budget",
+        "pssMb": 2033.0,
+        "unit": "workers"
+      },
+      "warm@100k": {
+        "count": 509,
+        "limit": "budget",
+        "pssMb": 2047.1,
+        "unit": "workers"
+      },
+      "warm@10k": {
+        "count": 738,
+        "limit": "budget",
+        "pssMb": 2047.0,
+        "unit": "workers"
+      },
+      "warm@1m": {
+        "count": 128,
+        "limit": "budget",
+        "pssMb": 2034.0,
+        "unit": "workers"
+      }
+    },
+    "displayLabel": "0.3.0 development snapshot · 485b29b",
+    "evidenceFiles": 5123,
+    "independentReview": "docs/data/performance-review.json",
+    "lowLoadPssMiB": 14.0,
+    "machine": {
+      "architecture": "x86_64",
+      "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+      "deno": "2.9.8",
+      "hostId": "f0385d0aeb8b4fc7e7f699e5a5dfc535e1a6aabf262f2c0ba5b773204ea2c51b",
+      "kernel": "6.18.40.1-microsoft-standard-WSL2",
+      "logicalCpus": 12,
+      "nginx": "1.24.0",
+      "node": "24.14.0",
+      "nproc": 12,
+      "php_fpm": "8.3.6",
+      "python": "3.12.3",
+      "uname": "6.18.40.1-microsoft-standard-WSL2",
+      "workerd_version": "workerd 2026-10-10"
+    },
+    "measuredSourceManifest": "docs/data/performance-source-manifest.json",
+    "physicalHostExclusivityClaimed": false,
+    "publishedBetaPerformanceMeasured": false,
+    "qps": {
+      "matrix-json-16k": 8090.2,
+      "matrix-json-1k": 9341.6,
+      "stream": 6491.7
+    },
+    "representsPublishedRelease": false,
+    "servingPssMiB": 18.0,
+    "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
+    "sourceCommit": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+    "sourceTag": "",
+    "sourceTree": "25bbf46247b68478a005cf779d884970fb98dc13"
+  },
+  "prerelease": {
+    "assets": [
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-darwin-arm64.tar.gz",
+        "digest": "sha256:999649d3d6a1482505cac8fb26487fe2a4a8ea029a47e2df45101ea0ceec58f3",
+        "id": 757042810,
+        "name": "capsid-0.3.0-darwin-arm64.tar.gz",
+        "size": 9770499
+      },
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-darwin-arm64.tar.gz.sha256",
+        "digest": "sha256:f43fcf6598248b5b85ee4b60b95809a80218d4a66a591e45f6c6ef11c5134168",
+        "id": 757042993,
+        "name": "capsid-0.3.0-darwin-arm64.tar.gz.sha256",
+        "size": 99
+      },
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-linux-musl.tar.gz",
+        "digest": "sha256:fa96d8a07779662e2f11c23a29e9aa91ed5947bddbb18e233966025ca1521c0e",
+        "id": 757043046,
+        "name": "capsid-0.3.0-linux-musl.tar.gz",
+        "size": 22836091
+      },
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-linux-musl.tar.gz.sha256",
+        "digest": "sha256:69998a48a04a9d6485cc047bea44ec8b66957876ab48e9735d332082491d03eb",
+        "id": 757043390,
+        "name": "capsid-0.3.0-linux-musl.tar.gz.sha256",
+        "size": 97
+      },
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-windows-x86_64.zip",
+        "digest": "sha256:f948bdba060a271732d91fdd015d7bb2029129c387e3c0834910a75715bca1c0",
+        "id": 757043428,
+        "name": "capsid-0.3.0-windows-x86_64.zip",
+        "size": 9587431
+      },
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/capsid-0.3.0-windows-x86_64.zip.sha256",
+        "digest": "sha256:b149713a0c3befc20d241db76860b2dd94b7f22c20f4067949ede7d9b915f17b",
+        "id": 757043581,
+        "name": "capsid-0.3.0-windows-x86_64.zip.sha256",
+        "size": 99
+      },
+      {
+        "browser_download_url": "https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/install.sh",
+        "digest": "sha256:a651e2c8c8955977c8c836d848949ba2fa41f41352dc34631fdbd65cc6357d08",
+        "id": 757043630,
+        "name": "install.sh",
+        "size": 7456
+      }
+    ],
+    "draft": false,
+    "prerelease": true,
+    "publishedAt": "2026-11-17T00:43:50Z",
+    "releaseId": 447836060,
+    "runtimeVersion": "0.3.0",
+    "sourceCommit": "87ed4630fa57e360ac0a3a8158218398250c8035",
+    "sourceTree": "96bef3a7b0a1acec0cd37be9d470a312046386cb",
+    "tag": "v0.3.0-beta.2",
+    "url": "https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.2"
+  },
+  "qualification": {
+    "allRequiredCiGatesAndActualTagPackagesPassed": true,
+    "evidence": "docs/evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json",
+    "ordinarySuitePassed": false,
+    "otherTagJobsActualAttempt": 1,
+    "sourceCommit": "87ed4630fa57e360ac0a3a8158218398250c8035",
+    "sourceFiles": 5347,
+    "sourceQualificationRuns": {
+      "attempt": 1,
+      "debugOriginal1800sSoak": 43881141077,
+      "full": 43881121477,
+      "threePlatformPreflight": 43881160382
+    },
+    "standardsConformanceClaimed": false,
+    "tagMacosActualAttempt": 2,
+    "tagReleaseRun": 43912740060
+  },
+  "runtime": {
+    "appPidLimitFieldEnforced": false,
+    "capabilityPolicyVersion": 2,
+    "defaultWireVersion": 3,
+    "headerSHA256": "454d295855db2149c45d63ae9202e6656821805d9551489a54663de3cd87978d",
+    "negotiatedWireVersion": 4,
+    "protocolSHA256": "bd4efe8b459c0fd649f158d64ff7985b4be033be16f51b2de022684dda69f60d",
+    "publicAbi": 7,
+    "quickjsCommit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e",
+    "sdkPatchCount": 78,
+    "sourceCommit": "87ed4630fa57e360ac0a3a8158218398250c8035",
+    "sourceManifest": "docs/data/runtime-source-manifest.json",
+    "sourceTree": "96bef3a7b0a1acec0cd37be9d470a312046386cb",
+    "txiki": {
+      "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787",
+      "tag": "v26.6.0"
+    },
+    "userModules": [
+      "capsid:assert",
+      "capsid:env",
+      "capsid:fs",
+      "capsid:getopts",
+      "capsid:hashing",
+      "capsid:ipaddr",
+      "capsid:permissions",
+      "capsid:stdio",
+      "capsid:storage",
+      "capsid:system",
+      "capsid:utils",
+      "capsid:uuid"
+    ],
+    "version": "0.3.0"
+  },
+  "schema": 1,
+  "sourceChangeScope": "documentation-data-and-publication-tools; no new runtime binary qualification",
+  "stable": {
+    "prerelease": false,
+    "releaseId": 380229548,
+    "tag": "v0.2.2",
+    "url": "https://github.com/ErosZy/capsid/releases/tag/v0.2.2"
+  }
+}

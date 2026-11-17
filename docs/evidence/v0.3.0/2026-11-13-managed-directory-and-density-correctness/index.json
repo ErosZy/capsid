@@ -1,0 +1,109 @@
+{
+  "files": {
+    "adaptive-header-density-plan.json": {
+      "bytes": 445,
+      "sha256": "e6099bb053f95cec74f755a35acdbf7f640dce0c524c0b0c97ba64b6183e7357"
+    },
+    "adaptive-header-density-review.json": {
+      "bytes": 5830,
+      "sha256": "363b40a625d655c35b2285156627ec8c90dbd102d6f3adcdb95dc9132e461f73"
+    },
+    "checkpoint.json": {
+      "bytes": 3134,
+      "sha256": "cbe825fafb7bdc3509efd1e8d5cfaae9c61a6ba68939fac23eb1b989c3c11db9"
+    },
+    "current-candidate.json": {
+      "bytes": 2876,
+      "sha256": "725a71df1120fa3d235052579cec976aa7e868150336572194c8ee4629ce2cfa"
+    },
+    "current-complete-ci-dispatch.json": {
+      "bytes": 2730,
+      "sha256": "76437169448982cb15f4b7dc28fa201b5f73b0db5f9c4dc9ce1348c5b279eeb6"
+    },
+    "current-complete-ci-review.json": {
+      "bytes": 404,
+      "sha256": "54d542dce4bf7d6cb343581b089a8e89c5d761dba11e141633e29345236ef375"
+    },
+    "current-local-qualification-preparation.json": {
+      "bytes": 5298,
+      "sha256": "ca037639574a6f58310dec13fbccdacfc002234bea86168b43d942c80e0e7b92"
+    },
+    "current-source-diff.patch": {
+      "bytes": 5661,
+      "sha256": "fb57751d3247fd3925b66b4d87f678b18a735ab8731727a0ddbfff7843b5506d"
+    },
+    "goal-ledger-before.json": {
+      "bytes": 1587709,
+      "sha256": "ee8ccc2f4c099f8f56ea6e2e1eecc83357e2f77ba529b1c620fd3cb938177efc"
+    },
+    "header-barrier-density-plan.json": {
+      "bytes": 570,
+      "sha256": "a910401b9f561c87f86cb2a655f85cdf8a4138f102fdd73b6eae845773363c67"
+    },
+    "header-barrier-density-review.json": {
+      "bytes": 5081,
+      "sha256": "49a99ace79ca5b54913ee91f40f63e316b1ab2a42d975b75b8b5acab28d2328a"
+    },
+    "header-barrier-helper.diff": {
+      "bytes": 1062,
+      "sha256": "76399085fb984809bb45490cdff72df56b1f01cb54b678511232b55906642771"
+    },
+    "local17-queue-observation.json": {
+      "bytes": 2666,
+      "sha256": "7665942e288a866aa8fb9149be14265c748484174057264b5a11f75c98cc1ab6"
+    },
+    "local18-queue-observation.json": {
+      "bytes": 911,
+      "sha256": "d816466a7d91429ee177b230bf7fdc3ecc6b3d07cfee5c12164ab05fcf34c2ff"
+    },
+    "local19-queue-observation.json": {
+      "bytes": 913,
+      "sha256": "00ac2fe829f2ba87288d33b21080f4f4e44b98e36f5d49b2b6cc91a488a5810e"
+    },
+    "older-local17-release-result.json": {
+      "bytes": 10863,
+      "sha256": "12e7bc5f891a07f1b0831af40011cd2057887e782a0e42e059764771216e11ed"
+    },
+    "older-terminal-tsan-failure.log": {
+      "bytes": 30926,
+      "sha256": "58dc7998a36c0fd40739e49fb01f77deda6025f022cf6f722f5e181ce84e5eb7"
+    },
+    "previous-current-macos-review.json": {
+      "bytes": 820,
+      "sha256": "5af39222295bef6d4476dfc25081c28d5a1b18926730c797ee4673580b5830f5"
+    },
+    "previous-current-ubsan-review.json": {
+      "bytes": 1076,
+      "sha256": "8916160e8f4d23135c2d466675a3dc86536c8510fcab583529b1d302100522cb"
+    },
+    "private-targeted-tsan-step-observation.json": {
+      "bytes": 635,
+      "sha256": "1d925d0df80f21d51aeb4422c40f118119a0e5086505688d040a6e9bc909f51f"
+    },
+    "qualification-before.md": {
+      "bytes": 28621,
+      "sha256": "29ec9a6585900df6947c0b1772bd938b1ddb565606460848f599e9485b0ccf80"
+    },
+    "qualified-private-asan-memory-acceptance.json": {
+      "bytes": 2562,
+      "sha256": "570f8299d0a899ab0c757a3f665ac0924646b89e1401d6073e992a9037871978"
+    },
+    "qualified-private-asan-review.json": {
+      "bytes": 797,
+      "sha256": "a17f4125b7e1caf3e58acf785ff621f25215c386344ca65a425f8fddb33e3d70"
+    },
+    "qualified-private-ubsan-review.json": {
+      "bytes": 1075,
+      "sha256": "9ba98f2bce7f03f87835fcefa58157469fa10cff03b30406d2749cc216895f7f"
+    },
+    "current-fuzz-review.json": {
+      "bytes": 615,
+      "sha256": "e29a9938f89b6eb0e66e9d904f8586b126f891a1fe1b1e197a89a57871ad3a82"
+    },
+    "current-fuzz-junit.xml": {
+      "bytes": 10430,
+      "sha256": "73a93bded168390780051978017df7288f832b99d055b7f2642fd35ab09c8c9f"
+    }
+  },
+  "fullV030GoalComplete": false
+}

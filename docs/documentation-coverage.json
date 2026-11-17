@@ -1,0 +1,814 @@
+{
+  "schema": 1,
+  "reviewedDate": "2026-11-17",
+  "sourceBaseline": "87ed4630fa57e360ac0a3a8158218398250c8035",
+  "meaning": "Reviewed means current maintained claims or explicit historical disposition reviewed; not every page rewritten, every command executed, or historical result requalified.",
+  "counts": {
+    "current-reference": 45,
+    "historical-plan-or-journal": 13,
+    "immutable-evidence": 37,
+    "release-history": 5
+  },
+  "documents": [
+    {
+      "path": "bench/perf-evidence.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "b2d1a4409d3ffc9de98a8cd64766dd47f74c2457589f7341910783e8a335e5b9",
+      "review": "Original complete lane/point/round/response/PSS/identity controls retained; bounded hashed compression is transport only."
+    },
+    {
+      "path": "bench/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "69a1599fb4de369faf88cf4aea2f5771b37505f82d2857327cb5a7c4319367cf",
+      "review": "Implemented producers, source prerequisites, current accepted snapshot, transport replay, legacy replacement warning and full-session obligations."
+    },
+    {
+      "path": "bench/SPEC.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "9cfc8a3ad6bd657f7702fb5f1c68ac90b33cfabef19d7f7442a86b24bf2eb50a",
+      "review": "Normative protocol constants/budgets retained; status/current acceptance/transport and same-version history caveat corrected."
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "976a3c8fe93de37a764ef3b2d3868a56fc9ac8c82a2769be2cfa507ef6b98806",
+      "review": "Clean isolated source/build practice, scopes, current docs/data/workflow checks and immutable evidence requirements."
+    },
+    {
+      "path": "docs/ai-review-brief-v0.2.2-to-v0.3.0.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "7a8c650a28b8bb943cc877229bd9bf751fa35944f3a74b326daabd953d0ac727",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/architecture.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "64d6c8f3cb84fe653a870da6b453ed68ed0f1cb57a37863452e7a826ba116a69",
+      "review": "Library/distribution/Host split, ABI7, default v3/explicit v4, bounded Host-owned channels and native/strict boundaries."
+    },
+    {
+      "path": "docs/binding-modules.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "b76e571d0455a2a7c7fbd8077e73aea3bcba3403544275abbe4b27f2a4db4e75",
+      "review": "Trusted package operation gates, independent runtimes, asynchronous RPC and narrow credential/resource authority."
+    },
+    {
+      "path": "docs/binding-technical-design.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "89250e1382fd2cfc8c49df4d4828d7b7ce5f8cb703a9d9b0a113bffdf57c1fcf",
+      "review": "Delivered Binding v1 versus planned v2, schema/registry ownership and runtime/operation-scoped gates; no stream/native-handle RPC promise."
+    },
+    {
+      "path": "docs/building.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "d2d8eb89e74cbc7c063d760dbaab7fc15583b674a388a08294e302a2e45280a1",
+      "review": "CMake/dependency/pinned-source setup, Debug versus clean Release, native toolchains and actual installed SDK targets."
+    },
+    {
+      "path": "docs/capability-policy.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "9968b75fce31c49bccbdfdc49ba90dcebc26335adec33808363051f6e6a9558e",
+      "review": "Manifest/source module and permission gates, null-egress denial and Host policy intersection; optional C API policy is not the first-party Host behavior."
+    },
+    {
+      "path": "docs/capsid-json.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "9119da6a51f1cace10f634e682355eebf6cc121b450a0ac9726ffab21562d365",
+      "review": "Actual local/managed configuration authority, optional-document denial, schema fields, resource mapping/limits and ineffective pidsMax."
+    },
+    {
+      "path": "docs/conformance.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "2118c9b4e4fe002e42014cb40b2d8d922b75b4b168d75093395e59bb474be55d",
+      "review": "Source-pinned API/WPT profile, current v2 reference conflicts, 84 selected files, closed D011/open exclusions and no full-conformance claim."
+    },
+    {
+      "path": "docs/current-status.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "7ec2afa5c1d2d8f213ac96ca82f55400103520efa6c3e53de9e7fb3d2e0391ce",
+      "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-byob-density/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "d0933d8321260b280c6c6491e166b53df0bf0c10629cb8ecf80e6ec8fd20204e",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-cold-settle-and-perf/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "f06a63ca4cb62ce9462a16f4864de8e2d89bbde68bb11a5e5dee58015a1e6014",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-darwin-ci/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "7e3da91b9c1d70f27ddab27092cfe1ab407d6d9ce68c3f262b911f2814fc7e41",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-darwin-ci-r2/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "7e3da91b9c1d70f27ddab27092cfe1ab407d6d9ce68c3f262b911f2814fc7e41",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-density-platform-controls/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "31f619b8c212a2ea1cdbe70363ae8b0f1c3a6bc1537bc3c6e99e7ca2c26a4413",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-documentation-archive-and-native-pressure/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "9f01e99fb960606bcfe38ceb153e1284c3c951cd197e4266ec24f731d1969e4b",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-fixture-bytes/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "1b7ebeeaa1f6335a40dbc530446024cf384972f5b511a8cd20534092e3521e0a",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-forced-reap-integration/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "fc374a498be76f4e66cc1a234ab42192e3db2bc580bc689df215bdd3ce6b7908",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-forced-reap-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "b02894eba22ad86378170eb45aed2f9d189ca48cda2b48f25e87f4f16630f69a",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-fuzz-setup-recovery/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "cece3fe618bf609b561b60ff0597cecd3ceaad17dcdf91b2722a11990bedc6de",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-hosted-native-terminals/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "1c8dac4058f388a36ace22383f11f8d67d8f50ad9f9f65f676f680d75796663b",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-linux-terminal-writer-pressure/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "a555f631f6ddeba16e2b2a6a93abc67d5dab94775d63f3616952a0a6d3cc8f13",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-model-head-boundary/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "5e9a43a7692378947ccd1c366f9f9e05dd3c4d55e6c885dd3120d57e4688a9c1",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-native-close-recovery/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "dbbe0494ee60278d33617b32b656d3c431df7db37ef040ceab22f827e0dd89fb",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-native-poll-interest/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "acb6993cbf2651a0bcd1c1cef4ac85238d302a333e43d202f8c701964e81e787",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-native-request-targets/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "3acce1fa81a3ccacae4a8ba7aa282fc2c4a0ce58eae31f386dc3fb63dfc18fc3",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-native-terminal-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "a3df2513f572a7835613fa073a769672868f4be401263162885a3881f76acc61",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-owner-hosted/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "9ac39c8a582bcc710d893e317f23900bb456c639ca77993b3287ab85d87cb97c",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-pressure-dns/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "5b9ea9e5fe10ff317b82f113cb0fab8c25296fb80c7188614e3fd1c8f3df71c1",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-producer-locks/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "251895fc32e38b54fbeab8d74d4756bd6c8302fd1e6a37784f24dbabf227ad4d",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-queued-http-handshake/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "2f62cb9a6f9bcc0ebaddbf15bdf700b7b4d0f6b70634030d6e61128d53c86844",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-session-anchor/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "335a79c5cf2ffe9cf475369400cf036026d2e8ff1ec920b429b8f91732852dee",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-12-startup-and-archive/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "4e90673c1d5116a374eefdde921d66ad8b2972e22ffcbcc4b70776232e4300e6",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-checkout-and-density-capacity-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "25bbd073c9fdc2496857198bbf9ab94d9f2d971077d21de1d9f1f54d52bf9fbf",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-ci-resumption/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "6c58260456acae6cf2bda5c091b3624faf3d7fa8e6cb571de548bb70a27378e8",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-current-platform-matrices/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "353879acb0868841670d5e5dea9138557a2c3895081528f4c6667a73f5dd3309",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-final17-platform-and-frame-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "92fff4dff751d1b1a04bdb4bf56032582e10c197108d2380e92300fc72b57192",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-frame-optimized-and-directory-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "89aa69d6f0960e515c2c5e8d6cd16921bba264aebae48c38aa1854220cfe0a6c",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-listener-and-tsan-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "de04ddd75ea13ce3b9a71a4be9fbd4a4cec794873aec46eccb5a6b3add256ebf",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-managed-directory-and-density-correctness/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "29ec9a6585900df6947c0b1772bd938b1ddb565606460848f599e9485b0ccf80",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/evidence/v0.3.0/2026-11-13-native-prerequisite-and-density-review/qualification-before.md",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "0eccffd02cb1b22d2e859700aeb6b49d843c56f8754fb6fe446cc7ee1852ffae",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/fetchrpc-v4.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "f2562c9fa27ddc8892f14fcd3bcbed063d9ab4ce77d761bb9a0ae37a8cd7b761",
+      "review": "Current immutable wire/base+A2 contract, no silent default-v4 upgrade, unsupported half-close/lifetime limits; exact old source retained."
+    },
+    {
+      "path": "docs/framework-compatibility/elysia.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "bd79dd942a64f0b60d6042d4e4671c6e7568600073c74e4a05cf1a11429c3853",
+      "review": "Locked Elysia/plugins, reference app lifecycle/AOT/sucrose constraints and native driver/labels; no arbitrary-version promise."
+    },
+    {
+      "path": "docs/framework-compatibility/h3-v2.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3506de0c9c9fb7a27f3fd1007413da8ef563a7d7fde8498e64ab00bb7407fd71",
+      "review": "Locked H3-v2 app/API fixture and real worker differential targets; no unsupported server adapter guarantee."
+    },
+    {
+      "path": "docs/framework-compatibility/hono.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "dddd3fd800160a345c5914185ecd27cbb44e7c9e3fa29610717cf1bfa32469a0",
+      "review": "Pinned Hono version/configuration and actual bundle/worker driver/CTest targets; env/ctx and external-runtime limits."
+    },
+    {
+      "path": "docs/framework-compatibility/itty-router.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "d9ec18acef311d1d94064096d3899243dff6eac6b2be95c80fac24372daeb511",
+      "review": "Locked router and self-contained worker entry, required dependency setup and exact focused driver/test selection."
+    },
+    {
+      "path": "docs/framework-compatibility/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "0f06fb7cb92d989e250cb7d9e73e9871c192c7b30500756cc7a22c159328cc2a",
+      "review": "Exact locked framework matrix, required dependency trees and focused versus full qualification; no Node/Wrangler/server compatibility promise."
+    },
+    {
+      "path": "docs/getting-started.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "91f71bb5934e27da1fb2cae33da38f2fd015c4d5b605edfff8e192cc3352bc58",
+      "review": "Complete trusted-local CLI/app/policy/READY/request; unchanged commands match prior actual Windows/Linux published-binary smoke, not macOS execution."
+    },
+    {
+      "path": "docs/history/archives/2026-11-17/fetchrpc-v4.md.txt",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "a522afeca477558afee0e62992bd40e825c80530da1f79df241cfbac4129d2c3",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/history/archives/2026-11-17/host-technical-design-review.md.txt",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "7914b70fe39195ff8e2886b089fcaaa56eab013965e1e2df48e23f7d61ceb622",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/history/archives/2026-11-17/performance-benchmarks.md.txt",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "c5a0151ea14ed83eb6515b7c9cb068cdd42cc5648c01d79b1bd98b6d8278e4a8",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/history/archives/2026-11-17/testing.md.txt",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "c832f4ed9f87939202c5048099bb96efad957e031e57591fa4ce09e29225f5a4",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/history/archives/2026-11-17/v0.3.0-current-qualification.md.txt",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "81c1ebb6521e4ae49cfc59e9bb4678b17d3ad62aec98df1a12140719bb5fc1c6",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/history/archives/2026-11-17/workerd-websocket-semantics.md.txt",
+      "kind": "immutable-evidence",
+      "reviewed": true,
+      "hashMode": "exact-bytes",
+      "sha256": "f4e6b1535e714ecc80398a0bc3dbed3df77f0e5d3e3841968cdc93d931f0ca1f",
+      "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
+    },
+    {
+      "path": "docs/history/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3407ace7a01b0f960f8168fdda2cb80ece545b8ee8f5a9f3be6af25e694627ed",
+      "review": "Historical dispositions, six captured source files/hashes/483 aliases, dated reviews/plans and source-bound evidence rules."
+    },
+    {
+      "path": "docs/host-config.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "ef918c47a894e7b78422ef69bb5289a3ef506f1d6681f0f7d9d22ae681f6ec9b",
+      "review": "Delivered parser/typed projection, CLI readiness/timeouts, v1/v2 schemas, current Admin request keys, v4 Host limits and unenforced App PID caveat."
+    },
+    {
+      "path": "docs/host-integration.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3428e5ffcfa3615cf3d421cc39f6cb82b0088f93bb96554fdb639ea9d6e3c211",
+      "review": "Public ABI7 request/event/callback/spawn lifecycle, additive protocol options and channel result/terminal confirmation; default strict off."
+    },
+    {
+      "path": "docs/host-technical-design-review.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3dd24bb0055f17ffe1d80d30c2d7882f2f562d7ecb2bf849e600279faeb3f92f",
+      "review": "Current Host architecture/ownership/authority, experimental deployment and separate build/test/performance qualification scopes."
+    },
+    {
+      "path": "docs/linux-sandbox.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "677c0ab5db43e7b584d66a2562f009efed78d5f5e11dec6872eb84b0a8f1c5c7",
+      "review": "Actual C API defaults and READY bits, seccomp/Landlock/rlimit/cgroup/namespace prerequisites and production versus diagnostic profiles."
+    },
+    {
+      "path": "docs/module-permissions.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "5bc80e5ce3f80fd0bab79f2bdfc87ad113be8a66fb35ec031ca1111c70cb16f1",
+      "review": "Twelve shipped modules, exact currently granted operations and unavailable/deferred capabilities; no ambient User socket/process authority."
+    },
+    {
+      "path": "docs/native-iterator-storage.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "c9d42a3f3bfb8e95d453cadf79494061cb4a5038135992bf103f4055d905af24",
+      "review": "Source/registered controls for inline iterator allocation, retained input/GC/memory accounting and original 20-second budget; no new timing claim."
+    },
+    {
+      "path": "docs/native-stream-observation.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "2c0a8e73125562aac07013cc9c88b3068322d2e25954db4b12fa4aef4699abe5",
+      "review": "Native observer designation versus active continuation/authority, original scope propagation and registered retired-ownership controls/budgets."
+    },
+    {
+      "path": "docs/native-upgrade-response-gzip.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "509573ae8b619dd205f3c247858fac86f9a0def24f730aef0bc9668a8ed53193",
+      "review": "Existing bounded native gzip/credits/limits and held-source reader gates, separate fallback/ordinary registrations and no formal performance inference."
+    },
+    {
+      "path": "docs/performance-benchmarks.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "8e69bfec8fe45f8382eaad6f433a4c0f64c30fd8d395be9d56e67f846a05f4df",
+      "review": "Accepted 485b29b whole-session source/tree/CPU/protocol/data, unchanged older observations, compressed full evidence and non-paired comparison limits."
+    },
+    {
+      "path": "docs/platform-support.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "10321c168371315fa5d92ae6c8e911e2a806177085d6518debf0cee27de19106",
+      "review": "Native versus Linux production isolation, supported assets, local modes, trusted Binding owners and platform-specific resource semantics."
+    },
+    {
+      "path": "docs/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "d753cdd1398adc7d6756f332058ea04d490b801c928acd0a6480b75c3256f2d2",
+      "review": "Task navigation, current status entry, per-file review and exact historical sources; no journal treated as a current procedure."
+    },
+    {
+      "path": "docs/releases.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "866ca1336951c066879f65ea621e98bf238553a58174cd87346e8e770d595d2f",
+      "review": "Captured stable/beta flags, actual asset architectures/names/digests, installer channel selection, checksums and build identity limits."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "24cd6b1712e28f716967464c01bf5f895158775ae36d101cccb1291c7bfc743c",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-12-v0.3.0-remediation-and-delivery.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "28c7c57047240d1def93f035b09e9c0032003691737169cd383281a65d0b030c",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/testing-guide.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3546cd55531f2424658f94f398c13e3c14c242e0022c0b31e796ba1d353ac135",
+      "review": "Current developer/CI/profile commands, missing-prerequisite and raw-failure semantics, instrumented providers and source-bound acceptance."
+    },
+    {
+      "path": "docs/testing.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "d370b749fbe99372aeb93d6789fa60f881c265399b37487197aa086115d15275",
+      "review": "Current validation reference; original journal is byte-preserved with legacy anchors, not rerun instructions."
+    },
+    {
+      "path": "docs/v0.3.0-current-qualification.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "8c25ce3dcd8cdd38ddab13aa66b8ccb8fcdcbb79e08027ea7f243fe503653948",
+      "review": "Actual published beta.2 source/runs/packages/attempt ledger and source-bound performance/standards limits; full historical qualification text retained separately."
+    },
+    {
+      "path": "docs/v0.3.0-fetchrpc-v4-plan.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3d8fdd2db94a2980273a92ce82d0caad73f227e381196b768809255b6a488574",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-glm-continuation-handoff.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "59618457554b1b93c12452d0edf5d632d33b7be57dca26e60d24eff3ac8a6caa",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-glm-fix-review.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3d7a7bce1b5aac2577d00874769e62ef5cc10fabd545320e4ff441b3edb31779",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-glm-round5-7-review.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "8a5a1babab3e5718ff858fa087d30f15179409012c1b3e29334407960fa0ee7f",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-glm-takeover-review.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "b4aa76da1aa3dbfa4f15478eff1b3b73086269e76296ccc51e834ad26f1e1b50",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-implementation-design.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "ed39c1e25aeab00cec1d7b9c512a4527f59532227506b17cc1355ed3e8213b7a",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-latest-combined-review.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "39f18981cae776b808bcfc8c914a49c7e74e253283c9eca3e9b9bff7f7e8d93a",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-native-fetch-branches-plan.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "e2af5cf4621f783f9516910e616b0bc8659186512376a4c09b8943a6250a8e33",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-next-ai-handoff.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "c2d4afd5a7813313dea5f76d7e2ff51ea3bd6a4c65269b902ef98b386ddbcc4e",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/v0.3.0-test-completeness-review.md",
+      "kind": "historical-plan-or-journal",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "38dda81bdb4d7756cce60a8a92bbf0f0ebfeb63781251a6e35ef69459867ba70",
+      "review": "Dated plan/review disposition checked; prominent current-context banner added. Original body/counts/failures/pending tasks are historical, not requalified."
+    },
+    {
+      "path": "docs/windows.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "7fbbe74ab231bad2ec317bf5f79fa10129f19fa8136e77a7f7fbb6ed7225946b",
+      "review": "MSVC/static CRT/vcpkg/source prerequisites, native exits, genuine skips and SID/ACL/reparse/hard-link ownership boundary."
+    },
+    {
+      "path": "docs/workerd-websocket-semantics.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "2feec8654a07846b56c21ab8a1256fac36474b4d20b6f801e526923f1d4c3ec4",
+      "review": "Delivered bounded inbound/outbound/Upgrade behavior, retained incoming owner and pinned independent references; no complete Workers platform parity."
+    },
+    {
+      "path": "examples/h3-v2-reference/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "1183755bdcc50eebd7b394577231ec3f6ade58985a334aa0bab7acc36f6fb990",
+      "review": "Locked app/dependencies/current native worker driver target and explicit focused test selection."
+    },
+    {
+      "path": "examples/hono-reference/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "9c0198921d2e2cabac729c9060c0cb7bbd5797e3d8c89caa03a68d2ab190aa88",
+      "review": "Locked example setup, current build-dev target and --no-tests=error focused worker validation."
+    },
+    {
+      "path": "examples/itty-router-reference/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "db3ff3f31e8494e1309ad04cd0bf68e059e8a643c80b5d62d84415a72c7c2742",
+      "review": "Locked example setup and actual worker driver/test names, not full CI."
+    },
+    {
+      "path": "perf-site/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "dd7690010fa785c3a92d33473014c09e56de923edafc5668a0957aa120e620bb",
+      "review": "Actual generated files, complete restore/replay commands, source/release boundaries, dev push branch and genuine deployment requirements."
+    },
+    {
+      "path": "README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "a2b1d5a0b164927272e6cb101121e23cb3952015d276dcfa6f37c8a98bac2fc6",
+      "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim."
+    },
+    {
+      "path": "release-notes/v0.2.0-rc.07.md",
+      "kind": "release-history",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "cbf9eaf1df924f92afb86951241e6965693d5219af3759150c593c79e34aaad9",
+      "review": "Dated release/source-time notes; stable/channel selection comes from current release guide. Beta.1 is explicitly marked unpublished with no valid asset URL."
+    },
+    {
+      "path": "release-notes/v0.2.0.md",
+      "kind": "release-history",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "8733015277f339e30d286d939032fde2dc047c66c33971fc0d11ce0ee8f4586c",
+      "review": "Dated release/source-time notes; stable/channel selection comes from current release guide. Beta.1 is explicitly marked unpublished with no valid asset URL."
+    },
+    {
+      "path": "release-notes/v0.2.1.md",
+      "kind": "release-history",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "999a6181c9b6c17e75ac02576d5c7ec9eff3e2916154a5bd86b4c447829bcb14",
+      "review": "Dated release/source-time notes; stable/channel selection comes from current release guide. Beta.1 is explicitly marked unpublished with no valid asset URL."
+    },
+    {
+      "path": "release-notes/v0.2.2.md",
+      "kind": "release-history",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "867da6d8c2b8a662e8812adc13d9a2b55ca4a6cf435e6383cfba63dcc4f51196",
+      "review": "Dated release/source-time notes; stable/channel selection comes from current release guide. Beta.1 is explicitly marked unpublished with no valid asset URL."
+    },
+    {
+      "path": "release-notes/v0.3.0-beta.1.md",
+      "kind": "release-history",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "dbd6fdbc10184cbf23f56188e9d9c25ff63a68b2e52470bf17d1faad90f5d04a",
+      "review": "Dated release/source-time notes; stable/channel selection comes from current release guide. Beta.1 is explicitly marked unpublished with no valid asset URL."
+    },
+    {
+      "path": "release-notes/v0.3.0-beta.2.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "f5d0b4f559cc90f8f5b86cd26a7d0277cfbc6929c5480540d3d1166629fcd61b",
+      "review": "Published source/run/assets and actual macOS retry, ABI/default-v3/additive-v4 and runtime/security/PID/standards/performance limits."
+    },
+    {
+      "path": "ROADMAP.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "37dcbaf26c5c89dd3c86e1d6cc96541fe6aac3db5cc00ea57fad9c0098a264a0",
+      "review": "Delivered negotiated-v4/WebSocket foundation separated from future waitUntil/Binding-v2/Wrangler work; connection owner is not general background authority."
+    },
+    {
+      "path": "SECURITY.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "abc33c1bff2e9cb3b320d7714fcfb315885930a4637c753ca8d2db1ea7efaf1e",
+      "review": "Linux-only strict production boundary, native trusted-dev limits, credential reporting and recognized-but-unenforced App PID field."
+    }
+  ]
+}

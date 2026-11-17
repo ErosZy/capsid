@@ -1,5 +1,9 @@
 # Platform Support Overview
 
+Reviewed 2026-11-17 against the published beta.2 source and platform gates.
+[Current status](current-status.md) distinguishes current interfaces and
+source-bound results from historical execution counts.
+
 Capsid's commitments for Linux, macOS, and Windows are split into two independent levels:
 
 - **Native development (native dev)**: the runtime, worker, bytecode compiler, and first-party Host can build, start, and pass platform-neutral tests natively on that platform;
@@ -33,7 +37,8 @@ Unified commitments:
 - `RLIMIT_AS` / `RLIMIT_NOFILE` / `RLIMIT_CORE`: semantics differ by platform, so there is no unified commitment
 - Secure `bindingsRoot` scanning for local Binding development: Linux/macOS
   (POSIX owner/mode + fd-relative scan) and Windows native-dev
-  (reparse-point/hard-link rejection, current-user ownership, Everyone/Users
+  (reparse-point/hard-link rejection, token-derived trusted-owner SID checks
+  including Administrators/SYSTEM only when the token permits, and broad-group
   writable ACL rejection). Windows runs the Binding Runtime and native gates,
   but Linux sandbox profile enforcement remains Linux-only
 
@@ -41,9 +46,13 @@ For consistent cross-platform behavior, rely only on the ✅ list; before using 
 
 ## Platform Builds
 
+Use [building from source](building.md) for shared setup and commands,
+[releases](releases.md) for published asset architectures, and
+[getting started](getting-started.md) for a trusted local application.
+
 ### Linux
 
-- x86-64 or AArch64 recommended; Release uses the musl fully static package `capsid-<version>-linux-musl.tar.gz`;
+- The published Linux package is **x86_64 musl**, `capsid-<version>-linux-musl.tar.gz`; a source build on another architecture does not establish an available or qualified release asset. See [release selection](releases.md);
 - `CAPSID_ENABLE_LTO`, `CAPSID_ENABLE_ASAN/UBSAN/TSAN`, fuzz, and `CAPSID_GENERATE_LINK_MAP` are available;
 - strict sandbox requires the kernel to provide seccomp and Landlock; cgroup/namespace capabilities are delegated by the host. See [Linux strict sandbox](linux-sandbox.md) for the detailed contract.
 
@@ -71,19 +80,20 @@ For consistent cross-platform behavior, rely only on the ✅ list; before using 
 - Ubuntu 24.04 Release/LTO + pinned WPT + delegated sandbox;
 - Ubuntu ASan, UBSan, TSan;
 - Four Clang/libFuzzer corpus gates;
-- macOS 14 posix-host-library;
+- macOS 15 (`macos-15`) POSIX host-library and native worker contracts;
 - `windows-latest` MSVC host-library (platform-neutral matrix + JUnit evidence).
 
-Unsupported scenarios on each platform follow the "skip unless registered" principle or CTest `SKIP_RETURN_CODE 77`; silent green must not substitute for missing coverage. See [testing and continuous gate](testing.md) for the detailed list.
+Unsupported scenarios on each platform follow the "skip unless registered" principle or CTest `SKIP_RETURN_CODE 77`; silent green must not substitute for missing coverage. See the [testing guide](testing-guide.md) for current validation instructions;
+the [testing reference](testing.md) links the exact dated journal archive.
 
 ## Selection Recommendations
 
 | Scenario | Recommended platform |
 | --- | --- |
 | Local development and AI code-generation integration | Linux, macOS, or Windows, any |
-| Benchmark reproduction | Linux (release package matches the performance baseline) |
+| Benchmark reproduction | Linux, using the exact recorded source/build/protocol; a newer release is not the historical baseline |
 | Running untrusted code | **Linux only**, with strict sandbox enabled and READY feature bits verified |
-| Need a Windows native host | Windows single-worker / single shard static-pool, trusted code only |
+| Need a Windows native host | Windows single-worker or single/multi-shard static-pool, trusted code only |
 | Need managed multi-App / Admin / blue-green deployment | Linux |
 
 When facts conflict, public headers, `docs/capability-manifest.json`, build configuration, and CI workflows take precedence; Markdown is only for navigation and explanation.

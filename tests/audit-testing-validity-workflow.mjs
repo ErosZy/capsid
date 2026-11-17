@@ -12,6 +12,12 @@ const releaseWorkflow = await readFile(
   path.join(root, ".github/workflows/release.yml"),
   "utf8",
 );
+const pagesWorkflow = await readFile(path.join(root, ".github/workflows/perf-pages.yml"), "utf8");
+const pushBranches = workflow.match(/^  push:\r?\n    branches:\r?\n((?:      -[^\r\n]+\r?\n)+)/m);
+assert.deepEqual(pushBranches?.[1].trim().split(/\r?\n/).map(line => line.trim()),
+  ['- dev/v0.3.0'], 'validity push trigger follows the retained development branch');
+assert.match(pagesWorkflow, /^    branches: \[dev\/v0\.3\.0\]\r?$/m,
+  'Pages push trigger follows the retained development branch');
 assert.match(workflow, /^  workflow_call:\s*$/m, 'validity workflow is reusable by the release gate');
 assert.match(releaseWorkflow, /^  validation:\r?\n    uses: \.\/\.github\/workflows\/testing-validity\.yml\s*$/m,
   'release validates the workflow from its own commit');

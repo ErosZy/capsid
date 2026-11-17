@@ -1,5 +1,9 @@
 # Capsid Roadmap: Progressive workerd Compatibility
 
+> Updated 2026-11-17 against the published v0.3.0-beta.2 source. Stable is v0.2.2;
+> this roadmap separates delivered beta scope from future milestones and does
+> not claim complete workerd/Cloudflare parity. See [current status](docs/current-status.md).
+
 ## Purpose
 
 Capsid will progressively support common Cloudflare workerd application source,
@@ -22,8 +26,9 @@ not part of this roadmap.
 
 ## Current Baseline
 
-The `0.2.0` line is the stable baseline for the current HTTP runtime. It
-contains:
+The stable channel is `0.2.2`. Experimental `0.3.0-beta.2` adds the delivered
+FetchRPC v4/WebSocket foundation while retaining ABI v7 and the legacy v3 entry.
+The shared HTTP runtime contains:
 
 - a pinned txiki.js, QuickJS-ng, and WAMR stack;
 - self-contained ESM bundles with `default.fetch(request)` or a named `fetch`;
@@ -42,18 +47,20 @@ boundary is documented in [`docs/architecture.md`](docs/architecture.md), and
 the current cross-runtime contract is documented in
 [`docs/binding-technical-design.md`](docs/binding-technical-design.md).
 
-The major structural gaps are:
+The current compatibility boundary (delivered foundations and remaining gaps) is:
 
 - Capsid invokes `handler(request)`, while a workerd Module Worker uses
   `fetch(request, env, ctx)`;
-- the current terminal cleanup model cannot yet represent `ctx.waitUntil()` or
-  resources that outlive the HTTP response;
-- FetchRPC v3 models HTTP request/response flow but not an independent duplex
-  connection;
+- the current model does not expose Module Worker ctx.waitUntil() or arbitrary
+  post-response background work; a delivered incoming WebSocket has its own
+  bounded connection owner, not general background authority;
+- legacy FetchRPC v3 remains HTTP-only by default; independent duplex channels
+  are delivered through explicitly negotiated v4, not a silent v3 upgrade;
 - Binding v1 only transports bounded structured values and rejects Streams,
   Sockets, remote objects, and native handles;
-- WebSocketPair, HTTP Upgrade, EventSource, scheduler, and several workerd
-  extensions are absent;
+- WebSocketPair, inbound HTTP Upgrade and outbound ws/wss are delivered in the
+  beta's bounded Host-owned channel model; EventSource, scheduler and other
+  workerd extensions still require separate work;
 - Capsid does not consume Wrangler configuration or artifacts directly.
 
 ## Architectural Order
@@ -117,11 +124,17 @@ Every Capsid minor release targeting workerd compatibility must record:
 - the WPT and Test262 revisions;
 - the compatibility matrix and exact deviations.
 
-The initial research baseline is:
+The current v0.3.0 reference locks use:
 
-- workerd commit `6dd2348caee25ee1f93e3b27ed468ad53bfa59a5`;
-- compatibility date `2026-08-20`;
-- Wrangler `4.124.0`.
+- workerd release `v1.20261010.1`, source commit
+  `8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f`;
+- compatibility date `2026-08-20`, with no explicit compatibility flags;
+- platform-specific binary digests and client versions in the committed
+  [reference locks](tests/fixtures/workerd-ws/reference-lock.json).
+
+Wrangler `4.124.0` remains a research target for a future compatibility layer,
+not a shipped Capsid CLI. Reference binaries are deliberately pinned; "latest"
+documentation does not mean silently upgrading third-party semantics.
 
 An unknown date or unsupported compatibility flag must produce an actionable
 error. Capsid must never silently ignore it.
@@ -144,6 +157,9 @@ error. Capsid must never silently ignore it.
 
 ### v0.2.0: Freeze the HTTP Runtime Baseline
 
+Historical milestone; the maintained stable line is now v0.2.2. The original
+scope below is a release criterion, not a claim that an old run is current.
+
 - Ship the current HTTP Runtime, ABI v7, FetchRPC v3, Binding v1, and
   `CAPSID-MIN-2025-subset-v0` behavior without adding workerd features.
 - Publish stable release notes, packages, checksums, SBOMs, build identity, and
@@ -159,11 +175,17 @@ the hosted evidence index.
 ### v0.3.0: FetchRPC v4 and WebSocket Foundation
 
 Milestone plan: [docs/v0.3.0-fetchrpc-v4-plan.md](docs/v0.3.0-fetchrpc-v4-plan.md) ·
-contract draft: [docs/fetchrpc-v4.md](docs/fetchrpc-v4.md) · workerd semantics
+wire reference: [docs/fetchrpc-v4.md](docs/fetchrpc-v4.md) · workerd semantics
 dossier: [docs/workerd-websocket-semantics.md](docs/workerd-websocket-semantics.md).
 
-Define the FetchRPC v4 contract before implementing the public WebSocket API.
-The contract must specify:
+Delivered in experimental beta.2: v4 negotiation, A2 channel layout,
+confirmation/terminal barriers, inbound WebSocketPair/101, outbound ws/wss,
+Upgrade-fetch metadata/body fallback and connection-lifetime accounting.
+First-party local/static-pool and Linux managed paths, native clients,
+sanitizers, fuzzing and actual platform packages passed the declared
+[source-bound qualification](docs/v0.3.0-current-qualification.md).
+
+The executable v4 contract specifies:
 
 - version and capability negotiation, including deterministic rejection of
   unsupported peers;
@@ -178,7 +200,7 @@ The contract must specify:
 - client disconnect, request timeout, worker shutdown, and worker replacement
   cleanup rules.
 
-Implement one complete vertical slice after the protocol tests are frozen:
+The delivered vertical slice includes:
 
 - Host HTTP Upgrade handling;
 - Worker-side `WebSocketPair`, `WebSocket.accept()`, and events;
@@ -186,10 +208,15 @@ Implement one complete vertical slice after the protocol tests are frozen:
 - bidirectional Host/Worker frames with backpressure and bounded cleanup;
 - outbound WebSocket support under the existing egress policy.
 
-Add the public C ABI needed by embedders to accept/reject an Upgrade and
-exchange duplex messages. If this cannot be expressed additively, introduce
-ABI v8 with an explicit ABI v7 compatibility path. FetchRPC v3 and v4 peers
-must never be mixed silently.
+The public embedding APIs are additive ABI v7 descriptors/functions; no ABI v8
+bump was needed. FetchRPC v3 and v4 peers must never be mixed silently.
+See the [embedding reference](docs/host-integration.md) for size negotiation,
+channel ACKs, counted Close reasons and optional capabilities.
+
+This delivery does not imply complete standards conformance, every historical
+R1–R9 causal closure, native Windows/macOS production isolation or beta.2
+performance measurement. The latest accepted local performance record belongs
+to measured snapshot `485b29b`, not the published beta.2 binary.
 
 Acceptance: real client/server interoperability, fragmented messages, slow
 consumers, simultaneous close, half-close where applicable, invalid frames,

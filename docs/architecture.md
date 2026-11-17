@@ -1,13 +1,21 @@
 # Architecture and Product Boundary
 
+> Source/API reviewed 2026-11-17 against published beta.2. See
+> [current status](current-status.md) for release, standards and measured-source identities.
+
 Capsid Runtime is a process-isolated JavaScript runtime built from a pinned txiki.js vendor tree. It targets embedded HTTP hosts and provides a versioned Minimum Common Web API subset; it does not claim full ECMA-429 conformance. Capsid is the only product name; external organization names are used only to identify standard sources and historical internal implementation.
 
 ## Deliverables and Application Model
 
-The project produces two primary artifacts:
+The embeddable core has two primary artifacts:
 
 - `capsid-worker`: a sandboxable persistent JavaScript subprocess;
-- `libcapsid_runtime`: a stable C ABI, plus a C++11 RAII wrapper in the headers.
+- `libcapsid_runtime`: the versioned C ABI, plus a C++11 RAII wrapper in the headers.
+
+The distribution also includes the first-party `capsid-host`, trusted-bytecode
+compiler, SDK/CMake package and identity/SBOM metadata. Use the
+[release guide](releases.md) to select an artifact and the
+[quick start](getting-started.md) to run a trusted local example.
 
 Each worker loads a self-contained ESM bundle from memory. The regular path loads source; the host may also load trusted bytecode generated and validated by the exact same Capsid/QuickJS build. Bytecode is not a tenant input format and cannot serve as a sandbox boundary. Bundles must not depend on external, remote, or file modules, and must export one of the following forms:
 
@@ -19,16 +27,22 @@ export default { fetch(request) { /* ... */ } }
 export function fetch(request) { /* ... */ }
 ```
 
-The Runtime library does not provide an HTTP server, TLS termination, routing, worker pool, or tenant scheduling. Those responsibilities belong to the embedding host; the first-party C++ Host being developed in this repository is an independent host on that boundary and will not push these responsibilities back into the Runtime ABI.
+The Runtime library does not provide an HTTP server, TLS termination, routing, worker pool, or tenant scheduling. Those responsibilities belong to the embedding host. The first-party C++ Host in this repository is an independent implementation on that boundary; its delivered local/managed modes do not move these responsibilities into the Runtime ABI. Its deployment interface remains experimental.
 
-It is also not a general-purpose POSIX application container: terminal readline, arbitrary TCP, long-running fswatch, and WebSocket server are outside the request-worker product surface. When persistent connections or background watchers are needed, the host owns the lifecycle; workers only receive bounded, cancelable input attributable to a request.
+It is not a general-purpose POSIX application container: terminal readline,
+arbitrary raw TCP, filesystem watchers and application-owned server listeners
+are outside the request-worker surface. Inbound WebSocketPair/101 and outbound
+ws/wss use the documented channel/Host lifecycle rather than giving application
+code a listener or native socket. Persistent work remains bounded, cancelable
+and attributable to its request/owner; see [Host configuration](host-config.md)
+and [WebSocket semantics](workerd-websocket-semantics.md).
 
 ## Process and Data Paths
 
 ```text
 Host HTTP/TLS, routing, worker pool, audit
                    │
-                   │ FetchRPC v1 / platform worker transport
+                   │ FetchRPC v3 default / negotiated v4 channels
                    ▼
 capsid-worker
   QuickJS-ng + libuv
@@ -50,9 +64,9 @@ Platform support splits into two independent commitments: native development and
 
 | Platform | Native development target | Production contract |
 | --- | --- | --- |
-| Linux x86-64/AArch64 | Supported | strict sandbox, target for the v1 production release |
-| macOS | Supported | v1 does not claim Linux-equivalent isolation; use Linux containers or VMs for production consistency |
-| Windows x86-64 (MSVC) | Supported since v0.1.2 | v1 uses Linux containers/WSL2; native production isolation is validated separately |
+| Linux | Supported; published package is x86_64 musl | Strict sandbox with verified kernel/filesystem/delegation prerequisites |
+| macOS | Native trusted development; published package is arm64 | No native production isolation contract; use a qualified Linux environment for untrusted workloads |
+| Windows x86_64 (MSVC) | Supported since v0.1.2 | No native production isolation contract; WSL2/native development alone is not isolation acceptance |
 
 Native development at minimum requires that the Host and worker can build and start on the target system and complete source/trusted bytecode loading, `capsid:env`, HTTP requests, streaming, cancel, worker replacement, and integration tests. Native development modes that do not yet have production-grade isolation must be enabled explicitly, may only bind to loopback, and must not be described as production isolation in documentation, logs, or READY status.
 
@@ -80,7 +94,14 @@ Frameworks are just ordinary bundles. The current validation covers Hono 4.12.32
 
 ## Restricted Build
 
-The current overlay directly excludes txiki.js's generic core bootstrap and dangerous builtin bytecode such as FFI, path, POSIX socket, readline, SQLite, and WASI in the restricted profile; any remaining native translation unit, even if it enters the static archive, must be proven absent from `capsid-worker` through link-time stripping and final-binary positive/negative control audits. Security claims are therefore supported by compile-time conditions, the module loader, and final artifact audits together, not by relying solely on "unreachable at runtime".
+The restricted **User** profile does not expose txiki.js's generic bootstrap,
+private core or dangerous module specifiers. Trusted Binding runtimes have a
+separate audited module set, including controlled SQLite/WASI/client primitives
+where built; their presence must not be confused with User availability or a
+blanket claim that every such implementation is absent from the binary.
+Compile-time conditions, authenticated module/origin/resource gates and the
+profile-specific final-binary positive/negative audits jointly support the
+boundary. "Unreachable by convention" is not a security mechanism.
 
 The final artifact retains QuickJS-ng, libuv, WAMR, the Web API implementation, and the DNS/TLS/HTTP client required for standard `fetch()`. mimalloc is optional and disabled by default. The vendor tree is not modified in place: CMake creates an overlay in the build directory and applies `patches/txiki/` in order.
 
@@ -93,10 +114,15 @@ The security policy is divided into mutually independent layers:
 3. Capability/egress policy determines concrete resource operations;
 4. Linux seccomp, Landlock, namespace, cgroup, and the host firewall provide the process boundary.
 
-JavaScript cannot request or expand permissions on its own. The currently buildable modules include the read-only `capsid:permissions` and six pure utilities with no ambient authority: `capsid:assert`, `capsid:getopts`, `capsid:hashing`, `capsid:ipaddr`, `capsid:utils`, `capsid:uuid`. `capsid:env` only reads an immutable snapshot that the host explicitly provides, is authorized per key, and is isolated per worker; it does not read the process environment. `capsid:system` only returns compile-time version and feature flags; it does not collect host system information. `capsid:storage` provides an in-memory key-value store that is authorized by namespace, has a fixed quota, and lives only within a single worker; it does not touch disk. `capsid:stdio` only routes approved stdout/stderr messages into bounded IPC log events; it does not expose real fds or stdin. `capsid:fs` provides bounded reads constrained by path rules, Landlock, and `openat2`, and rejects all symlinks and write operations.
+JavaScript cannot request or expand permissions on its own. The currently buildable modules include the read-only `capsid:permissions` and six pure utilities with no ambient authority: `capsid:assert`, `capsid:getopts`, `capsid:hashing`, `capsid:ipaddr`, `capsid:utils`, `capsid:uuid`. `capsid:env` only reads an immutable snapshot that the host explicitly provides, is authorized per key, and is isolated per worker; it does not read the process environment. `capsid:system` only returns compile-time version and feature flags; it does not collect host system information. `capsid:storage` provides an in-memory key-value store that is authorized by namespace, has a fixed quota, and lives only within a single worker; it does not touch disk. `capsid:stdio` only routes approved stdout/stderr messages into bounded IPC log events; it does not expose real fds or stdin. `capsid:fs` provides bounded User reads through path rules and platform file-safety gates (Linux Landlock/openat2, POSIX no-follow traversal, Windows reparse rejection); User symlink/write escapes remain denied.
 Every module still requires explicit host authorization; extensions not listed in the machine-readable available set remain unavailable. See [host capability policy](capability-policy.md) and [Linux strict sandbox](linux-sandbox.md) for the concrete contracts.
 
 ## Resource Policy
+
+Trusted Binding v1 runtimes have separate JavaScript heaps, loaders, jobs and
+native ownership gates, but share the worker process. This is not native-exploit
+isolation between runtimes. Binding sandbox unions never enlarge User API
+permissions; see [Binding design](binding-technical-design.md).
 
 - A single Wasm linear memory is limited to 256 pages (16 MiB);
 - A single Wasm table is limited to 1024 elements;
@@ -105,7 +131,7 @@ Every module still requires explicit host authorization; extensions not listed i
 - `capsid:fs` files are at most 1 MiB each, and a single directory enumeration is limited to 1024 entries;
 - Request/response bodies use a per-request-ID credit window;
 - A synchronous CPU timeout makes the worker no longer reusable; an asynchronous timeout only cancels the corresponding request;
-- Destruction escalates in a bounded sequence: graceful shutdown → SIGTERM → SIGKILL.
+- Destruction is bounded: POSIX can escalate through SIGTERM/SIGKILL; Windows uses native termination/reap mechanics, not POSIX signal emulation.
 
 Deployers can also configure JS heap, process address space, fd, cgroup CPU/memory/PID, egress body size, and network policy. The host is responsible for publishing the actual resource and isolation policy based on workload.
 

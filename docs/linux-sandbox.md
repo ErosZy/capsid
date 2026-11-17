@@ -1,5 +1,8 @@
 # Linux strict sandbox
 
+> Reviewed against the v0.3.0-beta.2 source/API on 2026-11-17. Release acceptance
+> and its limits are recorded in [current status](current-status.md).
+>
 > For a cross-platform capability overview and selection guidance, see [Platform Support Overview](platform-support.md).
 
 The Linux sandbox is configured by the host only through the C ABI; it is not exposed as a JavaScript global, module, or permission prompt.
@@ -19,7 +22,17 @@ Landlock opens only resolver/hosts configuration, system CAs, timezone data, the
 
 seccomp allows the process memory, event loop, DNS, TLS, and IPv4/IPv6 stream/datagram operations required by txiki.js standard `fetch()`; it denies listeners, Unix/raw sockets, process/thread creation, exec, ptrace, namespace/mount changes after sandbox installation, filesystem writes, executable mappings, and kernel interfaces such as key/BPF/perf. Because thread creation is denied after installation, the libuv work pool that `fetch()` hostname pre-resolution runs on is warmed — and the system resolver primed — before the sandbox installs.
 
-Strict mode currently requires Linux x86-64/AArch64 with usable Landlock and seccomp. If any mandatory feature is missing, startup fails; READY cannot be reported in a partially strict mode. Requesting strict mode on other platforms also fails closed.
+Strict mode requires a supported Linux target with usable Landlock and seccomp.
+The published Linux package is x86_64 musl; architecture portability is not a
+claim of published arm64 qualification. If a mandatory feature is missing,
+startup fails; READY cannot report a partially strict worker. Other platforms
+fail closed for strict mode.
+
+The operations above describe the **User/zero-Binding baseline**. Explicit
+trusted Binding profiles can add client or filesystem operations and paths to
+the process-wide seccomp/Landlock union. The User and each Binding still pass
+separate native origin/resource gates. A widened Binding process union is not
+a User permission grant; see [Binding profiles](binding-modules.md#sandbox-profiles).
 
 ## Optional isolation
 
@@ -63,7 +76,7 @@ The runtime validates the fd type, compares the inode after entering the namespa
 - numeric IP;
 - canonical IPv4/IPv6 CIDR.
 
-Deny always takes precedence. Even when `default_action` is allow, protected addresses such as loopback, link-local, private/unique-local, metadata-adjacent, multicast, unspecified, and documentation still require an explicit CIDR allow.
+Deny always takes precedence. Even when `default_action` is allow, protected addresses such as loopback, link-local, private/unique-local, metadata-adjacent, multicast, unspecified, and documentation still require an explicit IP/CIDR allow for direct numeric targets.
 
 The policy checks the original hostname, every DNS-resolved address, and every redirect. Once a domain and port are allowed at the host stage, the addresses that domain actually resolves to — including private, loopback, link-local, and other protected ranges — are authorized as part of the domain allow (the authoritative resolved-address path). Explicit IP/CIDR deny rules still take precedence, and requests made directly to a numeric protected address still require an explicit IP/CIDR allow. Deployers running untrusted code should not rely on a hostname allowlist alone as a DNS-rebinding boundary; combine it with explicit CIDR deny, network namespace isolation, and host firewall policy. If the capability policy also provides `net_policy`, both must allow.
 
@@ -83,4 +96,6 @@ Process tests cover strict enforcement, fd hygiene, namespace, cgroup controller
 
 When ordinary hosts lack delegation or namespace permissions, the corresponding tests return CTest skip 77. This is not positive evidence. The hosted validity workflow runs `scripts/run-delegated-sandbox-tests.sh` in a `--privileged --cgroupns=private` container and treats any 77 as a failure.
 
-For the full test layering and commands, see [Testing and Continuous Gate](testing.md).
+For maintained commands and the difference between ordinary skips and required
+delegated gates, see the [testing guide](testing-guide.md). The
+[testing journal](testing.md) preserves earlier commands/results as history.

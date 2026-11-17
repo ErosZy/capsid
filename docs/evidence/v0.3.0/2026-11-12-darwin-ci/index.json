@@ -1,0 +1,27 @@
+{
+  "complete": false,
+  "inventoryComplete": true,
+  "evidenceCaptureComplete": false,
+  "status": "historical-partial-evidence-inventoried-original-setup-error-retained",
+  "inventoriedUTC": "2026-11-12T10:22:06.448252+00:00",
+  "originalCaptureStatus": "evidence-captured-ledger-refresh-setup-error",
+  "qualificationSnapshotOriginalPath": "docs/v0.3.0-current-qualification.md",
+  "inventoryDoesNotEstablishAdditionalHistoricalProvenance": true,
+  "files": {
+    "archive-shell-controls.json": "79909afcacd329d6558efaf66e40ffe8221a87fd583f630b4deec75ad11fdd72",
+    "candidate.json": "5ec94ad218314e54feea4bdc0380edd94ad1672110371a2a4d4710de0c4e2e05",
+    "config-linux.json": "f58a667a1f2b97032ca0eba4f8b6309bd797ebd1c6a4e95a662a89ea61287e51",
+    "config-windows.json": "1e7dd73d712e066456f760e34115e47e204ff18ffffb69ec7ea95963ffbbc7a6",
+    "darwin-asset-verification.json": "4dd08ac5c3b361488b2f6173a7552b70c0d304e7ede3da0b2b600546a63b2b76",
+    "fixture-checkout-eol.json": "ee43854f29cc4d9f06006bc780573579f1afdf9ac52c6391690dae29a510492b",
+    "hosted-dispatch-original-failure.json": "bbe0e8ece996e86c8ac9f9ff57d819b8c743e99f7e44c8a2c725947e155cb994",
+    "hosted-dispatch-recovery.json": "cdc94fc671c41b80d5417be41ee7c2473362377f9e40301a68d3eed9e1d8c40e",
+    "previous-macos-failed-and-skipped.json": "e459cfbd5a9535314badde2ef5099fb26d81c6a80cdc55963f989ef4e3612245",
+    "previous-macos-full.json": "6205e92ff249c5433e7c137765d2e2eba8431b1e9af3e2720fe9646307413089",
+    "progress.json": "7483004c196c59d936c81d1c240037090751e95acaaf0fda98a127120f583f60",
+    "qualification-before.md": "7e3da91b9c1d70f27ddab27092cfe1ab407d6d9ce68c3f262b911f2814fc7e41",
+    "reference-controls.json": "ed1d57c654fbbb413869d6610b8c3f55d6fb88ecfac0f7b70a2091c50e418d2b",
+    "workflow-controls.json": "b8932e03632cfc0bbe504b2ce451c3590e437cfd8a47fc0a42b774a0a08a4a73"
+  },
+  "fullV030GoalComplete": false
+}

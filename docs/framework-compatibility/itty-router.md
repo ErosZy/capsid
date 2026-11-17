@@ -1,5 +1,8 @@
 # itty-router compatibility
 
+> Source/profile reviewed 2026-11-17. Pinned beta.2 compatibility is separate
+> from untested versions/adapters; see [current status](../current-status.md).
+
 ## Status
 
 Capsid Runtime validates pinned **itty-router 5.0.24**. The version and artifact integrity are pinned by `examples/itty-router-reference/package.json` and the lockfile, and do not automatically cover other v5 or future versions.
@@ -9,14 +12,15 @@ AutoRouter, Router, and hand-written IttyRouter pipelines are each built as a si
 ## Build and verification
 
 ```sh
-npm ci --ignore-scripts --prefix vendor/txiki.js
-npm ci --ignore-scripts --prefix examples/itty-router-reference
-
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-cmake --build build --target \
-  test-itty-router-worker-driver test-module-denial
-ctest --test-dir build -L itty-router --output-on-failure
+# Prepare all locked dependencies and configure build-dev using the source-build guide.
+cmake --build build-dev --target \
+  capsid-worker test-itty-router-worker-driver test-module-denial
+ctest --test-dir build-dev --no-tests=error -L itty-router --output-on-failure
 ```
+
+Follow the complete [build prerequisites](../building.md), including the other
+locked framework trees; a partial npm setup is not a complete test configuration.
+Use npm.cmd and native commands on Windows.
 
 96 deterministic request vectors run against both the unmodified Node reference and the real worker. The same vector set independently covers the three router variants, with independent absolute assertions.
 
@@ -39,7 +43,7 @@ The differential compares status, sorted lowercase headers, exact body, params/q
 
 Applications can bundle the validated v5 router variants and Web-standard helpers into one ESM. They cannot depend on provider ambient bindings.
 
-Exclusions: Cloudflare bindings/ExecutionContext/cache/Durable Object, Node/Bun server adapters, WebSocket server/upgrade, filesystem static serving, external/remote/file modules, process/Worker, and txiki private APIs. Seven `itty-router-excluded` tests verify these boundaries.
+Exclusions: Cloudflare bindings/ExecutionContext/cache/Durable Object, Node/Bun listeners and framework-specific WebSocket server/Upgrade adapters, filesystem static serving, external/remote/file modules, process/Worker, and txiki private APIs. Seven `itty-router-excluded` tests verify these boundaries.
 
 ## Upgrade process
 

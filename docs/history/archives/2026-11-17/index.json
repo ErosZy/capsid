@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "capturedAtUTC": "2026-11-17T05:27:40.364854+00:00",
+  "capturedFrom": "Local documentation admitted before the full synchronization; not a new runtime qualification",
+  "snapshots": [
+    {
+      "originalPath": "docs/fetchrpc-v4.md",
+      "path": "docs/history/archives/2026-11-17/fetchrpc-v4.md.txt",
+      "sha256": "a522afeca477558afee0e62992bd40e825c80530da1f79df241cfbac4129d2c3",
+      "bytes": 182201,
+      "anchors": 116,
+      "admissionBytesExact": true
+    },
+    {
+      "originalPath": "docs/workerd-websocket-semantics.md",
+      "path": "docs/history/archives/2026-11-17/workerd-websocket-semantics.md.txt",
+      "sha256": "f4e6b1535e714ecc80398a0bc3dbed3df77f0e5d3e3841968cdc93d931f0ca1f",
+      "bytes": 172399,
+      "anchors": 102,
+      "admissionBytesExact": true
+    },
+    {
+      "originalPath": "docs/host-technical-design-review.md",
+      "path": "docs/history/archives/2026-11-17/host-technical-design-review.md.txt",
+      "sha256": "7914b70fe39195ff8e2886b089fcaaa56eab013965e1e2df48e23f7d61ceb622",
+      "bytes": 111116,
+      "anchors": 89,
+      "admissionBytesExact": true
+    },
+    {
+      "originalPath": "docs/performance-benchmarks.md",
+      "path": "docs/history/archives/2026-11-17/performance-benchmarks.md.txt",
+      "sha256": "c5a0151ea14ed83eb6515b7c9cb068cdd42cc5648c01d79b1bd98b6d8278e4a8",
+      "bytes": 23880,
+      "anchors": 22,
+      "admissionBytesExact": true
+    },
+    {
+      "originalPath": "docs/testing.md",
+      "path": "docs/history/archives/2026-11-17/testing.md.txt",
+      "sha256": "c832f4ed9f87939202c5048099bb96efad957e031e57591fa4ce09e29225f5a4",
+      "bytes": 274938,
+      "anchors": 127,
+      "admissionBytesExact": true
+    },
+    {
+      "originalPath": "docs/v0.3.0-current-qualification.md",
+      "path": "docs/history/archives/2026-11-17/v0.3.0-current-qualification.md.txt",
+      "sha256": "81c1ebb6521e4ae49cfc59e9bb4678b17d3ad62aec98df1a12140719bb5fc1c6",
+      "bytes": 94794,
+      "anchors": 27,
+      "admissionBytesExact": true
+    }
+  ]
+}

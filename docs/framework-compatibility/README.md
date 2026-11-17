@@ -1,5 +1,8 @@
 # Framework compatibility
 
+> Source/profile reviewed 2026-11-17. The four dependency locks below describe
+> the beta.2 matrix, not upstream-latest packages. See [current status](../current-status.md).
+
 Capsid implements the WinterTC **ECMA-429 Minimum Common Web API** profile
 `CAPSID-MIN-2025-subset-v0` (see [standards and conformance](../conformance.md)).
 Any framework that compiles to a single self-contained ESM exporting a standard
@@ -28,7 +31,7 @@ evaluated against the same rules: bundle to one audited ESM, avoid the excluded
 surfaces listed below, and run the differential/lifecycle/global-surface matrix.
 Only the pinned versions above carry Capsid evidence; adding a framework requires
 the same reference app, vector suite, negative controls, and upgrade process as
-the existing three.
+the existing four.
 
 Common validation path:
 
@@ -43,4 +46,4 @@ spawn worker
 
 The differential between the reference and the real worker is only part of the evidence. Every vector containing `expect` also has independent absolute assertions, so a reference and runtime failing at the same time cannot still appear as a pass.
 
-Common exclusions: Node/Deno/Bun/Cloudflare adapters, server/listener, filesystem static serving, WebSocket server, external/remote/`file:` imports, and provider ambient bindings. These boundaries are maintained by separate expected-rejection tests and are not counted as framework core incompatibilities.
+Common exclusions: Node/Deno/Bun/Cloudflare adapters, server/listener, filesystem static serving, raw listeners and framework-specific WebSocket server adapters, external/remote/`file:` imports, and provider ambient bindings. These boundaries are maintained by separate expected-rejection tests and are not counted as framework core incompatibilities.

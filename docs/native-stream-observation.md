@@ -1,5 +1,9 @@
 # Native stream observations and request lifetime
 
+> Technical reference source-checked for beta.2 on 2026-11-17. Named controls
+> and original budgets below describe the implemented contract, not a new test
+> execution or performance acceptance. See [current status](current-status.md).
+
 An ordinary native fetch body can remain locked and have pending reads after its owning HTTP response ends. The upstream connection is retired with the request. The public read promises and stream locks retain the state observed in the pinned workerd profile.
 
 A designated native stream future retains each subscriber's request identity without treating the parked observation as active continuation work. This includes internal default and BYOB read roots, native pipe waits, and async iterator reads that use the internal read algorithm directly. Ordinary application stream promises retain their existing accounting.

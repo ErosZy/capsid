@@ -16,10 +16,11 @@ const rawWorkflow = fs.readFileSync(path.join(root, '.github/workflows/testing-v
 // multiline mutation a no-op before the auditor is exercised.
 const workflow = rawWorkflow.replace(/\r\n/g, '\n');
 const release = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8').replace(/\r\n/g, '\n');
+const pages = fs.readFileSync(path.join(root, '.github/workflows/perf-pages.yml'), 'utf8').replace(/\r\n/g, '\n');
 const controlEol = process.env.CAPSID_WORKFLOW_CONTROL_EOL ?? (rawWorkflow.includes('\r\n') ? 'crlf' : 'lf');
 assert.ok(['lf', 'crlf'].includes(controlEol), 'known workflow control line ending');
 const serialize = (value, eol) => eol === 'crlf' ? value.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n') : value.replace(/\r\n/g, '\n');
-function run(source, eol = controlEol) {
+function run(source, eol = controlEol, pageSource = pages) {
     const temporaryRoot = fs.realpathSync(os.tmpdir());
     const directory = fs.mkdtempSync(path.join(temporaryRoot, 'capsid-workflow-control-'));
     assert.ok(path.isAbsolute(directory) && path.basename(directory).startsWith('capsid-workflow-control-'));
@@ -28,6 +29,7 @@ function run(source, eol = controlEol) {
         fs.mkdirSync(path.join(directory, '.github/workflows'), {recursive: true});
         fs.writeFileSync(path.join(directory, '.github/workflows/testing-validity.yml'), serialize(source, eol));
         fs.writeFileSync(path.join(directory, '.github/workflows/release.yml'), serialize(release, eol));
+        fs.writeFileSync(path.join(directory, '.github/workflows/perf-pages.yml'), serialize(pageSource, eol));
         const result = spawnSync(process.execPath, [auditor, directory],
             {encoding: 'utf8', timeout: 10000, windowsHide: true});
         assert.ifError(result.error);
@@ -46,6 +48,28 @@ test('the opposite line ending preserves the same complete healthy audit', () =>
     assert.equal(other.status, 0, other.output);
     assert.match(other.output, /Windows package profile required/);
 });
+
+for (const [name, replacement] of [
+    ['retired main', '      - main'],
+    ['extra retired branch', '      - dev/v0.3.0\n      - main'],
+]) {
+    test(`validity push rejects ${name}`, () => {
+        const source = workflow.replace('      - dev/v0.3.0', replacement);
+        assert.notEqual(source, workflow);
+        const result = run(source);
+        assert.notEqual(result.status, 0);
+        assert.ok(result.output.includes('validity push trigger follows the retained development branch'));
+    });
+}
+for (const replacement of ['branches: [main]', 'branches: [dev/v0.3.0, main]']) {
+    test(`Pages push rejects ${replacement}`, () => {
+        const source = pages.replace('branches: [dev/v0.3.0]', replacement);
+        assert.notEqual(source, pages);
+        const result = run(workflow, controlEol, source);
+        assert.notEqual(result.status, 0);
+        assert.ok(result.output.includes('Pages push trigger follows the retained development branch'));
+    });
+}
 
 const validationRefs = [...workflow.matchAll(/^ {10}ref: \$\{\{ github\.sha \}\}\n/gm)];
 assert.equal(validationRefs.length, 5, 'all validation jobs pin the event SHA');

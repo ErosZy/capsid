@@ -22,7 +22,8 @@
     "CAPSID-D008": "Accepted profile exclusion",
     "CAPSID-D009": "Provisional engine deviation",
     "CAPSID-D010": "Accepted workerd profile deviation",
-    "CAPSID-D011": "Provisional engine deviation",
-    "CAPSID-D012": "Accepted workerd profile deviation"
+    "CAPSID-D011": "Closed implementation gap",
+    "CAPSID-D012": "Accepted workerd profile deviation",
+    "CAPSID-D013": "Accepted workerd profile deviation"
   }
 }

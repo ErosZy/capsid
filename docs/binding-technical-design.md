@@ -1,5 +1,8 @@
 # Capsid Binding v1 Technical Design
 
+> Source/API reviewed 2026-11-17 against beta.2; historical dated results in §8.2
+> keep their original scope. [Current status](current-status.md) links current acceptance.
+>
 > Status: implemented. The acceptance matrix in §8 maps the design to current
 > tests. Privileged Linux profile probes run as a mandatory Hosted Validity
 > gate: a skipped sandbox test is a failure.
@@ -140,8 +143,12 @@ Binding development does not require the managed coordinator. `single-worker`
 and `static-pool` accept the same `capsid/app-v2` document and an explicit
 `--bindings-root`:
 
+These are **option fragments**, not standalone runnable launches. Append them
+to the complete command in [getting started](getting-started.md), including the
+worker, source name, routing/public authority, timeout, strict mode and ready fd.
+
 ```sh
-# Supply the normal required listen, worker, and bundle arguments as well.
+# Keep all normal required arguments from the quick start as well.
 capsid-host --mode single-worker \
   --capsid-json ./capsid.json \
   --bindings-root ./bindings

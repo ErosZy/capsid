@@ -1,5 +1,13 @@
 # Capsid 工程审计简报（供 AI 审校）
 
+<!-- capsid-historical-context-20261117 -->
+> **Historical plan/review — not current execution instructions.** The original
+> body, counts, failures and pending language below retain their captured source/date.
+> Stable is v0.2.2 and experimental v0.3.0-beta.2 is now published. Use
+> [current status](current-status.md) for delivered scope, exact qualification and
+> measured-source data; do not restart old campaigns from this record.
+<!-- /capsid-historical-context-20261117 -->
+
 > 2026-10-14 更新：本简报保留原审校基线的历史结论。GLM 后续提交的真实进度、
 > 本轮修复和未实现项目见 [GLM 实现审校与接棒记录](v0.3.0-glm-takeover-review.md)；
 > 执行状态以更新后的任务表为准。原序列通过和开发 fixture 77 不证明 0.3.0 已完成。

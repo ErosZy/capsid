@@ -1,0 +1,308 @@
+{
+  "complete": true,
+  "goalComplete": false,
+  "createdUTC": "2026-11-11T16:29:46.358932+00:00",
+  "proof": {
+    "complete": true,
+    "status": "targeted-pressure-dns-resource-fixtures-corrected-new-full-validation-running-macos-and-fuzz-findings-open",
+    "createdUTC": "2026-11-11T16:29:46.358932+00:00",
+    "goalStatus": "active",
+    "fullV030GoalComplete": false,
+    "codeSnapshot": "6df7254fc1bb5a3e19a1083dc9c5831431459e29",
+    "sourceFileCount": 5123,
+    "rootCodeMatchesSnapshot": true,
+    "productionCodeAndSchedulingChangedByThisBatch": false,
+    "pressureNativeProfilesPassed": [
+      "windows-release",
+      "linux-production",
+      "linux-asan-ubsan",
+      "linux-tsan"
+    ],
+    "pressureNegativeControlsRejected": 2,
+    "pressureDeadlineMs": 300,
+    "pressureHoldMs": 1500,
+    "pressureWireLimitBytes": 1048576,
+    "pressureCTestTimeoutSeconds": 30,
+    "original64RequestCaseRetained": true,
+    "oldFullFailureRetained": true,
+    "exactOriginalFullFailureCauseNotRetrospectivelyClosed": true,
+    "originalPreparationRaceDemonstrated": true,
+    "newBatchCoordinationDemonstrated": true,
+    "actualDnsNativeChecksPassed": 18,
+    "dnsRegistrationControlsPassed": 1210,
+    "dnsRegistrationControlSkips": 0,
+    "resourceIdentityFiniteLimitsMiB": [
+      256,
+      256,
+      192,
+      192
+    ],
+    "resourceOriginalEnforcementTestsPreserved": true,
+    "resourceStandaloneUbsanDiagnosisUsesUninstrumentedHostProviders": true,
+    "actualHostedResourceCorrectionStillPending": true,
+    "newHostedRun": 43057754558,
+    "newHostedCommit": "6da9f5de7f98573b71f3b6c769cbcd98f457925f",
+    "newHostedTreeEqualsPrivateCandidate": true,
+    "newHostedPassed": false,
+    "previousMacos": {
+      "run": 43049957600,
+      "job": 130624022988,
+      "allBuildPassed": true,
+      "fullRegistered": 752,
+      "passed": 554,
+      "failed": 184,
+      "skipped": 14,
+      "fullPassed": false,
+      "wrongNodeObserved": "v22.23.4",
+      "lockedNodeRequired": "v24.14.0",
+      "referenceRuntimeMissing": true,
+      "nativeConfigScopedIpv6AuthorityAccepted": true,
+      "otherNativeFailuresStillRequireAudit": true
+    },
+    "latestFuzz": {
+      "run": 43057754558,
+      "job": 130651696615,
+      "allBuildPassed": true,
+      "tests": 9,
+      "passed": 8,
+      "timeouts": 1,
+      "failed": "fuzz-websocket-frames_smoke",
+      "timeoutSeconds": 60,
+      "seed": 876915245,
+      "lastReportedInput": 9289,
+      "continuedProgressObserved": true,
+      "noFinal10000Done": true,
+      "previousSeparateNinePassesAnd70000InputRunRetained": true,
+      "originalBudgetUnchanged": true,
+      "rootCauseClosed": false
+    },
+    "formalPerformancePoints": 0,
+    "densityUserChoice": "preserve-original-production-scheduler-and-single-App-pool-improve-warmup",
+    "densityWarmupAndEveryWorkerCoverageStillOpen": true,
+    "actualViewportScreenshotsAccepted": false,
+    "userBrowserActionRequiredNow": false,
+    "mainHead": "8028b88adff26cbc1abcb9a2fafce2ffc3d8090f",
+    "mainBranchUpdated": false,
+    "tagCreated": false,
+    "releasePublished": false,
+    "rawLogs": {
+      "macos-job-130624022988.log": {
+        "file": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\macos-job-130624022988.log",
+        "sha256": "f980d1230853b9100f7e226ae3119ddd3736123d8c3951fd1e0110ef19df044c",
+        "bytes": 995652
+      },
+      "ubsan-job-130614001986.log": {
+        "file": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\ubsan-job-130614001986.log",
+        "sha256": "c97743c330bf2536a77174be7d80be59f0681cfdc085540e331f47f23307e937",
+        "bytes": 1406824
+      },
+      "asan-job-130614000754.log": {
+        "file": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\asan-job-130614000754.log",
+        "sha256": "d0b0d35307d73dd2f695cc363ad8e6b625d02ba999c24adf5c55eb334369042e",
+        "bytes": 1444488
+      },
+      "new-fuzz-job-130651696615.log": {
+        "file": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\new-fuzz-job-130651696615.log",
+        "sha256": "4d4c49366a90b5b81dcdc9b8d37bb5b01f1d5c91a1bcd2bc7c0de918484e9b96",
+        "bytes": 113860
+      }
+    },
+    "files": {
+      "candidate.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-pressure-dns-candidate-r1\\run.json",
+        "sha256": "99d1326fcb75eaf07c1c4c0d816c2f46b1222b40186179208010c7e6042661fc",
+        "bytes": 2619
+      },
+      "windows-pressure-and-dns.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-windows-pressure-dns-r1\\run.json",
+        "sha256": "e5598771ccd0d8cbf04787e313431b6811de57c95cae7593fff32d6295df2c3e",
+        "bytes": 9717
+      },
+      "linux-pressure-profiles.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-linux-pressure-batch-r1\\run.json",
+        "sha256": "4e99a92efb947be8b9b2b4d95b46e1aa266fbdf45bc8497828cb4d4fcc678b7f",
+        "bytes": 19244
+      },
+      "linux-dns-search-regression.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-dns-absolute-fixture-r1\\run.json",
+        "sha256": "b7eb80b5232d8525dbc688ff802448126f43aba46198ff17051a59a5afe8b962",
+        "bytes": 5531
+      },
+      "dns-registration-controls.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-dns-platform-controls-r2\\run.json",
+        "sha256": "16dce8e29582b1cec810be4f1f0bc7f338687345b7e923b896ddcd1bb54c7b0d",
+        "bytes": 926
+      },
+      "ubsan-controlled-premises.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-ubsan-premises-r1\\run.json",
+        "sha256": "72cb00b121622e50cabaeaa9880d0dcf5950be207ea665111630be524f6a6a8b",
+        "bytes": 5241
+      },
+      "ubsan-identity-limit-proof.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-ubsan-identity-limit-probe-r1\\run.json",
+        "sha256": "67ba7d9144ec42f0dee0c47d343ead035a0342ae29bc34478f1cdb83c4602f44",
+        "bytes": 1416
+      },
+      "ubsan-worker-startup.json": {
+        "source": "D:\\capsid-verification-20261108\\evidence\\v030-ubsan-identity-startup-r1\\run.json",
+        "sha256": "2e7888c10d7d58c473d06754cd0a7f0fcfb4691b4241339eba3a5c2e2a730957",
+        "bytes": 421
+      },
+      "hosted-dispatch.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-pressure-dns-validation-r1\\run.json",
+        "sha256": "0cddd614d0886736e32d852c32ecf1d7af3a48559a693e0f099ce352989d29a8",
+        "bytes": 2096
+      },
+      "new-native-source.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final4-windows-source-r2\\run.json",
+        "sha256": "da06d3f1b69ccefa8dba4c6b75c72af6f866413024eeca36d7f1af5f102cc4cc",
+        "bytes": 6989
+      },
+      "new-native-build-at-capture.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final4-windows-release-prebuild-r2\\run.json",
+        "sha256": "740001a777440a9e174851ac66a1bf8b7d92a997cc4f6c5f895e9f0ae4e8c42c",
+        "bytes": 3110
+      },
+      "new-native-full-queue-at-capture.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final4-windows-full-after-build-r1\\run.json",
+        "sha256": "d738a385871d97f33421ede35b6dffdc6469578706d48188a397057ecacfe7be",
+        "bytes": 419
+      },
+      "new-hosted-run-at-capture.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\new-run-discovery.json",
+        "sha256": "d6d5da57f42f06f6bba20d7d6be823e3a63e2ab20413a891cc5961e3730b2c4a",
+        "bytes": 13222
+      },
+      "new-hosted-jobs-at-capture.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\new-run-jobs-43057754558.json",
+        "sha256": "89a79a845d65e154b2c5216e221b783f17e435b570696f38f510021774218db5",
+        "bytes": 36628
+      },
+      "macos-failed-and-skipped-cases.json": {
+        "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\macos-terminal-cases.json",
+        "sha256": "002fb8c4efd9b6697a828fa60a5d3bcb59d85c9cfc811048a9d076fa481c31b1",
+        "bytes": 24522
+      },
+      "pressure-valid.log": {
+        "source": "D:\\capsid-verification-20261108\\evidence\\v030-windows-pressure-dns-r1\\root-pressure.stderr.log",
+        "sha256": "3639432aeaa12a6c1a20da78165cc472af4a8bd20c29542eed2dcffe51f4ee94",
+        "bytes": 203
+      },
+      "pressure-rejected-insufficient-credit.log": {
+        "source": "D:\\capsid-verification-20261108\\evidence\\v030-windows-pressure-dns-r1\\negative-insufficient-credit.stderr.log",
+        "sha256": "648a436e41d052808f5ba19a77863382ad799fb842216ad4e18c176bff64ac04",
+        "bytes": 329
+      },
+      "pressure-rejected-no-hold.log": {
+        "source": "D:\\capsid-verification-20261108\\evidence\\v030-windows-pressure-dns-r1\\negative-no-writer-hold.stderr.log",
+        "sha256": "7f84079ea781b54f72cf9d64baa511ce2e397e28a4f3b7fdf885ef063f6b27d8",
+        "bytes": 320
+      },
+      "ubsan-worker-startup.log": {
+        "source": "D:\\capsid-verification-20261108\\evidence\\v030-ubsan-identity-startup-r1\\worker-stderr.log",
+        "sha256": "1eb891659557a257092190fc9428087bbdbae2408a9951c4488dffbdae1c6063",
+        "bytes": 311
+      }
+    }
+  },
+  "files": {
+    "candidate.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-pressure-dns-candidate-r1\\run.json",
+      "sha256": "99d1326fcb75eaf07c1c4c0d816c2f46b1222b40186179208010c7e6042661fc",
+      "bytes": 2619
+    },
+    "windows-pressure-and-dns.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-windows-pressure-dns-r1\\run.json",
+      "sha256": "e5598771ccd0d8cbf04787e313431b6811de57c95cae7593fff32d6295df2c3e",
+      "bytes": 9717
+    },
+    "linux-pressure-profiles.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-linux-pressure-batch-r1\\run.json",
+      "sha256": "4e99a92efb947be8b9b2b4d95b46e1aa266fbdf45bc8497828cb4d4fcc678b7f",
+      "bytes": 19244
+    },
+    "linux-dns-search-regression.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-dns-absolute-fixture-r1\\run.json",
+      "sha256": "b7eb80b5232d8525dbc688ff802448126f43aba46198ff17051a59a5afe8b962",
+      "bytes": 5531
+    },
+    "dns-registration-controls.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-dns-platform-controls-r2\\run.json",
+      "sha256": "16dce8e29582b1cec810be4f1f0bc7f338687345b7e923b896ddcd1bb54c7b0d",
+      "bytes": 926
+    },
+    "ubsan-controlled-premises.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-ubsan-premises-r1\\run.json",
+      "sha256": "72cb00b121622e50cabaeaa9880d0dcf5950be207ea665111630be524f6a6a8b",
+      "bytes": 5241
+    },
+    "ubsan-identity-limit-proof.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-ubsan-identity-limit-probe-r1\\run.json",
+      "sha256": "67ba7d9144ec42f0dee0c47d343ead035a0342ae29bc34478f1cdb83c4602f44",
+      "bytes": 1416
+    },
+    "ubsan-worker-startup.json": {
+      "source": "D:\\capsid-verification-20261108\\evidence\\v030-ubsan-identity-startup-r1\\run.json",
+      "sha256": "2e7888c10d7d58c473d06754cd0a7f0fcfb4691b4241339eba3a5c2e2a730957",
+      "bytes": 421
+    },
+    "hosted-dispatch.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-pressure-dns-validation-r1\\run.json",
+      "sha256": "0cddd614d0886736e32d852c32ecf1d7af3a48559a693e0f099ce352989d29a8",
+      "bytes": 2096
+    },
+    "new-native-source.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final4-windows-source-r2\\run.json",
+      "sha256": "da06d3f1b69ccefa8dba4c6b75c72af6f866413024eeca36d7f1af5f102cc4cc",
+      "bytes": 6989
+    },
+    "new-native-build-at-capture.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final4-windows-release-prebuild-r2\\run.json",
+      "sha256": "740001a777440a9e174851ac66a1bf8b7d92a997cc4f6c5f895e9f0ae4e8c42c",
+      "bytes": 3110
+    },
+    "new-native-full-queue-at-capture.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-final4-windows-full-after-build-r1\\run.json",
+      "sha256": "d738a385871d97f33421ede35b6dffdc6469578706d48188a397057ecacfe7be",
+      "bytes": 419
+    },
+    "new-hosted-run-at-capture.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\new-run-discovery.json",
+      "sha256": "d6d5da57f42f06f6bba20d7d6be823e3a63e2ab20413a891cc5961e3730b2c4a",
+      "bytes": 13222
+    },
+    "new-hosted-jobs-at-capture.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\new-run-jobs-43057754558.json",
+      "sha256": "89a79a845d65e154b2c5216e221b783f17e435b570696f38f510021774218db5",
+      "bytes": 36628
+    },
+    "macos-failed-and-skipped-cases.json": {
+      "source": "E:\\capsid\\build-v030-dev\\evidence\\fetch-encoded-layer-20261107\\v030-hosted-post-pressure-review-r1\\macos-terminal-cases.json",
+      "sha256": "002fb8c4efd9b6697a828fa60a5d3bcb59d85c9cfc811048a9d076fa481c31b1",
+      "bytes": 24522
+    },
+    "pressure-valid.log": {
+      "source": "D:\\capsid-verification-20261108\\evidence\\v030-windows-pressure-dns-r1\\root-pressure.stderr.log",
+      "sha256": "3639432aeaa12a6c1a20da78165cc472af4a8bd20c29542eed2dcffe51f4ee94",
+      "bytes": 203
+    },
+    "pressure-rejected-insufficient-credit.log": {
+      "source": "D:\\capsid-verification-20261108\\evidence\\v030-windows-pressure-dns-r1\\negative-insufficient-credit.stderr.log",
+      "sha256": "648a436e41d052808f5ba19a77863382ad799fb842216ad4e18c176bff64ac04",
+      "bytes": 329
+    },
+    "pressure-rejected-no-hold.log": {
+      "source": "D:\\capsid-verification-20261108\\evidence\\v030-windows-pressure-dns-r1\\negative-no-writer-hold.stderr.log",
+      "sha256": "7f84079ea781b54f72cf9d64baa511ce2e397e28a4f3b7fdf885ef063f6b27d8",
+      "bytes": 320
+    },
+    "ubsan-worker-startup.log": {
+      "source": "D:\\capsid-verification-20261108\\evidence\\v030-ubsan-identity-startup-r1\\worker-stderr.log",
+      "sha256": "1eb891659557a257092190fc9428087bbdbae2408a9951c4488dffbdae1c6063",
+      "bytes": 311
+    }
+  },
+  "qualificationDocumentSHA256": "83002f4f6bbc95f95ddd78340a8bc10841ecc76e90b926dba4ed82528cbeb90f",
+  "ledgerSHA256": "1fc9215ac3d5b40775bce10f47919d46a5f2fcf9af63f139fa9828b0475ffa91",
+  "historicalDocumentSHA256": "5b9ea9e5fe10ff317b82f113cb0fab8c25296fb80c7188614e3fd1c8f3df71c1"
+}

@@ -1,0 +1,93 @@
+{
+  "files": {
+    "actual-frame-replays-and-profile.json": {
+      "bytes": 7016,
+      "sha256": "a0b947122f8fdc1afcdac681bb6d26be846fe33125f757843cea7541b209786d"
+    },
+    "asan-artifact-receipt.json": {
+      "bytes": 248,
+      "sha256": "4a0103e2f24fb38c4e6325c68eac6a0125d6691adb9c6f9d404d5cf0ba0a366a"
+    },
+    "asan-memory-acceptance.json": {
+      "bytes": 2562,
+      "sha256": "894010ca5d5df60dc0ee62c0273e4fc5dbb0a4ee9df422d961d3c4f9b42be8c4"
+    },
+    "asan-review.json": {
+      "bytes": 1659,
+      "sha256": "fa9cf3ddef9595c5340ab545000e1d7349b2b06caf783a5b96dc909306a8bce1"
+    },
+    "checkpoint.json": {
+      "bytes": 9192,
+      "sha256": "307eda910bcfb7e438c86736be3bc19d992b5ad339eb47073dcb4768ceb985ad"
+    },
+    "current-local-queue-observation.json": {
+      "bytes": 903,
+      "sha256": "fda6bc3deba393ff7d1727c9949d5ceeb69d2a4f763ef990e79ec0bbb7983e94"
+    },
+    "frame-private-timing.json": {
+      "bytes": 1711,
+      "sha256": "d74d183aacd989f43348a0cbc625dc0b45f26e293ca128e1bd56201aa0e9727a"
+    },
+    "frame-replay-archive-receipt.json": {
+      "bytes": 232303,
+      "sha256": "8b52c03843f32b3ca0215d607884ad7e48d6dff3323b76f30ac683cf31d66504"
+    },
+    "goal-ledger-before.json": {
+      "bytes": 1575616,
+      "sha256": "e4b2fa9044659e9922b130157bdef039b1423c24e2ad27207bc79b1e19d61c22"
+    },
+    "macos-artifact-receipt.json": {
+      "bytes": 249,
+      "sha256": "66d620863cb8318abf61b8e8c883b3159d8cc63b62139733096bd34648a61a7c"
+    },
+    "macos-review.json": {
+      "bytes": 1270,
+      "sha256": "a838cf1aa52d621033362a9e74392840eab728b0224410682474e71c2d5c644e"
+    },
+    "parent-local-queue-observation.json": {
+      "bytes": 6949,
+      "sha256": "832b364bb6703f995b5dc32d5ca2d43f0e0f2e93de21092150c787d8c98d6fe2"
+    },
+    "platform-review.json": {
+      "bytes": 8076,
+      "sha256": "f49a3448a9507507f56485996d9c8ad59f0ae84f3266b8863224364010bb5a55"
+    },
+    "private-density-client-cpu-dispatch.json": {
+      "bytes": 2467,
+      "sha256": "b4fc4e81e4c221fe7746d10b28279863a30f35237e3109bef28f858f15a93b1c"
+    },
+    "private-frame-optimization-dispatch.json": {
+      "bytes": 2448,
+      "sha256": "d859cf7dbeed9a8bba7f062bcdb3fa8ff592d4a2b72896597555c5b166aa2c9b"
+    },
+    "qualification-before.md": {
+      "bytes": 27405,
+      "sha256": "92fff4dff751d1b1a04bdb4bf56032582e10c197108d2380e92300fc72b57192"
+    },
+    "release-artifact-receipt.json": {
+      "bytes": 251,
+      "sha256": "aeea6e642d1c2b970bf6be9005bde7cbb24e16c5b252e48dec91a1de2ed93cd6"
+    },
+    "release-compatibility-acceptance.json": {
+      "bytes": 3904,
+      "sha256": "2e9d951749eacc493b28390190a4d5970dfe6908db884e26ca64589dfdf8c6f3"
+    },
+    "release-review.json": {
+      "bytes": 2364,
+      "sha256": "ed67f318c2f25e0a4b5d31ab22be9ddec7e07b73df175528371ee92eab017e89"
+    },
+    "strict-workerd-summary.json": {
+      "bytes": 16604,
+      "sha256": "3a1aeada32c2fd0ff96514f519e5e2102c50ca6fea6a718c00212273a95a2cbc"
+    },
+    "ubsan-artifact-receipt.json": {
+      "bytes": 249,
+      "sha256": "23b308549fe2f182610d08e04ff6048ead7ef207d90852d6cb98bf0b76a32ed9"
+    },
+    "ubsan-review.json": {
+      "bytes": 1420,
+      "sha256": "f697fc4108774f30ab7223ed54132b09aa641f0aa60b59bee8a04957457f05aa"
+    }
+  },
+  "fullV030GoalComplete": false
+}

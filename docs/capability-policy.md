@@ -1,5 +1,8 @@
 # Host Capability Policy
 
+> Reviewed against the v0.3.0-beta.2 source/API on 2026-11-17. See the
+> [current status and data scope](current-status.md) for release and measurement identities.
+
 The public ABI provides an optional and immutable `capsid_capability_policy`. It
 is a policy snapshot given by the host at worker startup, not a JavaScript
 permission prompt.
@@ -106,9 +109,11 @@ conditions are also recorded in the machine manifest:
   resolved-address egress hook. HTTP(S) client needs should use standard
   `fetch()`, which already covers the hostname, every DNS address, and every
   redirect;
-- `capsid:websocket` must wait until the client-only path also completes
-  DNS/address rechecking, queue limits, cancel, and request ownership;
-  server/upgrade is out of product scope;
+- the separate `capsid:websocket` module remains unbuilt. This does **not**
+  mean WebSocket is absent: the public global `WebSocket` and
+  `WebSocketPair`/101 path use negotiated FetchRPC v4 and Host-owned channels,
+  with egress, queue, cancellation and ownership checks. Applications still
+  cannot open a raw server/listener; see [WebSocket semantics](workerd-websocket-semantics.md);
 - `capsid:sqlite`'s benchmark-only fixed read-only database is not a product
   API. Before official release it must disable the extension loader, add an SQL
   authorizer and memory/row-count/execution-time quotas, and allow only in-memory
@@ -169,6 +174,7 @@ capability.net_policy = &net;
 capsid_worker_config config;
 capsid_worker_config_init(&config);
 config.worker_path = "/path/to/capsid-worker";
+config.egress_policy = &net;  /* NULL would deny native Fetch, even with net_policy. */
 config.capability_policy = &capability;
 ```
 
@@ -212,8 +218,9 @@ import { env } from "capsid:env";
 env.get("APP_MODE"); // "production", "" or undefined
 ```
 
-The worker process environment is always cleared; the runtime never calls
-`getenv()` and never enumerates the host environment. Only keys explicitly
+The application environment is an explicit snapshot, never an ambient fallback.
+The native Windows child also receives the OS-resolved `SystemRoot` needed by
+Winsock; that process-bootstrap value is not a `capsid:env` grant. Only keys explicitly
 provided in `capsid_env_entry` and simultaneously covered by a valid allow rule
 can enter HELLO. deny rules take precedence; unauthorized keys, duplicate keys,
 wildcard key names, null pointers, oversized values, and snapshots for an
@@ -230,7 +237,7 @@ the host ambient environment.
 ```js
 import { system } from "capsid:system";
 
-system.get("runtimeVersion"); // "0.2.2"
+system.get("runtimeVersion"); // "0.3.0" for beta.2; not the prerelease tag string
 system.get("featureFlags");   // frozen compile-time capability object
 ```
 
@@ -302,16 +309,19 @@ Only canonical absolute paths are accepted, and every call performs
 `CAPSID_PERMISSION_READ` allow/deny matching. Strict sandbox synchronously adds
 effective allow roots to read-only Landlock rules; if a configuration root is a
 symlink, the worker fails startup before executing the bundle. Actual opens use
-`openat2(RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)`, so symlinks in both final
-and intermediate path components are never followed, and there is no
-check-then-open race window.
+`openat2(RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS)` on Linux, a descriptor-relative
+`O_NOFOLLOW` walk on macOS, and reparse-point rejection on Windows. Symlink/reparse
+components are not followed. Windows accepts drive-letter absolute paths, not UNC;
+see [platform details](windows.md).
 
 `readText()` accepts only regular files and reads at most 1 MiB; `stat()` reports
 type and size only for regular files or directories; `list()` returns at most
 1024 entries and does not follow directory entries. All APIs are synchronous and
 bounded, and returned objects are frozen. Writing, deletion, rename, mkdir, and
-fswatch are not in this module; `CAPSID_PERMISSION_WRITE` continues to query as
-`unavailable`, and Landlock remains globally write-denying.
+fswatch are not in this User module; `CAPSID_PERMISSION_WRITE` continues to query
+as `unavailable`. A trusted Binding may widen its process sandbox union through
+an explicit filesystem-write profile, but its native gates remain Binding-owned
+and never grant User JavaScript those paths or operations.
 
 ## Audit events
 

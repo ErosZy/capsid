@@ -1,5 +1,9 @@
 # Array and string iterator storage
 
+> Technical reference source-checked for beta.2 on 2026-11-17. Named controls
+> and original budgets below describe the implemented contract, not a new test
+> execution or performance acceptance. See [current status](current-status.md).
+
 The native VM keeps an array or string iterator's cursor and retained input in
 the allocation that owns the iterator object. The JavaScript object layout and
 the layouts of other classes stay the same. The object's allocation includes

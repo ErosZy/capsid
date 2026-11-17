@@ -1,0 +1,30 @@
+{
+  "complete": true,
+  "createdUTC": "2026-11-11T20:37:17.051156+00:00",
+  "snapshotCommit": "b52f5075a7c2579b6b48436b0a7686a687a4ab24",
+  "currentLedgerSHA256": "377fb7abfcd29c1e828df9de2a4366330c54eeaadf8bede1e5a8bb159d4a1ba3",
+  "qualificationDocumentSHA256": "2f62cb9a6f9bcc0ebaddbf15bdf700b7b4d0f6b70634030d6e61128d53c86844",
+  "files": {
+    "candidate.json": "55de6838fbf19b12d4e04f7ddbe021f27afed4e7d4c881b1e09522974af4d652",
+    "checkpoint.json": "5e14812bffdb4cc2140130f6df5f2ef11278d37891ad2ac955f5d987d8a6032e",
+    "linux-negative-controls.json": "1ab22eac341c28ff2ad850e155556db79745b1139bfb1176468005eeae69b824",
+    "linux-original-read-models.json": "49fb887cfe3b5fcd66f3ed4790a48183c1bfe784a8f212e25d9ac08a552f2983",
+    "linux-parent-compatibility.json": "866bb898c753b5613738e84201144647b181d19bf9030fc936dc290030ccec1f",
+    "linux-parent-full.json": "b62fdb77be43858deed1180f9a21fbe354e6f805fb5703fe487a49b821a3d692",
+    "linux-parent-reference.json": "9939e505cc50c37c84f8df2b0abf7f330b90f1ba23f22c8c4a8fd9490ab17516",
+    "linux-uri-component.json": "423787eaba6621531889db9ca6ef8164c7112835f9e0b7d5db2fed01ac64ad66",
+    "linux-uri-real.json": "bce30692b53367e3736789c6bb49781207cb4ca59ffe5a33e1e0e566e456fda8",
+    "macos-driver-original.zip": "9bdf66318c0b96ac620f68bac2e8ca9aec7579df471e7eaba85ad4fe0426fd61",
+    "macos-driver-terminal.json": "a91ebee290700c87504ad58ef3431eaa770533fc2a310d4b81925c1b91bb4078",
+    "macos-latest-status.json": "298a3df91fc752edd0f63c247fa68eda3cdf72fe8094f4c6691adfcaa9760acb",
+    "macos-startup-retry.json": "c857d707b2868a993b34a4d6f972f8cfdbc5a223cff4429d68fcf6ebb9981bf7",
+    "macos-uri-dispatch.json": "567f967c648a6c23e2497042e20003dd12979e2b6567ef9f62421b4d3a037473",
+    "qualification-before.md": "3acce1fa81a3ccacae4a8ba7aa282fc2c4a0ce58eae31f386dc3fb63dfc18fc3",
+    "windows-original-read-models.json": "56a0c5ed7e0116a62b65ae74b06bd00f8c7914d8a8d10f94cb0387f6dc2ea32b",
+    "windows-parent-full.json": "0d80fbb9a782377af551507e352bc96779b6135fc409caab5daf5cd8c1e9ae7d",
+    "windows-uri-component.json": "3d846c10272ad948653731c6e007a7c7b34db414a5e341ae7acbbb4922fb9e48",
+    "windows-uri-real.json": "76bf9619ee8f9abbf38d8718187c41652d31a449e9537fa9e1ead27cd9580703"
+  },
+  "fullV030GoalComplete": false,
+  "latestObservationUTC": "2026-11-11T20:39:46.326812+00:00"
+}

@@ -1,5 +1,8 @@
 # host.json and capsid.json Configuration Reference
 
+> Parser/compiler/API reviewed 2026-11-17 against beta.2. See
+> [current status](current-status.md) for source and release/data boundaries.
+
 Managed mode (`capsid-host --mode managed`) uses two JSON files to describe the whole
 machine and each application version. Both files fail closed: duplicate keys, unknown
 fields, invalid enums, and out-of-range values cause startup or deployment to fail
@@ -36,7 +39,7 @@ listener and any incomplete exchanges. Workers are not restarted in this mode.
 
 ### `single-worker` / `static-pool` CLI
 
-Required:
+Required inputs (conditional requirements are called out explicitly):
 
 | Flag | Meaning |
 | --- | --- |
@@ -52,18 +55,19 @@ Required:
 | `--public-scheme http` \| `https` | the external URL scheme the listener advertises |
 | `--public-authority host[:port]` | the external authority |
 | `--strict-sandbox on` \| `off` | worker sandbox profile |
-| `--ready-fd <fd>` | readiness descriptor the Host writes the READY record to |
+| `--ready-fd <fd>` | open, inherited descriptor receiving the READY JSON record; interactive examples explicitly use stdout (1) |
 | `--stop-fd <fd>` | optional parent stop pipe; a byte or EOF requests bounded normal shutdown; fd must be above 2 and distinct from READY; validated before bundle load or Worker spawn |
 | `--workers <positive-integer>` | `static-pool` only, required; 1..4096, each shard is one worker process |
 
-Optional (each keeps the data-plane default when omitted):
+Other options (omission uses the applicable document/default; the request
+timeout still has the conditional requirement shown below):
 
 | Flag | Meaning |
 | --- | --- |
 | `--capsid-json <file>` | local permission policy. Default: `./capsid.json` is read when it exists; an explicit path must exist. Absent document = the no-permission baseline (all denied). See [capsid-json.md](capsid-json.md) |
 | `--secrets-root <dir>` | local secret store for `env.valueFrom`: one regular file per key id. Without it, `valueFrom` is rejected at policy compile time |
 | `--bindings-root <dir>` | scanned immutable Binding registry for local Binding development; capsid.json may only request packages from this snapshot |
-| `--request-timeout-ms <ms>` | per-request deadline |
+| `--request-timeout-ms <ms>` | positive per-request deadline; required unless `capsid.json` supplies `request.timeout`, and an explicit CLI value overrides that setting |
 | `--max-inflight-per-worker <n>` | in-flight request cap (0 = unlimited) |
 | `--queue-requests <n>` | request queue depth |
 | `--queue-header-bytes <size>` | header queue budget (e.g. `2MiB`) |
@@ -99,8 +103,6 @@ validated before anything is spawned.
 the per-version capsid.json documents described below. On macOS and Windows the
 mode exits at the CLI with a message — the managed coordinator requires the Linux
 strict sandbox.
-
-## Responsibilities of the two configuration layers
 
 ## Responsibilities of the two configuration layers
 
@@ -200,8 +202,7 @@ All other fields are optional.
       "jsHeap": "64MiB",
       "processAddressSpace": "256MiB",
       "memoryMax": "256MiB",
-      "fileDescriptors": 64,
-      "pidsMax": 8
+      "fileDescriptors": 64
     },
     "request": {
       "timeout": "5s",
@@ -252,7 +253,9 @@ All other fields are optional.
 
 ### Field notes and hard validation
 
-- `apiVersion` must be exactly `capsid/host-v1`;
+- `apiVersion` is `capsid/host-v1`, or `capsid/host-v2` when using the delivered
+  Binding registry; unknown versions are rejected. App v1/v2 and Host v1/v2
+  preserve their explicit schema boundaries; see [Binding design](binding-technical-design.md);
 - `admin.mode` accepts only the string `"0600"`; the Admin socket accepts only peers
   with the same euid as the Host (`SO_PEERCRED`/`getpeereid`), and all other processes
   immediately get 403;
@@ -267,7 +270,10 @@ All other fields are optional.
   `host` or `host:p1,p2` (comma-separated port list); `fsReadRoots` are read-only roots;
 - `trustedBytecodeKeys`: free mapping from release id to Ed25519 public key file path;
 - `defaults`/`maximums` `worker`/`request` subfields use the same syntax as capsid.json
-  (see [How to write capsid.json](capsid-json.md)); `fileDescriptors` must be ≥1;
+  (see [How to write capsid.json](capsid-json.md)); `fileDescriptors` must be ≥1.
+  The parsed App `pidsMax` field is not propagated into effective App policy in
+  this source; do not mistake schema acceptance or a Host defaults declaration
+  for an enforced per-App PID ceiling. Linux C API/cgroup controls are separate;
 - `defaults.request.timeout` supplies the managed Worker duration when the App
   omits `request.timeout`. Both that default and `maximums.request.timeout`
   require positive `ms`/`s`/`m` durations within the Runtime's supported range.
@@ -322,6 +328,18 @@ and inbound connection teardown also emit diagnostics so the final request is
 observable after its inflight slot returns. Embedders can attach
 the shared budget to `MetricsRegistry` for Prometheus rendering.
 
+### Per-worker v4 protocol limits
+
+The top-level **Host** `channels` object (not an App key) accepts integer fields
+`maxChannels`, `maxMessageBytes`, `reassemblyBudgetBytes`, `sendBudgetBytes`,
+`closeTimeoutMs`, `dialTimeoutMs`, `idleTimeoutMs` and `perChannelQueueBytes`.
+Byte fields here are integer bytes, not size strings. Typed projection enforces
+the A2 bounds in the [wire contract](fetchrpc-v4.md#121-hello-a2-limits-extension-v41)
+and freezes them into each generation. A supplied Host JSON value must satisfy
+its positive-integer schema; omit idleTimeoutMs for the default rather than
+assuming the protocol's raw zero spelling is accepted by this JSON schema.
+These per-worker limits are independent of service/listener aggregate budgets.
+
 ## capsid.json (each app version)
 
 **For a step-by-step guide, see [How to write capsid.json (tutorial)](capsid-json.md)**—it
@@ -331,7 +349,7 @@ steps. This section only keeps a field quick reference:
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `apiVersion` | ✓ | Must be exactly `capsid/app-v1` |
+| `apiVersion` | ✓ | `capsid/app-v1`, or `capsid/app-v2` for declared Bindings |
 | `pool.minReady` | ✓ | Fixed pool size; must equal `maxWorkers` |
 | `pool.maxWorkers` | ✓ | Fixed pool size; must equal `minReady` |
 | `pool.queueRequests` / `queueHeaderBytes` / `queueTimeout` | | Queue; 0 = queueing disabled; capped by `maximums.pool` |
@@ -339,9 +357,10 @@ steps. This section only keeps a field quick reference:
 | `permissions.env` | | Environment variables; key → `{value}` or `{valueFrom}` (exactly one) |
 | `permissions.fs.read.allow` / `deny` | | Read-only roots; `deny` takes precedence over `allow` |
 | `permissions.fetch.allow` | | Egress targets `host` or `host:p1,p2`; omitted = all denied |
-| `permissions.storage.namespaces` | | Read-only storage namespaces (`[A-Za-z0-9._-]` ≤128) |
-| `permissions.stdio` | | Only `stdin`/`stdout`/`stderr` accepted |
-| `worker.jsHeap` / `processAddressSpace` / `memoryMax` / `fileDescriptors` / `pidsMax` | | Omitted = worker's own defaults; capped by `maximums.worker` |
+| `permissions.storage.namespaces` | | Authorized worker-local mutable in-memory namespaces (`[A-Za-z0-9._-]` ≤128), not persistent storage |
+| `permissions.stdio` | | Only the three stream names parse; User stdout/stderr logs are implemented, stdin remains unavailable |
+| `worker.jsHeap` / `processAddressSpace` / `memoryMax` / `fileDescriptors` | | Separate heap/address/managed-budget/fd settings; local memoryMax is rejected; see resource caveats in the tutorial |
+| `worker.pidsMax` | | Schema-recognized but not an enforced effective App PID limit; do not rely on it for isolation |
 | `request.timeout` / `maxInflightPerWorker` / `maxStreamingInflightPerWorker` / `streamIdleTimeoutMs` / `writeTimeoutMs` | | Request windows and SSE slots |
 | `healthCheck.path` / `timeout` | | Startup probe; managed mode probes worker-internal, local single-worker/static-pool modes probe through the real listener path; empty = no probe |
 
@@ -364,10 +383,9 @@ directory for that app; the key id referenced by `valueFrom` is the file name in
 that directory:
 
 ```sh
-mkdir -p /srv/capsid/secrets/orders
-printf '%s' 'postgres://user:pass@db.example.com/app' \
-  > /srv/capsid/secrets/orders/db-url
-chmod 0600 /srv/capsid/secrets/orders/db-url
+# The source is an operator-provided private file; never paste live secrets into shell history.
+install -d -m 0700 /srv/capsid/secrets/orders
+install -m 0600 /path/to/private/db-url /srv/capsid/secrets/orders/db-url
 ```
 
 - Key id grammar `[A-Za-z0-9._-]`, no `..`, has a length limit;
@@ -384,19 +402,30 @@ chmod 0600 /srv/capsid/secrets/orders/db-url
 `--host-config` must be a regular file owned by the Host user (O_NOFOLLOW, euid check,
 ≤1 MiB, mtime verified before and after reading).
 
-The Admin API only uses a Unix socket (same euid as the Host):
+The Admin API only uses a Unix socket (same euid as the Host). A deploy request
+has exactly `app` and `version` keys; its response uses `application` instead of
+`app`. Unknown request keys, including `application`, are rejected.
+
+HTTP 202 acknowledges submission, not routing readiness. Query that operation's
+`state` and `version` within a finite client deadline; require the matching
+operation to reach `active`. A `failed` state or deadline expiry is a failure,
+not a reason to repeat the deploy POST. A Host READY record or on-disk
+active App status alone does not prove that this version is serving requests.
+When validating rollout, check the matching terminal operation and then the
+expected data-plane response without concealing failures through retries.
 
 ```sh
 # Deploy (blue-green: staging/warm-up/health check first, atomic switch, old version kept on failure)
 curl --unix-socket /run/capsid/admin.sock \
   -X POST http://localhost/v1/deploy \
   -H 'Content-Type: application/json' \
-  -d '{"application":"orders","version":"v2"}'
+  -d '{"app":"orders","version":"v2"}'
 # → 202 {"operationId":"...","application":"orders","version":"v2","status":"..."}
 
-# Query operation status
+# Query the exact operationId returned above (replace this value)
+operation_id='replace-with-the-returned-operationId'
 curl --unix-socket /run/capsid/admin.sock \
-  http://localhost/v1/operations/<operationId>
+  "http://localhost/v1/operations/${operation_id}"
 
 # App status
 curl --unix-socket /run/capsid/admin.sock http://localhost/v1/apps/orders

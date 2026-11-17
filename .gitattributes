@@ -27,6 +27,13 @@
 # Captured evidence and byte-preserved qualification archives bind raw SHA256.
 # Keep every dated artifact's bytes intact on native Windows checkouts.
 /docs/evidence/** -text
+/docs/history/archives/** -text
+/docs/data/performance-review.json -text
+/docs/data/performance-source-manifest.json -text
+
+# Packed transports are exact binary bytes, including split parts whose first
+# block may otherwise look textual to Git. Disable diff/merge/EOL conversion.
+/perf-site/archives/** binary
 
 # Retained benchmark CSV files use the csv module's RFC-style CRLF records.
 /bench/results/**/*.csv -whitespace

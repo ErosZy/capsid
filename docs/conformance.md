@@ -1,13 +1,11 @@
 # Standards and Conformance
 
-<!-- capsid-current-qualification-20261110 -->
-本页后续历轮内容保留原记录身份。当前兼容边界、冻结输入、原始失败和封板开放项见[当前验收与边界](v0.3.0-current-qualification.md)。当前源码版本为 0.3.0 候选，v0.3.0 尚未封板或发布。
-
-部分历史产物已按用户授权清理；[证据索引](evidence/v0.3.0/2026-11-10/index.json)及[可用性审计](evidence/v0.3.0/2026-11-10/historical-evidence-availability.json)说明时点与范围。旧章节的“当前”“仍保留”不表示本轮重新验证了已删除文件。
-<!-- /capsid-current-qualification-20261110 -->
+> Reviewed against the v0.3.0-beta.2 source/profile on 2026-11-17. The beta is
+> published; stable remains v0.2.2. Required compatibility acceptance is **not**
+> full WPT or ECMA-429 conformance. See [current status](current-status.md).
 
 
-Target profile: `CAPSID-MIN-2025-subset-v0`. This document combines the standard source lock, conformance deviations, and capability tracking matrix; the machine-readable WPT selection is [`tests/wpt/manifest.json`](../tests/wpt/manifest.json). Test execution is described in [Testing and Continuous Gates](testing.md).
+Target profile: `CAPSID-MIN-2025-subset-v0`. This document combines the standard source lock, conformance deviations, and capability tracking matrix; the machine-readable WPT selection is [`tests/wpt/manifest.json`](../tests/wpt/manifest.json). Maintained execution instructions are in the [testing guide](testing-guide.md).
 
 ## 1. Standard Source Lock
 
@@ -114,6 +112,7 @@ This table distinguishes actively accepted profile exclusions from implementatio
 | CAPSID-D010 | MessagePort queue starts before `start()` | Accepted workerd profile deviation | The pinned workerd default and Capsid both deliver queued messages before `start()`, as the mandatory API fixture verifies. The WHATWG standard requires an initially disabled queue. After listener alignment, the upstream initial-disabled test encounters the D012 rejection of capture:true before reaching its queue assertion. | The old exact `Untitled test` assertion waiver is not matched: the TypeError remains a failing CTest. This run is not evidence that the upstream queue assertion executed. | Resolve the standards/default-workerd profile boundary while preserving the original source, exact failure checks and independent queue observations. |
 | CAPSID-D011 | GB18030 four-byte range mapping | Closed implementation gap | The former four-byte fallback depended on platform conversion tables: Linux mapped 18 WHATWG pointers to private-use characters, while native Windows and the locked workerd returned the standard code points. Decoding now uses all 207 manifest-pinned WHATWG ranges, the U+E7C7 exception, and a content-locked 23,940-entry WHATWG two-byte index. A fresh Managed Worker also uses this index: the former platform converter reported host encoding is unavailable there. All 18 expected-failure entries are removed without changing upstream assertions. | The selected 275-case upstream GB18030 batch and exact workerd observations cover these mappings; full standards conformance is not implied. | Keep the pinned range-generation audit, streaming/error/reset cases, and exact four-byte/two-byte pointer comparisons across Linux and Windows. |
 | CAPSID-D012 | Default workerd event behavior | Accepted workerd profile deviation | The v0.3.0 development profile follows the locked workerd default: currentTarget persists after dispatch, event timeStamp is zero, isTrusted is a configurable prototype getter, default ErrorEvent.error and CustomEvent.detail are undefined, MessagePort message source is the receiving port, and rejectionhandled omits reason. The 105 public event cases, 66 listener cases and 259 event-handler attribute inputs also freeze synchronous exception propagation, rejection of true capture/passive options, registration-time handleEvent capture, retained stop flags and cancellation by an exactly true return value. | The exact currentTarget assertion in EventTarget-constructible.any.js is retained as an expected failure. These are declared default-profile behaviors, not full DOM/HTML standards conformance. | Revisit when the locked default changes or a separately versioned standards profile is implemented; retain the upstream assertions and four-backend observations. |
+| CAPSID-D013 | Headers default-workerd behavior | Accepted workerd profile deviation | The locked Headers constructor/ByteString and snapshot-iteration behavior differs from selected standard expectations; Headers basic/errors retain raw failures in profile v2. | Reference agreement does not establish full Fetch Headers conformance. | Preserve upstream sources and exact conflicts; revisit only with a reviewed profile/reference change. |
 
 For D010, the [WHATWG MessagePort definition](https://html.spec.whatwg.org/multipage/web-messaging.html#message-ports)
 requires an initially disabled port message queue. The previous description that
@@ -151,8 +150,8 @@ A capability can only be marked complete when both its conformance test and proc
 | Compression | compression-stream and pinned resources | `worker_p1_platform_contract` | gzip/deflate/deflate-raw pass; brotli is CAPSID-D007 |
 | Console | `console-is-a-namespace.any.js` | `worker_p1_platform_contract` | Pass; CAPSID-D003 closed |
 | Web Crypto | getRandomValues, randomUUID | `worker_p1_platform_contract` | 2/2 files and digest/random process behavior pass |
-| Fetch | 5 Headers/Request/Response files | direct fetch, cancel, HTTP/HTTPS, egress, netns tests | Selected constructor/WebIDL and real egress matrix pass |
-| Performance | HR-Time `basic`, `monotonic-clock` | `worker_p1_platform_contract` | D004 reopened: relative elapsed comparison has an unexplained failure; diagnostic reruns are not a fix |
+| Fetch | 5 Headers/Request/Response files | direct fetch, cancel, HTTP/HTTPS, egress, netns tests | Real egress and selected constructor/WebIDL checks pass; Headers basic/errors retain raw standard failures under D013 |
+| Performance | HR-Time `basic`, `monotonic-clock` | `worker_p1_platform_contract` | Selected beta qualification passes these checks; D004 retains earlier source-bound clock observations and does not claim every historical failure is explained |
 | WebAssembly subset | 12 compile/instantiate/validate, Memory/Table/Global and streaming files | `worker_wasm_minimal` and shared/exported resource regressions | 12/12 files pass; CAPSID-D001/002/008 are accepted exclusions |
 | Host capability policy (non-conformance extension) | capability manifest, module contract, policy/audit/parser and fuzz | permissions, utility, env, system, storage, stdio, fs real worker contracts, per-module denial matrix and final binary audit | ABI v7 / policy v2 three-layer gates pass; the twelve `capsid:` modules can be authorized item by item, with known deferred modules and operations staying `unavailable` |
 
@@ -173,52 +172,65 @@ claim about all MessagePort features.
 The pinned [workerd implementation](https://github.com/cloudflare/workerd/blob/8f311ae3e3cf3064983f56a6a1c8b7ee33d6b99f/src/workerd/api/messagechannel.c%2B%2B)
 defines the delivery behavior. This differs from the task timing assumed by
 four nested-task cases in the selected rejection WPT support source. Their
-original ten-second timeouts and standard failures remain visible. The older
-two-file default-profile classification below does not accept these additional
-timeouts and cannot qualify this scheduling change; the complete standard and
-platform qualification remains required.
+original ten-second timeouts and standard failures remain visible. The historical v1/two-file classification did not accept those additional
+timeouts and could not qualify the scheduling change. The current v2 mapping
+below records only its exact declared conflicts; unlisted timeouts remain failures.
+Actual beta qualification is linked separately, not inferred from this observation.
 
 ### Versioned default-workerd evidence
 
-[`workerd-default-profile.json`](../tests/wpt/workerd-default-profile.json) defines
-`CAPSID-WORKERD-v1.20261010.1-default-v1` independently of the standard WPT result.
-It binds the reference release, source commit, binary digest, compatibility date
-and flags, the pinned WPT commit and both original file digests. Its scope is the
-36-subtest rejection support source and the one-subtest initial-disabled source.
-The original CTests remain failing; no expected-failure entry or upstream reason
-assertion is changed by this mapping.
+The current classification is
+[`workerd-default-profile-v2.json`](../tests/wpt/workerd-default-profile-v2.json),
+`CAPSID-WORKERD-v1.20261010.1-default-v2`. It binds platform-specific reference
+binary digests, source commit, compatibility date/flags, WPT commit and exact
+original file digests. It records five raw failing CTest files:
 
-`node tools/workerd-wpt-profile.mjs metadata` checks the declaration. The `audit`
-command consumes complete archived LastTest/JUnit/registration evidence and a
-validated required workerd gate using the same Host/Worker binaries. It requires
-the three exact failure names, test phases, error classes and diagnostic first
-lines, as well as the unreached D010 expectation. Cleanup failures, missing events,
-timeouts, partial files and additional failures cannot use this classification.
-Four-backend API observations independently require the handled event and promise
-identity, the original unhandled reason, capture-option rejection and queue
-delivery before and after start. The earlier event-presence guards remain required.
+- rejection support source (including its four declared nested-task timeouts);
+- PromiseRejectionEvent constructor;
+- MessagePort initial-disabled;
+- Headers basic;
+- Headers errors.
 
-A successful audit reports `profile-matched-with-standard-failures`,
+The original assertions, timeout diagnostics and ordinary nonzero suite result
+remain. An unlisted timeout, cleanup failure, missing event, altered input or
+additional failure is not accepted. The older
+[v1 declaration](../tests/wpt/workerd-default-profile.json) is retained as a
+historical narrower classification, not the current release gate.
+
+`node tools/workerd-wpt-profile-v2.mjs metadata` checks the declaration.
+`tools/workerd-wpt-acceptance.mjs audit` binds the complete ordinary exit,
+LastTest/JUnit/registration evidence, v2 comparison/context reports and required
+workerd gate to the same Host/Worker identities. Exact failure phases, classes,
+diagnostics, counts and the unreached D010 expectation remain checked.
+Four-backend observations independently require actual events, promise identity,
+rejection reason, listener options and queue behavior. Metadata/control tests
+alone are not live reference evidence.
+
+A successful compatibility audit retains its profile-matched verdict and reports
 `standardCTestFilesPassed:false`, `ordinarySuitePassed:false` and
 `standardsConformanceClaimed:false`. It does not rewrite standard reports or claim
 complete workerd or standards conformance. CI archives this audit after an ordinary
 suite failure while retaining that step's failure and the original full evidence.
-`workerd_wpt_profile_metadata` and `workerd_wpt_profile_controls` run on platforms
-without a local reference or WPT checkout; those declaration/control tests do not
-constitute a live reference comparison.
+Portable profile metadata/control tests also run without a local reference or
+WPT checkout; that does not establish live WPT/reference execution.
 
 The current adapted batch executes 84 upstream files in separate realms. It only proves those pinned files, not all of WPT or full ECMA-429 conformance.
 ## Development WebSocket scope (v0.3.0)
 
 The development profile adds WebSocketPair, WebSocket and CloseEvent. Inbound
 101 and User-origin outbound ws/wss have working first-party host paths;
-the release remains 0.2.2/ABI v7 until its separate acceptance gates complete.
+beta.2 is published with ABI v7 and additive FetchRPC v4 APIs. The stable channel
+remains v0.2.2; the current [qualification record](v0.3.0-current-qualification.md)
+identifies the actual accepted source and platform scope.
 The [semantics dossier](workerd-websocket-semantics.md) records the locked
 reference, tested cases and differences, including strict UTF-8/wire Close
 validation, bounded queues, unrequested protocols, and pending/abrupt lifetime
 observations. This addition does not constitute a WebSocket WPT certification.
-Binding-origin WS, full parameter/event/cleanup matrices and production strict
-platform evidence remain unaccepted in the [execution plan](superpowers/plans/2026-10-12-v0.3.0-remediation-and-delivery.md).
+Do not use the old [execution plan](superpowers/plans/2026-10-12-v0.3.0-remediation-and-delivery.md)
+as today's acceptance ledger. The required beta campaign passed its declared
+Binding, native-client, parameter/lifetime and Linux strict gates; this does
+not close every historical unobserved schedule, future profile or platform
+isolation gap.
 
 
 ### CAPSID-D013: Headers in the locked workerd default profile
@@ -232,7 +244,7 @@ uses entry snapshots for these iteration operations.
 
 Retain the original standard assertions and their recorded failures. This is
 an explicit compatibility profile difference and does not establish full Fetch
-Headers standards conformance. The same 20 cases have also been compared through
+Headers standards conformance. The same frozen 20 cases were compared through
 the actual public global `Headers` in native QuickJS, with two challenged requests
 in each of single-worker, static-pool and managed mode. All native values matched
 the locked reference, including the five declared standard differences. This
