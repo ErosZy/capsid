@@ -28,9 +28,7 @@ namespace {
 
 using ErrorCode = BytecodeAttestationErrorCode;
 
-void set_error(BytecodeAttestationResult &result,
-               ErrorCode code,
-               std::string path,
+void set_error(BytecodeAttestationResult& result, ErrorCode code, std::string path,
                std::string message) {
     result.selection = BytecodeArtifactSelection::kReject;
     result.code = code;
@@ -38,11 +36,10 @@ void set_error(BytecodeAttestationResult &result,
     result.message = std::move(message);
 }
 
-bool sha256_hex(std::span<const std::uint8_t> bytes, std::string *out) {
+bool sha256_hex(std::span<const std::uint8_t> bytes, std::string* out) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
-    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size,
-                   EVP_sha256(), nullptr) != 1 ||
+    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size, EVP_sha256(), nullptr) != 1 ||
         digest_size != 32) {
         return false;
     }
@@ -99,43 +96,37 @@ struct ParsedClaims {
 // Strict JSON parsing and claim extraction for bytecode.json. Rejects
 // oversized documents, duplicate keys, unknown fields, missing fields and
 // non-string values; every failure is kReject with an RFC 6901 pointer.
-bool parse_attestation_json(std::string_view json,
-                            ParsedClaims *claims,
-                            BytecodeAttestationResult *error) {
+bool parse_attestation_json(std::string_view json, ParsedClaims* claims,
+                            BytecodeAttestationResult* error) {
     if (json.size() > kMaxBytecodeAttestationBytes) {
-        set_error(*error, ErrorCode::kResourceLimit, "",
-                  "attestation exceeds the size limit");
+        set_error(*error, ErrorCode::kResourceLimit, "", "attestation exceeds the size limit");
         return false;
     }
     json_error_t parse_error;
-    json_t *root =
-        json_loadb(json.data(), json.size(), JSON_REJECT_DUPLICATES, &parse_error);
+    json_t* root = json_loadb(json.data(), json.size(), JSON_REJECT_DUPLICATES, &parse_error);
     if (root == nullptr) {
         const enum json_error_code parse_code = json_error_code(&parse_error);
         set_error(*error,
-                  parse_code == json_error_duplicate_key
-                      ? ErrorCode::kDuplicateKey
-                      : ErrorCode::kInvalidJson,
+                  parse_code == json_error_duplicate_key ? ErrorCode::kDuplicateKey
+                                                         : ErrorCode::kInvalidJson,
                   "",
-                  parse_code == json_error_duplicate_key
-                      ? "duplicate attestation field"
-                      : "invalid attestation JSON");
+                  parse_code == json_error_duplicate_key ? "duplicate attestation field"
+                                                         : "invalid attestation JSON");
         return false;
     }
     if (!json_is_object(root)) {
-        set_error(*error, ErrorCode::kInvalidJson, "",
-                  "attestation must be a JSON object");
+        set_error(*error, ErrorCode::kInvalidJson, "", "attestation must be a JSON object");
         json_decref(root);
         return false;
     }
 
     static constexpr std::string_view kClaimNames[] = {
-        "schema",          "application",    "version",       "sourceName",
-        "sourceSha256",    "bytecodeSha256", "compatibilityId", "keyId",
+        "schema",       "application",    "version",         "sourceName",
+        "sourceSha256", "bytecodeSha256", "compatibilityId", "keyId",
     };
     std::string values[8];
 
-    for (void *iter = json_object_iter(root); iter != nullptr;
+    for (void* iter = json_object_iter(root); iter != nullptr;
          iter = json_object_iter_next(root, iter)) {
         const std::string_view key = json_object_iter_key(iter);
         std::size_t index = 0;
@@ -145,16 +136,14 @@ bool parse_attestation_json(std::string_view json,
             }
         }
         if (index == 8) {
-            set_error(*error, ErrorCode::kUnknownField,
-                      "/" + escape_pointer_component(key),
+            set_error(*error, ErrorCode::kUnknownField, "/" + escape_pointer_component(key),
                       "unknown attestation field");
             json_decref(root);
             return false;
         }
-        json_t *value = json_object_iter_value(iter);
+        json_t* value = json_object_iter_value(iter);
         if (!json_is_string(value)) {
-            set_error(*error, ErrorCode::kInvalidValue,
-                      "/" + escape_pointer_component(key),
+            set_error(*error, ErrorCode::kInvalidValue, "/" + escape_pointer_component(key),
                       "attestation claim must be a string");
             json_decref(root);
             return false;
@@ -188,8 +177,7 @@ bool parse_attestation_json(std::string_view json,
 
     // Syntax checks run before any key lookup or signature work.
     if (claims->schema != kBytecodeAttestationSchema) {
-        set_error(*error, ErrorCode::kInvalidValue, "/schema",
-                  "unsupported attestation schema");
+        set_error(*error, ErrorCode::kInvalidValue, "/schema", "unsupported attestation schema");
         return false;
     }
     // The three SHA-256 claims must be exactly "sha256:" plus 64 lowercase
@@ -212,20 +200,19 @@ bool parse_attestation_json(std::string_view json,
     return true;
 }
 
-std::vector<std::uint8_t> build_signed_message(const ParsedClaims &claims) {
+std::vector<std::uint8_t> build_signed_message(const ParsedClaims& claims) {
     // The domain includes its terminating NUL: sizeof - 1 is the domain
     // length, matching the format pinned by the design review.
     static constexpr char kDomain[] = "capsid-bytecode-attestation-v1\0";
-    std::vector<std::uint8_t> message(
-        reinterpret_cast<const std::uint8_t *>(kDomain),
-        reinterpret_cast<const std::uint8_t *>(kDomain) + sizeof(kDomain) - 1);
-    const std::string *fields[] = {
-        &claims.schema,          &claims.application,
-        &claims.version,         &claims.source_name,
-        &claims.source_sha256,   &claims.bytecode_sha256,
+    std::vector<std::uint8_t> message(reinterpret_cast<const std::uint8_t*>(kDomain),
+                                      reinterpret_cast<const std::uint8_t*>(kDomain) +
+                                          sizeof(kDomain) - 1);
+    const std::string* fields[] = {
+        &claims.schema,           &claims.application,   &claims.version,
+        &claims.source_name,      &claims.source_sha256, &claims.bytecode_sha256,
         &claims.compatibility_id, &claims.key_id,
     };
-    for (const std::string *field : fields) {
+    for (const std::string* field : fields) {
         const std::uint32_t size = static_cast<std::uint32_t>(field->size());
         message.push_back(static_cast<std::uint8_t>(size >> 24));
         message.push_back(static_cast<std::uint8_t>(size >> 16));
@@ -236,29 +223,26 @@ std::vector<std::uint8_t> build_signed_message(const ParsedClaims &claims) {
     return message;
 }
 
-bool ed25519_verify(std::span<const std::uint8_t> public_key,
-                    std::span<const std::uint8_t> message,
+bool ed25519_verify(std::span<const std::uint8_t> public_key, std::span<const std::uint8_t> message,
                     std::span<const std::uint8_t> signature) {
-    EVP_PKEY *key = EVP_PKEY_new_raw_public_key(
-        EVP_PKEY_ED25519, nullptr, public_key.data(), public_key.size());
+    EVP_PKEY* key = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, public_key.data(),
+                                                public_key.size());
     if (key == nullptr) {
         return false;
     }
-    EVP_MD_CTX *context = EVP_MD_CTX_new();
-    const bool valid =
-        context != nullptr &&
-        EVP_DigestVerifyInit(context, nullptr, nullptr, nullptr, key) == 1 &&
-        EVP_DigestVerify(context, signature.data(), signature.size(),
-                         message.data(), message.size()) == 1;
+    EVP_MD_CTX* context = EVP_MD_CTX_new();
+    const bool valid = context != nullptr &&
+                       EVP_DigestVerifyInit(context, nullptr, nullptr, nullptr, key) == 1 &&
+                       EVP_DigestVerify(context, signature.data(), signature.size(), message.data(),
+                                        message.size()) == 1;
     EVP_MD_CTX_free(context);
     EVP_PKEY_free(key);
     return valid;
 }
 
-}  // namespace
+} // namespace
 
-BytecodeAttestationResult verify_bytecode_attestation(
-    const BytecodeAttestationInput &input) {
+BytecodeAttestationResult verify_bytecode_attestation(const BytecodeAttestationInput& input) {
     BytecodeAttestationResult result;
 
     // Artifacts are all-or-none: bytecode, attestation and signature must
@@ -267,8 +251,7 @@ BytecodeAttestationResult verify_bytecode_attestation(
     const bool has_json = input.attestation_json.has_value();
     const bool has_signature = input.signature.has_value();
     const std::size_t present_count =
-        (has_bytecode ? 1U : 0U) + (has_json ? 1U : 0U) +
-        (has_signature ? 1U : 0U);
+        (has_bytecode ? 1U : 0U) + (has_json ? 1U : 0U) + (has_signature ? 1U : 0U);
     if (present_count != 0 && present_count != 3) {
         set_error(result, ErrorCode::kIncompleteArtifactSet, "",
                   "bytecode artifacts are all-or-none");
@@ -277,8 +260,7 @@ BytecodeAttestationResult verify_bytecode_attestation(
 
     // The semantic source is always mandatory.
     if (input.source.empty()) {
-        set_error(result, ErrorCode::kInvalidValue, "/source",
-                  "semantic source is required");
+        set_error(result, ErrorCode::kInvalidValue, "/source", "semantic source is required");
         return result;
     }
     // A present bytecode artifact must not be empty: an empty artifact is
@@ -308,16 +290,15 @@ BytecodeAttestationResult verify_bytecode_attestation(
     }
 
     // Key lookup by keyId before any cryptographic work.
-    const TrustedBytecodeKey *trusted_key = nullptr;
-    for (const TrustedBytecodeKey &candidate : input.trusted_keys) {
+    const TrustedBytecodeKey* trusted_key = nullptr;
+    for (const TrustedBytecodeKey& candidate : input.trusted_keys) {
         if (candidate.key_id == claims.key_id) {
             trusted_key = &candidate;
             break;
         }
     }
     if (trusted_key == nullptr) {
-        set_error(result, ErrorCode::kUnknownKey, "/keyId",
-                  "unknown signing key");
+        set_error(result, ErrorCode::kUnknownKey, "/keyId", "unknown signing key");
         return result;
     }
     if (trusted_key->public_key.size() != kEd25519PublicKeyBytes) {
@@ -337,18 +318,15 @@ BytecodeAttestationResult verify_bytecode_attestation(
 
     // Expected claims.
     if (claims.application != input.expected_application) {
-        set_error(result, ErrorCode::kClaimMismatch, "/application",
-                  "application claim mismatch");
+        set_error(result, ErrorCode::kClaimMismatch, "/application", "application claim mismatch");
         return result;
     }
     if (claims.version != input.expected_version) {
-        set_error(result, ErrorCode::kClaimMismatch, "/version",
-                  "version claim mismatch");
+        set_error(result, ErrorCode::kClaimMismatch, "/version", "version claim mismatch");
         return result;
     }
     if (claims.source_name != input.expected_source_name) {
-        set_error(result, ErrorCode::kClaimMismatch, "/sourceName",
-                  "source name claim mismatch");
+        set_error(result, ErrorCode::kClaimMismatch, "/sourceName", "source name claim mismatch");
         return result;
     }
 
@@ -357,8 +335,7 @@ BytecodeAttestationResult verify_bytecode_attestation(
     std::string source_digest;
     if (!sha256_hex(input.source, &source_digest) ||
         "sha256:" + source_digest != claims.source_sha256) {
-        set_error(result, ErrorCode::kDigestMismatch, "/sourceSha256",
-                  "source digest mismatch");
+        set_error(result, ErrorCode::kDigestMismatch, "/sourceSha256", "source digest mismatch");
         return result;
     }
     std::string bytecode_digest;
@@ -371,14 +348,11 @@ BytecodeAttestationResult verify_bytecode_attestation(
 
     // Provenance is valid; retain safe metadata and decide compatibility.
     result.key_id = claims.key_id;
-    if (!sha256_hex(
-            std::span<const std::uint8_t>(
-                reinterpret_cast<const std::uint8_t *>(
-                    input.attestation_json->data()),
-                input.attestation_json->size()),
-            &result.attestation_sha256)) {
-        set_error(result, ErrorCode::kInvalidValue, "",
-                  "could not digest the attestation");
+    if (!sha256_hex(std::span<const std::uint8_t>(
+                        reinterpret_cast<const std::uint8_t*>(input.attestation_json->data()),
+                        input.attestation_json->size()),
+                    &result.attestation_sha256)) {
+        set_error(result, ErrorCode::kInvalidValue, "", "could not digest the attestation");
         return result;
     }
     result.attestation_sha256 = "sha256:" + result.attestation_sha256;
@@ -395,4 +369,4 @@ BytecodeAttestationResult verify_bytecode_attestation(
     return result;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

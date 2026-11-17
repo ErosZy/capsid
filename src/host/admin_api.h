@@ -61,8 +61,7 @@ struct AdminPeerCredentials {
 // Reads the kernel peer credentials of a connected Unix stream socket:
 // SO_PEERCRED on Linux, getpeereid on macOS. Returns false with a static
 // error text on failure; never blocks.
-bool query_admin_peer_credentials(int fd, AdminPeerCredentials* peer,
-                                  std::string* error);
+bool query_admin_peer_credentials(int fd, AdminPeerCredentials* peer, std::string* error);
 
 // The one global authorization decision: the peer UID equals the allowed
 // UID, or the optional management GID matches the peer GID.
@@ -83,13 +82,12 @@ struct AdminSocketOptions {
 // the socket, listen. Any failure closes the descriptor, removes a
 // half-created socket file and returns a static redacted error (never the
 // path or errno text). On success the caller owns the listener fd.
-bool open_admin_listener(const AdminSocketOptions& options, int* listener,
-                         std::string* error);
+bool open_admin_listener(const AdminSocketOptions& options, int* listener, std::string* error);
 
 struct AdminRequest {
-    std::string method;        // uppercase HTTP method
-    std::string target;        // path only
-    std::string content_type;  // lowercase
+    std::string method;       // uppercase HTTP method
+    std::string target;       // path only
+    std::string content_type; // lowercase
     std::string body;
     std::size_t header_bytes = 0;
 };
@@ -103,26 +101,21 @@ struct AdminResponse {
 // Coordinator adapter contract: the four operations the Admin API can
 // trigger. Implementations own all coordinator state transitions.
 class AdminBackend {
-public:
+  public:
     virtual ~AdminBackend() = default;
-    virtual DeployOutcome deploy(const std::string& application,
-                                 const std::string& version,
+    virtual DeployOutcome deploy(const std::string& application, const std::string& version,
                                  OperationStatus* status) = 0;
-    virtual DeployOutcome retire(const std::string& application,
-                                 OperationStatus* status) = 0;
-    virtual OperationStatus operation_status(
-        const std::string& operation_id) = 0;
+    virtual DeployOutcome retire(const std::string& application, OperationStatus* status) = 0;
+    virtual OperationStatus operation_status(const std::string& operation_id) = 0;
     virtual std::string app_status(const std::string& application) = 0;
 };
 
 // Pure request dispatch: authorization, bounds, exact route, strict
 // parsing, coordinator call, redacted response. Never throws; every path
 // returns a complete response.
-AdminResponse handle_admin_request(const AdminApiOptions& options,
-                                   const AdminPeerCredentials& peer,
-                                   const AdminRequest& request,
-                                   AdminBackend* backend);
+AdminResponse handle_admin_request(const AdminApiOptions& options, const AdminPeerCredentials& peer,
+                                   const AdminRequest& request, AdminBackend* backend);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

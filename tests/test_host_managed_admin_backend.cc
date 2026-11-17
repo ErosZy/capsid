@@ -65,8 +65,7 @@ bool valid_operation_id(const std::string& value) {
         return false;
     }
     const auto alnum = [](char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-               (c >= '0' && c <= '9');
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
     };
     if (!alnum(value.front())) {
         return false;
@@ -80,12 +79,10 @@ bool valid_operation_id(const std::string& value) {
 }
 
 class BlockingAdminBackend final : public capsid::host::AdminBackend {
-public:
-    capsid::host::DeployOutcome deploy(
-        const std::string& application,
-        const std::string& version,
-        capsid::host::OperationStatus* status) override {
-        (void) application;
+  public:
+    capsid::host::DeployOutcome deploy(const std::string& application, const std::string& version,
+                                       capsid::host::OperationStatus* status) override {
+        (void)application;
         std::unique_lock<std::mutex> lock(mutex_);
         ++calls_;
         started_ = true;
@@ -106,14 +103,12 @@ public:
         return outcome;
     }
 
-    capsid::host::DeployOutcome retire(
-        const std::string& application,
-        capsid::host::OperationStatus* status) override {
+    capsid::host::DeployOutcome retire(const std::string& application,
+                                       capsid::host::OperationStatus* status) override {
         return deploy(application, {}, status);
     }
 
-    capsid::host::OperationStatus operation_status(
-        const std::string& operation_id) override {
+    capsid::host::OperationStatus operation_status(const std::string& operation_id) override {
         capsid::host::OperationStatus status;
         status.operation_id = operation_id;
         status.state = capsid::host::OperationState::kFailed;
@@ -122,14 +117,13 @@ public:
     }
 
     std::string app_status(const std::string& application) override {
-        (void) application;
+        (void)application;
         return "{\"active\":false}";
     }
 
     void wait_started() {
         std::unique_lock<std::mutex> lock(mutex_);
-        require(condition_.wait_for(lock, std::chrono::seconds(2),
-                                    [&]() { return started_; }),
+        require(condition_.wait_for(lock, std::chrono::seconds(2), [&]() { return started_; }),
                 "async Admin operation never reached its backend");
     }
 
@@ -147,25 +141,21 @@ public:
 
     const std::string& sensitive_error() const { return sensitive_error_; }
 
-private:
+  private:
     mutable std::mutex mutex_;
     std::condition_variable condition_;
     bool started_ = false;
     bool released_ = false;
     bool fail_ = false;
     int calls_ = 0;
-    std::string sensitive_error_ =
-        "secret-canary-from-inner-managed-operation";
+    std::string sensitive_error_ = "secret-canary-from-inner-managed-operation";
 };
 
-capsid::host::OperationStatus wait_terminal(
-    capsid::host::AsyncAdminBackend* backend,
-    const std::string& operation_id) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(2);
+capsid::host::OperationStatus wait_terminal(capsid::host::AsyncAdminBackend* backend,
+                                            const std::string& operation_id) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     for (;;) {
-        const capsid::host::OperationStatus status =
-            backend->operation_status(operation_id);
+        const capsid::host::OperationStatus status = backend->operation_status(operation_id);
         if (status.state == capsid::host::OperationState::kActive ||
             status.state == capsid::host::OperationState::kFailed) {
             return status;
@@ -181,8 +171,7 @@ struct StateFixture {
 
     StateFixture() {
         root = "/tmp/capsid-managed-admin-XXXXXX";
-        require(mkdtemp(root.data()) != nullptr,
-                "cannot create managed Admin state fixture");
+        require(mkdtemp(root.data()) != nullptr, "cannot create managed Admin state fixture");
         require(mkdir((root + "/apps").c_str(), 0700) == 0,
                 "cannot create managed Admin apps directory");
         require(mkdir((root + "/apps/orders").c_str(), 0700) == 0 &&
@@ -193,31 +182,26 @@ struct StateFixture {
     }
 
     ~StateFixture() {
-        (void) unlink((root + "/apps/orders/active.json").c_str());
-        (void) unlink((root + "/apps/payments/active.json").c_str());
-        (void) rmdir((root + "/apps/orders").c_str());
-        (void) rmdir((root + "/apps/payments").c_str());
-        (void) rmdir((root + "/apps").c_str());
-        (void) rmdir(root.c_str());
+        (void)unlink((root + "/apps/orders/active.json").c_str());
+        (void)unlink((root + "/apps/payments/active.json").c_str());
+        (void)rmdir((root + "/apps/orders").c_str());
+        (void)rmdir((root + "/apps/payments").c_str());
+        (void)rmdir((root + "/apps").c_str());
+        (void)rmdir(root.c_str());
     }
 
-    void write_active(const std::string& application,
-                      const std::string& version,
+    void write_active(const std::string& application, const std::string& version,
                       char digest_byte) {
-        const std::string path = root + "/apps/" + application +
-                                 "/active.json";
-        const std::string bytes =
-            "{\"schema\":\"capsid-active-v1\",\"app\":\"" +
-            application + "\",\"state\":\"active\",\"version\":\"" +
-            version + "\",\"generation\":\"sha256:" +
-            std::string(64, digest_byte) + "\"}";
-        const int fd = open(path.c_str(),
-                            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        const std::string path = root + "/apps/" + application + "/active.json";
+        const std::string bytes = "{\"schema\":\"capsid-active-v1\",\"app\":\"" + application +
+                                  "\",\"state\":\"active\",\"version\":\"" + version +
+                                  "\",\"generation\":\"sha256:" + std::string(64, digest_byte) +
+                                  "\"}";
+        const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
         require(fd >= 0, "cannot create managed Admin active state");
         std::size_t offset = 0;
         while (offset < bytes.size()) {
-            const ssize_t count = write(fd, bytes.data() + offset,
-                                        bytes.size() - offset);
+            const ssize_t count = write(fd, bytes.data() + offset, bytes.size() - offset);
             if (count < 0 && errno == EINTR) {
                 continue;
             }
@@ -228,16 +212,14 @@ struct StateFixture {
     }
 
     std::string read_active(const std::string& application) const {
-        std::ifstream input(root + "/apps/" + application +
-                            "/active.json", std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(input),
-                           std::istreambuf_iterator<char>());
+        std::ifstream input(root + "/apps/" + application + "/active.json", std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
     }
 };
 
 #endif
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     require(argc == 2, "expected one managed Admin backend test mode");
@@ -253,17 +235,14 @@ int main(int argc, char** argv) {
         capsid::host::AsyncAdminBackend backend(&inner, options);
         capsid::host::OperationStatus submitted;
         const auto started = std::chrono::steady_clock::now();
-        const capsid::host::DeployOutcome outcome =
-            backend.deploy("orders", "v1", &submitted);
+        const capsid::host::DeployOutcome outcome = backend.deploy("orders", "v1", &submitted);
         const auto elapsed = std::chrono::steady_clock::now() - started;
         require(outcome.ok && valid_operation_id(outcome.operation_id),
                 "async Admin deploy was not accepted with a valid ID");
         require(elapsed < std::chrono::milliseconds(250),
                 "Admin deploy blocked on the managed operation");
-        require(submitted.operation_id == outcome.operation_id &&
-                    submitted.version == "v1" &&
-                    submitted.state ==
-                        capsid::host::OperationState::kValidating,
+        require(submitted.operation_id == outcome.operation_id && submitted.version == "v1" &&
+                    submitted.state == capsid::host::OperationState::kValidating,
                 "Admin deploy did not publish its initial progress");
         inner.wait_started();
         const capsid::host::OperationStatus running =
@@ -275,8 +254,7 @@ int main(int argc, char** argv) {
         inner.release();
         const capsid::host::OperationStatus terminal =
             wait_terminal(&backend, outcome.operation_id);
-        require(terminal.operation_id == outcome.operation_id &&
-                    terminal.version == "v1" &&
+        require(terminal.operation_id == outcome.operation_id && terminal.version == "v1" &&
                     terminal.state == capsid::host::OperationState::kActive,
                 "async Admin success lost its public operation identity");
         std::cout << "PASS" << std::endl;
@@ -289,22 +267,17 @@ int main(int argc, char** argv) {
         options.max_pending_operations = 1;
         capsid::host::AsyncAdminBackend backend(&inner, options);
         capsid::host::OperationStatus first_status;
-        const capsid::host::DeployOutcome first =
-            backend.deploy("orders", "v1", &first_status);
+        const capsid::host::DeployOutcome first = backend.deploy("orders", "v1", &first_status);
         require(first.ok, "first bounded Admin operation was not accepted");
         inner.wait_started();
         capsid::host::OperationStatus second_status;
-        const capsid::host::DeployOutcome second =
-            backend.retire("payments", &second_status);
-        require(!second.ok && inner.calls() == 1,
-                "Admin operation capacity was not fail-closed");
+        const capsid::host::DeployOutcome second = backend.retire("payments", &second_status);
+        require(!second.ok && inner.calls() == 1, "Admin operation capacity was not fail-closed");
         inner.release(true);
-        const capsid::host::OperationStatus terminal =
-            wait_terminal(&backend, first.operation_id);
+        const capsid::host::OperationStatus terminal = wait_terminal(&backend, first.operation_id);
         require(terminal.state == capsid::host::OperationState::kFailed,
                 "failed managed operation was not recorded as failed");
-        require(terminal.error.find(inner.sensitive_error()) ==
-                    std::string::npos,
+        require(terminal.error.find(inner.sensitive_error()) == std::string::npos,
                 "async Admin registry retained a sensitive inner error");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -319,7 +292,8 @@ int main(int argc, char** argv) {
         payments.application = "payments";
         payments.state_root = state.root;
         std::vector<capsid::host::ManagedHostOptions*> applications = {
-            &orders, &payments,
+            &orders,
+            &payments,
         };
         capsid::host::ManagedAdminBackend backend(applications);
 
@@ -327,27 +301,22 @@ int main(int argc, char** argv) {
         const std::string payments_status = backend.app_status("payments");
         require(orders_status.find("orders-v1") != std::string::npos &&
                     orders_status.find("payments-v2") == std::string::npos &&
-                    payments_status.find("payments-v2") !=
-                        std::string::npos,
+                    payments_status.find("payments-v2") != std::string::npos,
                 "managed Admin backend routed App status to wrong options");
 
         capsid::host::OperationStatus retire_status;
-        const capsid::host::DeployOutcome retired =
-            backend.retire("orders", &retire_status);
-        require(retired.ok && retire_status.operation_id ==
-                                  retired.operation_id,
+        const capsid::host::DeployOutcome retired = backend.retire("orders", &retire_status);
+        require(retired.ok && retire_status.operation_id == retired.operation_id,
                 "managed Admin backend did not invoke real retire");
         const std::string retired_state = state.read_active("orders");
-        require(retired_state.find("\"state\":\"retired\"") !=
-                    std::string::npos &&
+        require(retired_state.find("\"state\":\"retired\"") != std::string::npos &&
                     retired_state.find("orders-v1") != std::string::npos,
                 "real coordinator did not persist the retire tombstone");
 
         capsid::host::OperationStatus unknown_status;
         const capsid::host::DeployOutcome unknown =
             backend.deploy("unknown", "v1", &unknown_status);
-        require(!unknown.ok,
-                "managed Admin backend accepted an unconfigured App");
+        require(!unknown.ok, "managed Admin backend accepted an unconfigured App");
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -366,8 +335,7 @@ int main(int argc, char** argv) {
         capsid::host::AsyncAdminBackend backend(&managed, async_options);
 
         capsid::host::AdminApiOptions api_options;
-        api_options.authorization.allowed_uid =
-            static_cast<std::uint64_t>(geteuid());
+        api_options.authorization.allowed_uid = static_cast<std::uint64_t>(geteuid());
         capsid::host::AdminPeerCredentials peer;
         peer.uid = static_cast<std::uint64_t>(geteuid());
         peer.gid = static_cast<std::uint64_t>(getegid());
@@ -376,13 +344,10 @@ int main(int argc, char** argv) {
         request.target = "/v1/apps/orders";
         request.header_bytes = 64;
         const capsid::host::AdminResponse response =
-            capsid::host::handle_admin_request(
-                api_options, peer, request, &backend);
-        require(response.status == 200 &&
-                    response.content_type == "application/json",
+            capsid::host::handle_admin_request(api_options, peer, request, &backend);
+        require(response.status == 200 && response.content_type == "application/json",
                 "real managed App status did not cross Admin dispatch");
-        require(response.body.find("\"app\":\"orders\"") !=
-                    std::string::npos &&
+        require(response.body.find("\"app\":\"orders\"") != std::string::npos &&
                     response.body.find("orders-v1") != std::string::npos,
                 "Admin dispatch lost or changed real managed App status");
         std::cout << "PASS" << std::endl;
@@ -397,8 +362,7 @@ int main(int argc, char** argv) {
         options.external_stop = &stop;
         capsid::host::AsyncAdminBackend backend(&inner, options);
         capsid::host::OperationStatus submitted;
-        const capsid::host::DeployOutcome outcome =
-            backend.deploy("orders", "v1", &submitted);
+        const capsid::host::DeployOutcome outcome = backend.deploy("orders", "v1", &submitted);
         require(!outcome.ok && inner.calls() == 0 &&
                     submitted.state == capsid::host::OperationState::kFailed,
                 "Admin accepted a new operation after shutdown began");

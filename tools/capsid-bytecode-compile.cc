@@ -58,35 +58,30 @@ constexpr std::size_t kMaxSourceBytes = 16U * 1024U * 1024U;
 constexpr const char* kAttestationSchema = "capsid-bytecode-v1";
 
 void fail_usage() {
-    std::fputs(
-        "usage: capsid-bytecode-compile\n"
-        "  --source <bundle.mjs> --source-name <exact-name>\n"
-        "  --application <AppId> --version <VersionId> --key-id <KeyId>\n"
-        "  --bytecode-out <bundle.qjsb> --attestation-out <bytecode.json>\n"
-        "  --signing-message-out <message.bin>\n"
-        "  --print-compatibility-id   (alone; never mixed with the above)\n",
-        stderr);
+    std::fputs("usage: capsid-bytecode-compile\n"
+               "  --source <bundle.mjs> --source-name <exact-name>\n"
+               "  --application <AppId> --version <VersionId> --key-id <KeyId>\n"
+               "  --bytecode-out <bundle.qjsb> --attestation-out <bytecode.json>\n"
+               "  --signing-message-out <message.bin>\n"
+               "  --print-compatibility-id   (alone; never mixed with the above)\n",
+               stderr);
 }
 
 bool read_source(const char* path, std::vector<std::uint8_t>* out) {
     std::FILE* handle = std::fopen(path, "rb");
     if (handle == nullptr) {
-        std::fprintf(stderr, "capsid-bytecode-compile: cannot open source: %s\n",
-                     path);
+        std::fprintf(stderr, "capsid-bytecode-compile: cannot open source: %s\n", path);
         return false;
     }
     out->clear();
     std::uint8_t buffer[64 * 1024];
     std::size_t total = 0;
     for (;;) {
-        const std::size_t read_size =
-            std::fread(buffer, 1, sizeof(buffer), handle);
+        const std::size_t read_size = std::fread(buffer, 1, sizeof(buffer), handle);
         if (read_size == 0) {
             if (std::ferror(handle)) {
                 std::fclose(handle);
-                std::fprintf(stderr,
-                             "capsid-bytecode-compile: source read failed: %s\n",
-                             path);
+                std::fprintf(stderr, "capsid-bytecode-compile: source read failed: %s\n", path);
                 return false;
             }
             break;
@@ -94,8 +89,7 @@ bool read_source(const char* path, std::vector<std::uint8_t>* out) {
         total += read_size;
         if (total > kMaxSourceBytes) {
             std::fclose(handle);
-            std::fprintf(stderr,
-                         "capsid-bytecode-compile: source exceeds %zu bytes\n",
+            std::fprintf(stderr, "capsid-bytecode-compile: source exceeds %zu bytes\n",
                          kMaxSourceBytes);
             return false;
         }
@@ -105,13 +99,10 @@ bool read_source(const char* path, std::vector<std::uint8_t>* out) {
     return true;
 }
 
-bool sha256_hex(const std::uint8_t* data,
-                std::size_t size,
-                std::string* out) {
+bool sha256_hex(const std::uint8_t* data, std::size_t size, std::string* out) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
-    if (EVP_Digest(data, size, digest, &digest_size, EVP_sha256(), nullptr) !=
-            1 ||
+    if (EVP_Digest(data, size, digest, &digest_size, EVP_sha256(), nullptr) != 1 ||
         digest_size != 32) {
         return false;
     }
@@ -129,9 +120,7 @@ bool sha256_hex(const std::uint8_t* data,
 // reach it; mirrors the worker's loader contract (a missing module fails
 // the compile). The worker resolves imports at load time from its own
 // policy, so the compiler only needs the loader slot installed.
-JSModuleDef* compile_module_loader(JSContext* ctx,
-                                   const char* module_name,
-                                   void*) {
+JSModuleDef* compile_module_loader(JSContext* ctx, const char* module_name, void*) {
     JS_ThrowReferenceError(ctx, "module is unavailable: %s", module_name);
     return nullptr;
 }
@@ -140,8 +129,7 @@ JSModuleDef* compile_module_loader(JSContext* ctx,
 // bytecode load (JS_Eval compile-only, then JS_WriteObject bytecode). The
 // source-name is the module filename, so the module name matches the
 // worker's bundle-name check.
-bool compile_module(const std::string& source_name,
-                    const std::vector<std::uint8_t>& source,
+bool compile_module(const std::string& source_name, const std::vector<std::uint8_t>& source,
                     std::vector<std::uint8_t>* bytecode) {
     JSRuntime* runtime = JS_NewRuntime();
     if (runtime == nullptr) {
@@ -158,12 +146,8 @@ bool compile_module(const std::string& source_name,
     // source length or the source hash.
     std::string source_with_sentinel(source.begin(), source.end());
     source_with_sentinel.push_back('\0');
-    JSValue module = JS_Eval(
-        ctx,
-        source_with_sentinel.data(),
-        source.size(),
-        source_name.c_str(),
-        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue module = JS_Eval(ctx, source_with_sentinel.data(), source.size(), source_name.c_str(),
+                             JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (JS_IsException(module)) {
         JS_FreeValue(ctx, module);
         JS_FreeContext(ctx);
@@ -177,8 +161,7 @@ bool compile_module(const std::string& source_name,
     if (data == nullptr) {
         JS_FreeContext(ctx);
         JS_FreeRuntime(runtime);
-        std::fputs("capsid-bytecode-compile: bytecode serialization failed\n",
-                   stderr);
+        std::fputs("capsid-bytecode-compile: bytecode serialization failed\n", stderr);
         return false;
     }
     bytecode->assign(data, data + size);
@@ -192,12 +175,9 @@ bool compile_module(const std::string& source_name,
 // verifier's strict parser (parse_attestation_json) accepts exactly these
 // keys in any order, but the compiler emits the canonical order so repeated
 // compiles are byte-identical.
-bool build_attestation(const std::string& application,
-                       const std::string& version,
-                       const std::string& source_name,
-                       const std::string& source_sha256,
-                       const std::string& bytecode_sha256,
-                       const std::string& key_id,
+bool build_attestation(const std::string& application, const std::string& version,
+                       const std::string& source_name, const std::string& source_sha256,
+                       const std::string& bytecode_sha256, const std::string& key_id,
                        std::string* out) {
     json_t* root = json_object();
     if (root == nullptr) {
@@ -207,15 +187,16 @@ bool build_attestation(const std::string& application,
     // parser requires.
     const std::string source_digest = "sha256:" + source_sha256;
     const std::string bytecode_digest = "sha256:" + bytecode_sha256;
-    bool ok = json_object_set_new(root, "schema", json_string(kAttestationSchema)) == 0 &&
-              json_object_set_new(root, "application", json_string(application.c_str())) == 0 &&
-              json_object_set_new(root, "version", json_string(version.c_str())) == 0 &&
-              json_object_set_new(root, "sourceName", json_string(source_name.c_str())) == 0 &&
-              json_object_set_new(root, "sourceSha256", json_string(source_digest.c_str())) == 0 &&
-              json_object_set_new(root, "bytecodeSha256", json_string(bytecode_digest.c_str())) == 0 &&
-              json_object_set_new(root, "compatibilityId",
-                                  json_string(CAPSID_BUILD_COMPATIBILITY_ID)) == 0 &&
-              json_object_set_new(root, "keyId", json_string(key_id.c_str())) == 0;
+    bool ok =
+        json_object_set_new(root, "schema", json_string(kAttestationSchema)) == 0 &&
+        json_object_set_new(root, "application", json_string(application.c_str())) == 0 &&
+        json_object_set_new(root, "version", json_string(version.c_str())) == 0 &&
+        json_object_set_new(root, "sourceName", json_string(source_name.c_str())) == 0 &&
+        json_object_set_new(root, "sourceSha256", json_string(source_digest.c_str())) == 0 &&
+        json_object_set_new(root, "bytecodeSha256", json_string(bytecode_digest.c_str())) == 0 &&
+        json_object_set_new(root, "compatibilityId", json_string(CAPSID_BUILD_COMPATIBILITY_ID)) ==
+            0 &&
+        json_object_set_new(root, "keyId", json_string(key_id.c_str())) == 0;
     if (!ok) {
         json_decref(root);
         return false;
@@ -235,17 +216,13 @@ bool build_attestation(const std::string& application,
 // schema/application/version/sourceName/sourceSha256/bytecodeSha256/
 // compatibilityId/keyId order. This is byte-identical to what
 // verify_bytecode_attestation re-derives before signature verification.
-bool build_signing_message(const std::string& application,
-                           const std::string& version,
-                           const std::string& source_name,
-                           const std::string& source_sha256,
-                           const std::string& bytecode_sha256,
-                           const std::string& key_id,
+bool build_signing_message(const std::string& application, const std::string& version,
+                           const std::string& source_name, const std::string& source_sha256,
+                           const std::string& bytecode_sha256, const std::string& key_id,
                            std::vector<std::uint8_t>* out) {
     static constexpr char kDomain[] = "capsid-bytecode-attestation-v1\0";
     out->assign(reinterpret_cast<const std::uint8_t*>(kDomain),
-                reinterpret_cast<const std::uint8_t*>(kDomain) +
-                    sizeof(kDomain) - 1);
+                reinterpret_cast<const std::uint8_t*>(kDomain) + sizeof(kDomain) - 1);
     const std::string fields[] = {
         kAttestationSchema,
         application,
@@ -281,19 +258,17 @@ bool build_signing_message(const std::string& application,
 //     directory. Normal failures remove this invocation's partial outputs;
 //     a failed rollback is reported explicitly instead of claiming success.
 struct OutputTarget {
-    std::string dir;   // directory of the output path
-    std::string name;  // final basename
-    std::string temp;  // temp basename (name + ".tmp." + suffix)
+    std::string dir;  // directory of the output path
+    std::string name; // final basename
+    std::string temp; // temp basename (name + ".tmp." + suffix)
     const void* data = nullptr;
     std::size_t size = 0;
 };
 
-bool split_output_path(const std::string& path, OutputTarget* target,
-                       const std::string& suffix) {
+bool split_output_path(const std::string& path, OutputTarget* target, const std::string& suffix) {
     const std::string::size_type slash = path.find_last_of("/\\");
     target->dir = slash == std::string::npos ? "." : path.substr(0, slash);
-    target->name =
-        slash == std::string::npos ? path : path.substr(slash + 1);
+    target->name = slash == std::string::npos ? path : path.substr(slash + 1);
     if (target->name.empty() || target->name == "." || target->name == ".." ||
         target->name.find('/') != std::string::npos ||
         target->name.find('\\') != std::string::npos) {
@@ -313,59 +288,47 @@ std::string output_error(const char* operation, DWORD code) {
 // rename-without-replace contract (ERROR_ALREADY_EXISTS on a present
 // final name); DeleteFileW is unlink.
 std::wstring widen_output_path(const std::string& value) {
-    const int wide_size =
-        MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
+    const int wide_size = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
     if (wide_size <= 0) {
         return std::wstring();
     }
     std::wstring wide(static_cast<std::size_t>(wide_size - 1), L'\0');
-    if (MultiByteToWideChar(
-            CP_UTF8, 0, value.c_str(), -1, &wide[0], wide_size) <= 0) {
+    if (MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, &wide[0], wide_size) <= 0) {
         return std::wstring();
     }
     return wide;
 }
 
-std::wstring output_path(const OutputTarget& target,
-                         const std::string& name) {
-    return widen_output_path(
-        target.dir + (target.dir.empty() ? "" : "\\") + name);
+std::wstring output_path(const OutputTarget& target, const std::string& name) {
+    return widen_output_path(target.dir + (target.dir.empty() ? "" : "\\") + name);
 }
 
 bool write_temp_file(const OutputTarget& target, std::string* error, bool* created) {
     *created = false;
     const std::wstring temp_path = output_path(target, target.temp);
-    const HANDLE handle = CreateFileW(
-        temp_path.c_str(),
-        GENERIC_WRITE,
-        0,
-        nullptr,
-        CREATE_NEW,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-        nullptr);
+    const HANDLE handle =
+        CreateFileW(temp_path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
         *error = output_error("cannot create temporary output", GetLastError());
         return false;
     }
     *created = true;
     FILE_ATTRIBUTE_TAG_INFO attributes = {};
-    if (GetFileInformationByHandleEx(
-            handle, FileAttributeTagInfo, &attributes,
-            sizeof(attributes)) != 0 &&
+    if (GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes,
+                                     sizeof(attributes)) != 0 &&
         (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
         CloseHandle(handle);
         *error = output_error("temporary output is a reparse point", ERROR_REPARSE_TAG_INVALID);
         return false;
     }
-    const std::uint8_t* data =
-        static_cast<const std::uint8_t*>(target.data);
+    const std::uint8_t* data = static_cast<const std::uint8_t*>(target.data);
     std::size_t offset = 0;
     DWORD failure = ERROR_SUCCESS;
     while (offset < target.size) {
         DWORD written = 0;
-        const DWORD chunk = target.size - offset > MAXDWORD
-            ? MAXDWORD
-            : static_cast<DWORD>(target.size - offset);
+        const DWORD chunk =
+            target.size - offset > MAXDWORD ? MAXDWORD : static_cast<DWORD>(target.size - offset);
         const BOOL succeeded = WriteFile(handle, data + offset, chunk, &written, nullptr);
         if (!succeeded || written == 0) {
             failure = succeeded ? ERROR_WRITE_FAULT : GetLastError();
@@ -390,8 +353,7 @@ bool publish_no_replace(const OutputTarget& target, std::string* error, bool* cr
     *created = false;
     const std::wstring temp_path = output_path(target, target.temp);
     const std::wstring final_path = output_path(target, target.name);
-    if (MoveFileExW(temp_path.c_str(), final_path.c_str(),
-                    MOVEFILE_WRITE_THROUGH)) {
+    if (MoveFileExW(temp_path.c_str(), final_path.c_str(), MOVEFILE_WRITE_THROUGH)) {
         *created = true;
         return true;
     }
@@ -404,23 +366,24 @@ bool publish_no_replace(const OutputTarget& target, std::string* error, bool* cr
     return false;
 }
 
-bool remove_output_file(const OutputTarget& target,
-                        const std::string& name, std::string* error) {
+bool remove_output_file(const OutputTarget& target, const std::string& name, std::string* error) {
     const std::wstring path = output_path(target, name);
-    if (DeleteFileW(path.c_str())) return true;
+    if (DeleteFileW(path.c_str()))
+        return true;
     const DWORD code = GetLastError();
-    if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) return true;
+    if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND)
+        return true;
     *error = output_error("cannot remove invocation output", code);
     return false;
 }
 #else
 std::string output_error(const char* operation, int code) {
-    return std::string(operation) + " (errno=" + std::to_string(code) + ": " + std::strerror(code) + ")";
+    return std::string(operation) + " (errno=" + std::to_string(code) + ": " + std::strerror(code) +
+           ")";
 }
 bool write_temp_file(const OutputTarget& target, std::string* error, bool* created) {
     *created = false;
-    const int dir_fd = open(target.dir.c_str(),
-                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    const int dir_fd = open(target.dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dir_fd < 0) {
         *error = output_error("cannot open output directory", errno);
         return false;
@@ -428,9 +391,7 @@ bool write_temp_file(const OutputTarget& target, std::string* error, bool* creat
     // O_EXCL + O_NOFOLLOW: the temp must not pre-exist and must not be a
     // symlink; a concurrent creator loses the race cleanly.
     const int fd = openat(dir_fd, target.temp.c_str(),
-                          O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW |
-                              O_CLOEXEC,
-                          0600);
+                          O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (fd < 0) {
         const int code = errno;
         close(dir_fd);
@@ -438,13 +399,11 @@ bool write_temp_file(const OutputTarget& target, std::string* error, bool* creat
         return false;
     }
     *created = true;
-    const std::uint8_t* data =
-        static_cast<const std::uint8_t*>(target.data);
+    const std::uint8_t* data = static_cast<const std::uint8_t*>(target.data);
     std::size_t offset = 0;
     int failure = 0;
     while (offset < target.size) {
-        const ssize_t written =
-            write(fd, data + offset, target.size - offset);
+        const ssize_t written = write(fd, data + offset, target.size - offset);
         if (written <= 0) {
             if (written < 0 && errno == EINTR) {
                 continue;
@@ -471,45 +430,49 @@ bool write_temp_file(const OutputTarget& target, std::string* error, bool* creat
 // atomic link instead; neither path can replace an existing final name.
 bool publish_no_replace(const OutputTarget& target, std::string* error, bool* created) {
     *created = false;
-    const int dir_fd = open(target.dir.c_str(),
-                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    const int dir_fd = open(target.dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dir_fd < 0) {
         *error = output_error("cannot open output directory", errno);
         return false;
     }
-    const auto result = capsid::tools::publish_no_replace([&]() {
+    const auto result = capsid::tools::publish_no_replace(
+        [&]() {
 #if defined(__linux__) && defined(SYS_renameat2)
-        return syscall(SYS_renameat2, dir_fd, target.temp.c_str(), dir_fd,
-                       target.name.c_str(), 1U /* RENAME_NOREPLACE */) == 0 ? 0 : errno;
+            return syscall(SYS_renameat2, dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(),
+                           1U /* RENAME_NOREPLACE */) == 0
+                       ? 0
+                       : errno;
 #else
-        return ENOSYS;
+            return ENOSYS;
 #endif
-    }, [&]() {
-        return linkat(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(), 0) == 0 ? 0 : errno;
-    }, [&]() {
-        return unlinkat(dir_fd, target.temp.c_str(), 0) == 0 ? 0 : errno;
-    });
+        },
+        [&]() {
+            return linkat(dir_fd, target.temp.c_str(), dir_fd, target.name.c_str(), 0) == 0 ? 0
+                                                                                            : errno;
+        },
+        [&]() { return unlinkat(dir_fd, target.temp.c_str(), 0) == 0 ? 0 : errno; });
     *created = result.created_final;
     if (!result.complete) {
-        *error = (result.error == EEXIST ? "output already exists; " : "") + output_error(result.operation, result.error);
+        *error = (result.error == EEXIST ? "output already exists; " : "") +
+                 output_error(result.operation, result.error);
     }
     close(dir_fd);
     return result.complete;
 }
 
-bool remove_output_file(const OutputTarget& target,
-                        const std::string& name, std::string* error) {
-    const int dir_fd = open(target.dir.c_str(),
-                            O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+bool remove_output_file(const OutputTarget& target, const std::string& name, std::string* error) {
+    const int dir_fd = open(target.dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (dir_fd < 0) {
-        if (errno == ENOENT || errno == ENOTDIR) return true;
+        if (errno == ENOENT || errno == ENOTDIR)
+            return true;
         *error = output_error("cannot open invocation output directory for cleanup", errno);
         return false;
     }
     const bool removed = unlinkat(dir_fd, name.c_str(), 0) == 0;
     const int code = removed ? 0 : errno;
     close(dir_fd);
-    if (removed || code == ENOENT) return true;
+    if (removed || code == ENOENT)
+        return true;
     *error = output_error("cannot remove invocation output", code);
     return false;
 }
@@ -524,10 +487,9 @@ struct AtomicOutputs {
 bool commit_outputs(const AtomicOutputs& outputs) {
     std::string error;
     bool temporary_bytecode = false, temporary_attestation = false, temporary_message = false;
-    bool ok =
-        write_temp_file(outputs.bytecode, &error, &temporary_bytecode) &&
-        write_temp_file(outputs.attestation, &error, &temporary_attestation) &&
-        write_temp_file(outputs.message, &error, &temporary_message);
+    bool ok = write_temp_file(outputs.bytecode, &error, &temporary_bytecode) &&
+              write_temp_file(outputs.attestation, &error, &temporary_attestation) &&
+              write_temp_file(outputs.message, &error, &temporary_message);
     // Publish all three; remember which finals THIS invocation created so
     // rollback never removes a pre-existing or concurrent file.
     bool published_bytecode = false;
@@ -547,7 +509,8 @@ bool commit_outputs(const AtomicOutputs& outputs) {
         std::string detail;
         if (!remove_output_file(target, name, &detail)) {
             cleanup_ok = false;
-            std::fprintf(stderr, "capsid-bytecode-compile: output cleanup failed (%s)\n", detail.c_str());
+            std::fprintf(stderr, "capsid-bytecode-compile: output cleanup failed (%s)\n",
+                         detail.c_str());
         }
     };
     // Roll back only names this invocation created. Exclusive-creation
@@ -571,18 +534,17 @@ bool commit_outputs(const AtomicOutputs& outputs) {
         remove(outputs.message, outputs.message.name);
     }
     if (!ok) {
-        std::fprintf(stderr, "capsid-bytecode-compile: output commit failed (%s); %s\n", error.c_str(),
-                     cleanup_ok ? "removed this invocation's partial outputs" : "cleanup incomplete; partial outputs may remain");
+        std::fprintf(stderr, "capsid-bytecode-compile: output commit failed (%s); %s\n",
+                     error.c_str(),
+                     cleanup_ok ? "removed this invocation's partial outputs"
+                                : "cleanup incomplete; partial outputs may remain");
     }
     return ok && cleanup_ok;
 }
 
 // Formal grammar for the attestation claims (M1D audit). Rejects NUL,
 // control characters, path separators and empty/oversized values.
-bool valid_claim(const std::string& value,
-                 std::size_t min,
-                 std::size_t max,
-                 bool allow_slash) {
+bool valid_claim(const std::string& value, std::size_t min, std::size_t max, bool allow_slash) {
     if (value.size() < min || value.size() > max) {
         return false;
     }
@@ -598,7 +560,7 @@ bool valid_claim(const std::string& value,
     return true;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::strcmp(argv[1], "--print-compatibility-id") == 0) {
@@ -623,9 +585,7 @@ int main(int argc, char** argv) {
             return 2;
         }
         if (!seen_flags.insert(flag).second) {
-            std::fprintf(stderr,
-                         "capsid-bytecode-compile: duplicate argument: %s\n",
-                         flag);
+            std::fprintf(stderr, "capsid-bytecode-compile: duplicate argument: %s\n", flag);
             return 2;
         }
         const std::string value = argv[index + 1];
@@ -646,16 +606,13 @@ int main(int argc, char** argv) {
         } else if (std::strcmp(flag, "--signing-message-out") == 0) {
             message_out = value;
         } else {
-            std::fprintf(stderr,
-                         "capsid-bytecode-compile: unknown argument: %s\n",
-                         flag);
+            std::fprintf(stderr, "capsid-bytecode-compile: unknown argument: %s\n", flag);
             fail_usage();
             return 2;
         }
     }
-    if (source_path.empty() || source_name.empty() || application.empty() ||
-        version.empty() || key_id.empty() || bytecode_out.empty() ||
-        attestation_out.empty() || message_out.empty()) {
+    if (source_path.empty() || source_name.empty() || application.empty() || version.empty() ||
+        key_id.empty() || bytecode_out.empty() || attestation_out.empty() || message_out.empty()) {
         fail_usage();
         return 2;
     }
@@ -664,18 +621,14 @@ int main(int argc, char** argv) {
     // separators. The three output paths must be distinct.
     // sourceName is a module identifier (URI-style, e.g. file:///app/...);
     // application/version/key-id are plain identifiers without separators.
-    if (!valid_claim(application, 1, 64, false) ||
-        !valid_claim(version, 1, 128, false) ||
-        !valid_claim(key_id, 1, 128, false) ||
-        !valid_claim(source_name, 1, 256, true)) {
+    if (!valid_claim(application, 1, 64, false) || !valid_claim(version, 1, 128, false) ||
+        !valid_claim(key_id, 1, 128, false) || !valid_claim(source_name, 1, 256, true)) {
         std::fputs("capsid-bytecode-compile: invalid claim value\n", stderr);
         return 2;
     }
-    if (bytecode_out == attestation_out ||
-        bytecode_out == message_out ||
+    if (bytecode_out == attestation_out || bytecode_out == message_out ||
         attestation_out == message_out) {
-        std::fputs("capsid-bytecode-compile: output paths must be distinct\n",
-                   stderr);
+        std::fputs("capsid-bytecode-compile: output paths must be distinct\n", stderr);
         return 2;
     }
 
@@ -696,13 +649,13 @@ int main(int argc, char** argv) {
         return 1;
     }
     std::string attestation;
-    if (!build_attestation(application, version, source_name, source_sha256,
-                           bytecode_sha256, key_id, &attestation)) {
+    if (!build_attestation(application, version, source_name, source_sha256, bytecode_sha256,
+                           key_id, &attestation)) {
         return 1;
     }
     std::vector<std::uint8_t> message;
-    if (!build_signing_message(application, version, source_name, source_sha256,
-                               bytecode_sha256, key_id, &message)) {
+    if (!build_signing_message(application, version, source_name, source_sha256, bytecode_sha256,
+                               key_id, &message)) {
         return 1;
     }
 

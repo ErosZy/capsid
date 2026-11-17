@@ -13,38 +13,45 @@
 
 namespace capsid_test {
 inline std::string writer_receipt_path(int64_t pid) {
-    return "capsid-test-writer-"+std::to_string(pid)+".receipt";
+    return "capsid-test-writer-" + std::to_string(pid) + ".receipt";
 }
 
 // Open one exclusive, owned-child receipt before the Worker enters its runtime.
 // Its only content is emitted by the real write/ACK observer after both barriers.
 class WriterReceipt {
-public:
+  public:
     WriterReceipt() {
 #if defined(_WIN32)
         pid_ = static_cast<int64_t>(GetCurrentProcessId());
         handle_ = CreateFileA(writer_receipt_path(pid_).c_str(), GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-            CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                              CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr);
 #else
         pid_ = static_cast<int64_t>(getpid());
-        const int receipt = open(writer_receipt_path(pid_).c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-        if (receipt < 0) return;
+        const int receipt =
+            open(writer_receipt_path(pid_).c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        if (receipt < 0)
+            return;
         // This fixture owns stdout; its protocol uses the separate IPC fd and
         // diagnostics use stderr. Keep the receipt on ordinary stdio so the
         // real Worker descriptor sweep still closes every unrelated fd.
         int result;
-        do { result = dup2(receipt, STDOUT_FILENO); }
-        while (result < 0 && errno == EINTR);
-        if (receipt != STDOUT_FILENO) close(receipt);
-        if (result >= 0) descriptor_ = STDOUT_FILENO;
+        do {
+            result = dup2(receipt, STDOUT_FILENO);
+        } while (result < 0 && errno == EINTR);
+        if (receipt != STDOUT_FILENO)
+            close(receipt);
+        if (result >= 0)
+            descriptor_ = STDOUT_FILENO;
 #endif
     }
     ~WriterReceipt() {
 #if defined(_WIN32)
-        if (valid()) CloseHandle(handle_);
+        if (valid())
+            CloseHandle(handle_);
 #else
-        if (valid()) close(descriptor_);
+        if (valid())
+            close(descriptor_);
 #endif
     }
     WriterReceipt(const WriterReceipt&) = delete;
@@ -58,25 +65,32 @@ public:
     }
     bool publish(uint64_t dial, size_t queued, uint64_t stalls, uint64_t blocked) {
         char buffer[256];
-        const int length = std::snprintf(buffer, sizeof(buffer), "WRITER_PRESSURE %llu %llu %zu 4096 %llu %llu\n",
+        const int length = std::snprintf(
+            buffer, sizeof(buffer), "WRITER_PRESSURE %llu %llu %zu 4096 %llu %llu\n",
             static_cast<unsigned long long>(pid_), static_cast<unsigned long long>(dial), queued,
             static_cast<unsigned long long>(stalls), static_cast<unsigned long long>(blocked));
-        if (!valid() || length <= 0 || static_cast<size_t>(length) >= sizeof(buffer)) return false;
+        if (!valid() || length <= 0 || static_cast<size_t>(length) >= sizeof(buffer))
+            return false;
 #if defined(_WIN32)
         DWORD written = 0;
-        return WriteFile(handle_, buffer, static_cast<DWORD>(length), &written, nullptr) && written == static_cast<DWORD>(length);
+        return WriteFile(handle_, buffer, static_cast<DWORD>(length), &written, nullptr) &&
+               written == static_cast<DWORD>(length);
 #else
         size_t offset = 0;
         while (offset < static_cast<size_t>(length)) {
-            const ssize_t written = write(descriptor_, buffer+offset, static_cast<size_t>(length)-offset);
-            if (written < 0 && errno == EINTR) continue;
-            if (written <= 0) return false;
+            const ssize_t written =
+                write(descriptor_, buffer + offset, static_cast<size_t>(length) - offset);
+            if (written < 0 && errno == EINTR)
+                continue;
+            if (written <= 0)
+                return false;
             offset += static_cast<size_t>(written);
         }
         return true;
 #endif
     }
-private:
+
+  private:
     int64_t pid_ = 0;
 #if defined(_WIN32)
     HANDLE handle_ = INVALID_HANDLE_VALUE;
@@ -84,5 +98,5 @@ private:
     int descriptor_ = -1;
 #endif
 };
-}  // namespace capsid_test
+} // namespace capsid_test
 #endif

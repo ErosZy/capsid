@@ -42,7 +42,7 @@ struct LocalCapsidPolicy {
     // the queue fields use has_* because 0 means "queueing disabled".
     struct RuntimeSettings {
         bool has_entry = false;
-        std::string entry;  // bundle file name, relative to the capsid.json directory
+        std::string entry; // bundle file name, relative to the capsid.json directory
         bool has_request_timeout_ms = false;
         std::uint64_t request_timeout_ms = 0;
         bool has_max_inflight = false;
@@ -62,9 +62,9 @@ struct LocalCapsidPolicy {
         // worker.* resources; 0 = unset (worker defaults).
         std::uint64_t js_heap_bytes = 0;
         std::uint64_t process_address_bytes = 0;
-        std::uint64_t memory_bytes = 0;      // memoryMax: budget accounting
+        std::uint64_t memory_bytes = 0; // memoryMax: budget accounting
         std::uint64_t file_descriptors = 0;
-        HealthCheckConfig health_check;      // configured=false = no probe
+        HealthCheckConfig health_check; // configured=false = no probe
     };
 
     // True when the file existed and its policy was applied. A missing
@@ -86,13 +86,11 @@ struct LocalCapsidPolicy {
 // contract). Every other failure — unreadable, oversized, schema-invalid,
 // a rejected section, a valueFrom without a store — fails closed with
 // *error set.
-bool load_local_capsid_policy(const std::string& path,
-                              bool required,
+bool load_local_capsid_policy(const std::string& path, bool required,
                               const BindingRegistrySnapshot* binding_registry,
-                              const std::string& secrets_root,
-                              LocalCapsidPolicy* out,
+                              const std::string& secrets_root, LocalCapsidPolicy* out,
                               std::string* error);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

@@ -27,7 +27,7 @@
 #include <string.h>
 #include <time.h>
 
-static void fail(const char *message) {
+static void fail(const char* message) {
     fprintf(stderr, "FAIL: %s\n", message);
     exit(1);
 }
@@ -46,8 +46,8 @@ static double now_seconds(void) {
 #endif
 }
 
-static char *read_file(const char *path, size_t *out_size) {
-    FILE *handle = fopen(path, "rb");
+static char* read_file(const char* path, size_t* out_size) {
+    FILE* handle = fopen(path, "rb");
     if (handle == NULL) {
         fail("cannot open bundle");
     }
@@ -59,7 +59,7 @@ static char *read_file(const char *path, size_t *out_size) {
         fail("cannot tell bundle");
     }
     rewind(handle);
-    char *data = (char *)malloc((size_t)length + 1);
+    char* data = (char*)malloc((size_t)length + 1);
     if (data == NULL) {
         fail("cannot allocate bundle buffer");
     }
@@ -72,7 +72,7 @@ static char *read_file(const char *path, size_t *out_size) {
     return data;
 }
 
-static void drain_until_exit(capsid_worker *worker) {
+static void drain_until_exit(capsid_worker* worker) {
     const double deadline = now_seconds() + 15.0;
     for (;;) {
         capsid_result flush = capsid_worker_flush(worker);
@@ -111,20 +111,20 @@ static void drain_until_exit(capsid_worker *worker) {
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 3) {
         fprintf(stderr, "usage: %s <capsid-worker> <bundle.mjs>\n", argv[0]);
         return 2;
     }
-    const char *worker_path = argv[1];
-    const char *bundle_path = argv[2];
+    const char* worker_path = argv[1];
+    const char* bundle_path = argv[2];
 
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = worker_path;
     config.strict_sandbox = 0;
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     if (capsid_worker_spawn(&config, &worker) != CAPSID_OK) {
         fail("could not spawn worker");
     }
@@ -133,11 +133,9 @@ int main(int argc, char **argv) {
     // BEFORE the worker reports READY — spawn only starts the process, the
     // HELLO/READY handshake completes once the module is loaded.
     size_t bundle_size = 0;
-    char *bundle = read_file(bundle_path, &bundle_size);
-    if (capsid_worker_load_bundle_named(worker,
-                                        (const uint8_t *)bundle,
-                                        bundle_size,
-                                        "smoke.mjs") != CAPSID_OK) {
+    char* bundle = read_file(bundle_path, &bundle_size);
+    if (capsid_worker_load_bundle_named(worker, (const uint8_t*)bundle, bundle_size, "smoke.mjs") !=
+        CAPSID_OK) {
         fail("could not load bundle");
     }
     free(bundle);
@@ -185,9 +183,8 @@ int main(int argc, char **argv) {
         fail("worker never became READY");
     }
 
-    if (capsid_worker_begin_bodyless_request(worker, 1, "GET",
-                                             "https://example.test/smoke",
-                                             NULL, 0) != CAPSID_OK) {
+    if (capsid_worker_begin_bodyless_request(worker, 1, "GET", "https://example.test/smoke", NULL,
+                                             0) != CAPSID_OK) {
         fail("could not begin request");
     }
 
@@ -221,8 +218,7 @@ int main(int argc, char **argv) {
                 }
                 body_size += event.payload.size;
                 if (capsid_worker_grant_response_credit(
-                        worker, event.request_id,
-                        (uint32_t)event.payload.size) != CAPSID_OK) {
+                        worker, event.request_id, (uint32_t)event.payload.size) != CAPSID_OK) {
                     fail("could not replenish response credit");
                 }
                 continue;
@@ -260,7 +256,7 @@ int main(int argc, char **argv) {
     if (!received_end) {
         fail("no RESPONSE_END");
     }
-    if (body_size != 16) {  /* "package smoke ok" */
+    if (body_size != 16) { /* "package smoke ok" */
         fprintf(stderr, "FAIL: unexpected body size %zu\n", body_size);
         exit(1);
     }

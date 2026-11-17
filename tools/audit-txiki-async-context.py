@@ -60,18 +60,22 @@ REASONS = {
     CLASS_WIRED: (
         "reached from the capsid restricted profile; wired via patch 0013 "
         "(TJSAsyncContextHooks capture at creation, contextual invoke, "
-        "release at destruction)"),
+        "release at destruction)"
+    ),
     CLASS_UNREACHABLE: (
         "reachable only through the native `tjs` global or native module "
         "imports; `tjs` is not in profile-manifest.js profileGlobalNames so "
-        "the capsid bootstrap deletes it from the app realm"),
+        "the capsid bootstrap deletes it from the app realm"
+    ),
     CLASS_SYNC: (
         "reachable (WebAssembly) but invoked only synchronously inside the "
         "current JS call stack (WAMR import trampoline) — never across a "
-        "libuv tick"),
+        "libuv tick"
+    ),
     CLASS_VALUE: (
         "JSValue struct fields are data / GC-root references, never invoked "
-        "as callbacks from a libuv tick"),
+        "as callbacks from a libuv tick"
+    ),
 }
 
 # (file, enclosing function) -> class, for every public handler-wrapper call.
@@ -138,25 +142,25 @@ PROMISE_SITES = {
 # tick (per-file granularity). Local variables and function parameters are
 # not struct fields and are excluded by the detector below.
 STRUCT_FILES = {
-    "httpclient.c": CLASS_WIRED,   # TJSHc callbacks[] + ctx_data
-    "timers.c": CLASS_WIRED,       # TJSTimer.callback + ctx_data
-    "webcrypto.c": CLASS_WIRED,    # TJSWebCryptoOp callback + ctx_data
+    "httpclient.c": CLASS_WIRED,  # TJSHc callbacks[] + ctx_data
+    "timers.c": CLASS_WIRED,  # TJSTimer.callback + ctx_data
+    "webcrypto.c": CLASS_WIRED,  # TJSWebCryptoOp callback + ctx_data
     # utils.c is NOT listed: TJSPromise's JSValue fields (rfuncs) live in
     # utils.h, which the field detector does not scan; utils.c's inventory
     # is the PROMISE_SITES wired entries (TJS_InitPromise / Settle /
     # ClearPromise).
-    "url.c": CLASS_VALUE,          # TJSURL.url_obj / search_params: data refs
-    "wasm.c": CLASS_SYNC,          # TJSWasmImportCtx.func (WAMR trampoline)
+    "url.c": CLASS_VALUE,  # TJSURL.url_obj / search_params: data refs
+    "wasm.c": CLASS_SYNC,  # TJSWasmImportCtx.func (WAMR trampoline)
     "httpserver.c": CLASS_UNREACHABLE,  # server callbacks + ws callbacks
     "mod_ffi.c": CLASS_UNREACHABLE,
-    "mod_fs.c": CLASS_VALUE,            # TJSFileReq.result (promise data)
+    "mod_fs.c": CLASS_VALUE,  # TJSFileReq.result (promise data)
     "mod_fswatch.c": CLASS_WIRED,
     "mod_posix-socket.c": CLASS_UNREACHABLE,
     "mod_process.c": CLASS_UNREACHABLE,  # onexit
     "mod_streams.c": CLASS_WIRED,
     "mod_tls.c": CLASS_WIRED,
     "mod_udp.c": CLASS_WIRED,
-    "signals.c": CLASS_UNREACHABLE,      # sh->func
+    "signals.c": CLASS_UNREACHABLE,  # sh->func
     "worker.c": CLASS_UNREACHABLE,
     "ws.c": CLASS_WIRED,
 }
@@ -172,38 +176,35 @@ def enclosing_function(lines, index):
             continue
         # Column-0 candidate: function signature (possibly multi-line, e.g.
         # "static void" on its own line) or a bare macro/control token.
-        if re.match(r'^(?:typedef|#)', line):
+        if re.match(r"^(?:typedef|#)", line):
             continue
-        m = re.match(r'^(?:[A-Za-z_][\w .*]*\s+)?([A-Za-z_]\w*)\s*\(', line)
-        if m and ';' not in line and 'typedef' not in line:
+        m = re.match(r"^(?:[A-Za-z_][\w .*]*\s+)?([A-Za-z_]\w*)\s*\(", line)
+        if m and ";" not in line and "typedef" not in line:
             return m.group(1)
     return None
 
 
 def strip_comments(src):
-    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
-    src = re.sub(r'//[^\n]*', ' ', src)
+    src = re.sub(r"/\*.*?\*/", " ", src, flags=re.S)
+    src = re.sub(r"//[^\n]*", " ", src)
     return src
 
 
 def scan_handler_sites(lines, path):
     sites = []
     for idx, line in enumerate(lines):
-        if not re.search(r'\btjs_call_handler(?:_ctx(?:_sync)?)?\s*\(', line):
+        if not re.search(r"\btjs_call_handler(?:_ctx(?:_sync)?)?\s*\(", line):
             continue
-        if re.match(
-                r'\s*(?:void|static)\s+tjs_call_handler(?:_ctx(?:_sync)?)?\s*\(',
-                line):
+        if re.match(r"\s*(?:void|static)\s+tjs_call_handler(?:_ctx(?:_sync)?)?\s*\(", line):
             continue  # definition
         fn = enclosing_function(lines, idx)
-        sites.append((os.path.basename(path), idx + 1, fn,
-                      line.strip()[:72]))
+        sites.append((os.path.basename(path), idx + 1, fn, line.strip()[:72]))
     return sites
 
 
 def scan_promise_sites(lines, path):
     sites = []
-    pat = re.compile(r'\bTJS_(?:Init|Settle|Clear)Promise\b')
+    pat = re.compile(r"\bTJS_(?:Init|Settle|Clear)Promise\b")
     for idx, line in enumerate(lines):
         for m in pat.finditer(line):
             name = m.group(0)
@@ -211,8 +212,7 @@ def scan_promise_sites(lines, path):
             # utils.c are themselves inventory entries (capture at init,
             # enter/leave at settle, release at clear).
             fn = enclosing_function(lines, idx)
-            sites.append((os.path.basename(path), idx + 1, fn,
-                          name + ':', line.strip()[:64]))
+            sites.append((os.path.basename(path), idx + 1, fn, name + ":", line.strip()[:64]))
     return sites
 
 
@@ -226,18 +226,16 @@ def scan_struct_files(files):
     invoked from the tick (wired / unreachable / synchronous-reentry).
     """
     found = {}
-    field_pat = re.compile(r'^\s*JSValue\s+\w+\b')
-    struct_header = re.compile(
-        r'(?:typedef\s+struct|\bstruct\s+\w+\s*\{|\}\s*\w+\s*\{)')
-    signature = re.compile(
-        r'^(?:[A-Za-z_][\w .*]*\s+)?[A-Za-z_]\w*\s*\(')
+    field_pat = re.compile(r"^\s*JSValue\s+\w+\b")
+    struct_header = re.compile(r"(?:typedef\s+struct|\bstruct\s+\w+\s*\{|\}\s*\w+\s*\{)")
+    signature = re.compile(r"^(?:[A-Za-z_][\w .*]*\s+)?[A-Za-z_]\w*\s*\(")
     for path in files:
         try:
-            src = open(path, encoding='utf-8', errors='replace').read()
+            src = open(path, encoding="utf-8", errors="replace").read()
         except OSError:
             continue
         src = strip_comments(src)
-        lines = src.split('\n')
+        lines = src.split("\n")
         for idx, line in enumerate(lines):
             if not field_pat.match(line):
                 continue
@@ -255,7 +253,7 @@ def scan_struct_files(files):
                 if struct_header.search(w):
                     is_field = True
                     break
-                if signature.match(w) or w.startswith('}'):
+                if signature.match(w) or w.startswith("}"):
                     break  # function boundary or struct end without header
             if not is_field:
                 continue
@@ -265,32 +263,36 @@ def scan_struct_files(files):
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('overlay_src_dir',
-                        help='prepared overlay: build-m02/vendor-overlay/'
-                             'txiki.js/src')
-    parser.add_argument('--report', action='store_true',
-                        help='print the full archived classification')
+    parser.add_argument(
+        "overlay_src_dir", help="prepared overlay: build-m02/vendor-overlay/txiki.js/src"
+    )
+    parser.add_argument(
+        "--report", action="store_true", help="print the full archived classification"
+    )
     args = parser.parse_args(argv)
 
     src_dir = args.overlay_src_dir
     if not os.path.isdir(src_dir):
-        print(f'audit-txiki-async-context: not a directory: {src_dir}',
-              file=sys.stderr)
+        print(f"audit-txiki-async-context: not a directory: {src_dir}", file=sys.stderr)
         return 2
 
     c_files = []
     for root, dirs, files in os.walk(src_dir):
-        dirs[:] = [d for d in dirs if d not in ('deps', '.git')]
-        c_files.extend(os.path.join(root, f) for f in files
-                       if f.endswith('.c'))
+        dirs[:] = [d for d in dirs if d not in ("deps", ".git")]
+        c_files.extend(os.path.join(root, f) for f in files if f.endswith(".c"))
     c_files.sort()
 
     failures = []
     counts = {cls: 0 for cls in REASONS}
 
     def classify(kind, key):
-        table = (HANDLER_SITES if kind == 'handler' else
-                 PROMISE_SITES if kind == 'promise' else STRUCT_FILES)
+        table = (
+            HANDLER_SITES
+            if kind == "handler"
+            else PROMISE_SITES
+            if kind == "promise"
+            else STRUCT_FILES
+        )
         cls = table.get(key)
         if cls is None:
             return None
@@ -299,32 +301,34 @@ def main(argv):
 
     lines_by_file = {}
     for path in c_files:
-        lines_by_file[path] = open(path, encoding='utf-8',
-                                   errors='replace').read().split('\n')
+        lines_by_file[path] = open(path, encoding="utf-8", errors="replace").read().split("\n")
 
     for path in c_files:
         lines = lines_by_file[path]
         for fname, lineno, fn, text in scan_handler_sites(lines, path):
-            cls = classify('handler', (fname, fn))
+            cls = classify("handler", (fname, fn))
             if cls is None:
                 failures.append(
-                    f'{fname}:{lineno}: tjs_call_handler() call site not '
-                    f'classified (enclosing function {fn!r})')
+                    f"{fname}:{lineno}: tjs_call_handler() call site not "
+                    f"classified (enclosing function {fn!r})"
+                )
         for fname, lineno, fn, _name, _text in scan_promise_sites(lines, path):
-            cls = classify('promise', (fname, fn))
+            cls = classify("promise", (fname, fn))
             if cls is None:
                 failures.append(
-                    f'{fname}:{lineno}: TJS_*Promise call site not '
-                    f'classified (enclosing function {fn!r})')
+                    f"{fname}:{lineno}: TJS_*Promise call site not "
+                    f"classified (enclosing function {fn!r})"
+                )
 
     struct_found = scan_struct_files(c_files)
     for fname, linenos in sorted(struct_found.items()):
-        cls = classify('struct', fname)
+        cls = classify("struct", fname)
         if cls is None:
             failures.append(
-                f'{fname}: struct holds JSValue field at lines '
-                f'{",".join(map(str, linenos))} but the file is not '
-                f'classified')
+                f"{fname}: struct holds JSValue field at lines "
+                f"{','.join(map(str, linenos))} but the file is not "
+                f"classified"
+            )
 
     # Stale entries: a table row that no longer matches any scan result
     # means the inventory drifted from the source (or a patch reworked the
@@ -340,49 +344,52 @@ def main(argv):
     for key in sorted(HANDLER_SITES):
         if key not in handler_seen:
             failures.append(
-                f'{key[0]}.{key[1]}: handler-site inventory entry has no '
-                f'matching tjs_call_handler() call site')
+                f"{key[0]}.{key[1]}: handler-site inventory entry has no "
+                f"matching tjs_call_handler() call site"
+            )
     for key in sorted(PROMISE_SITES):
         if key not in promise_seen:
             failures.append(
-                f'{key[0]}.{key[1]}: promise-site inventory entry has no '
-                f'matching TJS_*Promise call site')
+                f"{key[0]}.{key[1]}: promise-site inventory entry has no "
+                f"matching TJS_*Promise call site"
+            )
     for fname in sorted(STRUCT_FILES):
         if fname not in struct_found:
             failures.append(
-                f'{fname}: struct inventory entry has no JSValue struct '
-                f'field in the overlay')
+                f"{fname}: struct inventory entry has no JSValue struct field in the overlay"
+            )
 
-    print('txiki async-context inventory (WP-03 §7.3)')
+    print("txiki async-context inventory (WP-03 §7.3)")
     for cls in (CLASS_WIRED, CLASS_UNREACHABLE, CLASS_SYNC, CLASS_VALUE):
-        print(f'  {counts[cls]:2d} {cls}')
+        print(f"  {counts[cls]:2d} {cls}")
 
     if args.report:
         print()
-        print('handler call sites:')
+        print("handler call sites:")
         for key in sorted(HANDLER_SITES):
-            print(f'  {".".join(key):44s} {HANDLER_SITES[key]}')
-        print('promise call sites:')
+            print(f"  {'.'.join(key):44s} {HANDLER_SITES[key]}")
+        print("promise call sites:")
         for key in sorted(PROMISE_SITES):
-            print(f'  {".".join(key):44s} {PROMISE_SITES[key]}')
-        print('callback-holding struct files:')
+            print(f"  {'.'.join(key):44s} {PROMISE_SITES[key]}")
+        print("callback-holding struct files:")
         for key in sorted(STRUCT_FILES):
-            print(f'  {key:24s} {STRUCT_FILES[key]}')
+            print(f"  {key:24s} {STRUCT_FILES[key]}")
 
     if failures:
-        print(f'audit FAILED: {len(failures)} unclassified item(s):',
-              file=sys.stderr)
+        print(f"audit FAILED: {len(failures)} unclassified item(s):", file=sys.stderr)
         for item in failures:
-            print(f'  {item}', file=sys.stderr)
-        print('  classify each item in tools/audit-txiki-async-context.py '
-              'as context-wired, profile-unreachable or '
-              'synchronous-reentry (spec §7.3).',
-              file=sys.stderr)
+            print(f"  {item}", file=sys.stderr)
+        print(
+            "  classify each item in tools/audit-txiki-async-context.py "
+            "as context-wired, profile-unreachable or "
+            "synchronous-reentry (spec §7.3).",
+            file=sys.stderr,
+        )
         return 1
 
-    print('audit OK: every async entry point into JS is classified')
+    print("audit OK: every async entry point into JS is classified")
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

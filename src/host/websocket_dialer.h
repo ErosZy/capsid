@@ -17,15 +17,16 @@ struct WebSocketDialerOptions {
 // Only the executor's thread accesses the C ABI. This owner receives
 // copied events and submits bounded commands back to that thread.
 class WebSocketDialer {
-public:
+  public:
     WebSocketDialer(EgressPolicy authority, protocol::ChannelLimits limits,
-        std::function<bool(Command)> sender, std::function<void(size_t)> release,
-        WebSocketDialerOptions options = {});
+                    std::function<bool(Command)> sender, std::function<void(size_t)> release,
+                    WebSocketDialerOptions options = {});
     ~WebSocketDialer();
     void post(WorkerEvent event);
     void request_stop();
     void stop_and_join();
-private:
+
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -35,7 +35,7 @@ struct SingleWorkerServerOptions {
     // capability set). Defaults construct the v4 carriage launch.
     capsid::host::ProtocolLaunch protocol;
     ChannelBudgetLimits channel_service_limits;
-    ChannelBudgetLimits channel_listener_limits{128,0,16u*1024u*1024u};
+    ChannelBudgetLimits channel_listener_limits{128, 0, 16u * 1024u * 1024u};
     // Shared by a static pool's shards. Native callers may supply a common
     // parent for several listeners; production limits are set before start.
     std::shared_ptr<ServiceChannelBudget> channel_service_budget;
@@ -152,7 +152,7 @@ struct SingleWorkerServerOptions {
 // This mode is an explicit benchmark fixture, not a deployment API: it never
 // reads or writes active.json and must not be described as a production path.
 class SingleWorkerServer {
-public:
+  public:
     explicit SingleWorkerServer(SingleWorkerServerOptions options);
     ~SingleWorkerServer();
 
@@ -251,7 +251,7 @@ public:
     // Host cleanup; this separately reports the actual Worker OS exit.
     capsid::WorkerExitStatus worker_exit_status() const;
 
-private:
+  private:
     std::shared_ptr<Impl> impl_;
 };
 
@@ -259,14 +259,10 @@ private:
 // healthCheck the single-worker server uses, against an already-accepting
 // pool endpoint. Returns true for a 2xx response; on failure *error names
 // the probe stage.
-bool probe_local_health(const std::string& address,
-                        std::uint16_t port,
-                        const std::string& target,
-                        const std::string& host_header,
-                        const std::string& capsid_app,
-                        std::uint64_t timeout_ms,
-                        std::string* error);
+bool probe_local_health(const std::string& address, std::uint16_t port, const std::string& target,
+                        const std::string& host_header, const std::string& capsid_app,
+                        std::uint64_t timeout_ms, std::string* error);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

@@ -26,9 +26,9 @@ struct StaticPoolServerOptions {
     std::uint64_t queue_requests = 0;
     std::uint64_t queue_header_bytes = 0;
     std::uint64_t queue_timeout_ms = 0;
-    std::uint64_t max_streaming_inflight_per_worker = 0;  // 0 = not set
-    std::uint64_t stream_idle_timeout_ms = 0;             // 0 = not set
-    std::uint64_t write_timeout_ms = 0;                   // 0 = not set
+    std::uint64_t max_streaming_inflight_per_worker = 0; // 0 = not set
+    std::uint64_t stream_idle_timeout_ms = 0;            // 0 = not set
+    std::uint64_t write_timeout_ms = 0;                  // 0 = not set
     // M2 item 7: the process-wide structured log (design §12). Null
     // disables event logging on this path.
     StructuredLog* log = nullptr;
@@ -52,7 +52,7 @@ struct StaticPoolServerOptions {
 // and SSE permits are configured above; connection selection round-robins
 // over currently available Workers.
 class StaticPoolServer {
-public:
+  public:
     explicit StaticPoolServer(StaticPoolServerOptions options);
     ~StaticPoolServer();
 
@@ -104,10 +104,10 @@ public:
     // the process exit code. Shards never install their own signal wiring.
     int run(const std::vector<std::uint8_t>& bundle);
 
-private:
+  private:
     std::shared_ptr<StaticPoolServerImpl> impl_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

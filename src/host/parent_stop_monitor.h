@@ -14,7 +14,7 @@ namespace capsid::host {
 // Optional one-shot parent control: a byte or EOF requests normal shutdown.
 // Owns a non-inheritable duplicate; cancellation never blocks in a pipe read.
 class ParentStopMonitor {
-public:
+  public:
     static std::unique_ptr<ParentStopMonitor> create(int fd, std::string* error);
     ~ParentStopMonitor();
     ParentStopMonitor(const ParentStopMonitor&) = delete;
@@ -24,7 +24,7 @@ public:
     // Read after cancel() joins the watcher.
     const std::string& error() const { return error_; }
 
-private:
+  private:
     explicit ParentStopMonitor(int fd) : fd_(fd) {}
     void watch(std::function<void()> request_stop);
     int fd_;
@@ -35,5 +35,5 @@ private:
     std::string error_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 #endif

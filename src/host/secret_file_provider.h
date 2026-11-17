@@ -45,14 +45,13 @@ struct SecretFileOutcome {
 // outcome per request in the same order. Duplicate request entries are
 // rejected (the caller must deduplicate); a missing or invalid file fails
 // that entry only. key_id must be a single valid filename component.
-std::vector<SecretFileOutcome> read_secret_files(
-    int secret_dir_fd,
-    const std::vector<std::string>& key_ids);
+std::vector<SecretFileOutcome> read_secret_files(int secret_dir_fd,
+                                                 const std::vector<std::string>& key_ids);
 
 // A key_id is a valid single filename component: non-empty, no '/', no NUL,
 // not "." or "..", and within kMaxSecretKeyIdBytes.
 bool valid_secret_key_id(const std::string& key_id);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

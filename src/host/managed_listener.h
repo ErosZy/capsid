@@ -57,9 +57,9 @@ struct ManagedListenerOptions {
 };
 
 class ManagedListener {
-public:
+  public:
     explicit ManagedListener(ManagedListenerOptions options);
-    ~ManagedListener();  // request_stop() + wait() (bounded)
+    ~ManagedListener(); // request_stop() + wait() (bounded)
 
     ManagedListener(const ManagedListener&) = delete;
     ManagedListener& operator=(const ManagedListener&) = delete;
@@ -86,10 +86,10 @@ public:
     std::uint16_t bound_port() const;
     bool running() const;
 
-private:
+  private:
     std::shared_ptr<ManagedListenerImpl> impl_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

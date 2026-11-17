@@ -17,8 +17,7 @@ capsid::protocol::Frame valid_hello(uint16_t version, uint32_t capabilities) {
     frame.flags = 0;
     frame.request_id = 0;
     capsid::protocol::append_u32(&frame.payload, CAPSID_ABI_VERSION);
-    capsid::protocol::append_u64(
-        &frame.payload, UINT64_C(64) * 1024 * 1024);
+    capsid::protocol::append_u64(&frame.payload, UINT64_C(64) * 1024 * 1024);
     capsid::protocol::append_u64(&frame.payload, 0);
     capsid::protocol::append_u32(&frame.payload, 64);
     capsid::protocol::append_u64(&frame.payload, 5000);
@@ -26,31 +25,28 @@ capsid::protocol::Frame valid_hello(uint16_t version, uint32_t capabilities) {
     capsid::protocol::append_u32(&frame.payload, 4);
     capsid::protocol::append_u32(&frame.payload, 1024);
     capsid::protocol::append_u32(&frame.payload, 64 * 1024);
-    capsid::protocol::append_u32(
-        &frame.payload, 4 * 1024 * 1024);
+    capsid::protocol::append_u32(&frame.payload, 4 * 1024 * 1024);
     frame.payload.push_back(0);
     capsid::protocol::append_u32(&frame.payload, 0);
     capsid::protocol::append_u32(&frame.payload, 0);
     capsid::protocol::append_u16(&frame.payload, 0);
     capsid::protocol::append_u64(&frame.payload, 0);
     capsid::protocol::append_u64(&frame.payload, 0);
-    capsid::protocol::append_u32(
-        &frame.payload, CAPSID_EGRESS_DENY);
+    capsid::protocol::append_u32(&frame.payload, CAPSID_EGRESS_DENY);
     capsid::protocol::append_u32(&frame.payload, 0);
     frame.payload.push_back(0);
     capsid::protocol::append_u32(&frame.payload, 0);
     capsid::protocol::append_u16(&frame.payload, 0);
     capsid::protocol::append_u16(&frame.payload, 0);
     capsid::protocol::append_u16(&frame.payload, 0);
-    capsid::protocol::append_u32(
-        &frame.payload, CAPSID_EGRESS_DENY);
+    capsid::protocol::append_u32(&frame.payload, CAPSID_EGRESS_DENY);
     capsid::protocol::append_u32(&frame.payload, 0);
     if (version == capsid::protocol::kVersionV4) {
         // The optional legacy environment section must end before the v4 tail.
         capsid::protocol::append_u16(&frame.payload, 0);
         if ((capabilities & capsid::protocol::kCapChannelLayoutA2) != 0 &&
-                !capsid::protocol::append_hello_a2_extension(&frame.payload,
-                    capsid::protocol::ChannelLimits())) {
+            !capsid::protocol::append_hello_a2_extension(&frame.payload,
+                                                         capsid::protocol::ChannelLimits())) {
             std::abort();
         }
         capsid::protocol::append_u32(&frame.payload, capabilities);
@@ -59,28 +55,24 @@ capsid::protocol::Frame valid_hello(uint16_t version, uint32_t capabilities) {
     return frame;
 }
 
-void initialize(capsid::WorkerStartupState *state, uint16_t version, uint32_t capabilities) {
+void initialize(capsid::WorkerStartupState* state, uint16_t version, uint32_t capabilities) {
     std::string error;
     if (!state->consume(valid_hello(version, capabilities), &error)) {
         std::abort();
     }
 }
 
-void assign_payload(capsid::protocol::Frame *frame,
-                    const uint8_t *data,
-                    size_t size) {
+void assign_payload(capsid::protocol::Frame* frame, const uint8_t* data, size_t size) {
     if (size != 0) {
         frame->payload.assign(data, data + size);
     }
 }
 
-void exercise_startup(const uint8_t *data, size_t size, uint16_t version, uint32_t capabilities) {
+void exercise_startup(const uint8_t* data, size_t size, uint16_t version, uint32_t capabilities) {
     std::string error;
 
     capsid::protocol::Frame mutated_hello = valid_hello(version, capabilities);
-    for (size_t index = 0;
-         index < size && index < mutated_hello.payload.size();
-         ++index) {
+    for (size_t index = 0; index < size && index < mutated_hello.payload.size(); ++index) {
         mutated_hello.payload[index] ^= data[index];
     }
     capsid::WorkerStartupState hello_state;
@@ -98,41 +90,33 @@ void exercise_startup(const uint8_t *data, size_t size, uint16_t version, uint32
     capsid::protocol::Frame bundle;
     bundle.version = version;
     bundle.type = capsid::protocol::kLoadBundle;
-    bundle.flags = size == 0
-        ? 0
-        : static_cast<uint32_t>(
-              data[0] &
-              (capsid::protocol::kFlagStart |
-               capsid::protocol::kFlagEnd |
-               capsid::protocol::kFlagBundleName));
+    bundle.flags = size == 0 ? 0
+                             : static_cast<uint32_t>(data[0] & (capsid::protocol::kFlagStart |
+                                                                capsid::protocol::kFlagEnd |
+                                                                capsid::protocol::kFlagBundleName));
     bundle.request_id = size < 2 ? 0 : data[1];
     assign_payload(&bundle, data, size);
     capsid::WorkerStartupState bundle_state;
     initialize(&bundle_state, version, capabilities);
     bundle_state.consume(bundle, &error);
 
-    bundle.flags =
-        capsid::protocol::kFlagStart |
-        capsid::protocol::kFlagEnd |
-        capsid::protocol::kFlagBundleName;
+    bundle.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd |
+                   capsid::protocol::kFlagBundleName;
     bundle.request_id = 0;
     capsid::WorkerStartupState named_state;
     initialize(&named_state, version, capabilities);
     named_state.consume(bundle, &error);
 
-    bundle.flags =
-        capsid::protocol::kFlagStart |
-        capsid::protocol::kFlagEnd;
+    bundle.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     capsid::WorkerStartupState raw_state;
     initialize(&raw_state, version, capabilities);
-    if (!raw_state.consume(bundle, &error) ||
-        !raw_state.bundle_complete() ||
+    if (!raw_state.consume(bundle, &error) || !raw_state.bundle_complete() ||
         raw_state.bundle().size() != size) {
         std::abort();
     }
 }
 
-void exercise_request(const uint8_t *data, size_t size) {
+void exercise_request(const uint8_t* data, size_t size) {
     capsid::protocol::Frame frame;
     frame.type = capsid::protocol::kRequestHead;
     frame.flags = 0;
@@ -140,67 +124,50 @@ void exercise_request(const uint8_t *data, size_t size) {
     assign_payload(&frame, data, size);
     capsid::WorkerRequestHead request;
     std::string error;
-    capsid::decode_worker_request_head(
-        frame, capsid::protocol::kMaxPayloadSize, &request, &error);
+    capsid::decode_worker_request_head(frame, capsid::protocol::kMaxPayloadSize, &request, &error);
 
     capsid::protocol::Frame structured;
     structured.type = capsid::protocol::kRequestHead;
     structured.flags = 0;
     structured.request_id = 1;
     const char method[] = "POST";
-    capsid::protocol::append_u16(
-        &structured.payload, sizeof(method) - 1);
-    structured.payload.insert(
-        structured.payload.end(), method, method + sizeof(method) - 1);
+    capsid::protocol::append_u16(&structured.payload, sizeof(method) - 1);
+    structured.payload.insert(structured.payload.end(), method, method + sizeof(method) - 1);
     const size_t url_size = size < 128 ? size : 128;
-    capsid::protocol::append_u32(
-        &structured.payload, static_cast<uint32_t>(url_size + 1));
+    capsid::protocol::append_u32(&structured.payload, static_cast<uint32_t>(url_size + 1));
     structured.payload.push_back('/');
     for (size_t index = 0; index < url_size; ++index) {
-        structured.payload.push_back(
-            static_cast<uint8_t>('a' + data[index] % 26));
+        structured.payload.push_back(static_cast<uint8_t>('a' + data[index] % 26));
     }
     capsid::protocol::append_u16(&structured.payload, 1);
     const char name[] = "x-fuzz";
-    capsid::protocol::append_u16(
-        &structured.payload, sizeof(name) - 1);
-    structured.payload.insert(
-        structured.payload.end(), name, name + sizeof(name) - 1);
-    capsid::protocol::append_u32(
-        &structured.payload, static_cast<uint32_t>(url_size));
+    capsid::protocol::append_u16(&structured.payload, sizeof(name) - 1);
+    structured.payload.insert(structured.payload.end(), name, name + sizeof(name) - 1);
+    capsid::protocol::append_u32(&structured.payload, static_cast<uint32_t>(url_size));
     if (url_size != 0) {
-        structured.payload.insert(
-            structured.payload.end(),
-            data,
-            data + url_size);
+        structured.payload.insert(structured.payload.end(), data, data + url_size);
     }
-    if (!capsid::decode_worker_request_head(
-            structured,
-            capsid::protocol::kMaxPayloadSize,
-            &request,
-            &error)) {
+    if (!capsid::decode_worker_request_head(structured, capsid::protocol::kMaxPayloadSize, &request,
+                                            &error)) {
         std::abort();
     }
 }
 
-void exercise_framing(const uint8_t *data, size_t size, uint16_t version) {
+void exercise_framing(const uint8_t* data, size_t size, uint16_t version) {
     capsid::protocol::Parser parser(version);
     capsid::WorkerStartupState startup;
     size_t offset = 0;
     while (offset < size) {
-        const size_t desired =
-            1 + static_cast<size_t>(data[offset] % 127);
+        const size_t desired = 1 + static_cast<size_t>(data[offset] % 127);
         const size_t remaining = size - offset;
-        const size_t chunk =
-            desired < remaining ? desired : remaining;
+        const size_t chunk = desired < remaining ? desired : remaining;
         if (!parser.append(data + offset, chunk)) {
             return;
         }
         offset += chunk;
         for (;;) {
             capsid::protocol::Frame frame;
-            const capsid::protocol::ParseResult result =
-                parser.next(&frame);
+            const capsid::protocol::ParseResult result = parser.next(&frame);
             if (result == capsid::protocol::kParseError) {
                 return;
             }
@@ -210,22 +177,18 @@ void exercise_framing(const uint8_t *data, size_t size, uint16_t version) {
             std::string error;
             if (!startup.bundle_complete()) {
                 startup.consume(frame, &error);
-            } else if (frame.type ==
-                       capsid::protocol::kRequestHead) {
+            } else if (frame.type == capsid::protocol::kRequestHead) {
                 capsid::WorkerRequestHead request;
-                capsid::decode_worker_request_head(
-                    frame,
-                    capsid::protocol::kMaxPayloadSize,
-                    &request,
-                    &error);
+                capsid::decode_worker_request_head(frame, capsid::protocol::kMaxPayloadSize,
+                                                   &request, &error);
             }
         }
     }
 }
 
-}  // namespace
+} // namespace
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     exercise_startup(data, size, capsid::protocol::kVersion, 0);
     exercise_startup(data, size, capsid::protocol::kVersionV4, 0);
     exercise_startup(data, size, capsid::protocol::kVersionV4,

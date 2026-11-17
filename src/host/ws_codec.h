@@ -48,32 +48,29 @@ struct Frame {
 };
 
 // RFC 6455 §1.3: SHA-1(client-key + GUID), base64-encoded.
-std::string compute_accept_key(const std::string &client_key);
+std::string compute_accept_key(const std::string& client_key);
 
 // A client key is 16 random bytes, base64-encoded (24 chars).
-bool validate_client_key(const std::string &key);
+bool validate_client_key(const std::string& key);
 
 // Encodes one frame. Client frames are masked with the supplied mask
 // (the caller owns randomness); server frames must pass mask == 0.
 // Control frames over 125 bytes and fragmented control frames are
 // rejected (RFC 6455 §5.5).
-bool encode(const Frame &frame,
-            Role role,
-            uint32_t mask,
-            std::vector<uint8_t> *output);
+bool encode(const Frame& frame, Role role, uint32_t mask, std::vector<uint8_t>* output);
 
 class Parser {
-public:
+  public:
     explicit Parser(Role role);
 
-    bool append(const uint8_t *data, size_t size);
-    ParseResult next(Frame *frame);
-    const std::string &error() const { return error_; }
+    bool append(const uint8_t* data, size_t size);
+    ParseResult next(Frame* frame);
+    const std::string& error() const { return error_; }
     // Total bytes currently held (consumed prefix included) - bounded
     // memory accounting for tests and host budget checks.
     size_t storage_bytes() const { return buffer_.size(); }
 
-private:
+  private:
     void compact_if_needed();
 
     Role role_;
@@ -86,8 +83,8 @@ private:
 // frame); appends that would exceed it fail before allocating.
 const size_t kMaxBufferedBytes = 64u * 1024u * 1024u;
 
-}  // namespace ws
-}  // namespace host
-}  // namespace capsid
+} // namespace ws
+} // namespace host
+} // namespace capsid
 
 #endif

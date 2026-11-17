@@ -20,16 +20,14 @@
 
 namespace capsid::host {
 
-inline std::uint32_t clamp_credit_grant_threshold(std::uint64_t requested,
-                                                  std::uint32_t window) {
+inline std::uint32_t clamp_credit_grant_threshold(std::uint64_t requested, std::uint32_t window) {
     if (requested == 0) {
-        return 0;  // explicit off: keep immediate-grant pacing
+        return 0; // explicit off: keep immediate-grant pacing
     }
     const std::uint32_t cap = window / 4;
-    return static_cast<std::uint32_t>(
-        std::min<std::uint64_t>(requested, cap));
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(requested, cap));
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
-#endif  // CAPSID_SRC_HOST_CREDIT_LIMITS_H_
+#endif // CAPSID_SRC_HOST_CREDIT_LIMITS_H_

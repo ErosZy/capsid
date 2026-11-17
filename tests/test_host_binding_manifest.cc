@@ -22,40 +22,36 @@ using capsid::host::ConfigValidationResult;
 using capsid::host::compute_binding_manifest_digest;
 using capsid::host::validate_binding_manifest;
 
-[[noreturn]] void fail(const std::string &message) {
+[[noreturn]] void fail(const std::string& message) {
     std::cerr << "test-host-binding-manifest: " << message << std::endl;
     std::exit(1);
 }
 
-void require(bool condition, const std::string &message) {
+void require(bool condition, const std::string& message) {
     if (!condition) {
         fail(message);
     }
 }
 
-void require_valid(std::string_view json, const char *label) {
+void require_valid(std::string_view json, const char* label) {
     const ConfigValidationResult result = validate_binding_manifest(json);
-    require(result.ok, std::string(label) + " was rejected at '" +
-                           result.error.path + "': " + result.error.message);
+    require(result.ok, std::string(label) + " was rejected at '" + result.error.path +
+                           "': " + result.error.message);
     require(result.error.code == ConfigErrorCode::kNone,
             std::string(label) + " succeeded with a non-empty error code");
-    require(result.error.path.empty(),
-            std::string(label) + " succeeded with an error path");
-    require(result.error.message.empty(),
-            std::string(label) + " succeeded with an error message");
+    require(result.error.path.empty(), std::string(label) + " succeeded with an error path");
+    require(result.error.message.empty(), std::string(label) + " succeeded with an error message");
 }
 
-void require_error(std::string_view json,
-                   ConfigErrorCode expected_code,
-                   const char *expected_path,
-                   const char *label) {
+void require_error(std::string_view json, ConfigErrorCode expected_code, const char* expected_path,
+                   const char* label) {
     const ConfigValidationResult result = validate_binding_manifest(json);
     require(!result.ok, std::string(label) + " was accepted");
     require(result.error.code == expected_code,
             std::string(label) + " reported the wrong error code");
-    require(result.error.path == expected_path,
-            std::string(label) + " reported path '" + result.error.path +
-                "' instead of '" + expected_path + "'");
+    require(result.error.path == expected_path, std::string(label) + " reported path '" +
+                                                    result.error.path + "' instead of '" +
+                                                    expected_path + "'");
     require(!result.error.message.empty(),
             std::string(label) + " did not provide a safe diagnostic");
 }
@@ -87,114 +83,75 @@ void test_minimal_and_full_shapes_are_valid() {
           }
         })json",
         "design's full binding manifest");
-    require_valid(
-        R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":[]}})json",
-        "manifest with an empty module list");
+    require_valid(R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":[]}})json",
+                  "manifest with an empty module list");
     require_valid(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"net":{"allow":[]}}})json",
         "manifest with an empty net allow list");
 }
 
 void test_manifest_envelope_is_exact() {
-    require_error(
-        R"json({"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/apiVersion",
-        "manifest without apiVersion");
+    require_error(R"json({"permissions":{"modules":["capsid:utils"]}})json",
+                  ConfigErrorCode::kInvalidValue, "/apiVersion", "manifest without apiVersion");
     require_error(
         R"json({"apiVersion":"capsid/binding-v2","permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/apiVersion",
-        "unsupported manifest apiVersion");
-    require_error(
-        R"json({"apiVersion":7,"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/apiVersion",
-        "non-string manifest apiVersion");
-    require_error(
-        R"json({"apiVersion":"capsid/binding-v1"})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions",
-        "manifest without permissions");
-    require_error(
-        R"json({"apiVersion":"capsid/binding-v1","permissions":{}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/modules",
-        "manifest without the module list");
+        ConfigErrorCode::kInvalidValue, "/apiVersion", "unsupported manifest apiVersion");
+    require_error(R"json({"apiVersion":7,"permissions":{"modules":["capsid:utils"]}})json",
+                  ConfigErrorCode::kInvalidValue, "/apiVersion", "non-string manifest apiVersion");
+    require_error(R"json({"apiVersion":"capsid/binding-v1"})json", ConfigErrorCode::kInvalidValue,
+                  "/permissions", "manifest without permissions");
+    require_error(R"json({"apiVersion":"capsid/binding-v1","permissions":{}})json",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules",
+                  "manifest without the module list");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":"capsid:utils"}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/modules",
-        "non-array manifest module list");
+        ConfigErrorCode::kInvalidValue, "/permissions/modules", "non-array manifest module list");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"extra":true}})json",
-        ConfigErrorCode::kUnknownField,
-        "/permissions/extra",
-        "unknown manifest permission");
+        ConfigErrorCode::kUnknownField, "/permissions/extra", "unknown manifest permission");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"extra":true},"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kUnknownField,
-        "/sandbox/extra",
-        "unknown manifest sandbox field");
+        ConfigErrorCode::kUnknownField, "/sandbox/extra", "unknown manifest sandbox field");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","mystery":true,"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kUnknownField,
-        "/mystery",
-        "unknown manifest root field");
+        ConfigErrorCode::kUnknownField, "/mystery", "unknown manifest root field");
 }
 
 void test_manifest_modules_are_required_and_known() {
     require_valid(
-                  R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["sqlite","wasi"]},"permissions":{"modules":["capsid:internal/core","capsid:utils","capsid:assert","capsid:getopts","capsid:hashing","capsid:internal/path","capsid:ipaddr","capsid:path","capsid:readline","capsid:sqlite","capsid:uuid","capsid:wasi"]}})json",
-                  "every grantable module");
+        R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["sqlite","wasi"]},"permissions":{"modules":["capsid:internal/core","capsid:utils","capsid:assert","capsid:getopts","capsid:hashing","capsid:internal/path","capsid:ipaddr","capsid:path","capsid:readline","capsid:sqlite","capsid:uuid","capsid:wasi"]}})json",
+        "every grantable module");
 
     require_error(manifest_with_modules(R"json(["capsid:posix-socket"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/0",
                   "unsafe posix socket module");
     require_error(manifest_with_modules(R"json(["capsid:ffi"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/0",
                   "permanently forbidden ffi module");
     require_error(manifest_with_modules(R"json(["capsid:worker"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/0",
                   "permanently forbidden worker module");
     require_error(manifest_with_modules(R"json(["capsid:http-server"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/0",
                   "permanently forbidden http-server module");
     require_error(manifest_with_modules(R"json(["capsid:process"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/0",
                   "permanently forbidden process module");
-    require_error(manifest_with_modules(R"json(["tjs:nope"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
-                  "unknown tjs module");
-    require_error(manifest_with_modules(R"json(["tjs:utils"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
-                  "private implementation namespace");
-    require_error(manifest_with_modules(R"json(["http:evil"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
-                  "http import as a module");
-    require_error(manifest_with_modules(R"json(["node:x"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
-                  "node import as a module");
-    require_error(manifest_with_modules(R"json(["capsid:fs"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/0",
-                  "user-facade module in a binding manifest");
+    require_error(manifest_with_modules(R"json(["tjs:nope"])json"), ConfigErrorCode::kInvalidValue,
+                  "/permissions/modules/0", "unknown tjs module");
+    require_error(manifest_with_modules(R"json(["tjs:utils"])json"), ConfigErrorCode::kInvalidValue,
+                  "/permissions/modules/0", "private implementation namespace");
+    require_error(manifest_with_modules(R"json(["http:evil"])json"), ConfigErrorCode::kInvalidValue,
+                  "/permissions/modules/0", "http import as a module");
+    require_error(manifest_with_modules(R"json(["node:x"])json"), ConfigErrorCode::kInvalidValue,
+                  "/permissions/modules/0", "node import as a module");
+    require_error(manifest_with_modules(R"json(["capsid:fs"])json"), ConfigErrorCode::kInvalidValue,
+                  "/permissions/modules/0", "user-facade module in a binding manifest");
     require_error(manifest_with_modules(R"json(["capsid:utils",7])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/1",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/1",
                   "non-string module entry");
     require_error(manifest_with_modules(R"json(["capsid:utils","capsid:utils"])json"),
-                  ConfigErrorCode::kInvalidValue,
-                  "/permissions/modules/1",
+                  ConfigErrorCode::kInvalidValue, "/permissions/modules/1",
                   "duplicate module entry");
 }
 
@@ -208,29 +165,19 @@ void test_manifest_sandbox_profiles_are_fixed_and_unique() {
 
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-server"]},"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/sandbox/requires/0",
-        "unknown sandbox profile");
+        ConfigErrorCode::kInvalidValue, "/sandbox/requires/0", "unknown sandbox profile");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client","network-client"]},"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/sandbox/requires/1",
-        "duplicate sandbox profile");
+        ConfigErrorCode::kInvalidValue, "/sandbox/requires/1", "duplicate sandbox profile");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":"network-client"},"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/sandbox/requires",
-        "non-array sandbox requires");
+        ConfigErrorCode::kInvalidValue, "/sandbox/requires", "non-array sandbox requires");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":7,"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/sandbox",
-        "non-object sandbox block");
+        ConfigErrorCode::kInvalidValue, "/sandbox", "non-object sandbox block");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":[7]},"permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/sandbox/requires/0",
-        "non-string sandbox profile");
+        ConfigErrorCode::kInvalidValue, "/sandbox/requires/0", "non-string sandbox profile");
 }
 
 void test_manifest_permission_shapes_are_typed() {
@@ -243,59 +190,43 @@ void test_manifest_permission_shapes_are_typed() {
 
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"net":{"allow":["noport"]}}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/net/allow/0",
-        "invalid manifest net target");
+        ConfigErrorCode::kInvalidValue, "/permissions/net/allow/0", "invalid manifest net target");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"net":{"deny":[]}}})json",
-        ConfigErrorCode::kUnknownField,
-        "/permissions/net/deny",
-        "manifest net deny field");
+        ConfigErrorCode::kUnknownField, "/permissions/net/deny", "manifest net deny field");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"net":[]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/net",
-        "non-object manifest net block");
+        ConfigErrorCode::kInvalidValue, "/permissions/net", "non-object manifest net block");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"fs":{"allow":[]}}})json",
-        ConfigErrorCode::kUnknownField,
-        "/permissions/fs/allow",
-        "manifest fs allow field");
+        ConfigErrorCode::kUnknownField, "/permissions/fs/allow", "manifest fs allow field");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"fs":{"read":[7]}}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/fs/read/0",
+        ConfigErrorCode::kInvalidValue, "/permissions/fs/read/0",
         "non-string manifest fs read entry");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"env":["1BAD"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/env/0",
-        "invalid manifest environment name");
+        ConfigErrorCode::kInvalidValue, "/permissions/env/0", "invalid manifest environment name");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"stdio":[7]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/stdio/0",
-        "non-string manifest stdio entry");
+        ConfigErrorCode::kInvalidValue, "/permissions/stdio/0", "non-string manifest stdio entry");
 }
 
 void test_manifest_profile_permission_consistency() {
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"net":{"allow":["*:27017"]}}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/net/allow",
+        ConfigErrorCode::kInvalidValue, "/permissions/net/allow",
         "net permission without the network-client profile");
     require_valid(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["capsid:utils"],"net":{"allow":["*:27017"]}}})json",
         "net permission with the network-client profile");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"],"fs":{"read":["/etc/capsid/mongo"],"write":[]}}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/fs/read",
+        ConfigErrorCode::kInvalidValue, "/permissions/fs/read",
         "fs read permission without the filesystem-read profile");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["filesystem-read"]},"permissions":{"modules":["capsid:utils"],"fs":{"read":[],"write":["/var/lib/capsid/mongo"]}}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/fs/write",
+        ConfigErrorCode::kInvalidValue, "/permissions/fs/write",
         "fs write permission without the filesystem-write profile");
     require_valid(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["filesystem-read","filesystem-write"]},"permissions":{"modules":["capsid:utils"],"fs":{"read":["/etc/capsid/mongo"],"write":["/var/lib/capsid/mongo"]}}})json",
@@ -305,16 +236,14 @@ void test_manifest_profile_permission_consistency() {
         "empty resource permissions need no profiles");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:sqlite"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/modules",
+        ConfigErrorCode::kInvalidValue, "/permissions/modules",
         "sqlite module without the sqlite profile");
     require_valid(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["sqlite"]},"permissions":{"modules":["capsid:sqlite"]}})json",
         "sqlite module with the sqlite profile");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:wasi"]}})json",
-        ConfigErrorCode::kInvalidValue,
-        "/permissions/modules",
+        ConfigErrorCode::kInvalidValue, "/permissions/modules",
         "wasi module without the wasi profile");
     require_valid(
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["wasi"]},"permissions":{"modules":["capsid:wasi"]}})json",
@@ -324,23 +253,16 @@ void test_manifest_profile_permission_consistency() {
 void test_manifest_json_envelope_is_strict() {
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"]}})json",
-        ConfigErrorCode::kDuplicateKey,
-        "",
-        "duplicate manifest key");
+        ConfigErrorCode::kDuplicateKey, "", "duplicate manifest key");
     require_error(
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"]},})json",
-        ConfigErrorCode::kInvalidJson,
-        "",
-        "manifest trailing comma");
+        ConfigErrorCode::kInvalidJson, "", "manifest trailing comma");
 
     constexpr std::size_t kLimit = 1024U * 1024U;
     std::string over_limit =
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":["capsid:utils"]}})json";
     over_limit.resize(kLimit + 1, ' ');
-    require_error(over_limit,
-                  ConfigErrorCode::kResourceLimit,
-                  "",
-                  "manifest over the byte limit");
+    require_error(over_limit, ConfigErrorCode::kResourceLimit, "", "manifest over the byte limit");
 }
 
 void test_manifest_digest_is_canonical_and_deterministic() {
@@ -351,30 +273,23 @@ void test_manifest_digest_is_canonical_and_deterministic() {
     const std::string different =
         R"json({"apiVersion":"capsid/binding-v1","sandbox":{"requires":["network-client"]},"permissions":{"modules":["capsid:utils"],"net":{"allow":["*:27017"]}}})json";
 
-    const std::string first_digest =
-        compute_binding_manifest_digest(first);
-    const std::string reordered_digest =
-        compute_binding_manifest_digest(reordered);
-    const std::string first_again =
-        compute_binding_manifest_digest(first);
-    const std::string different_digest =
-        compute_binding_manifest_digest(different);
+    const std::string first_digest = compute_binding_manifest_digest(first);
+    const std::string reordered_digest = compute_binding_manifest_digest(reordered);
+    const std::string first_again = compute_binding_manifest_digest(first);
+    const std::string different_digest = compute_binding_manifest_digest(different);
 
     require(first_digest.size() == 64 + std::string("sha256:").size(),
             "manifest digest is not a sha256 hex digest");
     require(first_digest.rfind("sha256:", 0) == 0,
             "manifest digest does not carry the sha256 prefix");
-    require(first_digest == reordered_digest,
-            "manifest digest depends on JSON key order");
-    require(first_digest == first_again,
-            "manifest digest is not deterministic");
-    require(first_digest != different_digest,
-            "manifest digest does not change with the content");
+    require(first_digest == reordered_digest, "manifest digest depends on JSON key order");
+    require(first_digest == first_again, "manifest digest is not deterministic");
+    require(first_digest != different_digest, "manifest digest does not change with the content");
     require(compute_binding_manifest_digest("not json").empty(),
             "invalid manifest digest is not empty");
 }
 
-}  // namespace
+} // namespace
 
 int main() {
     test_minimal_and_full_shapes_are_valid();

@@ -27,19 +27,19 @@ namespace capsid::host {
 // ---- listener model (§9.2; wired into the data plane by PR-09) ---------
 
 struct ListenerRoutingConfig {
-    std::string mode;    // "path" | "subdomain" | "header"
-    std::string suffix;  // header mode: the trusted request header
+    std::string mode;   // "path" | "subdomain" | "header"
+    std::string suffix; // header mode: the trusted request header
 };
 
 struct ListenerLimitsConfig {
     // Inbound WS reservations/write buffers, shared across local shards.
     // Outbound actors belong to the service (not an HTTP listener owner).
     std::uint64_t channels = 128;
-    std::uint64_t channel_queue_bytes = 16u*1024u*1024u;
-    std::uint64_t connections = 0;          // 0 = no ceiling
-    std::uint64_t header_bytes = 0;         // 0 = no ceiling
-    std::uint64_t header_timeout_ms = 0;    // 0 = no ceiling
-    std::uint64_t body_idle_timeout_ms = 0; // 0 = no ceiling
+    std::uint64_t channel_queue_bytes = 16u * 1024u * 1024u;
+    std::uint64_t connections = 0;            // 0 = no ceiling
+    std::uint64_t header_bytes = 0;           // 0 = no ceiling
+    std::uint64_t header_timeout_ms = 0;      // 0 = no ceiling
+    std::uint64_t body_idle_timeout_ms = 0;   // 0 = no ceiling
     std::uint64_t stream_idle_timeout_ms = 0; // 0 = no ceiling
 };
 
@@ -64,8 +64,8 @@ struct ListenerCorsConfig {
 
 struct ListenerConfig {
     std::string name;
-    std::string tcp;             // "host" or "host:port"
-    std::string public_scheme;   // "https" for trusted listeners
+    std::string tcp;           // "host" or "host:port"
+    std::string public_scheme; // "https" for trusted listeners
     std::string public_authority;
     // §9.2 trust boundary: header routing requires trusted == true. The
     // field is an explicit declaration, never inferred from the transport
@@ -82,15 +82,15 @@ struct ListenerConfig {
 // Host-side defaults/maximums worker tier. All strings are the "256MiB" /
 // "5s" grammars except the plain integers.
 struct WorkerTierConfig {
-    std::string js_heap;             // size text, empty when absent
-    std::string process_address_space;  // size text
-    std::string memory_max;          // size text
+    std::string js_heap;               // size text, empty when absent
+    std::string process_address_space; // size text
+    std::string memory_max;            // size text
     std::uint64_t file_descriptors = 0;
     std::uint64_t pids_max = 0;
 };
 
 struct RequestTierConfig {
-    std::string timeout;             // duration text
+    std::string timeout; // duration text
     std::uint64_t max_inflight_per_worker = 0;
     std::uint64_t max_streaming_inflight_per_worker = 0;
     std::uint64_t stream_idle_timeout_ms = 0;
@@ -122,7 +122,7 @@ struct CapacityConfig {
     // a serving pool is refused without surge/headroom (never silently
     // over-spawned); a fresh deploy never needs it.
     std::uint64_t activation_surge_workers = 0;
-    std::uint64_t startups_concurrent = 0;   // 0 = Host default
+    std::uint64_t startups_concurrent = 0; // 0 = Host default
     std::uint64_t queued_requests_total = 0;
     std::uint64_t queued_header_bytes_total = 0;
     std::uint64_t worker_memory_commit_total = 0;
@@ -152,7 +152,7 @@ struct CrashBudgetConfig {
 struct RestartBackoffConfig {
     std::uint64_t initial_ms = 0;
     std::uint64_t maximum_ms = 0;
-    std::string jitter;  // basis-points text ("1000" = 10%)
+    std::string jitter; // basis-points text ("1000" = 10%)
 };
 
 struct RecoveryConfig {
@@ -168,10 +168,10 @@ struct RecoveryConfig {
 struct ParsedHostConfig {
     std::string applications_root;
     std::string state_root;
-    std::string secret_root_template;  // contains "{application}"
+    std::string secret_root_template; // contains "{application}"
     std::string admin_unix_path;
     unsigned admin_mode = 0600;
-    std::vector<ListenerConfig> listeners;  // empty = admin-only mode
+    std::vector<ListenerConfig> listeners; // empty = admin-only mode
     // Compiled from permissions + maximums + capacity (see
     // policy_compiler.h for the field semantics).
     HostPolicy policy;
@@ -199,13 +199,12 @@ struct ParsedHostConfig {
 // first). Returns false with a stable operator-facing error when a field is
 // accepted by the schema but cannot be mapped or fails a semantic gate
 // (admin.mode, isolation.mode, capacity bounds, size/duration grammars).
-bool parse_host_config(std::string_view json, ParsedHostConfig* out,
-                       std::string* error);
+bool parse_host_config(std::string_view json, ParsedHostConfig* out, std::string* error);
 
 struct ResolvedRecoveryPolicy {
     bool ok = false;
     WorkerRecoveryPolicy policy;
-    std::string error;  // static text
+    std::string error; // static text
 };
 
 // PR-09c: the coordinator's recovery-policy projection from the §9.5
@@ -219,6 +218,6 @@ struct ResolvedRecoveryPolicy {
 // default).
 ResolvedRecoveryPolicy resolve_recovery_policy(const RecoveryConfig& config);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

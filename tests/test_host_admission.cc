@@ -96,8 +96,7 @@ void require(bool condition, const std::string& message) {
 
 std::string read_one_ready_line(int fd) {
     std::string line;
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (line.empty() || line.back() != '\n') {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
@@ -114,8 +113,7 @@ std::string read_one_ready_line(int fd) {
         require(capsid::win32::read_fd(fd, &byte, 1) == 1,
                 "server READY pipe closed without a complete record");
 #else
-        require(read(fd, &byte, 1) == 1,
-                "server READY pipe closed without a complete record");
+        require(read(fd, &byte, 1) == 1, "server READY pipe closed without a complete record");
 #endif
         line.push_back(byte);
         require(line.size() <= 1024, "server READY record is unbounded");
@@ -130,32 +128,27 @@ std::uint16_t ready_port(const std::string& line) {
     const char* digits = line.c_str() + begin + marker.size();
     char* end = nullptr;
     const unsigned long port = std::strtoul(digits, &end, 10);
-    require(end != digits && port > 0 && port <= 65535,
-            "server READY record has an invalid port");
+    require(end != digits && port > 0 && port <= 65535, "server READY record has an invalid port");
     return static_cast<std::uint16_t>(port);
 }
 
 // The slow fixture: every request parks in the worker for 700 ms, so a test
 // can hold one inflight slot deterministically.
 const std::vector<std::uint8_t>& slow_bundle() {
-    static const std::string source =
-        "export default { fetch: async () => { "
-        "  await new Promise((resolve) => setTimeout(resolve, 700)); "
-        "  return new Response('admission-ok'); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::string source = "export default { fetch: async () => { "
+                                      "  await new Promise((resolve) => setTimeout(resolve, 700)); "
+                                      "  return new Response('admission-ok'); } };";
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
 // A warm-up response plus requests that cannot complete before the fault.
 // Queue occupancy is established by a real 429, rather than a timed sleep.
 const std::vector<std::uint8_t>& worker_death_bundle() {
-    static const std::string source =
-        "export default { fetch: request => "
-        "  new URL(request.url).pathname.endsWith('/alive') ? "
-        "  new Response('admission-ok') : new Promise(() => {}) };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::string source = "export default { fetch: request => "
+                                      "  new URL(request.url).pathname.endsWith('/alive') ? "
+                                      "  new Response('admission-ok') : new Promise(() => {}) };";
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -173,8 +166,7 @@ const std::vector<std::uint8_t>& streamed_bundle() {
         "      new URL(request.url).pathname.endsWith('/pending-end') ? 600000 : 80);\n"
         "  }}),\n"
         "  { headers: { 'content-length': String(body.length) } }) };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                   source.end());
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -189,17 +181,18 @@ int connect_to(std::uint16_t port) {
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode admission loopback address");
     require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
-                    sizeof(address)) == 0,
+                                      sizeof(address)) == 0,
             "cannot connect to admission server");
     return fd;
 }
 
 void send_request(int fd, const std::string& target, bool keep_alive) {
     const std::string connection = keep_alive ? "keep-alive" : "close";
-    const std::string request =
-        "GET " + target + " HTTP/1.1\r\n"
-        "Host: public.example\r\n"
-        "Connection: " + connection + "\r\n\r\n";
+    const std::string request = "GET " + target +
+                                " HTTP/1.1\r\n"
+                                "Host: public.example\r\n"
+                                "Connection: " +
+                                connection + "\r\n\r\n";
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
@@ -250,17 +243,14 @@ bool lower_contains(const std::string& value, const char* needle) {
     return false;
 }
 
-
 // Reads exactly one line ("\r\n"-terminated) from fd, refilling `buffer`
 // as needed. The line is appended to `buffer` (so the caller keeps a
 // consistent stream view) and returned without the terminator.
-std::string read_line(int fd, std::string& buffer, char* scratch,
-                      const std::size_t scratch_size,
+std::string read_line(int fd, std::string& buffer, char* scratch, const std::size_t scratch_size,
                       const std::chrono::steady_clock::time_point& deadline) {
     std::string::size_type line_end = buffer.find("\r\n");
     while (line_end == std::string::npos) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "admission response line timed out");
+        require(std::chrono::steady_clock::now() < deadline, "admission response line timed out");
         const ssize_t count = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         if (count == 0) {
             fail("admission response hit EOF mid-line");
@@ -274,12 +264,11 @@ std::string read_line(int fd, std::string& buffer, char* scratch,
     return line;
 }
 
-void require_bytes(int fd, std::string& buffer, std::size_t count,
-                   char* scratch, const std::size_t scratch_size,
+void require_bytes(int fd, std::string& buffer, std::size_t count, char* scratch,
+                   const std::size_t scratch_size,
                    const std::chrono::steady_clock::time_point& deadline) {
     while (buffer.size() < count) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "admission response body timed out");
+        require(std::chrono::steady_clock::now() < deadline, "admission response body timed out");
         const ssize_t got = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         require(got > 0, "admission response body recv failed");
         buffer.append(scratch, static_cast<std::size_t>(got));
@@ -292,23 +281,20 @@ void require_bytes(int fd, std::string& buffer, std::size_t count,
 // was used.
 RawHttpResponse read_response(int fd) {
     char scratch[2048];
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     std::string buffer;
-    const std::string status_line = read_line(fd, buffer, scratch,
-                                              sizeof(scratch), deadline);
+    const std::string status_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline);
     const std::string::size_type sp1 = status_line.find(' ');
     require(sp1 != std::string::npos, "malformed status line");
     RawHttpResponse response;
-    response.status = static_cast<unsigned>(
-        std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
+    response.status =
+        static_cast<unsigned>(std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
     require(response.status >= 100, "invalid response status");
     std::size_t body_length = 0;
     bool chunked = false;
     bool saw_content_length = false;
     std::string header_line;
-    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch),
-                                     deadline)).empty()) {
+    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline)).empty()) {
         if (lower_starts_with(header_line, "connection:")) {
             std::string value = header_line.substr(11);
             const auto first = value.find_first_not_of(" \t");
@@ -317,8 +303,8 @@ RawHttpResponse read_response(int fd) {
             response.connection_close = value.size() == 5 && lower_starts_with(value, "close");
         } else if (lower_starts_with(header_line, "content-length:")) {
 
-            body_length = static_cast<std::size_t>(
-                std::strtoul(header_line.c_str() + 15, nullptr, 10));
+            body_length =
+                static_cast<std::size_t>(std::strtoul(header_line.c_str() + 15, nullptr, 10));
             saw_content_length = true;
         } else if (lower_starts_with(header_line, "transfer-encoding:") &&
 
@@ -328,39 +314,33 @@ RawHttpResponse read_response(int fd) {
     }
     if (chunked) {
         for (;;) {
-            const std::string size_line =
-                read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-            const std::size_t chunk_size = static_cast<std::size_t>(
-                std::strtoul(size_line.c_str(), nullptr, 16));
+            const std::string size_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline);
+            const std::size_t chunk_size =
+                static_cast<std::size_t>(std::strtoul(size_line.c_str(), nullptr, 16));
             if (chunk_size == 0) {
                 // Consume the trailer block up to its terminating blank
                 // line, so a keep-alive connection starts the next response
                 // on a clean stream.
                 for (;;) {
                     const std::string trailer =
-                        read_line(fd, buffer, scratch, sizeof(scratch),
-                                  deadline);
+                        read_line(fd, buffer, scratch, sizeof(scratch), deadline);
                     if (trailer.empty()) {
                         break;
                     }
                 }
                 break;
             }
-            require_bytes(fd, buffer, chunk_size, scratch, sizeof(scratch),
-                          deadline);
+            require_bytes(fd, buffer, chunk_size, scratch, sizeof(scratch), deadline);
             response.body.append(buffer.substr(0, chunk_size));
             buffer.erase(0, chunk_size);
             // The chunk terminator "\r\n" follows the data.
             const std::string terminator =
                 read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-            require(terminator.empty(),
-                    "chunked response had a non-empty chunk terminator");
+            require(terminator.empty(), "chunked response had a non-empty chunk terminator");
         }
     } else {
-        require(saw_content_length,
-                "admission response has neither Content-Length nor chunked");
-        require_bytes(fd, buffer, body_length, scratch, sizeof(scratch),
-                      deadline);
+        require(saw_content_length, "admission response has neither Content-Length nor chunked");
+        require_bytes(fd, buffer, body_length, scratch, sizeof(scratch), deadline);
         response.body = buffer.substr(0, body_length);
         buffer.erase(0, body_length);
     }
@@ -397,7 +377,7 @@ pid_t find_worker_child_pid(const char* worker_path) {
         if (entry->d_name[0] < '0' || entry->d_name[0] > '9') {
             continue;
         }
-        char path[320];  // NAME_MAX (255) + "/proc/" + "/stat" + NUL
+        char path[320]; // NAME_MAX (255) + "/proc/" + "/stat" + NUL
         std::snprintf(path, sizeof(path), "/proc/%s/stat", entry->d_name);
         FILE* file = std::fopen(path, "r");
         if (file == nullptr) {
@@ -410,13 +390,13 @@ pid_t find_worker_child_pid(const char* worker_path) {
         // between the comm's ')' and ppid are ')', a space, the state
         // character and a space, consumed one at a time (the %[^)] scan
         // absorbs the comm and its leading '(').
-        const int scanned = std::fscanf(
-            file, "%*d %255[^)]%*c %*c %ld", comm, &ppid);
+        const int scanned = std::fscanf(file, "%*d %255[^)]%*c %*c %ld", comm, &ppid);
         std::fclose(file);
         if (scanned == 2 && ppid == static_cast<long>(self) &&
             std::strcmp(comm, "(capsid-worker") == 0) {
             const auto executable = std::filesystem::path("/proc") / entry->d_name / "exe";
-            require(std::filesystem::canonical(executable) == std::filesystem::canonical(worker_path),
+            require(std::filesystem::canonical(executable) ==
+                        std::filesystem::canonical(worker_path),
                     "worker fault must target the requested executable");
             require(found == -1, "worker-death fixture has more than one Worker child");
             found = static_cast<pid_t>(std::strtol(entry->d_name, nullptr, 10));
@@ -443,8 +423,7 @@ pid_t kill_worker_child(const char* worker_path) {
 // After the worker exits, the shard closes its acceptor: a refused new
 // connection is the deterministic "worker-exit processed" signal.
 void require_acceptor_closed(std::uint16_t port) {
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
                 "acceptor never closed after the worker was killed");
@@ -454,19 +433,17 @@ void require_acceptor_closed(std::uint16_t port) {
         address.sin_port = htons(port);
         require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
                 "cannot encode admission loopback address");
-        const int connected =
-            capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
-                    sizeof(address));
+        const int connected = capsid::win32::connect_fd(
+            fd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
         close(fd);
         if (connected != 0) {
-            return;  // refused: the shard stopped accepting
+            return; // refused: the shard stopped accepting
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
 
-capsid::host::SingleWorkerServerOptions make_worker_options(
-    const char* worker_path, int ready_fd) {
+capsid::host::SingleWorkerServerOptions make_worker_options(const char* worker_path, int ready_fd) {
     capsid::host::SingleWorkerServerOptions options;
     options.worker_path = worker_path;
     options.source_bundle_path = "admission-inline";
@@ -489,15 +466,13 @@ capsid::host::SingleWorkerServerOptions make_worker_options(
 void test_inflight_full_rejects(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_worker_options(worker_path, ready[1]);
-    options.max_inflight_per_worker = 1;  // one in-flight slot
-    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
-    options.queue_requests = 0;           // queueing disabled
+    capsid::host::SingleWorkerServerOptions options = make_worker_options(worker_path, ready[1]);
+    options.max_inflight_per_worker = 1;           // one in-flight slot
+    options.max_streaming_inflight_per_worker = 1; // E-2 1/1 boundary
+    options.queue_requests = 0;                    // queueing disabled
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(slow_bundle(), &error),
-            "cannot start admission server: " + error);
+    require(server.start(slow_bundle(), &error), "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // Hold the single inflight slot.
@@ -525,16 +500,14 @@ void test_inflight_full_rejects(const char* worker_path) {
 void test_queue_full_rejects(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_worker_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
-    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
+    options.max_streaming_inflight_per_worker = 1; // E-2 1/1 boundary
     options.queue_requests = 1;
-    options.queue_timeout_ms = 3000;  // long enough to never fire
+    options.queue_timeout_ms = 3000; // long enough to never fire
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(slow_bundle(), &error),
-            "cannot start admission server: " + error);
+    require(server.start(slow_bundle(), &error), "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const int holder = connect_to(port);
@@ -548,15 +521,13 @@ void test_queue_full_rejects(const char* worker_path) {
     // Queue is now full → 429.
     const RawHttpResponse rejected = http_get(port, "/@capsid/orders/third");
     require(rejected.status == 429,
-            "queue-full must reject with 429, got " +
-                std::to_string(rejected.status));
+            "queue-full must reject with 429, got " + std::to_string(rejected.status));
 
     // The held request completes, the queued request is served next.
     const RawHttpResponse held = read_response(holder);
     require(held.status == 200, "held request did not complete with 200");
     const RawHttpResponse served = read_response(queued);
-    require(served.status == 200,
-            "queued request was not served after the slot freed");
+    require(served.status == 200, "queued request was not served after the slot freed");
     close(holder);
     close(queued);
 
@@ -569,16 +540,14 @@ void test_queue_full_rejects(const char* worker_path) {
 void test_queue_timeout_returns_504(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_worker_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
-    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
+    options.max_streaming_inflight_per_worker = 1; // E-2 1/1 boundary
     options.queue_requests = 2;
-    options.queue_timeout_ms = 200;  // expires while the holder parks
+    options.queue_timeout_ms = 200; // expires while the holder parks
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(slow_bundle(), &error),
-            "cannot start admission server: " + error);
+    require(server.start(slow_bundle(), &error), "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const int holder = connect_to(port);
@@ -590,8 +559,7 @@ void test_queue_timeout_returns_504(const char* worker_path) {
     send_request(queued, "/@capsid/orders/queued", true);
     const RawHttpResponse timed_out = read_response(queued);
     require(timed_out.status == 504,
-            "queue deadline expiry must return 504, got " +
-                std::to_string(timed_out.status));
+            "queue deadline expiry must return 504, got " + std::to_string(timed_out.status));
 
     const RawHttpResponse held = read_response(holder);
     require(held.status == 200, "held request did not complete with 200");
@@ -609,16 +577,14 @@ void test_queue_timeout_returns_504(const char* worker_path) {
 void test_worker_death_returns_503(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_worker_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_worker_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
     options.max_streaming_inflight_per_worker = 1;
     options.queue_requests = 1;
     options.request_timeout_ms = 15000;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(worker_death_bundle(), &error),
-            "cannot start admission server: " + error);
+    require(server.start(worker_death_bundle(), &error), "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const int warm = connect_to(port);
@@ -649,7 +615,8 @@ void test_worker_death_returns_503(const char* worker_path) {
         const int polled = capsid::win32::capsid_poll(pending.data(), pending.size(), 50);
         require(polled >= 0, "cannot poll admission capacity barrier");
         for (std::size_t index = 0; index < pending.size(); ++index) {
-            if (pending[index].revents == 0) continue;
+            if (pending[index].revents == 0)
+                continue;
             require(rejected < 0 && (pending[index].revents & POLLIN) != 0,
                     "unexpected connection termination at admission barrier");
             // These poll descriptors were populated exclusively from the
@@ -667,7 +634,8 @@ void test_worker_death_returns_503(const char* worker_path) {
     require_acceptor_closed(port);
     unsigned unavailable_responses = 0;
     for (std::size_t index = 0; index < pending.size(); ++index) {
-        if (static_cast<int>(index) == rejected) continue;
+        if (static_cast<int>(index) == rejected)
+            continue;
         const int connection = static_cast<int>(pending[index].fd);
         const RawHttpResponse after = read_response(connection);
         require(after.status == 503 && after.body == "worker exited" && after.connection_close,
@@ -690,7 +658,6 @@ void test_worker_death_returns_503(const char* worker_path) {
     std::cout << "worker-exit: complete503=2 tcpEof=2 workerReaped=true" << std::endl;
 }
 
-
 // Keep-alive clients may legally send the next request the instant they
 // have read the full response body. The streamed (buffer_body) path writes
 // the end block as a separate completion; the next request's data can
@@ -704,13 +671,11 @@ void test_keepalive_streamed_responses(const char* worker_path, const std::strin
     const bool idle = mode == "idle-drain";
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create admission READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_worker_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_worker_options(worker_path, ready[1]);
     options.install_process_signals = mode != "keepalive-streamed-drain-no-signals";
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(streamed_bundle(), &error),
-            "cannot start admission server: " + error);
+    require(server.start(streamed_bundle(), &error), "cannot start admission server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const int kConnections = idle ? 0 : 4;
@@ -726,8 +691,7 @@ void test_keepalive_streamed_responses(const char* worker_path, const std::strin
         for (int request = 0; request < kRequestsPerConnection; ++request) {
             const RawHttpResponse response = read_response(fd);
             require(response.status == 200,
-                    "streamed keep-alive response status was " +
-                        std::to_string(response.status));
+                    "streamed keep-alive response status was " + std::to_string(response.status));
             require(response.body == "streamed-ok",
                     "streamed keep-alive response body was corrupted");
             if (request + 1 < kRequestsPerConnection) {
@@ -736,17 +700,22 @@ void test_keepalive_streamed_responses(const char* worker_path, const std::strin
                 // from the client's point of view.
                 // The stop control leaves the final stream genuinely open;
                 // scheduling cannot turn its cancellation into a clean end.
-                const bool final_pending = (!drain || forced) && request + 2 == kRequestsPerConnection;
-                send_request(fd, final_pending ? "/@capsid/orders/pending-end"
-                                               : "/@capsid/orders/stream", true);
+                const bool final_pending =
+                    (!drain || forced) && request + 2 == kRequestsPerConnection;
+                send_request(
+                    fd, final_pending ? "/@capsid/orders/pending-end" : "/@capsid/orders/stream",
+                    true);
             }
         }
-        if (!drain) close(fd);
+        if (!drain)
+            close(fd);
     }
 
     const auto started = std::chrono::steady_clock::now();
-    if (drain) server.begin_drain(forced ? 200 : 5000);
-    else server.request_stop();
+    if (drain)
+        server.begin_drain(forced ? 200 : 5000);
+    else
+        server.request_stop();
     if (drain) {
         const auto deadline = started + std::chrono::milliseconds(2500);
         while (!server.worker_exit_status().observed &&
@@ -761,13 +730,15 @@ void test_keepalive_streamed_responses(const char* worker_path, const std::strin
     }
     require(server.wait(&error), "admission server wait failed: " + error);
     if (drain) {
-        for (const int fd : connections) close(fd);
+        for (const int fd : connections)
+            close(fd);
         const auto metrics = server.drain_metrics();
         std::cout << "HOST_DRAIN {\"finished\":" << (metrics.finished ? "true" : "false")
                   << ",\"forcedCancellations\":" << metrics.forced_cancellations
                   << ",\"totalMs\":" << metrics.total_ms << "}" << std::endl;
         require(metrics.draining && metrics.finished &&
-                    metrics.forced_cancellations == static_cast<std::uint64_t>(forced ? kConnections : 0),
+                    metrics.forced_cancellations ==
+                        static_cast<std::uint64_t>(forced ? kConnections : 0),
                 "streamed drain cancellation count disagrees with its deadline");
         require(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(2500),
                 "drain did not join promptly after completion/deadline");
@@ -780,7 +751,7 @@ void test_keepalive_streamed_responses(const char* worker_path, const std::strin
             "streamed drain/unfinished stop has the wrong actual Worker exit");
 }
 
-#endif  // CAPSID_HAS_SINGLE_WORKER_SERVER
+#endif // CAPSID_HAS_SINGLE_WORKER_SERVER
 
 #if CAPSID_HAS_STATIC_POOL_SERVER
 
@@ -792,7 +763,7 @@ void test_pool_forwards_admission(const char* worker_path) {
     capsid::host::StaticPoolServerOptions options;
     options.workers = 1;
     options.max_inflight_per_worker = 1;
-    options.max_streaming_inflight_per_worker = 1;  // E-2 1/1 boundary
+    options.max_streaming_inflight_per_worker = 1; // E-2 1/1 boundary
     options.queue_requests = 1;
     options.queue_timeout_ms = 3000;
     options.worker_options.worker_path = worker_path;
@@ -809,8 +780,7 @@ void test_pool_forwards_admission(const char* worker_path) {
     options.worker_options.ready_fd = ready[1];
     capsid::host::StaticPoolServer pool(std::move(options));
     std::string error;
-    require(pool.start(slow_bundle(), &error),
-            "cannot start admission pool: " + error);
+    require(pool.start(slow_bundle(), &error), "cannot start admission pool: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const int holder = connect_to(port);
@@ -822,8 +792,7 @@ void test_pool_forwards_admission(const char* worker_path) {
     send_request(queued, "/@capsid/orders/queued", true);
     const RawHttpResponse rejected = http_get(port, "/@capsid/orders/third");
     require(rejected.status == 429,
-            "pool queue-full must reject with 429, got " +
-                std::to_string(rejected.status));
+            "pool queue-full must reject with 429, got " + std::to_string(rejected.status));
 
     const RawHttpResponse held = read_response(holder);
     require(held.status == 200, "pool held request did not complete");
@@ -836,9 +805,9 @@ void test_pool_forwards_admission(const char* worker_path) {
     require(pool.wait(&error), "admission pool wait failed: " + error);
 }
 
-#endif  // CAPSID_HAS_STATIC_POOL_SERVER
+#endif // CAPSID_HAS_STATIC_POOL_SERVER
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) try {
     require(argc == 3, "expected mode and capsid-worker path");

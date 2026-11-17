@@ -92,10 +92,8 @@ enum class GenerationRecoveryDisposition {
 struct WorkerRecoveryDecision {
     bool ok = false;
     GenerationRecoveryState state;
-    WorkerInstabilityKind instability_kind =
-        WorkerInstabilityKind::kUnexpectedExit;
-    GenerationRecoveryDisposition disposition =
-        GenerationRecoveryDisposition::kUnavailable;
+    WorkerInstabilityKind instability_kind = WorkerInstabilityKind::kUnexpectedExit;
+    GenerationRecoveryDisposition disposition = GenerationRecoveryDisposition::kUnavailable;
     bool event_counted = false;
     std::size_t events_in_window = 0;
     bool begin_quarantine = false;
@@ -111,11 +109,10 @@ struct WorkerRecoveryDecision {
 // replacement decision. Only a complete ACTIVE lifecycle document matching
 // state and worker_generation can count or schedule work. Exceeding max_events
 // begins quarantine and suppresses replacement in the same result.
-WorkerRecoveryDecision record_worker_instability(
-    const GenerationRecoveryState& state,
-    const WorkerRecoveryPolicy& policy,
-    const ServiceLifecycleState& lifecycle,
-    const WorkerInstabilityObservation& observation);
+WorkerRecoveryDecision record_worker_instability(const GenerationRecoveryState& state,
+                                                 const WorkerRecoveryPolicy& policy,
+                                                 const ServiceLifecycleState& lifecycle,
+                                                 const WorkerInstabilityObservation& observation);
 
 struct WorkerStabilityResult {
     bool ok = false;
@@ -126,11 +123,10 @@ struct WorkerStabilityResult {
 
 // Resets replacement backoff after one replacement worker has remained
 // continuously READY for stable_reset_ms. It never clears crash-budget events.
-WorkerStabilityResult observe_worker_stability(
-    const GenerationRecoveryState& state,
-    const WorkerRecoveryPolicy& policy,
-    std::uint64_t continuously_ready_since_ms,
-    std::uint64_t now_ms);
+WorkerStabilityResult observe_worker_stability(const GenerationRecoveryState& state,
+                                               const WorkerRecoveryPolicy& policy,
+                                               std::uint64_t continuously_ready_since_ms,
+                                               std::uint64_t now_ms);
 
 struct FailedRequestRetryContext {
     std::string method;
@@ -151,9 +147,8 @@ enum class FailedRequestAction {
 // retry only for an eligible worker/IPC/protocol failure, GET/HEAD, no body,
 // no response head, sufficient deadline and a READY worker from the same
 // active generation.
-FailedRequestAction decide_failed_request_action(
-    const WorkerRecoveryDecision& recovery,
-    const FailedRequestRetryContext& request);
+FailedRequestAction decide_failed_request_action(const WorkerRecoveryDecision& recovery,
+                                                 const FailedRequestRetryContext& request);
 
 enum class StartupPermitLane {
     kDeploy,
@@ -185,10 +180,9 @@ struct StartupPermitQueueResult {
     WorkerRecoveryError error;
 };
 
-StartupPermitQueueResult enqueue_startup_permit_request(
-    const FairStartupPermitQueue& queue,
-    const StartupPermitRequest& request,
-    std::size_t maximum_queued);
+StartupPermitQueueResult enqueue_startup_permit_request(const FairStartupPermitQueue& queue,
+                                                        const StartupPermitRequest& request,
+                                                        std::size_t maximum_queued);
 
 struct StartupPermitGrantResult {
     bool ok = false;
@@ -199,10 +193,9 @@ struct StartupPermitGrantResult {
     WorkerRecoveryError error;
 };
 
-StartupPermitGrantResult grant_next_startup_permit(
-    const FairStartupPermitQueue& queue,
-    bool permit_available);
+StartupPermitGrantResult grant_next_startup_permit(const FairStartupPermitQueue& queue,
+                                                   bool permit_available);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

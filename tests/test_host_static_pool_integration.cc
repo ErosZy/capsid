@@ -72,12 +72,10 @@ std::uint16_t reserve_test_port() {
     address.sin_port = 0;
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode integration loopback address");
-    require(bind(fd, reinterpret_cast<struct sockaddr*>(&address),
-                 sizeof(address)) == 0,
+    require(bind(fd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) == 0,
             "cannot reserve integration port");
     socklen_t length = sizeof(address);
-    require(getsockname(fd, reinterpret_cast<struct sockaddr*>(&address),
-                        &length) == 0,
+    require(getsockname(fd, reinterpret_cast<struct sockaddr*>(&address), &length) == 0,
             "cannot inspect integration port");
     const std::uint16_t port = ntohs(address.sin_port);
     close(fd);
@@ -94,22 +92,20 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
     address.sin_port = htons(port);
     if (inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) != 1 ||
         capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
-                sizeof(address)) != 0) {
+                                  sizeof(address)) != 0) {
         close(fd);
         return false;
     }
-    const std::string request =
-        "GET /@capsid/orders/pool-integration HTTP/1.1\r\n"
-        "Host: public.example\r\n"
-        "Connection: close\r\n\r\n";
+    const std::string request = "GET /@capsid/orders/pool-integration HTTP/1.1\r\n"
+                                "Host: public.example\r\n"
+                                "Connection: close\r\n\r\n";
     if (capsid::win32::send_fd(fd, request.data(), request.size(), 0) !=
         static_cast<ssize_t>(request.size())) {
         close(fd);
         return false;
     }
     std::string response;
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::milliseconds(timeout_ms);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     while (std::chrono::steady_clock::now() < deadline) {
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
             deadline - std::chrono::steady_clock::now());
@@ -117,8 +113,7 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
         descriptor.fd = fd;
         descriptor.events = POLLIN;
         const int polled = capsid::win32::capsid_poll(
-            &descriptor, 1,
-            static_cast<int>(remaining.count() > 0 ? remaining.count() : 1));
+            &descriptor, 1, static_cast<int>(remaining.count() > 0 ? remaining.count() : 1));
         if (polled <= 0) {
             break;
         }
@@ -134,8 +129,8 @@ bool http_succeeds(std::uint16_t port, int timeout_ms) {
            response.find("pool-integration-ok") != std::string::npos;
 }
 
-capsid::host::StaticPoolServerOptions make_options(
-    const std::string& worker_path, int ready_fd, std::uint16_t port) {
+capsid::host::StaticPoolServerOptions make_options(const std::string& worker_path, int ready_fd,
+                                                   std::uint16_t port) {
     capsid::host::StaticPoolServerOptions options;
     options.workers = 3;
     options.worker_options.worker_path = worker_path;
@@ -164,13 +159,10 @@ void write_all(int fd, const std::string& bytes) {
     std::size_t offset = 0;
     while (offset < bytes.size()) {
 #if defined(_WIN32)
-        const ssize_t count = write(
-            fd,
-            bytes.data() + offset,
-            static_cast<unsigned int>(bytes.size() - offset));
-#else
         const ssize_t count =
-            write(fd, bytes.data() + offset, bytes.size() - offset);
+            write(fd, bytes.data() + offset, static_cast<unsigned int>(bytes.size() - offset));
+#else
+        const ssize_t count = write(fd, bytes.data() + offset, bytes.size() - offset);
 #endif
         require(count > 0, "cannot write delayed worker wrapper");
         offset += static_cast<std::size_t>(count);
@@ -204,22 +196,26 @@ void test_activation_barrier(const char* real_worker_path) {
     const std::string first = directory + "/first";
     const std::string second = directory + "/second";
     const std::string delayed = directory + "/second-delayed";
-    const std::string script =
-        "#!/bin/sh\n"
-        "if mkdir " + shell_quote(first) + " 2>/dev/null; then\n"
-        "  :\n"
-        "elif mkdir " + shell_quote(second) + " 2>/dev/null; then\n"
-        "  : > " + shell_quote(delayed) + "\n"
-        "  sleep 1\n"
-        "fi\n"
-        "exec " + shell_quote(real_worker_path) + " \"$@\"\n";
-    const int wrapper_fd =
-        open(wrapper.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0700);
+    const std::string script = "#!/bin/sh\n"
+                               "if mkdir " +
+                               shell_quote(first) +
+                               " 2>/dev/null; then\n"
+                               "  :\n"
+                               "elif mkdir " +
+                               shell_quote(second) +
+                               " 2>/dev/null; then\n"
+                               "  : > " +
+                               shell_quote(delayed) +
+                               "\n"
+                               "  sleep 1\n"
+                               "fi\n"
+                               "exec " +
+                               shell_quote(real_worker_path) + " \"$@\"\n";
+    const int wrapper_fd = open(wrapper.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0700);
     require(wrapper_fd >= 0, "cannot create delayed worker wrapper");
     write_all(wrapper_fd, script);
     require(close(wrapper_fd) == 0, "cannot close delayed worker wrapper");
-    require(chmod(wrapper.c_str(), 0700) == 0,
-            "cannot make delayed worker wrapper executable");
+    require(chmod(wrapper.c_str(), 0700) == 0, "cannot make delayed worker wrapper executable");
 
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create activation READY pipe");
@@ -228,20 +224,17 @@ void test_activation_barrier(const char* real_worker_path) {
     bool started = false;
     std::string error;
     std::thread starter([&] { started = pool.start(fixture_bundle(), &error); });
-    const auto delayed_deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto delayed_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (access(delayed.c_str(), F_OK) != 0 &&
            std::chrono::steady_clock::now() < delayed_deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    require(access(delayed.c_str(), F_OK) == 0,
-            "second shard never entered delayed READY fixture");
+    require(access(delayed.c_str(), F_OK) == 0, "second shard never entered delayed READY fixture");
     require(!http_succeeds(port, 200),
             "an early shard served HTTP before the whole pool was READY");
     starter.join();
     require(started, "activation-barrier pool failed to start: " + error);
-    require(http_succeeds(port, 1000),
-            "fully READY pool did not begin serving HTTP");
+    require(http_succeeds(port, 1000), "fully READY pool did not begin serving HTTP");
     pool.request_stop();
     require(pool.wait(&error), "activation-barrier pool did not stop");
     close(ready[0]);
@@ -251,14 +244,13 @@ void test_activation_barrier(const char* real_worker_path) {
     rmdir(first.c_str());
     unlink(wrapper.c_str());
     rmdir(directory.c_str());
-#endif  // !defined(_WIN32)
+#endif // !defined(_WIN32)
 }
 
 #if defined(__linux__)
 std::string canonical_path(const char* path) {
     char resolved[PATH_MAX];
-    require(realpath(path, resolved) != nullptr,
-            "cannot resolve capsid-worker path");
+    require(realpath(path, resolved) != nullptr, "cannot resolve capsid-worker path");
     return resolved;
 }
 
@@ -276,15 +268,12 @@ std::set<pid_t> matching_worker_children(const std::string& worker_path) {
         if (entry->d_name[0] < '0' || entry->d_name[0] > '9') {
             continue;
         }
-        std::ifstream children(std::string("/proc/self/task/") +
-                               entry->d_name + "/children");
+        std::ifstream children(std::string("/proc/self/task/") + entry->d_name + "/children");
         long long child = 0;
         while (children >> child) {
             char executable[PATH_MAX];
-            const std::string link =
-                "/proc/" + std::to_string(child) + "/exe";
-            const ssize_t size =
-                readlink(link.c_str(), executable, sizeof(executable) - 1);
+            const std::string link = "/proc/" + std::to_string(child) + "/exe";
+            const ssize_t size = readlink(link.c_str(), executable, sizeof(executable) - 1);
             if (size <= 0) {
                 continue;
             }
@@ -303,38 +292,28 @@ void test_worker_exit_isolation(const char* worker_path_bytes) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create isolation READY pipe");
     const std::uint16_t port = reserve_test_port();
-    capsid::host::StaticPoolServer pool(
-        make_options(worker_path, ready[1], port));
+    capsid::host::StaticPoolServer pool(make_options(worker_path, ready[1], port));
     std::string error;
-    require(pool.start(fixture_bundle(), &error),
-            "cannot start fault-isolation pool: " + error);
+    require(pool.start(fixture_bundle(), &error), "cannot start fault-isolation pool: " + error);
     std::set<pid_t> children;
-    const auto child_deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (children.size() != 3 &&
-           std::chrono::steady_clock::now() < child_deadline) {
+    const auto child_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (children.size() != 3 && std::chrono::steady_clock::now() < child_deadline) {
         children = matching_worker_children(worker_path);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    require(children.size() == 3,
-            "three-shard pool did not own three distinct worker processes");
+    require(children.size() == 3, "three-shard pool did not own three distinct worker processes");
     for (int request = 0; request < 48; ++request) {
-        require(http_succeeds(port, 1000),
-                "healthy multi-process pool failed an HTTP request");
+        require(http_succeeds(port, 1000), "healthy multi-process pool failed an HTTP request");
     }
 
     auto victim = children.begin();
     ++victim;
-    require(kill(*victim, SIGKILL) == 0,
-            "cannot kill one worker isolation fixture");
-    const auto exit_deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (kill(*victim, 0) == 0 &&
-           std::chrono::steady_clock::now() < exit_deadline) {
+    require(kill(*victim, SIGKILL) == 0, "cannot kill one worker isolation fixture");
+    const auto exit_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (kill(*victim, 0) == 0 && std::chrono::steady_clock::now() < exit_deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    require(kill(*victim, 0) != 0 && errno == ESRCH,
-            "dead shard worker was not reaped");
+    require(kill(*victim, 0) != 0 && errno == ESRCH, "dead shard worker was not reaped");
     // Reaping happens on the worker owner thread; allow the already-queued
     // exit event one short reactor turn to remove that shard's listener.
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -351,7 +330,7 @@ void test_worker_exit_isolation(const char* worker_path_bytes) {
 }
 #endif
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     require(argc == 3, "expected mode and capsid-worker path");
@@ -364,8 +343,7 @@ int main(int argc, char** argv) {
 #else
         // /proc process evidence is Linux-only. Report the missing
         // coverage with the CTest skip code instead of a green pass.
-        std::cerr << "SKIP: Linux /proc process evidence is unavailable"
-                  << std::endl;
+        std::cerr << "SKIP: Linux /proc process evidence is unavailable" << std::endl;
         return 77;
 #endif
     } else {

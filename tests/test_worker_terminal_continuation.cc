@@ -20,50 +20,45 @@
 
 namespace {
 
-[[noreturn]] void fail(const std::string &message) {
+[[noreturn]] void fail(const std::string& message) {
     std::cerr << "FAIL " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-std::string bytes(const capsid_bytes &value) {
-    return value.size == 0
-        ? std::string()
-        : std::string(reinterpret_cast<const char *>(value.data), value.size);
+std::string bytes(const capsid_bytes& value) {
+    return value.size == 0 ? std::string()
+                           : std::string(reinterpret_cast<const char*>(value.data), value.size);
 }
 
-std::string payload(const capsid_event &event) {
-    return bytes(event.payload);
-}
+std::string payload(const capsid_event& event) { return bytes(event.payload); }
 
-std::string log_message(const capsid_event &event) {
+std::string log_message(const capsid_event& event) {
     if (event.payload.size < 2) {
         fail("truncated log");
     }
-    const size_t stream_size = event.payload.data[0] |
-                               (static_cast<size_t>(event.payload.data[1]) << 8);
+    const size_t stream_size =
+        event.payload.data[0] | (static_cast<size_t>(event.payload.data[1]) << 8);
     if (stream_size > event.payload.size - 2) {
         fail("invalid log stream length");
     }
-    const char *data = reinterpret_cast<const char *>(event.payload.data);
-    return std::string(data + 2 + stream_size,
-                       event.payload.size - 2 - stream_size);
+    const char* data = reinterpret_cast<const char*>(event.payload.data);
+    return std::string(data + 2 + stream_size, event.payload.size - 2 - stream_size);
 }
 
-void wait_io(capsid_worker *worker, bool writable) {
+void wait_io(capsid_worker* worker, bool writable) {
     capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
     descriptor.events = POLLIN | (writable ? POLLOUT : 0);
     (void)capsid::win32::capsid_poll(&descriptor, 1, 20);
 }
 
-capsid_event next_event(capsid_worker *worker,
-                        std::chrono::steady_clock::time_point deadline) {
+capsid_event next_event(capsid_worker* worker, std::chrono::steady_clock::time_point deadline) {
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
@@ -85,63 +80,52 @@ capsid_event next_event(capsid_worker *worker,
     }
 }
 
-void wait_ready(capsid_worker *worker) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(15);
+void wait_ready(capsid_worker* worker) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
         const capsid_event event = next_event(worker, deadline);
         if (event.type == CAPSID_EVENT_READY) {
             return;
         }
-        if (event.type == CAPSID_EVENT_ERROR ||
-            event.type == CAPSID_EVENT_EXIT) {
+        if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
             fail("startup event: " + payload(event));
         }
     }
 }
 
-void begin(capsid_worker *worker, uint64_t id, const char *path) {
+void begin(capsid_worker* worker, uint64_t id, const char* path) {
     const std::string url = std::string("https://terminal.invalid/") + path;
-    require_result(capsid_worker_begin_bodyless_request(
-                       worker, id, "GET", url.c_str(), nullptr, 0),
+    require_result(capsid_worker_begin_bodyless_request(worker, id, "GET", url.c_str(), nullptr, 0),
                    "begin request");
 }
 
 // Waits for a LOG with exactly `wanted`; fails on ERROR/EXIT.
-void wait_log(capsid_worker *worker,
-              const std::string &wanted,
-              uint64_t expected_id) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(15);
+void wait_log(capsid_worker* worker, const std::string& wanted, uint64_t expected_id) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
         const capsid_event event = next_event(worker, deadline);
         if (event.type == CAPSID_EVENT_LOG && log_message(event) == wanted) {
             if (event.request_id != expected_id) {
-                fail("LOG '" + wanted + "' carried request_id " +
-                     std::to_string(event.request_id) + " instead of " +
-                     std::to_string(expected_id));
+                fail("LOG '" + wanted + "' carried request_id " + std::to_string(event.request_id) +
+                     " instead of " + std::to_string(expected_id));
             }
             return;
         }
-        if (event.type == CAPSID_EVENT_ERROR ||
-            event.type == CAPSID_EVENT_EXIT) {
+        if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
             fail("log wait event: " + payload(event));
         }
     }
 }
 
 // Waits for a REQUEST_TIMEOUT for `id`; fails on ERROR/EXIT.
-void wait_timeout(capsid_worker *worker, uint64_t id) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(15);
+void wait_timeout(capsid_worker* worker, uint64_t id) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
         const capsid_event event = next_event(worker, deadline);
-        if (event.type == CAPSID_EVENT_REQUEST_TIMEOUT &&
-            event.request_id == id) {
+        if (event.type == CAPSID_EVENT_REQUEST_TIMEOUT && event.request_id == id) {
             return;
         }
-        if (event.type == CAPSID_EVENT_ERROR ||
-            event.type == CAPSID_EVENT_EXIT) {
+        if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
             fail("timeout wait event: " + payload(event));
         }
     }
@@ -150,24 +134,18 @@ void wait_timeout(capsid_worker *worker, uint64_t id) {
 // After a request terminal state, the worker must not run the detached
 // continuation and must poison itself: any LOG whose message equals
 // `forbidden` fails the test, and the phase only passes on EXIT.
-void watch_poison(capsid_worker *worker,
-                  const std::string &forbidden,
-                  const char *label) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(3);
+void watch_poison(capsid_worker* worker, const std::string& forbidden, const char* label) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (std::chrono::steady_clock::now() < deadline) {
         const capsid_event event = next_event(worker, deadline);
         if (event.type == CAPSID_EVENT_LOG) {
             if (log_message(event) == forbidden) {
-                fail(std::string(label) +
-                     ": terminal continuation produced native event '" +
-                     forbidden + "' with request_id " +
-                     std::to_string(event.request_id));
+                fail(std::string(label) + ": terminal continuation produced native event '" +
+                     forbidden + "' with request_id " + std::to_string(event.request_id));
             }
             continue;
         }
-        if (event.type == CAPSID_EVENT_ERROR ||
-            event.type == CAPSID_EVENT_REQUEST_TIMEOUT) {
+        if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_REQUEST_TIMEOUT) {
             // Terminalization of the request itself is expected on the
             // fixed implementation; keep watching for the poison EXIT.
             continue;
@@ -176,44 +154,34 @@ void watch_poison(capsid_worker *worker,
             return;
         }
     }
-    fail(std::string(label) +
-         ": worker neither ran the terminal continuation nor exited "
-         "(poison required)");
+    fail(std::string(label) + ": worker neither ran the terminal continuation nor exited "
+                              "(poison required)");
 }
 
 // Completes a normal response and grants credit; fails on ERROR/EXIT.
-void complete_response(capsid_worker *worker,
-                       uint64_t id,
-                       bool *saw_head) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(15);
+void complete_response(capsid_worker* worker, uint64_t id, bool* saw_head) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
         const capsid_event event = next_event(worker, deadline);
-        if (event.type == CAPSID_EVENT_RESPONSE_HEAD &&
-            event.request_id == id) {
+        if (event.type == CAPSID_EVENT_RESPONSE_HEAD && event.request_id == id) {
             *saw_head = event.status == 200;
-        } else if (event.type == CAPSID_EVENT_RESPONSE_BODY &&
-                   event.request_id == id) {
+        } else if (event.type == CAPSID_EVENT_RESPONSE_BODY && event.request_id == id) {
             require_result(capsid_worker_grant_response_credit(
-                               worker, id,
-                               static_cast<uint32_t>(event.payload.size)),
+                               worker, id, static_cast<uint32_t>(event.payload.size)),
                            "grant response credit");
-        } else if (event.type == CAPSID_EVENT_RESPONSE_END &&
-                   event.request_id == id) {
+        } else if (event.type == CAPSID_EVENT_RESPONSE_END && event.request_id == id) {
             if (!*saw_head) {
                 fail("response ended without a 200 head");
             }
             return;
-        } else if (event.type == CAPSID_EVENT_ERROR ||
-                   event.type == CAPSID_EVENT_REQUEST_TIMEOUT ||
+        } else if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_REQUEST_TIMEOUT ||
                    event.type == CAPSID_EVENT_EXIT) {
             fail("response event: " + payload(event));
         }
     }
 }
 
-capsid_worker *spawn(const char *worker_path,
-                     const capsid_capability_policy *capability,
+capsid_worker* spawn(const char* worker_path, const capsid_capability_policy* capability,
                      uint32_t timeout_ms) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
@@ -222,58 +190,55 @@ capsid_worker *spawn(const char *worker_path,
     config.request_timeout_ms = timeout_ms;
     config.capability_policy = capability;
 
-    capsid_worker *worker = nullptr;
+    capsid_worker* worker = nullptr;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
-    const std::string bundle =
-        "import { permissions } from 'capsid:permissions';\n"
-        "import { stdio } from 'capsid:stdio';\n"
-        "function emit(name) {\n"
-        "  permissions.query({ name: 'stdio', stream: 'stdout' });\n"
-        "  stdio.write('stdout', name);\n"
-        "}\n"
-        "export default { async fetch(request) {\n"
-        "  const name = new URL(request.url).pathname.slice(1);\n"
-        "  if (name === 'cancel') {\n"
-        "    emit('start-cancel');\n"
-        "    setTimeout(() => emit('after-cancel'), 80);\n"
-        "    return new Promise(() => {});\n"
-        "  }\n"
-        "  if (name === 'timeout') {\n"
-        "    emit('start-timeout');\n"
-        "    await new Promise(resolve => setTimeout(resolve, 80));\n"
-        "    emit('after-timeout');\n"
-        "  }\n"
-        "  if (name === 'detached') {\n"
-        "    emit('start-detached');\n"
-        "    setTimeout(() => emit('after-detach'), 80);\n"
-        "    return new Response('detached-ok');\n"
-        "  }\n"
-        "  if (name === 'parked-reaction') {\n"
-        "    emit('start-parked-reaction');\n"
-        "    const late = new Promise(resolve => setTimeout(resolve, 80));\n"
-        "    late.then(() => { globalThis.terminalMutation = true; });\n"
-        "    return new Response('parked-reaction-ok');\n"
-        "  }\n"
-        "  emit('start-reuse');\n"
-        "  return new Response('reuse-ok');\n"
-        "} };\n";
+    const std::string bundle = "import { permissions } from 'capsid:permissions';\n"
+                               "import { stdio } from 'capsid:stdio';\n"
+                               "function emit(name) {\n"
+                               "  permissions.query({ name: 'stdio', stream: 'stdout' });\n"
+                               "  stdio.write('stdout', name);\n"
+                               "}\n"
+                               "export default { async fetch(request) {\n"
+                               "  const name = new URL(request.url).pathname.slice(1);\n"
+                               "  if (name === 'cancel') {\n"
+                               "    emit('start-cancel');\n"
+                               "    setTimeout(() => emit('after-cancel'), 80);\n"
+                               "    return new Promise(() => {});\n"
+                               "  }\n"
+                               "  if (name === 'timeout') {\n"
+                               "    emit('start-timeout');\n"
+                               "    await new Promise(resolve => setTimeout(resolve, 80));\n"
+                               "    emit('after-timeout');\n"
+                               "  }\n"
+                               "  if (name === 'detached') {\n"
+                               "    emit('start-detached');\n"
+                               "    setTimeout(() => emit('after-detach'), 80);\n"
+                               "    return new Response('detached-ok');\n"
+                               "  }\n"
+                               "  if (name === 'parked-reaction') {\n"
+                               "    emit('start-parked-reaction');\n"
+                               "    const late = new Promise(resolve => setTimeout(resolve, 80));\n"
+                               "    late.then(() => { globalThis.terminalMutation = true; });\n"
+                               "    return new Response('parked-reaction-ok');\n"
+                               "  }\n"
+                               "  emit('start-reuse');\n"
+                               "  return new Response('reuse-ok');\n"
+                               "} };\n";
     require_result(capsid_worker_load_bundle(
-                       worker,
-                       reinterpret_cast<const uint8_t *>(bundle.data()),
-                       bundle.size()),
+                       worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()),
                    "load bundle");
     wait_ready(worker);
     return worker;
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 2) {
         fail("expected capsid-worker path");
     }
 
-    const char *modules[] = { "capsid:permissions", "capsid:stdio" };
+    const char* modules[] = {"capsid:permissions", "capsid:stdio"};
     capsid_permission_rule rule;
     capsid_permission_rule_init(&rule);
     rule.action = CAPSID_PERMISSION_ALLOW;
@@ -289,7 +254,7 @@ int main(int argc, char **argv) {
     capability.rule_count = 1;
 
     // Phase 1: cancel leaves an 80ms continuation behind.
-    capsid_worker *worker = spawn(argv[1], &capability, 30);
+    capsid_worker* worker = spawn(argv[1], &capability, 30);
     begin(worker, 51, "cancel");
     wait_log(worker, "start-cancel", 51);
     require_result(capsid_worker_cancel(worker, 51), "cancel request");

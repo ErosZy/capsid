@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Inject failure probes into the actual search/coverage controller."""
+
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
@@ -19,7 +20,9 @@ import unittest
 from unittest.mock import patch
 
 ap = argparse.ArgumentParser(add_help=False)
-ap.add_argument("--module", type=Path, default=Path(__file__).resolve().parents[1] / "bench/density_control.py")
+ap.add_argument(
+    "--module", type=Path, default=Path(__file__).resolve().parents[1] / "bench/density_control.py"
+)
 ap.add_argument("--node", required=True)
 args, remaining = ap.parse_known_args()
 sys.argv[1:] = remaining
@@ -33,55 +36,85 @@ def result_for(call, pss=None):
     count, phase = call["count"], call["phase"]
     target = 1 if phase == "cold" else 100
     value = count * 1024 if pss is None else pss
-    return {"stack": call["stack"], "size": call["size"], "phase": phase, "count": count,
-            "unit": "workers" if call["stack"] == "capsid" else "cells", "status": "ok",
-            "pss_readings_kb": [value, value], "requestsPerWorker": {f"w{i}": target for i in range(count)},
-            "correctness": {"ok": True, "errors_as_success": False, "responses_checked": count * target,
-                            "errors": 0, "mismatches": 0, "timeouts": 0},
-            "cleanup": {"ownedPidsRemaining": 0}}
+    return {
+        "stack": call["stack"],
+        "size": call["size"],
+        "phase": phase,
+        "count": count,
+        "unit": "workers" if call["stack"] == "capsid" else "cells",
+        "status": "ok",
+        "pss_readings_kb": [value, value],
+        "requestsPerWorker": {f"w{i}": target for i in range(count)},
+        "correctness": {
+            "ok": True,
+            "errors_as_success": False,
+            "responses_checked": count * target,
+            "errors": 0,
+            "mismatches": 0,
+            "timeouts": 0,
+        },
+        "cleanup": {"ownedPidsRemaining": 0},
+    }
 
 
 class RuntimeSnapshotTests(unittest.TestCase):
     def test_portable_runtime_files_keep_their_exact_bytes(self):
         import density_probe
-        with tempfile.TemporaryDirectory() as temporary:
-            source, archive = Path(temporary)/'source', Path(temporary)/'archive'
-            source.mkdir(); archive.mkdir()
-            (source/'bundle.mjs').write_bytes(b'fixture bytes\x00\xff')
-            density_probe.snapshot_runtime_files(source, archive)
-            self.assertEqual((archive/'runtime/bundle.mjs').read_bytes(), b'fixture bytes\x00\xff')
-            index = json.loads((archive/'runtime-nonportable.json').read_text())
-            self.assertEqual(index, {'schema': 1, 'archive': None, 'members': []})
 
-    @unittest.skipUnless(sys.platform == 'linux', 'actual colon filename requires Linux')
+        with tempfile.TemporaryDirectory() as temporary:
+            source, archive = Path(temporary) / "source", Path(temporary) / "archive"
+            source.mkdir()
+            archive.mkdir()
+            (source / "bundle.mjs").write_bytes(b"fixture bytes\x00\xff")
+            density_probe.snapshot_runtime_files(source, archive)
+            self.assertEqual(
+                (archive / "runtime/bundle.mjs").read_bytes(), b"fixture bytes\x00\xff"
+            )
+            index = json.loads((archive / "runtime-nonportable.json").read_text())
+            self.assertEqual(index, {"schema": 1, "archive": None, "members": []})
+
+    @unittest.skipUnless(sys.platform == "linux", "actual colon filename requires Linux")
     def test_linux_generation_name_is_preserved_inside_tar_without_renaming(self):
         import density_probe
         import tarfile
         from perf_run import seal_archive
         from density_evidence import validate_runtime_snapshot
-        with tempfile.TemporaryDirectory() as temporary:
-            source, archive = Path(temporary)/'source', Path(temporary)/'archive'
-            source.mkdir(); archive.mkdir()
-            name = 'state/apps/orders/generations/sha256:'+'a'*64+'/COMPLETE'
-            file = source/name; file.parent.mkdir(parents=True); file.write_bytes(b'original generation\x00\xff')
-            (source/'prewarm-barriers.jsonl').write_bytes(b'original barrier bytes\n')
-            density_probe.snapshot_runtime_files(source, archive)
-            self.assertFalse(any(':' in p.relative_to(archive).as_posix() for p in archive.rglob('*')))
-            with tarfile.open(archive/'runtime-nonportable.tar', 'r:') as tar:
-                self.assertEqual(tar.getnames(), [name])
-                self.assertEqual(tar.extractfile(name).read(), b'original generation\x00\xff')
-            self.assertEqual((archive/'runtime/prewarm-barriers.jsonl').read_bytes(), b'original barrier bytes\n')
-            seal_archive(archive)
-            reader = SimpleNamespace(json=lambda n: json.loads((archive/n).read_text()), sealed=lambda n: archive/n)
-            validate_runtime_snapshot(reader, '')
 
-    @unittest.skipUnless(sys.platform == 'linux', 'actual colon filename requires Linux')
+        with tempfile.TemporaryDirectory() as temporary:
+            source, archive = Path(temporary) / "source", Path(temporary) / "archive"
+            source.mkdir()
+            archive.mkdir()
+            name = "state/apps/orders/generations/sha256:" + "a" * 64 + "/COMPLETE"
+            file = source / name
+            file.parent.mkdir(parents=True)
+            file.write_bytes(b"original generation\x00\xff")
+            (source / "prewarm-barriers.jsonl").write_bytes(b"original barrier bytes\n")
+            density_probe.snapshot_runtime_files(source, archive)
+            self.assertFalse(
+                any(":" in p.relative_to(archive).as_posix() for p in archive.rglob("*"))
+            )
+            with tarfile.open(archive / "runtime-nonportable.tar", "r:") as tar:
+                self.assertEqual(tar.getnames(), [name])
+                self.assertEqual(tar.extractfile(name).read(), b"original generation\x00\xff")
+            self.assertEqual(
+                (archive / "runtime/prewarm-barriers.jsonl").read_bytes(),
+                b"original barrier bytes\n",
+            )
+            seal_archive(archive)
+            reader = SimpleNamespace(
+                json=lambda n: json.loads((archive / n).read_text()), sealed=lambda n: archive / n
+            )
+            validate_runtime_snapshot(reader, "")
+
+    @unittest.skipUnless(sys.platform == "linux", "actual colon filename requires Linux")
     def test_observation_sealing_already_rejects_nonportable_names(self):
         from perf_run import seal_archive
         from perf_evidence import EvidenceError
+
         with tempfile.TemporaryDirectory() as temporary:
-            out = Path(temporary); (out/('sha256:'+'b'*64)).write_bytes(b'not portable')
-            with self.assertRaisesRegex(EvidenceError, 'invalid archive-relative'):
+            out = Path(temporary)
+            (out / ("sha256:" + "b" * 64)).write_bytes(b"not portable")
+            with self.assertRaisesRegex(EvidenceError, "invalid archive-relative"):
                 seal_archive(out)
 
 
@@ -90,96 +123,126 @@ class WorkerdNetworkHeadroomTests(unittest.TestCase):
         clock = SimpleNamespace(now=0.0)
         calls, pauses = [], []
         iterator = iter(values)
+
         def read():
             value = next(iterator)
             calls.append(value)
             return value
+
         def pause(seconds):
             pauses.append(seconds)
             clock.now += seconds
+
         output = io.StringIO()
-        return control.wait_network_headroom(required, deadline, output, read=read,
-                                             clock=lambda: clock.now, pause=pause), output, calls, pauses
+        return (
+            control.wait_network_headroom(
+                required, deadline, output, read=read, clock=lambda: clock.now, pause=pause
+            ),
+            output,
+            calls,
+            pauses,
+        )
 
     def test_waits_for_actual_capacity_and_archives_each_reading(self):
         result, output, calls, pauses = self.invoke([(262144, 230000), (262144, 150000)])
         rows = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(calls, [(262144, 230000), (262144, 150000)])
         self.assertEqual(len(pauses), 1)
-        self.assertEqual([row['eligible'] for row in rows], [False, True])
-        self.assertEqual(result['readings'], 2)
-        self.assertEqual(result['admittedMonotonic'], rows[-1]['sampledMonotonic'])
-        self.assertTrue(all(row['requiredConnections'] == 103424 for row in rows))
+        self.assertEqual([row["eligible"] for row in rows], [False, True])
+        self.assertEqual(result["readings"], 2)
+        self.assertEqual(result["admittedMonotonic"], rows[-1]["sampledMonotonic"])
+        self.assertTrue(all(row["requiredConnections"] == 103424 for row in rows))
 
     def test_sufficient_capacity_never_inserts_an_arbitrary_hold(self):
         result, _, calls, pauses = self.invoke([(262144, 0)])
-        self.assertEqual(result['readings'], 1)
+        self.assertEqual(result["readings"], 1)
         self.assertEqual(len(calls), 1)
         self.assertEqual(pauses, [])
 
     def test_insufficient_native_maximum_fails_without_tuning_or_waiting(self):
         with self.assertRaises(ProbeError) as raised:
             self.invoke([(1024, 0)], required=1025)
-        self.assertEqual(raised.exception.code, 'network-capacity')
+        self.assertEqual(raised.exception.code, "network-capacity")
 
     def test_network_wait_cannot_extend_the_absolute_deadline(self):
         with self.assertRaises(ProbeError) as raised:
-            self.invoke([(262144, 262144)] * 3, deadline=.1)
-        self.assertEqual(raised.exception.code, 'readiness-timeout')
+            self.invoke([(262144, 262144)] * 3, deadline=0.1)
+        self.assertEqual(raised.exception.code, "readiness-timeout")
 
     def test_bad_kernel_readings_fail_closed(self):
-        for value in [(True, 0), (0, 0), (1024, -1), (1024, False), ('1024', 0)]:
+        for value in [(True, 0), (0, 0), (1024, -1), (1024, False), ("1024", 0)]:
             with self.subTest(value=value), self.assertRaises(ProbeError):
                 self.invoke([value], required=1)
 
     def test_unreadable_or_malformed_kernel_counters_fail_closed(self):
-        for error in (OSError('unavailable kernel counter'), ValueError('malformed kernel counter')):
+        for error in (
+            OSError("unavailable kernel counter"),
+            ValueError("malformed kernel counter"),
+        ):
+
             def read():
                 raise error
+
             with self.subTest(error=type(error).__name__), self.assertRaises(ProbeError) as raised:
                 control.wait_network_headroom(1, 120, io.StringIO(), read=read, clock=lambda: 0)
-            self.assertEqual(raised.exception.code, 'network-capacity')
+            self.assertEqual(raised.exception.code, "network-capacity")
 
     def test_service_readiness_cannot_restart_an_exhausted_shared_budget(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'control.log'
-            path.write_bytes(b'')
-            probe = DensityProbe(host=sys.executable, worker=sys.executable, workerd=sys.executable,
-                                 apps=temporary, out=temporary, cpuset='0')
-            with patch('density_probe.time.monotonic', return_value=200):
+            path = Path(temporary) / "control.log"
+            path.write_bytes(b"")
+            probe = DensityProbe(
+                host=sys.executable,
+                worker=sys.executable,
+                workerd=sys.executable,
+                apps=temporary,
+                out=temporary,
+                cpuset="0",
+            )
+            with patch("density_probe.time.monotonic", return_value=200):
                 with self.assertRaises(ProbeError) as raised:
-                    probe.wait_ready(SimpleNamespace(), Path(temporary), 'workerd', [12345],
-                                     control_log=path, deadline=200)
-            self.assertEqual(raised.exception.code, 'readiness-timeout')
+                    probe.wait_ready(
+                        SimpleNamespace(),
+                        Path(temporary),
+                        "workerd",
+                        [12345],
+                        control_log=path,
+                        deadline=200,
+                    )
+            self.assertEqual(raised.exception.code, "readiness-timeout")
 
 
 class WorkerdStartupReadinessTests(unittest.TestCase):
     def test_incremental_events_require_every_exact_socket_and_port(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'control.log'
-            path.write_bytes(b'')
+            path = Path(temporary) / "control.log"
+            path.write_bytes(b"")
             reader = control.WorkerdReadyLog(path, [12345, 12346])
             first = b'{"event":"listen","socket":"s0","port":12345}\n'
             second = b'{"event":"listen","socket":"s1","port":12346}\n'
             for byte in first + second[:-1]:
-                with path.open('ab') as stream:
+                with path.open("ab") as stream:
                     stream.write(bytes([byte]))
                 self.assertFalse(reader.poll())
-            with path.open('ab') as stream:
-                stream.write(b'\n')
+            with path.open("ab") as stream:
+                stream.write(b"\n")
             self.assertTrue(reader.poll())
-            self.assertEqual(reader.seen, {'s0': 12345, 's1': 12346})
+            self.assertEqual(reader.seen, {"s0": 12345, "s1": 12346})
 
     def test_malformed_repeated_and_wrong_identity_events_fail_closed(self):
         valid = b'{"event":"listen","socket":"s0","port":12345}\n'
-        cases = [b'not json\n', b'{"event":"listen","event":"listen","socket":"s0","port":12345}\n',
-                 valid + valid, b'{"event":"listen","socket":"s1","port":12345}\n',
-                 b'{"event":"listen","socket":"s0","port":12346}\n',
-                 b'{"event":"listen","socket":"s0","port":true}\n',
-                 b'{"event":"other","socket":"s0","port":12345}\n',
-                 b'{"event":"listen","socket":"s0","port":12345,"extra":0}\n']
+        cases = [
+            b"not json\n",
+            b'{"event":"listen","event":"listen","socket":"s0","port":12345}\n',
+            valid + valid,
+            b'{"event":"listen","socket":"s1","port":12345}\n',
+            b'{"event":"listen","socket":"s0","port":12346}\n',
+            b'{"event":"listen","socket":"s0","port":true}\n',
+            b'{"event":"other","socket":"s0","port":12345}\n',
+            b'{"event":"listen","socket":"s0","port":12345,"extra":0}\n',
+        ]
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'control.log'
+            path = Path(temporary) / "control.log"
             for raw in cases:
                 with self.subTest(raw=raw):
                     path.write_bytes(raw)
@@ -188,49 +251,80 @@ class WorkerdStartupReadinessTests(unittest.TestCase):
 
     def test_unterminated_control_data_is_bounded(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'control.log'
-            path.write_bytes(b'x' * 4097)
+            path = Path(temporary) / "control.log"
+            path.write_bytes(b"x" * 4097)
             with self.assertRaises(ProbeError) as raised:
                 control.WorkerdReadyLog(path, [12345]).poll()
-            self.assertEqual(raised.exception.code, 'readiness-limit')
+            self.assertEqual(raised.exception.code, "readiness-limit")
 
     def test_actual_listening_socket_is_not_application_readiness(self):
         # This is a controller fixture, not a performance or process-PSS sample.
         with tempfile.TemporaryDirectory() as temporary, socket.socket() as listener:
-            listener.bind(('127.0.0.1', 0))
+            listener.bind(("127.0.0.1", 0))
             listener.listen()
             port = listener.getsockname()[1]
-            path = Path(temporary) / 'control.log'
-            path.write_bytes(b'')
-            probe = DensityProbe(host=sys.executable, worker=sys.executable, workerd=sys.executable,
-                                 apps=temporary, out=temporary, cpuset='0')
-            tree = SimpleNamespace(alive=lambda: True, listeners_owned=lambda ports: ports == [port])
+            path = Path(temporary) / "control.log"
+            path.write_bytes(b"")
+            probe = DensityProbe(
+                host=sys.executable,
+                worker=sys.executable,
+                workerd=sys.executable,
+                apps=temporary,
+                out=temporary,
+                cpuset="0",
+            )
+            tree = SimpleNamespace(
+                alive=lambda: True, listeners_owned=lambda ports: ports == [port]
+            )
             entered = threading.Event()
             original = control.WorkerdReadyLog.poll
+
             def observed(reader):
                 entered.set()
                 return original(reader)
-            with patch.object(control.WorkerdReadyLog, 'poll', observed), ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(probe.wait_ready, tree, Path(temporary), 'workerd', [port], control_log=path)
+
+            with (
+                patch.object(control.WorkerdReadyLog, "poll", observed),
+                ThreadPoolExecutor(max_workers=1) as executor,
+            ):
+                future = executor.submit(
+                    probe.wait_ready, tree, Path(temporary), "workerd", [port], control_log=path
+                )
                 try:
                     self.assertTrue(entered.wait(timeout=1))
                     self.assertFalse(future.done())
                 finally:
-                    path.write_text(json.dumps({'event': 'listen', 'socket': 's0', 'port': port}) + '\n')
+                    path.write_text(
+                        json.dumps({"event": "listen", "socket": "s0", "port": port}) + "\n"
+                    )
                 ready = future.result(timeout=2)
-                self.assertEqual(ready, {'method': 'workerd-control-listen-v1', 'sockets': 1,
-                                        'beforeTraffic': True, 'deadlineSeconds': 120})
+                self.assertEqual(
+                    ready,
+                    {
+                        "method": "workerd-control-listen-v1",
+                        "sockets": 1,
+                        "beforeTraffic": True,
+                        "deadlineSeconds": 120,
+                    },
+                )
 
     def test_missing_events_do_not_extend_the_absolute_startup_deadline(self):
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / 'control.log'
-            path.write_bytes(b'')
-            probe = DensityProbe(host=sys.executable, worker=sys.executable, workerd=sys.executable,
-                                 apps=temporary, out=temporary, cpuset='0', startup_timeout=.02)
+            path = Path(temporary) / "control.log"
+            path.write_bytes(b"")
+            probe = DensityProbe(
+                host=sys.executable,
+                worker=sys.executable,
+                workerd=sys.executable,
+                apps=temporary,
+                out=temporary,
+                cpuset="0",
+                startup_timeout=0.02,
+            )
             tree = SimpleNamespace(alive=lambda: True, listeners_owned=lambda ports: True)
             with self.assertRaises(ProbeError) as raised:
-                probe.wait_ready(tree, Path(temporary), 'workerd', [12345], control_log=path)
-            self.assertEqual(raised.exception.code, 'readiness-timeout')
+                probe.wait_ready(tree, Path(temporary), "workerd", [12345], control_log=path)
+            self.assertEqual(raised.exception.code, "readiness-timeout")
 
 
 class LoopbackHTTPServer(http.server.ThreadingHTTPServer):
@@ -244,6 +338,7 @@ class LoopbackHTTPServer(http.server.ThreadingHTTPServer):
 class SearchTests(unittest.TestCase):
     def search(self, change=None, **options):
         self.calls, self.rows = [], []
+
         def probe(**call):
             self.calls.append(call)
             call["release_ports"]()
@@ -253,6 +348,7 @@ class SearchTests(unittest.TestCase):
                 if updated is not None:
                     result = updated
             return result
+
         return control.DensitySearch(probe, self.rows.append, **options)
 
     def test_search_replays_budget_boundary_and_a_new_final_probe(self):
@@ -275,11 +371,19 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(len(self.rows[-1]["ports"]), 5)
 
     def test_failed_touch_or_read_is_not_an_over_budget_boundary(self):
-        for code in ("correctness", "process-exited", "pss-unreadable", "pss-nonpositive", "coverage-deadline"):
+        for code in (
+            "correctness",
+            "process-exited",
+            "pss-unreadable",
+            "pss-nonpositive",
+            "coverage-deadline",
+        ):
             with self.subTest(code=code):
+
                 def fail(call, result):
                     if call["count"] == 2:
                         raise ProbeError(code, "injected failure")
+
                 search = self.search(fail)
                 with self.assertRaises(ProbeError) as raised:
                     search.fill("capsid", "10k", "warm", 8)
@@ -289,7 +393,7 @@ class SearchTests(unittest.TestCase):
                 json.dumps(self.rows, allow_nan=False)
 
     def test_no_positive_pool_fitting_budget_cannot_generate_a_zero_cell(self):
-        search = self.search(budget_mb=.5)
+        search = self.search(budget_mb=0.5)
         with self.assertRaises(ProbeError) as raised:
             search.fill("workerd", "10k", "cold", 8)
         self.assertEqual(raised.exception.code, "no-pool-fit")
@@ -299,6 +403,7 @@ class SearchTests(unittest.TestCase):
         def unstable(call, result):
             if call["final"]:
                 result["pss_readings_kb"] = [1024, 1025]
+
         search = self.search(unstable, final_retries=2)
         with self.assertRaises(ProbeError) as raised:
             search.fill("capsid", "10k", "warm", 1)
@@ -310,6 +415,7 @@ class SearchTests(unittest.TestCase):
         def grows(call, result):
             if call["final"] and call["count"] == 3:
                 result["pss_readings_kb"] = [4096, 4096]
+
         result = self.search(grows, budget_mb=3).fill("capsid", "10k", "warm", 8)
         self.assertEqual(result["count"], 2)
         self.assertEqual(result["pss_readings_kb"], [2048, 2048])
@@ -320,6 +426,7 @@ class SearchTests(unittest.TestCase):
         def over(call, result):
             if call["final"]:
                 result["pss_readings_kb"] = [21 * 1024, 21 * 1024]
+
         search = self.search(over, budget_mb=20, final_steps=2)
         with self.assertRaises(ProbeError) as raised:
             search.fill("capsid", "10k", "cold", 16)
@@ -328,8 +435,10 @@ class SearchTests(unittest.TestCase):
 
     def test_search_deadline_stops_before_launching_the_next_probe(self):
         now = [0]
+
         def advance(call, result):
             now[0] = 2
+
         search = self.search(advance, clock=lambda: now[0], deadline_seconds=1)
         with self.assertRaises(ProbeError) as raised:
             search.fill("capsid", "10k", "cold", 8)
@@ -339,10 +448,16 @@ class SearchTests(unittest.TestCase):
 
 class CoverageTests(unittest.TestCase):
     def test_actual_208000_correct_responses_do_not_warm_every_worker(self):
-        observed = json.loads((Path(__file__).parent / "fixtures/density65-incomplete-counter-observation.json").read_text())
+        observed = json.loads(
+            (
+                Path(__file__).parent / "fixtures/density65-incomplete-counter-observation.json"
+            ).read_text()
+        )
         self.assertEqual("capsid-density-incomplete-counter-observation-v1", observed["schema"])
-        self.assertEqual("8d20e2b0bcf6b19b9160b16606c1042ef7b3addcb9b6dc42585d549534096404",
-                         observed["originalArtifact"]["sha256"])
+        self.assertEqual(
+            "8d20e2b0bcf6b19b9160b16606c1042ef7b3addcb9b6dc42585d549534096404",
+            observed["originalArtifact"]["sha256"],
+        )
         coverage = control.Coverage(observed["workerCount"], observed["nonce"])
         # This negative control replays the retained counter snapshot; it is
         # not a runtime probe or a replacement for the original counter log.
@@ -356,150 +471,250 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual("coverage-incomplete", failure.exception.code)
 
     def test_numeric_loopback_fixture_does_not_require_reverse_dns(self):
-        with patch('socket.getfqdn', side_effect=AssertionError('unexpected reverse DNS')):
-            with self.assertRaisesRegex(AssertionError, 'unexpected reverse DNS'):
-                http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
-            server = LoopbackHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+        with patch("socket.getfqdn", side_effect=AssertionError("unexpected reverse DNS")):
+            with self.assertRaisesRegex(AssertionError, "unexpected reverse DNS"):
+                http.server.ThreadingHTTPServer(
+                    ("127.0.0.1", 0), http.server.BaseHTTPRequestHandler
+                )
+            server = LoopbackHTTPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
             try:
-                self.assertEqual('127.0.0.1', server.server_name)
+                self.assertEqual("127.0.0.1", server.server_name)
                 self.assertEqual(server.server_address[1], server.server_port)
                 self.assertGreater(server.server_port, 0)
             finally:
                 server.server_close()
 
     def test_clients_connect_before_the_synchronized_request_wave(self):
-        received=[]
+        received = []
+
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                received.append(self.headers['x-capsid-bench-nonce'])
-                self.send_response(200);self.send_header('Content-Length',str(len(EXPECTED_BODY)))
-                self.end_headers();self.wfile.write(EXPECTED_BODY)
-            def log_message(self,*_):pass
-        server=LoopbackHTTPServer(('127.0.0.1',0),Handler)
-        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+                received.append(self.headers["x-capsid-bench-nonce"])
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(EXPECTED_BODY)))
+                self.end_headers()
+                self.wfile.write(EXPECTED_BODY)
+
+            def log_message(self, *_):
+                pass
+
+        server = LoopbackHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01))
+        thread.start()
         try:
             with ThreadPoolExecutor(max_workers=4) as executor:
-                start=threading.Barrier(5)
-                futures=[executor.submit(validated_request,server.server_port,'wave',start=start) for _ in range(4)]
-                deadline=time.monotonic()+3
-                while start.n_waiting<4 and time.monotonic()<deadline:time.sleep(.001)
-                self.assertEqual(4,start.n_waiting,'all clients connected before release')
-                self.assertEqual([],received,'no HTTP request before the connected-client barrier')
+                start = threading.Barrier(5)
+                futures = [
+                    executor.submit(validated_request, server.server_port, "wave", start=start)
+                    for _ in range(4)
+                ]
+                deadline = time.monotonic() + 3
+                while start.n_waiting < 4 and time.monotonic() < deadline:
+                    time.sleep(0.001)
+                self.assertEqual(4, start.n_waiting, "all clients connected before release")
+                self.assertEqual(
+                    [], received, "no HTTP request before the connected-client barrier"
+                )
                 start.wait(timeout=2)
-                self.assertTrue(all(future.result(timeout=3)['ok'] for future in futures))
-            self.assertEqual(['wave']*4,received)
+                self.assertTrue(all(future.result(timeout=3)["ok"] for future in futures))
+            self.assertEqual(["wave"] * 4, received)
         finally:
-            server.shutdown();thread.join(timeout=2);server.server_close()
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
             self.assertFalse(thread.is_alive())
 
     def test_broken_connected_client_wave_is_a_failure(self):
-        server=LoopbackHTTPServer(('127.0.0.1',0),http.server.BaseHTTPRequestHandler)
-        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+        server = LoopbackHTTPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01))
+        thread.start()
         try:
             with ThreadPoolExecutor(max_workers=1) as executor:
-                start=threading.Barrier(2)
-                future=executor.submit(validated_request,server.server_port,'wave',start=start)
-                deadline=time.monotonic()+3
-                while start.n_waiting<1 and time.monotonic()<deadline:time.sleep(.001)
-                self.assertEqual(1,start.n_waiting);start.abort()
-                with self.assertRaises(ProbeError) as raised:future.result(timeout=3)
-                self.assertEqual('request-failed',raised.exception.code)
+                start = threading.Barrier(2)
+                future = executor.submit(validated_request, server.server_port, "wave", start=start)
+                deadline = time.monotonic() + 3
+                while start.n_waiting < 1 and time.monotonic() < deadline:
+                    time.sleep(0.001)
+                self.assertEqual(1, start.n_waiting)
+                start.abort()
+                with self.assertRaises(ProbeError) as raised:
+                    future.result(timeout=3)
+                self.assertEqual("request-failed", raised.exception.code)
         finally:
-            server.shutdown();thread.join(timeout=2);server.server_close()
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
             self.assertFalse(thread.is_alive())
 
     def test_starved_wave_expands_without_exceeding_configured_concurrency(self):
-        coverage=control.Coverage(8,'wave');pending=[];sequence={};waves=[];lock=threading.Lock()
-        def request(port,nonce,*,start):
+        coverage = control.Coverage(8, "wave")
+        pending = []
+        sequence = {}
+        waves = []
+        lock = threading.Lock()
+
+        def request(port, nonce, *, start):
             start.wait(timeout=2)
             with lock:
                 # A synthetic fast-service scheduler only exposes three
                 # identities at the small wave. The larger connected wave
                 # exposes all eight; no real benchmark is claimed here.
-                worker='w'+str(len(waves)%(3 if start.parties==8 else 8))
-                waves.append(start.parties);sequence[worker]=sequence.get(worker,0)+1
-                pending.append(dict(nonce=nonce,worker=worker,count=sequence[worker]))
-            return dict(port=port,status=200,ok=True,bodySHA256='a'*64)
+                worker = "w" + str(len(waves) % (3 if start.parties == 8 else 8))
+                waves.append(start.parties)
+                sequence[worker] = sequence.get(worker, 0) + 1
+                pending.append(dict(nonce=nonce, worker=worker, count=sequence[worker]))
+            return dict(port=port, status=200, ok=True, bodySHA256="a" * 64)
+
         def poll():
-            while pending:coverage.add(pending.pop(0))
+            while pending:
+                coverage.add(pending.pop(0))
+
         with tempfile.TemporaryDirectory() as temporary:
-            probe=DensityProbe(host=args.node,worker=args.node,workerd=args.node,apps=temporary,out=temporary,
-                               cpuset='0',parallel=64,coverage_timeout=5)
-            with patch('density_probe.validated_request',side_effect=request):
-                result=probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=poll),
-                                   'capsid',[12345],8,1,'wave',io.StringIO())
-        self.assertEqual(24,result['responses_checked']);coverage.verify(1,24)
-        self.assertEqual([8,16],sorted(set(waves)));self.assertLessEqual(max(waves),64)
+            probe = DensityProbe(
+                host=args.node,
+                worker=args.node,
+                workerd=args.node,
+                apps=temporary,
+                out=temporary,
+                cpuset="0",
+                parallel=64,
+                coverage_timeout=5,
+            )
+            with patch("density_probe.validated_request", side_effect=request):
+                result = probe.cover(
+                    SimpleNamespace(alive=lambda: True),
+                    SimpleNamespace(coverage=coverage, poll=poll),
+                    "capsid",
+                    [12345],
+                    8,
+                    1,
+                    "wave",
+                    io.StringIO(),
+                )
+        self.assertEqual(24, result["responses_checked"])
+        coverage.verify(1, 24)
+        self.assertEqual([8, 16], sorted(set(waves)))
+        self.assertLessEqual(max(waves), 64)
 
     def test_large_pool_conditioning_can_exceed_64_without_changing_qps(self):
-        coverage=control.Coverage(65,'large');pending=[];sequence={};waves=[];lock=threading.Lock()
-        def wave(ports,nonce,*,connect_parallel):
-            self.assertEqual(64,connect_parallel)
-            observations=[]
+        coverage = control.Coverage(65, "large")
+        pending = []
+        sequence = {}
+        waves = []
+        lock = threading.Lock()
+
+        def wave(ports, nonce, *, connect_parallel):
+            self.assertEqual(64, connect_parallel)
+            observations = []
             for port in ports:
-                identities=49 if len(ports)<130 else 65
-                worker='w'+str(len(waves)%identities)
-                waves.append(len(ports));sequence[worker]=sequence.get(worker,0)+1
-                pending.append(dict(nonce=nonce,worker=worker,count=sequence[worker]))
-                observations.append(dict(port=port,status=200,ok=True,bodySHA256='a'*64))
+                identities = 49 if len(ports) < 130 else 65
+                worker = "w" + str(len(waves) % identities)
+                waves.append(len(ports))
+                sequence[worker] = sequence.get(worker, 0) + 1
+                pending.append(dict(nonce=nonce, worker=worker, count=sequence[worker]))
+                observations.append(dict(port=port, status=200, ok=True, bodySHA256="a" * 64))
             return observations
+
         def poll():
-            while pending:coverage.add(pending.pop(0))
+            while pending:
+                coverage.add(pending.pop(0))
+
         with tempfile.TemporaryDirectory() as temporary:
-            probe=DensityProbe(host=args.node,worker=args.node,workerd=args.node,apps=temporary,out=temporary,
-                               cpuset='0',parallel=64,coverage_timeout=5)
-            with patch('density_probe.validated_wave',side_effect=wave):
-                result=probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=poll),
-                                   'capsid',[12345],65,1,'large',io.StringIO())
-        coverage.verify(1,result['responses_checked'])
-        self.assertEqual(520,result['responses_checked'])
-        self.assertEqual([520],sorted(set(waves)))
-        self.assertEqual(8320,result['warmupConcurrencyLimit'])
-        self.assertEqual(520,result['maximumWaveRequests'])
-        self.assertEqual(64,probe.parallel)
+            probe = DensityProbe(
+                host=args.node,
+                worker=args.node,
+                workerd=args.node,
+                apps=temporary,
+                out=temporary,
+                cpuset="0",
+                parallel=64,
+                coverage_timeout=5,
+            )
+            with patch("density_probe.validated_wave", side_effect=wave):
+                result = probe.cover(
+                    SimpleNamespace(alive=lambda: True),
+                    SimpleNamespace(coverage=coverage, poll=poll),
+                    "capsid",
+                    [12345],
+                    65,
+                    1,
+                    "large",
+                    io.StringIO(),
+                )
+        coverage.verify(1, result["responses_checked"])
+        self.assertEqual(520, result["responses_checked"])
+        self.assertEqual([520], sorted(set(waves)))
+        self.assertEqual(8320, result["warmupConcurrencyLimit"])
+        self.assertEqual(520, result["maximumWaveRequests"])
+        self.assertEqual(64, probe.parallel)
 
     def test_large_wave_sends_all_requests_before_waiting_for_responses(self):
         from density_probe import validated_wave
-        received=[];complete=threading.Event()
+
+        received = []
+        complete = threading.Event()
+
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                received.append(self.headers['x-capsid-bench-nonce'])
-                if len(received)==3:complete.set()
-                if not complete.wait(3):return
-                self.send_response(200);self.send_header('Content-Length',str(len(EXPECTED_BODY)))
-                self.end_headers();self.wfile.write(EXPECTED_BODY)
-            def log_message(self,*_):pass
-        server=LoopbackHTTPServer(('127.0.0.1',0),Handler)
-        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+                received.append(self.headers["x-capsid-bench-nonce"])
+                if len(received) == 3:
+                    complete.set()
+                if not complete.wait(3):
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(EXPECTED_BODY)))
+                self.end_headers()
+                self.wfile.write(EXPECTED_BODY)
+
+            def log_message(self, *_):
+                pass
+
+        server = LoopbackHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01))
+        thread.start()
         try:
-            observations=validated_wave([server.server_port]*3,'burst',connect_parallel=2)
-            self.assertEqual(['burst']*3,received)
-            self.assertEqual(3,len(observations));self.assertTrue(all(row['ok'] for row in observations))
+            observations = validated_wave([server.server_port] * 3, "burst", connect_parallel=2)
+            self.assertEqual(["burst"] * 3, received)
+            self.assertEqual(3, len(observations))
+            self.assertTrue(all(row["ok"] for row in observations))
         finally:
-            complete.set();server.shutdown();thread.join(timeout=2);server.server_close()
+            complete.set()
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
             self.assertFalse(thread.is_alive())
 
     def test_real_http_wrong_body_and_status_cannot_pass_correctness(self):
         response = [200, EXPECTED_BODY]
+
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 self.send_response(response[0])
                 self.send_header("Content-Length", str(len(response[1])))
                 self.end_headers()
                 self.wfile.write(response[1])
+
             def log_message(self, *_):
                 pass
+
         server = LoopbackHTTPServer(("127.0.0.1", 0), Handler)
-        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.01))
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01))
         thread.start()
         try:
             self.assertTrue(validated_request(server.server_port, "test")["ok"])
-            for status, body in ((200, b"wrong"), (503, EXPECTED_BODY), (200, EXPECTED_BODY + b"extra")):
+            for status, body in (
+                (200, b"wrong"),
+                (503, EXPECTED_BODY),
+                (200, EXPECTED_BODY + b"extra"),
+            ):
                 with self.subTest(status=status, body=body):
                     response[:] = status, body
                     from density_probe import validated_wave
-                    for validate in (lambda: validated_request(server.server_port, "test"),
-                                     lambda: validated_wave([server.server_port], "test")):
+
+                    for validate in (
+                        lambda: validated_request(server.server_port, "test"),
+                        lambda: validated_wave([server.server_port], "test"),
+                    ):
                         with self.assertRaises(ProbeError) as raised:
                             validate()
                         self.assertEqual(raised.exception.code, "correctness")
@@ -513,42 +728,82 @@ class CoverageTests(unittest.TestCase):
         import socket
         import socketserver
         from density_probe import validated_wave
-        closed=threading.Event();received=[]
+
+        closed = threading.Event()
+        received = []
+
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
                 received.append(self.rfile.readline())
                 closed.set()
-        server=socketserver.ThreadingTCPServer(('127.0.0.1',0),Handler)
-        thread=threading.Thread(target=lambda:server.serve_forever(poll_interval=.01));thread.start()
+
+        server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01))
+        thread.start()
         try:
             with socket.socket() as refused:
-                refused.bind(('127.0.0.1',0))
+                refused.bind(("127.0.0.1", 0))
                 with self.assertRaises(ProbeError) as raised:
-                    validated_wave([server.server_address[1],refused.getsockname()[1]],'failed',connect_parallel=1)
-                self.assertEqual('request-failed',raised.exception.code)
-                self.assertTrue(closed.wait(3),'connected peer observes close after another connection fails')
-                self.assertEqual([b''],received,'a failed connection wave sends no HTTP request')
+                    validated_wave(
+                        [server.server_address[1], refused.getsockname()[1]],
+                        "failed",
+                        connect_parallel=1,
+                    )
+                self.assertEqual("request-failed", raised.exception.code)
+                self.assertTrue(
+                    closed.wait(3), "connected peer observes close after another connection fails"
+                )
+                self.assertEqual([b""], received, "a failed connection wave sends no HTTP request")
         finally:
-            server.shutdown();thread.join(timeout=2);server.server_close()
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
             self.assertFalse(thread.is_alive())
 
     def test_completed_last_wave_cannot_hide_an_expired_coverage_deadline(self):
-        now=[0];coverage=control.Coverage(1,'late');pending=[]
-        def request(port,nonce,*,start):
-            now[0]=6;pending.append(dict(nonce=nonce,worker='one',count=1))
-            return dict(port=port,status=200,ok=True,bodySHA256='a'*64)
+        now = [0]
+        coverage = control.Coverage(1, "late")
+        pending = []
+
+        def request(port, nonce, *, start):
+            now[0] = 6
+            pending.append(dict(nonce=nonce, worker="one", count=1))
+            return dict(port=port, status=200, ok=True, bodySHA256="a" * 64)
+
         def poll():
-            while pending:coverage.add(pending.pop(0))
+            while pending:
+                coverage.add(pending.pop(0))
+
         with tempfile.TemporaryDirectory() as temporary:
-            probe=DensityProbe(host=args.node,worker=args.node,workerd=args.node,apps=temporary,out=temporary,
-                               cpuset='0',parallel=64,coverage_timeout=5)
-            with patch('density_probe.time.monotonic',side_effect=lambda:now[0]), \
-                 patch('density_probe.validated_request',side_effect=request):
+            probe = DensityProbe(
+                host=args.node,
+                worker=args.node,
+                workerd=args.node,
+                apps=temporary,
+                out=temporary,
+                cpuset="0",
+                parallel=64,
+                coverage_timeout=5,
+            )
+            with (
+                patch("density_probe.time.monotonic", side_effect=lambda: now[0]),
+                patch("density_probe.validated_request", side_effect=request),
+            ):
                 with self.assertRaises(ProbeError) as raised:
-                    probe.cover(SimpleNamespace(alive=lambda:True),SimpleNamespace(coverage=coverage,poll=poll),
-                                'capsid',[12345],1,1,'late',io.StringIO())
-                self.assertEqual('coverage-deadline',raised.exception.code)
-        self.assertTrue(coverage.complete(1),'coverage alone cannot replace the elapsed-time bound')
+                    probe.cover(
+                        SimpleNamespace(alive=lambda: True),
+                        SimpleNamespace(coverage=coverage, poll=poll),
+                        "capsid",
+                        [12345],
+                        1,
+                        1,
+                        "late",
+                        io.StringIO(),
+                    )
+                self.assertEqual("coverage-deadline", raised.exception.code)
+        self.assertTrue(
+            coverage.complete(1), "coverage alone cannot replace the elapsed-time bound"
+        )
 
     def test_large_total_does_not_prove_each_worker(self):
         coverage = control.Coverage(2, "run")
@@ -560,9 +815,11 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "coverage-incomplete")
 
     def test_missing_duplicate_replacement_and_wrong_probe_are_rejected(self):
-        for record in ({"nonce": "other", "worker": "w", "count": 1},
-                       {"nonce": "run", "worker": "w", "count": 2},
-                       {"nonce": "run", "worker": "w", "count": True}):
+        for record in (
+            {"nonce": "other", "worker": "w", "count": 1},
+            {"nonce": "run", "worker": "w", "count": 2},
+            {"nonce": "run", "worker": "w", "count": True},
+        ):
             with self.subTest(record=record), self.assertRaises(ProbeError):
                 control.Coverage(1, "run").add(record)
         coverage = control.Coverage(1, "run")
@@ -578,12 +835,17 @@ class CoverageTests(unittest.TestCase):
             path = Path(temp) / "stderr.log"
             coverage = control.Coverage(1, "run")
             reader = control.CounterLog(path, coverage)
-            first = json.dumps({"message": control.MARKER + '{"nonce":"run","worker":"w","count":1}'}) + "\n"
+            first = (
+                json.dumps({"message": control.MARKER + '{"nonce":"run","worker":"w","count":1}'})
+                + "\n"
+            )
             path.write_text(first[:20])
             reader.poll()
             self.assertEqual(coverage.counts, {})
             with path.open("a") as stream:
-                stream.write(first[20:] + control.MARKER + '{"nonce":"run","worker":"w","count":2}\n')
+                stream.write(
+                    first[20:] + control.MARKER + '{"nonce":"run","worker":"w","count":2}\n'
+                )
             reader.poll()
             coverage.verify(2, 2)
             self.assertEqual(coverage.counts, {"w": 2})
@@ -602,7 +864,8 @@ class CoverageTests(unittest.TestCase):
                 file.write_text(instrument_fixture(original, "fixture-run"), encoding="utf-8")
                 fixture_paths.append(str(file))
             runner = folder / "check.mjs"
-            runner.write_text('''import {pathToFileURL} from 'node:url';
+            runner.write_text(
+                """import {pathToFileURL} from 'node:url';
 for (const file of process.argv.slice(2)) {
   const app=(await import(pathToFileURL(file).href)).default;
   for (const headers of [{}, {'x-capsid-bench-nonce':'fixture-run'}]) {
@@ -610,8 +873,12 @@ for (const file of process.argv.slice(2)) {
     console.log(JSON.stringify({status:response.status,headers:[...response.headers],body:await response.text()}));
   }
 }
-''', encoding="utf-8")
-            run = subprocess.run([args.node, str(runner), *fixture_paths], capture_output=True, text=True, timeout=10)
+""",
+                encoding="utf-8",
+            )
+            run = subprocess.run(
+                [args.node, str(runner), *fixture_paths], capture_output=True, text=True, timeout=10
+            )
             self.assertEqual(run.returncode, 0, run.stderr)
             responses = [json.loads(line) for line in run.stdout.splitlines()]
             self.assertEqual(len(responses), 4)
@@ -620,7 +887,9 @@ for (const file of process.argv.slice(2)) {
                 self.assertEqual(response["body"].encode(), EXPECTED_BODY)
                 self.assertEqual(response["headers"], [["content-type", "application/json"]])
             counter_lines = [line for line in run.stderr.splitlines() if control.MARKER in line]
-            self.assertEqual(len(counter_lines), 2, "ordinary health requests must not alter benchmark counters")
+            self.assertEqual(
+                len(counter_lines), 2, "ordinary health requests must not alter benchmark counters"
+            )
 
 
 if __name__ == "__main__":

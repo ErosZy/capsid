@@ -19,8 +19,8 @@
 #include <vector>
 
 namespace fetchrpc_sequences {
-inline const char *string_value(const json_t *value) {
-    const char *text = json_string_value(value);
+inline const char* string_value(const json_t* value) {
+    const char* text = json_string_value(value);
     return text ? text : "";
 }
 
@@ -28,11 +28,10 @@ inline const char *string_value(const json_t *value) {
 // in `dir` ("h2w" | "w2h") and returns "ok" or the exact contract
 // error string.
 class SequenceTarget {
-public:
+  public:
     virtual ~SequenceTarget() {}
     virtual void reset() = 0;
-    virtual std::string apply(const std::string &dir,
-                              const capsid::protocol::Frame &frame) = 0;
+    virtual std::string apply(const std::string& dir, const capsid::protocol::Frame& frame) = 0;
 };
 
 // Canonical v3 startup payload (mirrors the fixed fixture in
@@ -41,7 +40,7 @@ public:
 inline std::vector<uint8_t> canonical_startup_payload() {
     namespace p = capsid::protocol;
     std::vector<uint8_t> payload;
-    p::append_u32(&payload, 7);  // CAPSID_ABI_VERSION
+    p::append_u32(&payload, 7); // CAPSID_ABI_VERSION
     p::append_u64(&payload, 64u * 1024u * 1024u);
     p::append_u64(&payload, 0);
     p::append_u32(&payload, 64);
@@ -80,23 +79,22 @@ inline std::vector<uint8_t> filler_bytes(size_t count) {
 
 // Synthesizes one "make" step into a real wire frame (composed with
 // the production layout helpers, then re-parsed by the caller).
-inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
-                       std::string *error) {
+inline bool synthesize(const json_t* make, capsid::protocol::Frame* frame, std::string* error) {
     namespace p = capsid::protocol;
-    const json_t *kind_json = json_object_get(make, "kind");
+    const json_t* kind_json = json_object_get(make, "kind");
     if (!json_is_string(kind_json)) {
         *error = "make.kind missing";
         return false;
     }
     const std::string kind = string_value(kind_json);
-    const int channel =
-        json_integer_value(json_object_get(make, json_object_get(make, "channel") ? "channel" : "channel_id"));
+    const int channel = json_integer_value(
+        json_object_get(make, json_object_get(make, "channel") ? "channel" : "channel_id"));
     frame->flags = 0;
     frame->request_id = 0;
 
     if (kind == "hello" || kind == "ready") {
-        const uint32_t caps = static_cast<uint32_t>(
-            json_integer_value(json_object_get(make, "caps")));
+        const uint32_t caps =
+            static_cast<uint32_t>(json_integer_value(json_object_get(make, "caps")));
         frame->type = kind == "hello" ? p::kHello : p::kReady;
         frame->version = p::kVersionV4;
         if (kind == "hello") {
@@ -111,8 +109,7 @@ inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
                 limits.dial_timeout_ms = 10000;
                 limits.idle_timeout_ms = 0;
                 limits.per_channel_queue_bytes = 4 * 1024 * 1024;
-                if (!p::append_hello_a2_extension(&frame->payload,
-                                                  limits)) {
+                if (!p::append_hello_a2_extension(&frame->payload, limits)) {
                     *error = "a2 extension append failed";
                     return false;
                 }
@@ -125,10 +122,9 @@ inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
         return true;
     }
     if (kind == "open") {
-        const uint64_t dial = static_cast<uint64_t>(
-            json_integer_value(json_object_get(make, "dial_id")));
-        const std::string url = string_value(
-            json_object_get(make, "url"));
+        const uint64_t dial =
+            static_cast<uint64_t>(json_integer_value(json_object_get(make, "dial_id")));
+        const std::string url = string_value(json_object_get(make, "url"));
         p::ChannelOpenPayload open;
         open.channel_id = 0;
         open.dial_id = dial;
@@ -136,26 +132,29 @@ inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
         open.channel_kind = p::kChannelKindWebSocket;
         open.owner_request_id = 0;
         open.max_message_bytes = json_object_get(make, "max_message")
-            ? json_integer_value(json_object_get(make, "max_message")) : 1024 * 1024;
+                                     ? json_integer_value(json_object_get(make, "max_message"))
+                                     : 1024 * 1024;
         open.url = url;
         frame->type = p::kChannelOpen;
         return p::encode_channel_open(open, &frame->payload);
     }
     if (kind == "accept") {
-        const uint64_t dial = static_cast<uint64_t>(
-            json_integer_value(json_object_get(make, "dial_id")));
+        const uint64_t dial =
+            static_cast<uint64_t>(json_integer_value(json_object_get(make, "dial_id")));
         p::ChannelAcceptPayload accept;
         accept.dial_id = dial;
         accept.channel_id = static_cast<uint32_t>(channel);
-        accept.accepted_max_message_bytes = json_object_get(make, "max_message")
-            ? json_integer_value(json_object_get(make, "max_message")) : 1024 * 1024;
+        accept.accepted_max_message_bytes =
+            json_object_get(make, "max_message")
+                ? json_integer_value(json_object_get(make, "max_message"))
+                : 1024 * 1024;
         accept.selected_protocol = "chat";
         frame->type = p::kChannelAccept;
         return p::encode_channel_accept(accept, &frame->payload);
     }
     if (kind == "reject") {
-        const uint64_t dial = static_cast<uint64_t>(
-            json_integer_value(json_object_get(make, "dial_id")));
+        const uint64_t dial =
+            static_cast<uint64_t>(json_integer_value(json_object_get(make, "dial_id")));
         p::ChannelRejectPayload reject;
         reject.dial_id = dial;
         reject.channel_id = 0;
@@ -166,12 +165,9 @@ inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
     }
     if (kind == "data" || kind == "data-v3") {
         frame->type = p::kChannelData;
-        frame->version = kind == "data-v3"
-            ? p::kVersion
-            : p::kVersionV4;
+        frame->version = kind == "data-v3" ? p::kVersion : p::kVersionV4;
         const bool text = json_is_true(json_object_get(make, "text"));
-        const bool first =
-            json_is_true(json_object_get(make, "first"));
+        const bool first = json_is_true(json_object_get(make, "first"));
         const bool last = json_is_true(json_object_get(make, "last"));
         if (first) {
             frame->flags |= p::kFlagStart;
@@ -182,55 +178,48 @@ inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
         if (text) {
             frame->flags |= p::kFlagChanText;
         }
-        p::append_u32(&frame->payload,
-                      static_cast<uint32_t>(channel));
-        const json_t *single = json_object_get(make, "single");
+        p::append_u32(&frame->payload, static_cast<uint32_t>(channel));
+        const json_t* single = json_object_get(make, "single");
         if (json_is_string(single)) {
             const std::string value = string_value(single);
-            frame->payload.insert(frame->payload.end(),
-                                  value.begin(), value.end());
+            frame->payload.insert(frame->payload.end(), value.begin(), value.end());
             if (!first && !last) {
                 frame->flags |= p::kFlagStart | p::kFlagEnd;
             }
         } else {
-            const size_t count = static_cast<size_t>(
-                json_integer_value(json_object_get(make, "bytes")));
+            const size_t count =
+                static_cast<size_t>(json_integer_value(json_object_get(make, "bytes")));
             if (count > p::kMaxPayloadSize - sizeof(uint32_t)) {
                 *error = "make.data exceeds a wire fragment";
                 return false;
             }
             const std::vector<uint8_t> bytes = filler_bytes(count);
-            frame->payload.insert(frame->payload.end(),
-                                  bytes.begin(), bytes.end());
+            frame->payload.insert(frame->payload.end(), bytes.begin(), bytes.end());
         }
         return true;
     }
     if (kind == "credit") {
         p::ChannelCreditPayload grant;
         grant.channel_id = static_cast<uint32_t>(channel);
-        grant.credit = static_cast<uint64_t>(
-            json_integer_value(json_object_get(make, "amount")));
+        grant.credit = static_cast<uint64_t>(json_integer_value(json_object_get(make, "amount")));
         frame->type = p::kChannelCredit;
         return p::encode_channel_credit(grant, &frame->payload);
     }
     if (kind == "halfclose") {
         frame->type = p::kChannelHalfClose;
-        p::append_u32(&frame->payload,
-                      static_cast<uint32_t>(channel));
+        p::append_u32(&frame->payload, static_cast<uint32_t>(channel));
         return true;
     }
     if (kind == "close") {
         p::ChannelClosePayload close;
         close.channel_id = static_cast<uint32_t>(channel);
-        const std::string kind_name = string_value(
-            json_object_get(make, "kind_name"));
-        close.close_kind = kind_name == "observed"
-            ? p::kCloseObserved
-            : (kind_name == "transport" ? p::kCloseTransport
-                                        : p::kCloseInitiated);
+        const std::string kind_name = string_value(json_object_get(make, "kind_name"));
+        close.close_kind =
+            kind_name == "observed"
+                ? p::kCloseObserved
+                : (kind_name == "transport" ? p::kCloseTransport : p::kCloseInitiated);
         close.flags = p::kCloseFlagCodePresent;
-        close.code = static_cast<uint16_t>(
-            json_integer_value(json_object_get(make, "code")));
+        close.code = static_cast<uint16_t>(json_integer_value(json_object_get(make, "code")));
         close.reason = "done";
         frame->type = p::kChannelClose;
         return p::encode_channel_close(close, &frame->payload);
@@ -241,11 +230,10 @@ inline bool synthesize(const json_t *make, capsid::protocol::Frame *frame,
 
 // Drives every sequence against the target. `failures` accumulates;
 // returns the set of executed sequence names.
-inline std::set<std::string> run_sequences(
-        const json_t *sequences,
-        const std::map<std::string, std::vector<uint8_t>> &frame_wire,
-        SequenceTarget *target,
-        int *failures) {
+inline std::set<std::string>
+run_sequences(const json_t* sequences,
+              const std::map<std::string, std::vector<uint8_t>>& frame_wire, SequenceTarget* target,
+              int* failures) {
     std::set<std::string> executed;
     if (!json_is_array(sequences) || json_array_size(sequences) == 0) {
         std::fprintf(stderr, "FAIL: nonempty sequences array required\n");
@@ -253,14 +241,12 @@ inline std::set<std::string> run_sequences(
         return executed;
     }
     size_t index;
-    json_t *value;
+    json_t* value;
     json_array_foreach(sequences, index, value) {
-        const std::string name =
-            string_value(json_object_get(value, "name"));
-        const json_t *steps = json_object_get(value, "steps");
+        const std::string name = string_value(json_object_get(value, "name"));
+        const json_t* steps = json_object_get(value, "steps");
         if (name.empty() || !(json_is_array(steps) && json_array_size(steps) >= 1)) {
-            std::fprintf(stderr, "FAIL: sequence has steps: %s\n",
-                         name.c_str());
+            std::fprintf(stderr, "FAIL: sequence has steps: %s\n", name.c_str());
             ++(*failures);
             continue;
         }
@@ -270,64 +256,53 @@ inline std::set<std::string> run_sequences(
         }
         target->reset();
         size_t step_index;
-        json_t *step_json;
+        json_t* step_json;
         json_array_foreach(steps, step_index, step_json) {
-            const std::string expect = string_value(
-                json_object_get(step_json, "expect"));
-            const std::string dir = string_value(
-                json_object_get(step_json, "dir"));
-            const json_t *frame_ref =
-                json_object_get(step_json, "frame");
-            const json_t *make = json_object_get(step_json, "make");
+            const std::string expect = string_value(json_object_get(step_json, "expect"));
+            const std::string dir = string_value(json_object_get(step_json, "dir"));
+            const json_t* frame_ref = json_object_get(step_json, "frame");
+            const json_t* make = json_object_get(step_json, "make");
             if (expect.empty() || (dir != "h2w" && dir != "w2h") ||
-                    !(frame_ref ? json_is_string(frame_ref) : true) ||
-                    !(make ? json_is_object(make) : true) ||
-                    ((!frame_ref) == (!make))) {
-                std::fprintf(stderr,
-                             "FAIL: step shape: %s step %zu\n",
-                             name.c_str(), step_index);
+                !(frame_ref ? json_is_string(frame_ref) : true) ||
+                !(make ? json_is_object(make) : true) || ((!frame_ref) == (!make))) {
+                std::fprintf(stderr, "FAIL: step shape: %s step %zu\n", name.c_str(), step_index);
                 ++(*failures);
                 continue;
             }
             capsid::protocol::Frame frame;
             if (frame_ref) {
                 const std::string ref = string_value(frame_ref);
-                std::map<std::string, std::vector<uint8_t>>
-                    ::const_iterator it = frame_wire.find(ref);
+                std::map<std::string, std::vector<uint8_t>>::const_iterator it =
+                    frame_wire.find(ref);
                 if (it == frame_wire.end()) {
-                    std::fprintf(stderr,
-                        "FAIL: step frame exists: %s/%s\n",
-                        name.c_str(), ref.c_str());
+                    std::fprintf(stderr, "FAIL: step frame exists: %s/%s\n", name.c_str(),
+                                 ref.c_str());
                     ++(*failures);
                     continue;
                 }
                 capsid::protocol::Parser v4(4);
                 v4.append(it->second.data(), it->second.size());
                 if (v4.next(&frame) != capsid::protocol::kParseFrame) {
-                    std::fprintf(stderr,
-                        "FAIL: step frame parses: %s/%s\n",
-                        name.c_str(), ref.c_str());
+                    std::fprintf(stderr, "FAIL: step frame parses: %s/%s\n", name.c_str(),
+                                 ref.c_str());
                     ++(*failures);
                     continue;
                 }
             } else {
                 std::string error;
                 if (!synthesize(make, &frame, &error)) {
-                    std::fprintf(stderr,
-                        "FAIL: synthesize: %s %s\n",
-                        name.c_str(), error.c_str());
+                    std::fprintf(stderr, "FAIL: synthesize: %s %s\n", name.c_str(), error.c_str());
                     ++(*failures);
                     continue;
                 }
                 if (frame.version == capsid::protocol::kVersion) {
                     // a v3 frame on the v4 connection: feed it raw
-                    const std::string outcome =
-                        target->apply(dir, frame);
+                    const std::string outcome = target->apply(dir, frame);
                     if (outcome != expect) {
                         std::fprintf(stderr,
-                            "FAIL: sequence %s step %zu (got %s, "
-                            "want %s)\n", name.c_str(), step_index,
-                            outcome.c_str(), expect.c_str());
+                                     "FAIL: sequence %s step %zu (got %s, "
+                                     "want %s)\n",
+                                     name.c_str(), step_index, outcome.c_str(), expect.c_str());
                         ++(*failures);
                     }
                     continue;
@@ -336,21 +311,16 @@ inline std::set<std::string> run_sequences(
                 capsid::protocol::encode_versioned(4, frame, &wire);
                 capsid::protocol::Parser v4(4);
                 v4.append(wire.data(), wire.size());
-                if (v4.next(&frame) !=
-                        capsid::protocol::kParseFrame) {
-                    std::fprintf(stderr,
-                        "FAIL: synthesized frame parses: %s\n",
-                        name.c_str());
+                if (v4.next(&frame) != capsid::protocol::kParseFrame) {
+                    std::fprintf(stderr, "FAIL: synthesized frame parses: %s\n", name.c_str());
                     ++(*failures);
                     continue;
                 }
             }
             const std::string outcome = target->apply(dir, frame);
             if (outcome != expect) {
-                std::fprintf(stderr,
-                    "FAIL: sequence %s step %zu (got %s, want %s)\n",
-                    name.c_str(), step_index, outcome.c_str(),
-                    expect.c_str());
+                std::fprintf(stderr, "FAIL: sequence %s step %zu (got %s, want %s)\n", name.c_str(),
+                             step_index, outcome.c_str(), expect.c_str());
                 ++(*failures);
             }
         }
@@ -358,6 +328,6 @@ inline std::set<std::string> run_sequences(
     return executed;
 }
 
-}  // namespace fetchrpc_sequences
+} // namespace fetchrpc_sequences
 
 #endif

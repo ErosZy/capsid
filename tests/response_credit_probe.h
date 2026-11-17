@@ -13,7 +13,7 @@ namespace capsid_test {
 // exposes complete wire-body pieces for regression validation; ordinary runs
 // keep their existing output. This helper queues credit and never flushes IPC.
 class ResponseCreditProbe {
-public:
+  public:
     explicit ResponseCreditProbe(uint32_t window = 0, uint64_t group = 0)
         : window_(window), group_(group) {}
 
@@ -27,7 +27,8 @@ public:
             parts_.clear();
         }
         const auto bytes = static_cast<uint32_t>(event.payload.size);
-        if (!bytes) return;
+        if (!bytes)
+            return;
         if (window_ && bytes > window_)
             throw std::runtime_error("response body exceeded configured test window");
         if (capsid_worker_grant_response_credit(worker, event.request_id, bytes) != CAPSID_OK)
@@ -37,7 +38,8 @@ public:
         granted_ += granted;
         parts_.push_back(bytes);
         if (window_) {
-            std::printf("RESPONSE_WINDOW_PART {\"window\":%u,\"group\":%llu,\"request\":%llu,\"bytes\":%u,\"granted\":%u,\"bodyHex\":\"",
+            std::printf(
+                "RESPONSE_WINDOW_PART {\"window\":%u,\"group\":%llu,\"request\":%llu,\"bytes\":%u,\"granted\":%u,\"bodyHex\":\"",
                 window_, static_cast<unsigned long long>(group_),
                 static_cast<unsigned long long>(request_), bytes, granted);
             hex(event.payload.data, event.payload.size);
@@ -47,13 +49,15 @@ public:
     }
 
     void complete(uint64_t request, const std::string& body) const {
-        if (!window_) return;
+        if (!window_)
+            return;
         if (request != request_ || consumed_ != body.size())
             throw std::runtime_error("complete consumed response accounting");
-        std::printf("RESPONSE_WINDOW_ROW {\"window\":%u,\"group\":%llu,\"request\":%llu,\"bytes\":%llu,\"granted\":%llu,\"parts\":[",
+        std::printf(
+            "RESPONSE_WINDOW_ROW {\"window\":%u,\"group\":%llu,\"request\":%llu,\"bytes\":%llu,\"granted\":%llu,\"parts\":[",
             window_, static_cast<unsigned long long>(group_),
-            static_cast<unsigned long long>(request_),
-            static_cast<unsigned long long>(consumed_), static_cast<unsigned long long>(granted_));
+            static_cast<unsigned long long>(request_), static_cast<unsigned long long>(consumed_),
+            static_cast<unsigned long long>(granted_));
         for (size_t i = 0; i < parts_.size(); ++i)
             std::printf("%s%u", i ? "," : "", parts_[i]);
         std::printf("],\"bodyHex\":\"");
@@ -62,9 +66,10 @@ public:
         std::fflush(stdout);
     }
 
-private:
+  private:
     static void hex(const uint8_t* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) std::printf("%02x", unsigned(data[i]));
+        for (size_t i = 0; i < size; ++i)
+            std::printf("%02x", unsigned(data[i]));
     }
     uint32_t window_;
     uint64_t group_;

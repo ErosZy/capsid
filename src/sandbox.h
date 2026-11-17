@@ -18,12 +18,8 @@ static constexpr uint32_t kSeccompModeFilter = 2u;
 
 struct SandboxConfig {
     SandboxConfig()
-        : address_space_limit(0),
-          file_descriptor_limit(64),
-          strict(false),
-          required_features(0),
-          preinstalled_features(0),
-          network_namespace_fd(-1) {}
+        : address_space_limit(0), file_descriptor_limit(64), strict(false), required_features(0),
+          preinstalled_features(0), network_namespace_fd(-1) {}
 
     uint64_t address_space_limit;
     uint32_t file_descriptor_limit;
@@ -43,11 +39,8 @@ struct SandboxConfig {
     std::vector<std::string> binding_write_paths;
 };
 
-bool apply_sandbox(const SandboxConfig &config,
-                   uint32_t *applied_features,
-                   uint32_t *landlock_abi,
-                   uint32_t *seccomp_mode,
-                   std::string *error);
+bool apply_sandbox(const SandboxConfig& config, uint32_t* applied_features, uint32_t* landlock_abi,
+                   uint32_t* seccomp_mode, std::string* error);
 
 // Read-only Host/worker proof helpers. They never install or relax a sandbox.
 // The namespace identity is stable for the lifetime of the namespace and is
@@ -55,6 +48,6 @@ bool apply_sandbox(const SandboxConfig &config,
 uint32_t query_landlock_abi();
 std::string network_namespace_identity(int descriptor);
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

@@ -50,8 +50,8 @@ bool is_sha256_id(const char* value) {
 std::string sha256_id(const std::string& bytes) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
-    require(EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size,
-                       EVP_sha256(), nullptr) == 1,
+    require(EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size, EVP_sha256(), nullptr) ==
+                1,
             "OpenSSL could not hash the compatibility record");
     require(digest_size == 32, "SHA-256 returned an unexpected digest size");
     static constexpr char kHex[] = "0123456789abcdef";
@@ -73,9 +73,8 @@ std::string canonical_record(const capsid_build_info& info) {
            "bytecodeCompileFlags=" + info.bytecode_compile_flags + "\n" +
            "targetArchitecture=" + info.target_architecture + "\n" +
            "endianness=" + info.endianness + "\n" +
-           "pointerWidthBits=" + std::to_string(info.pointer_width_bits) +
-           "\n" + "bytecodeFormatIdentity=" +
-           info.bytecode_format_identity + "\n";
+           "pointerWidthBits=" + std::to_string(info.pointer_width_bits) + "\n" +
+           "bytecodeFormatIdentity=" + info.bytecode_format_identity + "\n";
 }
 
 // Provenance record v1 (spec §11.3) minus the final buildId line, in the
@@ -85,16 +84,14 @@ std::string canonical_record(const capsid_build_info& info) {
 std::string canonical_provenance(const capsid_build_info& info) {
     return std::string("schema=capsid-build-provenance-v1\n") +
            "capsidCommit=" + info.capsid_commit + "\n" +
-           "capsidTreeClean=" +
-           (info.capsid_tree_clean == 1 ? "true" : "false") + "\n" +
+           "capsidTreeClean=" + (info.capsid_tree_clean == 1 ? "true" : "false") + "\n" +
            "runtimeVersion=" + info.runtime_version + "\n" +
            "abiVersion=" + std::to_string(info.abi_version) + "\n" +
-           "fetchRpcVersion=" + std::to_string(info.fetchrpc_version) +
-           "\n" + "compatibilityId=" + info.compatibility_id + "\n" +
-           "capabilityManifestSha256=" + info.capability_manifest_sha256 +
-           "\n" + "compilerId=" + info.compiler_id + "\n" +
-           "compilerVersion=" + info.compiler_version + "\n" +
-           "targetTriple=" + info.target_triple + "\n" +
+           "fetchRpcVersion=" + std::to_string(info.fetchrpc_version) + "\n" +
+           "compatibilityId=" + info.compatibility_id + "\n" +
+           "capabilityManifestSha256=" + info.capability_manifest_sha256 + "\n" +
+           "compilerId=" + info.compiler_id + "\n" + "compilerVersion=" + info.compiler_version +
+           "\n" + "targetTriple=" + info.target_triple + "\n" +
            "cmakeBuildType=" + info.cmake_build_type + "\n" +
            "featureFlags=" + info.build_feature_flags + "\n" +
            "dependencyOverlayKey=" + info.txiki_overlay_key + "\n";
@@ -107,8 +104,7 @@ bool feature_flags_complete(const char* flags) {
     if (flags == nullptr) {
         return false;
     }
-    for (const char* key : { "lto=", "asan=", "ubsan=", "tsan=",
-                             "mimalloc=", "host=", "worker=" }) {
+    for (const char* key : {"lto=", "asan=", "ubsan=", "tsan=", "mimalloc=", "host=", "worker="}) {
         if (std::strstr(flags, key) == nullptr) {
             return false;
         }
@@ -125,35 +121,26 @@ capsid_build_info read_library_build_info() {
 
     capsid_build_info info;
     capsid_build_info_init(&info);
-    require(info.struct_size == sizeof(info) &&
-                info.version == CAPSID_BUILD_INFO_VERSION,
+    require(info.struct_size == sizeof(info) && info.version == CAPSID_BUILD_INFO_VERSION,
             "build-info initializer returned the wrong envelope");
-    require(capsid_runtime_build_info(&info) == CAPSID_OK,
-            "library build info was unavailable");
-    require(info.version == CAPSID_BUILD_INFO_VERSION &&
-                info.abi_version == CAPSID_ABI_VERSION &&
+    require(capsid_runtime_build_info(&info) == CAPSID_OK, "library build info was unavailable");
+    require(info.version == CAPSID_BUILD_INFO_VERSION && info.abi_version == CAPSID_ABI_VERSION &&
                 info.fetchrpc_version != 0,
             "library build info reported incompatible numeric versions");
     require(info.runtime_version != nullptr && info.runtime_version[0] != 0 &&
-                is_lower_hex(info.quickjs_commit, 40) &&
-                is_lower_hex(info.txiki_overlay_key, 64) &&
+                is_lower_hex(info.quickjs_commit, 40) && is_lower_hex(info.txiki_overlay_key, 64) &&
                 is_lower_hex(info.txiki_overlay_manifest, 64) &&
-                info.bytecode_compile_flags != nullptr &&
-                info.bytecode_compile_flags[0] != 0 &&
-                info.target_architecture != nullptr &&
-                info.target_architecture[0] != 0 &&
-                info.bytecode_format_identity != nullptr &&
-                info.bytecode_format_identity[0] != 0 &&
+                info.bytecode_compile_flags != nullptr && info.bytecode_compile_flags[0] != 0 &&
+                info.target_architecture != nullptr && info.target_architecture[0] != 0 &&
+                info.bytecode_format_identity != nullptr && info.bytecode_format_identity[0] != 0 &&
                 is_lower_hex(info.capability_manifest_sha256, 64),
             "library build info contains an empty or malformed identity field");
-    require(is_sha256_id(info.build_id),
-            "library build ID is not lowercase sha256");
+    require(is_sha256_id(info.build_id), "library build ID is not lowercase sha256");
     require(sha256_id(canonical_provenance(info)) == info.build_id,
             "library build ID does not cover the canonical provenance "
             "record; a provenance field is missing or misordered");
-    require(info.capsid_commit != nullptr &&
-                (is_lower_hex(info.capsid_commit, 40) ||
-                 std::strcmp(info.capsid_commit, "unknown") == 0),
+    require(info.capsid_commit != nullptr && (is_lower_hex(info.capsid_commit, 40) ||
+                                              std::strcmp(info.capsid_commit, "unknown") == 0),
             "capsid commit must be 40 lowercase hex or \"unknown\"");
     require(info.capsid_tree_clean == 0 || info.capsid_tree_clean == 1,
             "capsid_tree_clean is not a boolean");
@@ -165,23 +152,21 @@ capsid_build_info read_library_build_info() {
     require(info.provenance_dirty == (release_grade ? 0u : 1u),
             "provenance_dirty disagrees with build type/commit/tree state");
     require(info.compiler_id != nullptr && info.compiler_id[0] != 0 &&
-                info.compiler_version != nullptr &&
-                info.compiler_version[0] != 0 &&
+                info.compiler_version != nullptr && info.compiler_version[0] != 0 &&
                 info.target_triple != nullptr && info.target_triple[0] != 0 &&
                 info.cmake_build_type != nullptr &&
                 feature_flags_complete(info.build_feature_flags),
             "library build provenance is missing toolchain or feature "
             "information");
 #ifdef CAPSID_TEST_EXPECTED_QUICKJS_COMMIT
-    require(std::strcmp(info.quickjs_commit,
-                        CAPSID_TEST_EXPECTED_QUICKJS_COMMIT) == 0,
+    require(std::strcmp(info.quickjs_commit, CAPSID_TEST_EXPECTED_QUICKJS_COMMIT) == 0,
             "build identity carries the txiki.js commit instead of the "
             "locked QuickJS gitlink");
 #endif
-    require((std::strcmp(info.endianness, "little") == 0 ||
-             std::strcmp(info.endianness, "big") == 0) &&
-                info.pointer_width_bits == sizeof(void*) * 8,
-            "library build info does not describe the running architecture");
+    require(
+        (std::strcmp(info.endianness, "little") == 0 || std::strcmp(info.endianness, "big") == 0) &&
+            info.pointer_width_bits == sizeof(void*) * 8,
+        "library build info does not describe the running architecture");
     require(is_sha256_id(info.compatibility_id),
             "library compatibility ID is not lowercase sha256");
     require(sha256_id(canonical_record(info)) == info.compatibility_id,
@@ -203,8 +188,7 @@ std::string read_child_stdout(const char* executable, const char* argument) {
             "could not create compiler output pipe");
     require(SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0),
             "could not clear compiler output pipe inheritance");
-    std::string command = std::string("\"") + executable + "\" \"" +
-                          argument + "\"";
+    std::string command = std::string("\"") + executable + "\" \"" + argument + "\"";
     STARTUPINFOA startup;
     std::memset(&startup, 0, sizeof(startup));
     startup.cb = sizeof(startup);
@@ -213,8 +197,7 @@ std::string read_child_stdout(const char* executable, const char* argument) {
     startup.dwFlags = STARTF_USESTDHANDLES;
     PROCESS_INFORMATION process;
     std::memset(&process, 0, sizeof(process));
-    require(CreateProcessA(NULL, &command[0], NULL, NULL, TRUE, 0, NULL,
-                           NULL, &startup, &process),
+    require(CreateProcessA(NULL, &command[0], NULL, NULL, TRUE, 0, NULL, NULL, &startup, &process),
             "could not spawn compiler identity probe");
     CloseHandle(write_pipe);
     CloseHandle(process.hThread);
@@ -235,12 +218,10 @@ std::string read_child_stdout(const char* executable, const char* argument) {
     require(WaitForSingleObject(process.hProcess, INFINITE) == WAIT_OBJECT_0,
             "could not wait for compiler identity probe");
     DWORD exit_code = 0;
-    require(GetExitCodeProcess(process.hProcess, &exit_code) &&
-                exit_code == 0,
+    require(GetExitCodeProcess(process.hProcess, &exit_code) && exit_code == 0,
             "compiler identity probe failed");
     CloseHandle(process.hProcess);
-    while (!output.empty() &&
-           (output.back() == '\n' || output.back() == '\r')) {
+    while (!output.empty() && (output.back() == '\n' || output.back() == '\r')) {
         output.pop_back();
     }
     return output;
@@ -275,11 +256,9 @@ std::string read_child_stdout(const char* executable, const char* argument) {
     }
     close(descriptors[0]);
     int status = 0;
-    require(waitpid(child, &status, 0) == child && WIFEXITED(status) &&
-                WEXITSTATUS(status) == 0,
+    require(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0,
             "compiler identity probe failed");
-    while (!output.empty() &&
-           (output.back() == '\n' || output.back() == '\r')) {
+    while (!output.empty() && (output.back() == '\n' || output.back() == '\r')) {
         output.pop_back();
     }
     return output;
@@ -291,15 +270,12 @@ std::string read_worker_identity(const char* worker_path) {
     capsid_worker_config_init(&config);
     config.worker_path = worker_path;
     capsid_worker* worker = nullptr;
-    require(capsid_worker_spawn(&config, &worker) == CAPSID_OK &&
-                worker != nullptr,
+    require(capsid_worker_spawn(&config, &worker) == CAPSID_OK && worker != nullptr,
             "could not spawn identity worker");
 
-    static constexpr char kBundle[] =
-        "export default { fetch() { return new Response('ok'); } };";
-    require(capsid_worker_load_bundle_named(
-                worker, reinterpret_cast<const std::uint8_t*>(kBundle),
-                sizeof(kBundle) - 1, "bundle.mjs") == CAPSID_OK &&
+    static constexpr char kBundle[] = "export default { fetch() { return new Response('ok'); } };";
+    require(capsid_worker_load_bundle_named(worker, reinterpret_cast<const std::uint8_t*>(kBundle),
+                                            sizeof(kBundle) - 1, "bundle.mjs") == CAPSID_OK &&
                 capsid_worker_flush(worker) == CAPSID_OK,
             "could not load identity worker bundle");
 
@@ -315,15 +291,12 @@ std::string read_worker_identity(const char* worker_path) {
             continue;
         }
         require(next == CAPSID_OK, "worker closed before READY identity");
-        require(event.type != CAPSID_EVENT_ERROR &&
-                    event.type != CAPSID_EVENT_EXIT,
+        require(event.type != CAPSID_EVENT_ERROR && event.type != CAPSID_EVENT_EXIT,
                 "worker rejected the identity probe bundle");
         if (event.type == CAPSID_EVENT_READY) {
             require(event.payload.data != nullptr && event.payload.size == 71,
                     "READY did not carry a sha256 compatibility ID");
-            identity.assign(
-                reinterpret_cast<const char*>(event.payload.data),
-                event.payload.size);
+            identity.assign(reinterpret_cast<const char*>(event.payload.data), event.payload.size);
         }
     }
     capsid_worker_destroy(worker);
@@ -331,7 +304,7 @@ std::string read_worker_identity(const char* worker_path) {
     return identity;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     capsid_build_info_init(nullptr);
@@ -340,8 +313,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     require(argc == 3, "expected optional <worker> <compiler> arguments");
-    const std::string compiler_identity =
-        read_child_stdout(argv[2], "--print-compatibility-id");
+    const std::string compiler_identity = read_child_stdout(argv[2], "--print-compatibility-id");
     const std::string worker_identity = read_worker_identity(argv[1]);
     require(compiler_identity == info.compatibility_id,
             "compiler compatibility ID differs from the library");

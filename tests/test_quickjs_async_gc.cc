@@ -5,38 +5,40 @@
 #include <cstring>
 
 namespace {
-void require(bool value, const char *message) {
+void require(bool value, const char* message) {
     if (!value) {
         std::fprintf(stderr, "FAIL: %s\n", message);
         std::exit(1);
     }
 }
 
-void check_exception(JSContext *ctx, JSValue value) {
-    if (!JS_IsException(value)) return;
+void check_exception(JSContext* ctx, JSValue value) {
+    if (!JS_IsException(value))
+        return;
     JSValue error = JS_GetException(ctx);
-    const char *message = JS_ToCString(ctx, error);
+    const char* message = JS_ToCString(ctx, error);
     std::fprintf(stderr, "FAIL: JS exception: %s\n", message ? message : "unknown");
     JS_FreeCString(ctx, message);
     JS_FreeValue(ctx, error);
     std::exit(1);
 }
 
-void eval(JSContext *ctx, const char *source) {
+void eval(JSContext* ctx, const char* source) {
     JSValue value = JS_Eval(ctx, source, std::strlen(source), "async-gc.js", JS_EVAL_TYPE_GLOBAL);
     check_exception(ctx, value);
     JS_FreeValue(ctx, value);
 }
 
-void drain(JSRuntime *rt) {
-    JSContext *ctx = nullptr;
+void drain(JSRuntime* rt) {
+    JSContext* ctx = nullptr;
     int count = 0, status;
     while ((status = JS_ExecutePendingJob(rt, &ctx)) > 0)
         require(++count < 1000, "job drain must be bounded");
-    if (status < 0) check_exception(ctx, JS_EXCEPTION);
+    if (status < 0)
+        check_exception(ctx, JS_EXCEPTION);
 }
 
-void expect(JSContext *ctx, const char *source) {
+void expect(JSContext* ctx, const char* source) {
     JSValue value = JS_Eval(ctx, source, std::strlen(source), "assert.js", JS_EVAL_TYPE_GLOBAL);
     check_exception(ctx, value);
     require(JS_ToBool(ctx, value) == 1, source);
@@ -45,9 +47,9 @@ void expect(JSContext *ctx, const char *source) {
 } // namespace
 
 int main() {
-    JSRuntime *rt = JS_NewRuntime();
+    JSRuntime* rt = JS_NewRuntime();
     require(rt != nullptr, "runtime creation");
-    JSContext *ctx = JS_NewContext(rt);
+    JSContext* ctx = JS_NewContext(rt);
     require(ctx != nullptr, "context creation");
 
     // The callback is the only external root of a suspended frame. In the
@@ -114,7 +116,7 @@ int main() {
 
     // Adding an ownership edge must not turn abandoned async cycles into
     // permanent roots. After warm-up, repeated GC returns to the same heap.
-    const char *abandoned = R"JS(
+    const char* abandoned = R"JS(
         for (let i = 0; i < 100; ++i) {
             (async () => {
                 let resolve;

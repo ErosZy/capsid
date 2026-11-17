@@ -17,101 +17,120 @@ import { setMetric, timing } from 'hono/timing';
 
 const textDecoder = new TextDecoder();
 
-const toHex = value => {
-    let output = '';
-    for (const byte of new Uint8Array(value)) {
-        output += byte.toString(16).padStart(2, '0');
-    }
-    return output;
+const toHex = (value) => {
+  let output = '';
+  for (const byte of new Uint8Array(value)) {
+    output += byte.toString(16).padStart(2, '0');
+  }
+  return output;
 };
 
 const app = new Hono();
 
 app.onError((error, context) => {
-    if (error instanceof HTTPException) {
-        return error.getResponse();
-    }
-    return context.json({
-        name: error?.name ?? 'Error',
-        message: error?.message ?? String(error),
-    }, 555);
+  if (error instanceof HTTPException) {
+    return error.getResponse();
+  }
+  return context.json(
+    {
+      name: error?.name ?? 'Error',
+      message: error?.message ?? String(error),
+    },
+    555,
+  );
 });
 
-app.notFound(context => context.text(
-    `not-found:${new URL(context.req.url).pathname}`,
-    404,
-));
+app.notFound((context) => context.text(`not-found:${new URL(context.req.url).pathname}`, 404));
 
-app.get('/entry', context => context.text('hono-entry-ok'));
-app.get('/fixed', context => new Response(
-    new Uint8Array(1024).fill(0x78),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
-
-app.on(
-    [ 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS' ],
-    '/routing/method',
-    context => context.text(context.req.method),
+app.get('/entry', (context) => context.text('hono-entry-ok'));
+app.get(
+  '/fixed',
+  (context) =>
+    new Response(new Uint8Array(1024).fill(0x78), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
 );
-app.get('/routing/static', context => context.text('static'));
-app.get('/routing/users/:id', context => context.json({
+
+app.on(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], '/routing/method', (context) =>
+  context.text(context.req.method),
+);
+app.get('/routing/static', (context) => context.text('static'));
+app.get('/routing/users/:id', (context) =>
+  context.json({
     id: context.req.param('id'),
-}));
-app.get('/routing/assets/*', context => context.text(
-    new URL(context.req.url).pathname,
-));
-app.all('/routing/all', context => context.text(`all:${context.req.method}`));
+  }),
+);
+app.get('/routing/assets/*', (context) => context.text(new URL(context.req.url).pathname));
+app.all('/routing/all', (context) => context.text(`all:${context.req.method}`));
 
 // Single-process benchmark routes (hono vs slim comparison):
 // /bench/json  -> a fixed JSON document
 // /bench/bytes -> 1024 bytes of binary payload
 // /bench/stream -> a streamed response (3 chunks)
-app.get('/bench/json', context => context.json({
+app.get('/bench/json', (context) =>
+  context.json({
     status: 'ok',
     app: 'hono',
     item: 'benchmark',
     value: 42,
-}));
-app.get('/bench/bytes', context => new Response(
-    new Uint8Array(1024).fill(0x61),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
-app.get('/bench/stream', context => new Response(
-    new ReadableStream({
+  }),
+);
+app.get(
+  '/bench/bytes',
+  (context) =>
+    new Response(new Uint8Array(1024).fill(0x61), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
+app.get(
+  '/bench/stream',
+  (context) =>
+    new Response(
+      new ReadableStream({
         type: 'bytes',
         pull(controller) {
-            controller.enqueue(new Uint8Array(341).fill(0x62));
-            controller.enqueue(new Uint8Array(341).fill(0x63));
-            controller.enqueue(new Uint8Array(342).fill(0x64));
-            controller.close();
+          controller.enqueue(new Uint8Array(341).fill(0x62));
+          controller.enqueue(new Uint8Array(341).fill(0x63));
+          controller.enqueue(new Uint8Array(342).fill(0x64));
+          controller.close();
         },
-    }),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
+      }),
+      { headers: { 'content-type': 'application/octet-stream' } },
+    ),
+);
 
 // 16 KiB payloads: json16k (pad field), bytes16k, stream16k.
 const pad16k = 'x'.repeat(16384);
-app.get('/bench/json16k', context => context.json({
+app.get('/bench/json16k', (context) =>
+  context.json({
     status: 'ok',
     app: 'hono',
     pad: pad16k,
-}));
-app.get('/bench/bytes16k', context => new Response(
-    new Uint8Array(16384).fill(0x61),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
-app.get('/bench/stream16k', context => new Response(
-    new ReadableStream({
+  }),
+);
+app.get(
+  '/bench/bytes16k',
+  (context) =>
+    new Response(new Uint8Array(16384).fill(0x61), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
+app.get(
+  '/bench/stream16k',
+  (context) =>
+    new Response(
+      new ReadableStream({
         type: 'bytes',
         pull(controller) {
-            controller.enqueue(new Uint8Array(5462).fill(0x62));
-            controller.enqueue(new Uint8Array(5461).fill(0x63));
-            controller.enqueue(new Uint8Array(5461).fill(0x64));
-            controller.close();
+          controller.enqueue(new Uint8Array(5462).fill(0x62));
+          controller.enqueue(new Uint8Array(5461).fill(0x63));
+          controller.enqueue(new Uint8Array(5461).fill(0x64));
+          controller.close();
         },
-    }),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
+      }),
+      { headers: { 'content-type': 'application/octet-stream' } },
+    ),
+);
 
 // 64 KiB payloads.
 const pad64k = 'x'.repeat(65536);
@@ -119,531 +138,625 @@ const pad64k = 'x'.repeat(65536);
 // Pre-computed JSON body: JSON.stringify once at startup to isolate
 // QuickJS JSON.stringify cost from the data-plane path.
 const json64kPreBody = JSON.stringify({ status: 'ok', app: 'hono', pad: pad64k });
-app.get('/bench/json64k-pre', () => new Response(json64kPreBody, {
-    headers: { 'content-type': 'application/json; charset=UTF-8' },
-}));
+app.get(
+  '/bench/json64k-pre',
+  () =>
+    new Response(json64kPreBody, {
+      headers: { 'content-type': 'application/json; charset=UTF-8' },
+    }),
+);
 
 // Pre-computed JSON **bytes**: same JSON payload, but as a Uint8Array body.
 // Isolates string-body vs byte-body data-plane difference.
 const json64kPreBytes = new TextEncoder().encode(json64kPreBody);
-app.get('/bench/json64k-bytes', () => new Response(json64kPreBytes, {
-    headers: { 'content-type': 'application/json; charset=UTF-8' },
-}));
-app.get('/bench/json64k-octet', () => new Response(json64kPreBytes, {
-    headers: { 'content-type': 'application/octet-stream' },
-}));
+app.get(
+  '/bench/json64k-bytes',
+  () =>
+    new Response(json64kPreBytes, {
+      headers: { 'content-type': 'application/json; charset=UTF-8' },
+    }),
+);
+app.get(
+  '/bench/json64k-octet',
+  () =>
+    new Response(json64kPreBytes, {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
 
 // Plain string body (not JSON) at 64 KB. Isolates content-type from body type.
 const text64kBody = 't'.repeat(65536);
-app.get('/bench/text64k', () => new Response(text64kBody, {
-    headers: { 'content-type': 'text/plain; charset=UTF-8' },
-}));
+app.get(
+  '/bench/text64k',
+  () =>
+    new Response(text64kBody, {
+      headers: { 'content-type': 'text/plain; charset=UTF-8' },
+    }),
+);
 
 // Direct JS-level timing of JSON.stringify — logs to stderr on the worker
-app.get('/bench/stringify-cost', context => {
-    const N = 200;
-    const obj = { status: 'ok', app: 'hono', pad: pad64k };
-    const t0 = Date.now();
-    for (let i = 0; i < N; i++) JSON.stringify(obj);
-    const t1 = Date.now();
-    const perCall = (t1 - t0) / N;
-    const result = JSON.stringify(obj);
-    console.error(`[stringify-cost] ${N} calls: total=${t1-t0}ms per_call=${perCall.toFixed(2)}ms output_size=${result.length} max_qps=${(1000/perCall).toFixed(0)}`);
-    return context.json({
-        iterations: N,
-        total_ms: t1 - t0,
-        per_call_ms: parseFloat(perCall.toFixed(2)),
-        output_size: result.length,
-        max_qps: parseInt((1000 / perCall).toFixed(0)),
-    });
+app.get('/bench/stringify-cost', (context) => {
+  const N = 200;
+  const obj = { status: 'ok', app: 'hono', pad: pad64k };
+  const t0 = Date.now();
+  for (let i = 0; i < N; i++) JSON.stringify(obj);
+  const t1 = Date.now();
+  const perCall = (t1 - t0) / N;
+  const result = JSON.stringify(obj);
+  console.error(
+    `[stringify-cost] ${N} calls: total=${t1 - t0}ms per_call=${perCall.toFixed(2)}ms output_size=${result.length} max_qps=${(1000 / perCall).toFixed(0)}`,
+  );
+  return context.json({
+    iterations: N,
+    total_ms: t1 - t0,
+    per_call_ms: parseFloat(perCall.toFixed(2)),
+    output_size: result.length,
+    max_qps: parseInt((1000 / perCall).toFixed(0)),
+  });
 });
 
 // Direct JS-level timing of TextEncoder().encode(64KB) — string→bytes path
-app.get('/bench/encode-cost', context => {
-    const N = 100;
-    const str = 'x'.repeat(65536);
-    const encoder = new TextEncoder();
-    let size = 0;
-    const t0 = Date.now();
-    for (let i = 0; i < N; i++) size = encoder.encode(str).byteLength;
-    const t1 = Date.now();
-    const perCall = (t1 - t0) / N;
-    console.error(`[encode-cost] ${N} calls: total=${t1-t0}ms per_call=${perCall.toFixed(2)}ms bytes=${size}`);
-    return context.json({
-        iterations: N,
-        total_ms: t1 - t0,
-        per_call_ms: parseFloat(perCall.toFixed(2)),
-        bytes: size,
-    });
+app.get('/bench/encode-cost', (context) => {
+  const N = 100;
+  const str = 'x'.repeat(65536);
+  const encoder = new TextEncoder();
+  let size = 0;
+  const t0 = Date.now();
+  for (let i = 0; i < N; i++) size = encoder.encode(str).byteLength;
+  const t1 = Date.now();
+  const perCall = (t1 - t0) / N;
+  console.error(
+    `[encode-cost] ${N} calls: total=${t1 - t0}ms per_call=${perCall.toFixed(2)}ms bytes=${size}`,
+  );
+  return context.json({
+    iterations: N,
+    total_ms: t1 - t0,
+    per_call_ms: parseFloat(perCall.toFixed(2)),
+    bytes: size,
+  });
 });
 
-app.get('/bench/json64k', context => context.json({
+app.get('/bench/json64k', (context) =>
+  context.json({
     status: 'ok',
     app: 'hono',
     pad: pad64k,
-}));
-app.get('/bench/bytes64k', context => new Response(
-    new Uint8Array(65536).fill(0x61),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
+  }),
+);
+app.get(
+  '/bench/bytes64k',
+  (context) =>
+    new Response(new Uint8Array(65536).fill(0x61), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
 
 // 12ms sync busy-wait: simulates blocking DB query (sync driver)
-app.get("/bench/db12ms", () => {
-    const end = Date.now() + 12;
-    while (Date.now() < end) {}
-    return new Response(JSON.stringify({ status: "ok", delay_ms: 12 }),
-        { headers: { "content-type": "application/json" } });
+app.get('/bench/db12ms', () => {
+  const end = Date.now() + 12;
+  while (Date.now() < end) {}
+  return new Response(JSON.stringify({ status: 'ok', delay_ms: 12 }), {
+    headers: { 'content-type': 'application/json' },
+  });
 });
 
 // 12ms async: simulates await db.query() (proper async driver)
-app.get("/bench/db12ms-async", async () => {
-    await new Promise(r => setTimeout(r, 12));
-    return new Response(JSON.stringify({ status: "ok", delay_ms: 12 }),
-        { headers: { "content-type": "application/json" } });
+app.get('/bench/db12ms-async', async () => {
+  await new Promise((r) => setTimeout(r, 12));
+  return new Response(JSON.stringify({ status: 'ok', delay_ms: 12 }), {
+    headers: { 'content-type': 'application/json' },
+  });
 });
-app.get('/bench/bytes65537', context => new Response(
-    new Uint8Array(65537).fill(0x61),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
+app.get(
+  '/bench/bytes65537',
+  (context) =>
+    new Response(new Uint8Array(65537).fill(0x61), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
 const bytes65537Pre = new Uint8Array(65537).fill(0x61);
-app.get('/bench/bytes65537-pre', () => new Response(bytes65537Pre, {
-    headers: { 'content-type': 'application/octet-stream' },
-}));
-app.get('/bench/bytes65535', context => new Response(
-    new Uint8Array(65535).fill(0x61),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
-app.get('/bench/stream64k', context => new Response(
-    new ReadableStream({
+app.get(
+  '/bench/bytes65537-pre',
+  () =>
+    new Response(bytes65537Pre, {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
+app.get(
+  '/bench/bytes65535',
+  (context) =>
+    new Response(new Uint8Array(65535).fill(0x61), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }),
+);
+app.get(
+  '/bench/stream64k',
+  (context) =>
+    new Response(
+      new ReadableStream({
         type: 'bytes',
         pull(controller) {
-            controller.enqueue(new Uint8Array(21846).fill(0x62));
-            controller.enqueue(new Uint8Array(21845).fill(0x63));
-            controller.enqueue(new Uint8Array(21845).fill(0x64));
-            controller.close();
+          controller.enqueue(new Uint8Array(21846).fill(0x62));
+          controller.enqueue(new Uint8Array(21845).fill(0x63));
+          controller.enqueue(new Uint8Array(21845).fill(0x64));
+          controller.close();
         },
-    }),
-    { headers: { 'content-type': 'application/octet-stream' } },
-));
+      }),
+      { headers: { 'content-type': 'application/octet-stream' } },
+    ),
+);
 
 const based = new Hono().basePath('/routing/base');
-based.get('/item/:id', context => context.text(
-    `base:${context.req.param('id')}`,
-));
+based.get('/item/:id', (context) => context.text(`base:${context.req.param('id')}`));
 app.route('/', based);
 
 const child = new Hono();
-child.get('/item/:id', context => context.text(
-    `route:${context.req.param('id')}`,
-));
+child.get('/item/:id', (context) => context.text(`route:${context.req.param('id')}`));
 app.route('/routing/child', child);
 
-app.mount('/routing/mount', request => new Response(
-    `mount:${new URL(request.url).pathname}`,
-    { headers: { 'content-type': 'text/plain; charset=UTF-8' } },
-));
+app.mount(
+  '/routing/mount',
+  (request) =>
+    new Response(`mount:${new URL(request.url).pathname}`, {
+      headers: { 'content-type': 'text/plain; charset=UTF-8' },
+    }),
+);
 
-app.get('/request/query', context => context.json({
+app.get('/request/query', (context) =>
+  context.json({
     first: context.req.query('tag'),
     all: context.req.queries('tag'),
     encoded: context.req.query('encoded'),
-}));
-app.get('/request/headers', context => context.json({
+  }),
+);
+app.get('/request/headers', (context) =>
+  context.json({
     one: context.req.header('x-one'),
     repeated: context.req.header('x-repeated'),
-}));
-app.post('/request/json', async context => context.json({
+  }),
+);
+app.post('/request/json', async (context) =>
+  context.json({
     parsed: await context.req.json(),
-}));
-app.post('/request/text', async context => context.text(
-    `text:${await context.req.text()}`,
-));
-app.post('/request/urlencoded', async context => {
-    const form = await context.req.parseBody({ all: true });
-    return context.json({
-        alpha: form.alpha,
-        repeated: form.repeated,
-    });
+  }),
+);
+app.post('/request/text', async (context) => context.text(`text:${await context.req.text()}`));
+app.post('/request/urlencoded', async (context) => {
+  const form = await context.req.parseBody({ all: true });
+  return context.json({
+    alpha: form.alpha,
+    repeated: form.repeated,
+  });
 });
-app.post('/request/multipart', async context => {
-    const form = await context.req.formData();
-    const file = form.get('upload');
-    return context.json({
-        field: form.get('field'),
-        repeated: form.getAll('repeated'),
-        file: file instanceof File ? {
+app.post('/request/multipart', async (context) => {
+  const form = await context.req.formData();
+  const file = form.get('upload');
+  return context.json({
+    field: form.get('field'),
+    repeated: form.getAll('repeated'),
+    file:
+      file instanceof File
+        ? {
             name: file.name,
             type: file.type,
             size: file.size,
             text: await file.text(),
-        } : null,
-    });
+          }
+        : null,
+  });
 });
-app.post('/request/array-buffer', async context => {
-    const body = await context.req.arrayBuffer();
-    return context.json({ byteLength: body.byteLength, hex: toHex(body) });
+app.post('/request/array-buffer', async (context) => {
+  const body = await context.req.arrayBuffer();
+  return context.json({ byteLength: body.byteLength, hex: toHex(body) });
 });
-app.post('/request/blob', async context => {
-    const blob = await context.req.blob();
-    return context.json({
-        size: blob.size,
-        type: blob.type,
-        text: await blob.text(),
-    });
+app.post('/request/blob', async (context) => {
+  const blob = await context.req.blob();
+  return context.json({
+    size: blob.size,
+    type: blob.type,
+    text: await blob.text(),
+  });
 });
-app.post('/request/empty', async context => context.json({
+app.post('/request/empty', async (context) =>
+  context.json({
     text: await context.req.text(),
-}));
-app.post('/request/stream', async context => {
-    const reader = context.req.raw.body.getReader();
-    let chunks = 0;
-    let size = 0;
-    let checksum = 0;
-    for (;;) {
-        const result = await reader.read();
-        if (result.done) {
-            break;
-        }
-        chunks += 1;
-        size += result.value.byteLength;
-        for (const byte of result.value) {
-            checksum = (checksum + byte) >>> 0;
-        }
+  }),
+);
+app.post('/request/stream', async (context) => {
+  const reader = context.req.raw.body.getReader();
+  let chunks = 0;
+  let size = 0;
+  let checksum = 0;
+  for (;;) {
+    const result = await reader.read();
+    if (result.done) {
+      break;
     }
-    return context.json({ chunks, size, checksum });
+    chunks += 1;
+    size += result.value.byteLength;
+    for (const byte of result.value) {
+      checksum = (checksum + byte) >>> 0;
+    }
+  }
+  return context.json({ chunks, size, checksum });
 });
 
-app.get('/response/text', context => context.text('plain-text'));
-app.get('/response/json', context => context.json({
+app.get('/response/text', (context) => context.text('plain-text'));
+app.get('/response/json', (context) =>
+  context.json({
     framework: 'hono',
     runtime: 'capsid',
-}));
-app.get('/response/html', context => context.html(
-    '<!doctype html><h1>Capsid Hono</h1>',
-));
-app.get('/response/binary', context => context.body(
-    new Uint8Array([ 0, 1, 2, 127, 128, 255 ]),
-    200,
-    { 'content-type': 'application/octet-stream' },
-));
-app.post('/response/status', context => context.text('created', 201));
-app.get('/response/redirect', context => context.redirect('/response/text', 307));
-app.get('/response/headers', context => {
-    context.header('x-capsid', 'one');
-    context.header('x-repeat', 'first', { append: true });
-    context.header('x-repeat', 'second', { append: true });
-    return context.text('headers');
+  }),
+);
+app.get('/response/html', (context) => context.html('<!doctype html><h1>Capsid Hono</h1>'));
+app.get('/response/binary', (context) =>
+  context.body(new Uint8Array([0, 1, 2, 127, 128, 255]), 200, {
+    'content-type': 'application/octet-stream',
+  }),
+);
+app.post('/response/status', (context) => context.text('created', 201));
+app.get('/response/redirect', (context) => context.redirect('/response/text', 307));
+app.get('/response/headers', (context) => {
+  context.header('x-capsid', 'one');
+  context.header('x-repeat', 'first', { append: true });
+  context.header('x-repeat', 'second', { append: true });
+  return context.text('headers');
 });
-app.get('/response/cookies', context => {
-    setCookie(context, 'first', 'one', {
-        httpOnly: true,
-        path: '/',
-        sameSite: 'Lax',
-    });
-    setCookie(context, 'second', 'two', {
-        maxAge: 60,
-        path: '/cookies',
-    });
-    return context.text('cookies');
+app.get('/response/cookies', (context) => {
+  setCookie(context, 'first', 'one', {
+    httpOnly: true,
+    path: '/',
+    sameSite: 'Lax',
+  });
+  setCookie(context, 'second', 'two', {
+    maxAge: 60,
+    path: '/cookies',
+  });
+  return context.text('cookies');
 });
-app.get('/response/stream', context => stream(context, async output => {
+app.get('/response/stream', (context) =>
+  stream(context, async (output) => {
     for (let index = 0; index < 16; ++index) {
-        await output.write(new Uint8Array(256).fill(65 + index));
+      await output.write(new Uint8Array(256).fill(65 + index));
     }
-}));
-app.get('/response/no-content', context => context.body(null, 204));
-app.get('/response/not-modified', context => context.body(null, 304, {
+  }),
+);
+app.get('/response/no-content', (context) => context.body(null, 204));
+app.get('/response/not-modified', (context) =>
+  context.body(null, 304, {
     etag: '"capsid"',
-}));
-app.get('/response/head', context => context.text('head-body', 200, {
+  }),
+);
+app.get('/response/head', (context) =>
+  context.text('head-body', 200, {
     'x-head': 'present',
-}));
+  }),
+);
 
 app.use('/middleware/order', async (context, next) => {
-    context.set('trace', [ 'outer:before' ]);
-    await next();
-    context.get('trace').push('outer:after');
-    context.res.headers.set('x-order', context.get('trace').join(','));
+  context.set('trace', ['outer:before']);
+  await next();
+  context.get('trace').push('outer:after');
+  context.res.headers.set('x-order', context.get('trace').join(','));
 });
 app.use('/middleware/order', async (context, next) => {
-    context.get('trace').push('inner:before');
-    await next();
-    context.get('trace').push('inner:after');
+  context.get('trace').push('inner:before');
+  await next();
+  context.get('trace').push('inner:after');
 });
-app.get('/middleware/order', context => {
-    context.get('trace').push('handler');
-    return context.json({ during: [ ...context.get('trace') ] });
+app.get('/middleware/order', (context) => {
+  context.get('trace').push('handler');
+  return context.json({ during: [...context.get('trace')] });
 });
-app.use('/middleware/early', context => context.text('early', 202));
-app.get('/middleware/early', context => context.text('unreachable'));
+app.use('/middleware/early', (context) => context.text('early', 202));
+app.get('/middleware/early', (context) => context.text('unreachable'));
 app.use('/middleware/scoped/*', async (context, next) => {
-    context.set('scope', 'applied');
-    await next();
+  context.set('scope', 'applied');
+  await next();
 });
-app.get('/middleware/scoped/inside', context => context.text(
-    context.get('scope') ?? 'missing',
-));
-app.get('/middleware/outside', context => context.text(
-    context.get('scope') ?? 'absent',
-));
-app.get('/middleware/context', context => {
-    const before = context.get('request-value') ?? null;
-    const value = context.req.query('value') ?? 'unset';
-    context.set('request-value', value);
-    return context.json({ before, after: context.get('request-value') });
+app.get('/middleware/scoped/inside', (context) => context.text(context.get('scope') ?? 'missing'));
+app.get('/middleware/outside', (context) => context.text(context.get('scope') ?? 'absent'));
+app.get('/middleware/context', (context) => {
+  const before = context.get('request-value') ?? null;
+  const value = context.req.query('value') ?? 'unset';
+  context.set('request-value', value);
+  return context.json({ before, after: context.get('request-value') });
 });
 app.use('/middleware/mutate', async (context, next) => {
-    await next();
-    const original = await context.res.text();
-    context.res = new Response(`${original}:mutated`, context.res);
-    context.res.headers.set('x-mutated', 'true');
+  await next();
+  const original = await context.res.text();
+  context.res = new Response(`${original}:mutated`, context.res);
+  context.res.headers.set('x-mutated', 'true');
 });
-app.get('/middleware/mutate', context => context.text('original'));
+app.get('/middleware/mutate', (context) => context.text('original'));
 app.get('/middleware/error-sync', () => {
-    throw new TypeError('sync-boom');
+  throw new TypeError('sync-boom');
 });
 app.get('/middleware/error-async', async () => {
-    await Promise.resolve();
-    throw new RangeError('async-boom');
+  await Promise.resolve();
+  throw new RangeError('async-boom');
 });
 
-app.use('/builtin/cors', cors({
+app.use(
+  '/builtin/cors',
+  cors({
     origin: 'https://client.example',
-    allowMethods: [ 'GET', 'POST' ],
-    exposeHeaders: [ 'x-capsid' ],
+    allowMethods: ['GET', 'POST'],
+    exposeHeaders: ['x-capsid'],
     maxAge: 600,
-}));
-app.get('/builtin/cors', context => context.text('cors'));
+  }),
+);
+app.get('/builtin/cors', (context) => context.text('cors'));
 
 app.use('/builtin/secure-headers', secureHeaders());
-app.get('/builtin/secure-headers', context => context.text('secure'));
+app.get('/builtin/secure-headers', (context) => context.text('secure'));
 
 app.use('/builtin/body-limit', bodyLimit({ maxSize: 8 }));
-app.post('/builtin/body-limit', async context => context.text(
-    `accepted:${await context.req.text()}`,
-));
+app.post('/builtin/body-limit', async (context) =>
+  context.text(`accepted:${await context.req.text()}`),
+);
 
-app.use('/builtin/basic-auth', basicAuth({
+app.use(
+  '/builtin/basic-auth',
+  basicAuth({
     username: 'capsid',
     password: 'hono',
-}));
-app.get('/builtin/basic-auth', context => context.text('basic-ok'));
+  }),
+);
+app.get('/builtin/basic-auth', (context) => context.text('basic-ok'));
 
 app.use('/builtin/bearer-auth', bearerAuth({ token: 'capsid-token' }));
-app.get('/builtin/bearer-auth', context => context.text('bearer-ok'));
+app.get('/builtin/bearer-auth', (context) => context.text('bearer-ok'));
 
-app.use('/builtin/jwt', jwt({
+app.use(
+  '/builtin/jwt',
+  jwt({
     secret: 'capsid-secret',
     alg: 'HS256',
-}));
-app.get('/builtin/jwt', context => context.json({
+  }),
+);
+app.get('/builtin/jwt', (context) =>
+  context.json({
     payload: context.get('jwtPayload'),
-}));
+  }),
+);
 
-app.use('/builtin/request-id', requestId({
+app.use(
+  '/builtin/request-id',
+  requestId({
     generator: () => 'capsid-generated-id',
-}));
-app.get('/builtin/request-id', context => context.text(
-    context.get('requestId'),
-));
+  }),
+);
+app.get('/builtin/request-id', (context) => context.text(context.get('requestId')));
 
 app.use('/builtin/etag', etag());
-app.get('/builtin/etag', context => context.text('etag-content'));
+app.get('/builtin/etag', (context) => context.text('etag-content'));
 
-app.use('/builtin/compress', compress({
+app.use(
+  '/builtin/compress',
+  compress({
     encoding: 'deflate',
     threshold: 1,
-}));
-app.get('/builtin/compress', context => context.text(
-    'compressible-capsid-hono-content',
-));
+  }),
+);
+app.get('/builtin/compress', (context) => context.text('compressible-capsid-hono-content'));
 
 const loggerEvents = [];
-app.use('/builtin/logger', logger(message => loggerEvents.push(message)));
-app.get('/builtin/logger', context => context.json({
+app.use(
+  '/builtin/logger',
+  logger((message) => loggerEvents.push(message)),
+);
+app.get('/builtin/logger', (context) =>
+  context.json({
     incoming: loggerEvents.length,
-}));
+  }),
+);
 
 app.use('/builtin/timing', timing({ crossOrigin: '*' }));
-app.get('/builtin/timing', context => {
-    setMetric(context, 'fixed', 12.5, 'Fixed Metric', 1);
-    return context.text('timing');
+app.get('/builtin/timing', (context) => {
+  setMetric(context, 'fixed', 12.5, 'Fixed Metric', 1);
+  return context.text('timing');
 });
 
-app.get('/builtin/cookie', context => {
-    setCookie(context, 'seen', getCookie(context, 'input') ?? 'missing', {
-        path: '/',
-    });
-    return context.text(getCookie(context, 'input') ?? 'missing');
+app.get('/builtin/cookie', (context) => {
+  setCookie(context, 'seen', getCookie(context, 'input') ?? 'missing', {
+    path: '/',
+  });
+  return context.text(getCookie(context, 'input') ?? 'missing');
 });
 
-app.get('/builtin/streaming', context => stream(context, async output => {
-    await output.write(textDecoder.decode(new Uint8Array([
-        115, 116, 114, 101, 97, 109, 45,
-    ])));
+app.get('/builtin/streaming', (context) =>
+  stream(context, async (output) => {
+    await output.write(textDecoder.decode(new Uint8Array([115, 116, 114, 101, 97, 109, 45])));
     await output.write('helper');
-}));
+  }),
+);
 
 const factory = createFactory();
 const factoryMiddleware = factory.createMiddleware(async (context, next) => {
-    context.set('factory', 'factory-value');
-    await next();
+  context.set('factory', 'factory-value');
+  await next();
 });
 app.get(
-    '/builtin/factory',
-    factoryMiddleware,
-    ...factory.createHandlers(context => context.text(context.get('factory'))),
+  '/builtin/factory',
+  factoryMiddleware,
+  ...factory.createHandlers((context) => context.text(context.get('factory'))),
 );
 
-app.get('/runtime/globals', context => {
-    const names = new Set(Object.getOwnPropertyNames(globalThis));
-    const state = name => names.has(name) ? 'present' : 'undefined';
-    return context.json({
-        process: state('process'),
-        Buffer: state('Buffer'),
-        Deno: state('Deno'),
-        Bun: state('Bun'),
-        caches: state('caches'),
-        tjs: state('tjs'),
-    });
+app.get('/runtime/globals', (context) => {
+  const names = new Set(Object.getOwnPropertyNames(globalThis));
+  const state = (name) => (names.has(name) ? 'present' : 'undefined');
+  return context.json({
+    process: state('process'),
+    Buffer: state('Buffer'),
+    Deno: state('Deno'),
+    Bun: state('Bun'),
+    caches: state('caches'),
+    tjs: state('tjs'),
+  });
 });
 
 // Abort-aware (same contract as the h3 fixture's delay): on hard timeout
 // the worker fires the request abort, so the timer must be cleared and
 // the route promise settled from the abort listener — otherwise the
 // timer continuation leaks and the reclaim poisons the worker.
-app.get('/runtime/delay', context => new Promise((resolve, reject) => {
-    const delay = Number(context.req.query('ms') ?? '0');
-    const signal = context.req.raw.signal;
-    const timer = setTimeout(() => {
+app.get(
+  '/runtime/delay',
+  (context) =>
+    new Promise((resolve, reject) => {
+      const delay = Number(context.req.query('ms') ?? '0');
+      const signal = context.req.raw.signal;
+      const timer = setTimeout(() => {
         signal.removeEventListener('abort', onAbort);
         resolve(context.text(`delay:${delay}`));
-    }, delay);
-    const onAbort = () => {
+      }, delay);
+      const onAbort = () => {
         clearTimeout(timer);
         signal.removeEventListener('abort', onAbort);
         reject(signal.reason ?? new Error('request aborted'));
-    };
-    if (signal.aborted) onAbort();
-    else signal.addEventListener('abort', onAbort, { once: true });
-}));
+      };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }),
+);
 
 let abortedHandlers = 0;
 let abortedStreams = 0;
 
-app.get('/runtime/wait-for-abort', context => new Promise(resolve => {
-    context.req.raw.signal.addEventListener('abort', () => {
-        abortedHandlers += 1;
-        resolve(context.text('aborted'));
-    }, { once: true });
-}));
-app.get('/runtime/abort-count', context => context.json({
+app.get(
+  '/runtime/wait-for-abort',
+  (context) =>
+    new Promise((resolve) => {
+      context.req.raw.signal.addEventListener(
+        'abort',
+        () => {
+          abortedHandlers += 1;
+          resolve(context.text('aborted'));
+        },
+        { once: true },
+      );
+    }),
+);
+app.get('/runtime/abort-count', (context) =>
+  context.json({
     handlers: abortedHandlers,
     streams: abortedStreams,
-}));
-app.get('/runtime/stream-cancel', context => stream(context, async output => {
+  }),
+);
+app.get('/runtime/stream-cancel', (context) =>
+  stream(context, async (output) => {
     output.onAbort(() => {
-        abortedStreams += 1;
+      abortedStreams += 1;
     });
     for (let index = 0; index < 128 && !output.aborted; ++index) {
-        await output.write(new Uint8Array(256).fill(65 + (index % 26)));
-        await output.sleep(1);
+      await output.write(new Uint8Array(256).fill(65 + (index % 26)));
+      await output.sleep(1);
     }
-}));
+  }),
+);
 
 app.use('/runtime/concurrent', async (context, next) => {
-    const token = context.req.query('token');
-    context.set('concurrent-token', token);
-    await next();
-    context.res.headers.set(
-        'x-context-token',
-        context.get('concurrent-token'),
-    );
+  const token = context.req.query('token');
+  context.set('concurrent-token', token);
+  await next();
+  context.res.headers.set('x-context-token', context.get('concurrent-token'));
 });
-app.get('/runtime/concurrent', async context => {
-    const delay = Number(context.req.query('delay') ?? '0');
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return context.json({
-        token: context.get('concurrent-token'),
-        delay,
-    });
+app.get('/runtime/concurrent', async (context) => {
+  const delay = Number(context.req.query('delay') ?? '0');
+  await new Promise((resolve) => setTimeout(resolve, delay));
+  return context.json({
+    token: context.get('concurrent-token'),
+    delay,
+  });
 });
 
-app.use('/runtime/middleware-timeout', (context, next) =>
+app.use(
+  '/runtime/middleware-timeout',
+  (context, next) =>
     new Promise((resolve, reject) => {
-        const delay = Number(context.req.query('ms') ?? '0');
-        const signal = context.req.raw.signal;
-        const timer = setTimeout(() => {
-            signal.removeEventListener('abort', onAbort);
-            resolve(next());
-        }, delay);
-        const onAbort = () => {
-            clearTimeout(timer);
-            signal.removeEventListener('abort', onAbort);
-            reject(signal.reason ?? new Error('request aborted'));
-        };
-        if (signal.aborted) onAbort();
-        else signal.addEventListener('abort', onAbort, { once: true });
-    }));
-app.get('/runtime/middleware-timeout', context => context.text('too-late'));
+      const delay = Number(context.req.query('ms') ?? '0');
+      const signal = context.req.raw.signal;
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(next());
+      }, delay);
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+        reject(signal.reason ?? new Error('request aborted'));
+      };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }),
+);
+app.get('/runtime/middleware-timeout', (context) => context.text('too-late'));
 
 app.get('/runtime/cpu-timeout', () => {
-    for (;;) {
-        // Deliberately exercise the runtime interrupt deadline.
-    }
+  for (;;) {
+    // Deliberately exercise the runtime interrupt deadline.
+  }
 });
 
-app.get('/runtime/ownership', async context => {
-    console.log('capsid-owner:before');
-    await Promise.resolve();
-    console.log('capsid-owner:after');
-    return context.text('ownership-ok');
+app.get('/runtime/ownership', async (context) => {
+  console.log('capsid-owner:before');
+  await Promise.resolve();
+  console.log('capsid-owner:after');
+  return context.text('ownership-ok');
 });
 
 app.get('/runtime/ownership-cancel', () => {
-    console.log('capsid-owner:start');
-    setTimeout(() => console.log('capsid-owner:after-cancel'), 80);
-    return new Promise(() => {});
+  console.log('capsid-owner:start');
+  setTimeout(() => console.log('capsid-owner:after-cancel'), 80);
+  return new Promise(() => {});
 });
 
-app.get('/runtime/fetch', async context => {
-    const target = context.req.query('url');
-    const response = await fetch(target);
-    return context.json({
-        status: response.status,
-        header: response.headers.get('x-hono-upstream'),
-        body: await response.text(),
-    });
+app.get('/runtime/fetch', async (context) => {
+  const target = context.req.query('url');
+  const response = await fetch(target);
+  return context.json({
+    status: response.status,
+    header: response.headers.get('x-hono-upstream'),
+    body: await response.text(),
+  });
 });
 
 export { app };
-export const createReferenceJwt = () => sign(
-    { sub: 'capsid-user', role: 'tester' },
-    'capsid-secret',
-    'HS256',
-);
+export const createReferenceJwt = () =>
+  sign({ sub: 'capsid-user', role: 'tester' }, 'capsid-secret', 'HS256');
 export default app;
 
 // Serverless sim: 12ms async I/O + 5KB JSON.parse + pick fields + return small
 const sls5kItems = [];
-for (let i = 0; i < 50; i++) sls5kItems.push({id:i, title:'item-'+i, desc:'x'.repeat(80), price:i*1.5, stock:i*10});
-const sls5kData = JSON.stringify({id:12345, name:'user', email:'user@example.com', items: sls5kItems});
+for (let i = 0; i < 50; i++)
+  sls5kItems.push({
+    id: i,
+    title: 'item-' + i,
+    desc: 'x'.repeat(80),
+    price: i * 1.5,
+    stock: i * 10,
+  });
+const sls5kData = JSON.stringify({
+  id: 12345,
+  name: 'user',
+  email: 'user@example.com',
+  items: sls5kItems,
+});
 
 app.get('/bench/sls-sim', async () => {
-    // Simulate 12ms DB I/O (async)
-    await new Promise(r => setTimeout(r, 12));
-    // Parse 5KB JSON response from "DB"
-    const data = JSON.parse(sls5kData);
-    // Extract fields + transform
-    const result = {
-        user_id: data.id,
-        user_name: data.name,
-        item_count: data.items.length,
-        total_value: data.items.reduce((sum, it) => sum + it.price, 0),
-        first_item: data.items[0].title,
-        last_item: data.items[data.items.length - 1].title,
-    };
-    return new Response(JSON.stringify(result), {
-        headers: { 'content-type': 'application/json' }
-    });
+  // Simulate 12ms DB I/O (async)
+  await new Promise((r) => setTimeout(r, 12));
+  // Parse 5KB JSON response from "DB"
+  const data = JSON.parse(sls5kData);
+  // Extract fields + transform
+  const result = {
+    user_id: data.id,
+    user_name: data.name,
+    item_count: data.items.length,
+    total_value: data.items.reduce((sum, it) => sum + it.price, 0),
+    first_item: data.items[0].title,
+    last_item: data.items[data.items.length - 1].title,
+  };
+  return new Response(JSON.stringify(result), {
+    headers: { 'content-type': 'application/json' },
+  });
 });

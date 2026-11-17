@@ -22,12 +22,10 @@ struct OperationStatus;
 // Records the settled outcome of a deploy/retire/recovery operation.
 // Bounded: entries expire by TTL; a burst within one TTL window is capped
 // (oldest records evicted first).
-void record_operation(const std::string& operation_id,
-                      const OperationStatus& status);
+void record_operation(const std::string& operation_id, const OperationStatus& status);
 
 // Reads a recorded operation; false if unknown or already evicted.
-bool lookup_operation(const std::string& operation_id,
-                      OperationStatus* out);
+bool lookup_operation(const std::string& operation_id, OperationStatus* out);
 
 // RAII lock that pins one per-App mutex slot for the duration of a
 // deploy/retire/recovery state transition. Pinning keeps the slot alive
@@ -43,7 +41,7 @@ class AppOperationLock {
     AppOperationLock& operator=(const AppOperationLock&) = delete;
 
   private:
-    void* slot_;  // AppOperationSlot*; opaque to keep the header light
+    void* slot_; // AppOperationSlot*; opaque to keep the header light
     std::unique_lock<std::mutex> lock_;
 };
 
@@ -51,6 +49,6 @@ class AppOperationLock {
 std::size_t operation_record_count();
 std::size_t app_operation_slot_count();
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
-#endif  // CAPSID_HOST_MANAGED_REGISTRY_H
+#endif // CAPSID_HOST_MANAGED_REGISTRY_H

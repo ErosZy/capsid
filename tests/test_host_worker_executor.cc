@@ -57,27 +57,21 @@ void require(bool condition, const std::string& message) {
     }
 }
 
-const char* kBundle =
-    "export default { async fetch(request) {"
-    " return new Response('hello-executor'); } };\n";
+const char* kBundle = "export default { async fetch(request) {"
+                      " return new Response('hello-executor'); } };\n";
 
-void append_string16(std::vector<std::uint8_t>* output,
-                     const std::string& value) {
-    capsid::protocol::append_u16(
-        output, static_cast<std::uint16_t>(value.size()));
+void append_string16(std::vector<std::uint8_t>* output, const std::string& value) {
+    capsid::protocol::append_u16(output, static_cast<std::uint16_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
-void append_string32(std::vector<std::uint8_t>* output,
-                     const std::string& value) {
-    capsid::protocol::append_u32(
-        output, static_cast<std::uint32_t>(value.size()));
+void append_string32(std::vector<std::uint8_t>* output, const std::string& value) {
+    capsid::protocol::append_u32(output, static_cast<std::uint32_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
 capsid_event binding_log_event(const std::vector<std::uint8_t>& payload,
-                               std::uint32_t flags =
-                                   capsid::protocol::kFlagBindingLog) {
+                               std::uint32_t flags = capsid::protocol::kFlagBindingLog) {
     capsid_event event = {};
     event.struct_size = sizeof(event);
     event.type = CAPSID_EVENT_LOG;
@@ -93,27 +87,20 @@ void test_binding_log_decoder() {
     append_string16(&payload, "mongo");
     append_string16(&payload, "warn");
     append_string32(&payload, "visible");
-    append_string32(
-        &payload,
-        "{\"password\":\"[REDACTED]\",\"safe\":\"yes\"}");
+    append_string32(&payload, "{\"password\":\"[REDACTED]\",\"safe\":\"yes\"}");
     WorkerEvent decoded;
     std::string error;
-    require(decode_worker_log_event(
-                binding_log_event(payload), &decoded, &error),
+    require(decode_worker_log_event(binding_log_event(payload), &decoded, &error),
             "valid Binding log rejected: " + error);
-    require(decoded.binding_log && decoded.binding_id == "mongo" &&
-                decoded.log_level == "warn" && decoded.request_id == 108 &&
-                decoded.text == "visible" &&
-                decoded.log_fields_json.find("[REDACTED]") !=
-                    std::string::npos,
+    require(decoded.binding_log && decoded.binding_id == "mongo" && decoded.log_level == "warn" &&
+                decoded.request_id == 108 && decoded.text == "visible" &&
+                decoded.log_fields_json.find("[REDACTED]") != std::string::npos,
             "Binding log envelope decoded incorrectly");
 
     const std::vector<std::uint8_t> empty;
-    require(!decode_worker_log_event(
-                binding_log_event(empty), &decoded, &error),
+    require(!decode_worker_log_event(binding_log_event(empty), &decoded, &error),
             "empty Binding log envelope accepted");
-    require(!decode_worker_log_event(
-                binding_log_event(payload, 0x80000000U), &decoded, &error),
+    require(!decode_worker_log_event(binding_log_event(payload, 0x80000000U), &decoded, &error),
             "unknown LOG flag accepted");
 
     std::vector<std::uint8_t> duplicate_fields;
@@ -121,15 +108,14 @@ void test_binding_log_decoder() {
     append_string16(&duplicate_fields, "warn");
     append_string32(&duplicate_fields, "visible");
     append_string32(&duplicate_fields, "{\"x\":1,\"x\":2}");
-    require(!decode_worker_log_event(
-                binding_log_event(duplicate_fields), &decoded, &error),
+    require(!decode_worker_log_event(binding_log_event(duplicate_fields), &decoded, &error),
             "duplicate Binding log field accepted");
 
     capsid_event ordinary = {};
     ordinary.struct_size = sizeof(ordinary);
     ordinary.type = CAPSID_EVENT_LOG;
-    require(decode_worker_log_event(ordinary, &decoded, &error) &&
-                !decoded.binding_log && decoded.text.empty(),
+    require(decode_worker_log_event(ordinary, &decoded, &error) && !decoded.binding_log &&
+                decoded.text.empty(),
             "empty ordinary log did not decode safely");
     std::cout << "PASS: strict Binding log decoder" << std::endl;
 }
@@ -137,7 +123,7 @@ void test_binding_log_decoder() {
 // Wakes the waiting test thread whenever the executor queues a new event
 // batch (the notifier runs on the worker thread).
 class EventHarness {
-public:
+  public:
     explicit EventHarness(WorkerExecutor& executor) {
         executor.set_event_notifier([this] {
             {
@@ -150,12 +136,9 @@ public:
 
     // Drains the executor's event queue into `events` and returns when
     // `done` is satisfied; fails the test on a 15s deadline.
-    void observe(
-        WorkerExecutor& executor,
-        std::vector<WorkerEvent>& events,
-        const std::function<bool(const std::vector<WorkerEvent>&)>& done) {
-        const auto deadline =
-            std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    void observe(WorkerExecutor& executor, std::vector<WorkerEvent>& events,
+                 const std::function<bool(const std::vector<WorkerEvent>&)>& done) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
         for (;;) {
             std::deque<WorkerEvent> batch = executor.drain_events();
             while (!batch.empty()) {
@@ -172,39 +155,33 @@ public:
                 signaled_ = false;
                 continue;
             }
-            if (!cv_.wait_until(lock, deadline,
-                                [this] { return signaled_; })) {
+            if (!cv_.wait_until(lock, deadline, [this] { return signaled_; })) {
                 fail("event deadline expired");
             }
             signaled_ = false;
         }
     }
 
-private:
+  private:
     std::mutex mutex_;
     std::condition_variable cv_;
     bool signaled_ = false;
 };
 
-bool has_response_head_for(const std::vector<WorkerEvent>& events,
-                           std::uint64_t request_id) {
+bool has_response_head_for(const std::vector<WorkerEvent>& events, std::uint64_t request_id) {
     for (const WorkerEvent& event : events) {
-        if (event.type == WorkerEvent::Type::kResponseHead &&
-            event.request_id == request_id) {
+        if (event.type == WorkerEvent::Type::kResponseHead && event.request_id == request_id) {
             return true;
         }
     }
     return false;
 }
 
-bool has_fixed_response_head_for(
-    const std::vector<WorkerEvent>& events,
-    std::uint64_t request_id,
-    std::uint32_t body_size) {
+bool has_fixed_response_head_for(const std::vector<WorkerEvent>& events, std::uint64_t request_id,
+                                 std::uint32_t body_size) {
     for (const WorkerEvent& event : events) {
-        if (event.type == WorkerEvent::Type::kResponseHead &&
-            event.request_id == request_id && event.fixed_body &&
-            event.fixed_body_size == body_size) {
+        if (event.type == WorkerEvent::Type::kResponseHead && event.request_id == request_id &&
+            event.fixed_body && event.fixed_body_size == body_size) {
             return true;
         }
     }
@@ -214,61 +191,50 @@ bool has_fixed_response_head_for(
 // Submits a bodyless begin request and observes the round trip, granting
 // response credit for every body frame exactly once. Returns when
 // RESPONSE_END for `request_id` has arrived (or fails the test).
-void begin_and_observe(WorkerExecutor& executor,
-                       EventHarness& harness,
-                       std::uint64_t request_id,
+void begin_and_observe(WorkerExecutor& executor, EventHarness& harness, std::uint64_t request_id,
                        std::vector<WorkerEvent>& events) {
     Command begin;
     begin.type = CommandType::kBeginRequest;
     begin.request_id = request_id;
     begin.method = "GET";
     begin.url = "https://executor.invalid/hello";
-    begin.end_request = true;  // bodyless fusion: begin + end in one frame
+    begin.end_request = true; // bodyless fusion: begin + end in one frame
     executor.submit(std::move(begin));
     std::set<std::uint64_t> granted;
-    harness.observe(executor, events,
-                    [&](const std::vector<WorkerEvent>& all) {
-                        for (const WorkerEvent& event : all) {
-                            if (event.type ==
-                                    WorkerEvent::Type::kResponseBody &&
-                                granted.insert(event.request_id).second) {
-                                Command grant;
-                                grant.type =
-                                    CommandType::kGrantResponseCredit;
-                                grant.request_id = event.request_id;
-                                grant.credit = static_cast<std::uint32_t>(
-                                    event.body.size());
-                                executor.submit(std::move(grant));
-                            }
-                        }
-                        for (const WorkerEvent& event : all) {
-                            if (event.type ==
-                                    WorkerEvent::Type::kResponseEnd &&
-                                event.request_id == request_id) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    });
+    harness.observe(executor, events, [&](const std::vector<WorkerEvent>& all) {
+        for (const WorkerEvent& event : all) {
+            if (event.type == WorkerEvent::Type::kResponseBody &&
+                granted.insert(event.request_id).second) {
+                Command grant;
+                grant.type = CommandType::kGrantResponseCredit;
+                grant.request_id = event.request_id;
+                grant.credit = static_cast<std::uint32_t>(event.body.size());
+                executor.submit(std::move(grant));
+            }
+        }
+        for (const WorkerEvent& event : all) {
+            if (event.type == WorkerEvent::Type::kResponseEnd && event.request_id == request_id) {
+                return true;
+            }
+        }
+        return false;
+    });
 }
 
 void test_startup_failure() {
     WorkerExecutor executor;
     std::string error;
     bool factory_called = false;
-    WorkerExecutor::WorkerFactory factory =
-        [&factory_called](capsid_worker** out,
-                          std::string* factory_error) -> bool {
+    WorkerExecutor::WorkerFactory factory = [&factory_called](capsid_worker** out,
+                                                              std::string* factory_error) -> bool {
         (void)out;
         factory_called = true;
         *factory_error = "injected spawn failure";
         return false;
     };
-    require(!executor.start(factory, &error),
-            "start must fail when the factory rejects");
+    require(!executor.start(factory, &error), "start must fail when the factory rejects");
     require(factory_called, "factory must run");
-    require(!executor.available(),
-            "no available worker after failed start");
+    require(!executor.available(), "no available worker after failed start");
     require(executor.inflight() == 0, "inflight 0 after failed start");
     // No thread was ever started: stop_and_join is a safe no-op and a
     // second start is rejected instead of double-owning a worker.
@@ -280,13 +246,12 @@ void test_startup_failure() {
     std::cout << "PASS: startup failure leaves nothing behind" << std::endl;
 }
 
-WorkerExecutor::WorkerFactory hello_factory(
-    const std::string& worker_path,
-    std::uint32_t initial_stream_window = 0,
-    bool metrics_enabled = false) {
+WorkerExecutor::WorkerFactory hello_factory(const std::string& worker_path,
+                                            std::uint32_t initial_stream_window = 0,
+                                            bool metrics_enabled = false) {
     const std::string bundle(kBundle);
-    return [worker_path, initial_stream_window, metrics_enabled, bundle](capsid_worker** out,
-                         std::string* factory_error) -> bool {
+    return [worker_path, initial_stream_window, metrics_enabled,
+            bundle](capsid_worker** out, std::string* factory_error) -> bool {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = worker_path.c_str();
@@ -297,12 +262,11 @@ WorkerExecutor::WorkerFactory hello_factory(
             *factory_error = "worker spawn failed";
             return false;
         }
-        if (metrics_enabled) capsid::client_ipc_metrics_enable(worker, true);
-        if (capsid_worker_load_bundle(
-                worker,
-                reinterpret_cast<const std::uint8_t*>(bundle.data()),
-                bundle.size()) != CAPSID_OK) {
-            capsid_worker_destroy(worker);  // the factory cleans its own
+        if (metrics_enabled)
+            capsid::client_ipc_metrics_enable(worker, true);
+        if (capsid_worker_load_bundle(worker, reinterpret_cast<const std::uint8_t*>(bundle.data()),
+                                      bundle.size()) != CAPSID_OK) {
+            capsid_worker_destroy(worker); // the factory cleans its own
             *factory_error = "bundle load failed";
             return false;
         }
@@ -316,12 +280,9 @@ WorkerExecutor::WorkerFactory hello_factory(
     };
 }
 
-WorkerExecutor::WorkerFactory bundle_factory(
-    const std::string& worker_path,
-    std::string bundle) {
-    return [worker_path, bundle = std::move(bundle)](
-               capsid_worker** out,
-               std::string* factory_error) -> bool {
+WorkerExecutor::WorkerFactory bundle_factory(const std::string& worker_path, std::string bundle) {
+    return [worker_path, bundle = std::move(bundle)](capsid_worker** out,
+                                                     std::string* factory_error) -> bool {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = worker_path.c_str();
@@ -331,10 +292,8 @@ WorkerExecutor::WorkerFactory bundle_factory(
             *factory_error = "worker spawn failed";
             return false;
         }
-        if (capsid_worker_load_bundle(
-                worker,
-                reinterpret_cast<const std::uint8_t*>(bundle.data()),
-                bundle.size()) != CAPSID_OK ||
+        if (capsid_worker_load_bundle(worker, reinterpret_cast<const std::uint8_t*>(bundle.data()),
+                                      bundle.size()) != CAPSID_OK ||
             capsid_worker_flush(worker) != CAPSID_OK) {
             capsid_worker_destroy(worker);
             *factory_error = "bundle startup failed";
@@ -350,32 +309,27 @@ void test_log_identity_is_host_owned(const std::string& worker_path) {
     executor.set_log_identity("orders", "sha256:generation");
     EventHarness harness(executor);
     std::string error;
-    require(executor.start(
-                bundle_factory(
-                    worker_path,
-                    "console.log('identity-log');"
-                    "export default { fetch() {"
-                    " return new Response('ok'); } };\n"),
-                &error),
+    require(executor.start(bundle_factory(worker_path, "console.log('identity-log');"
+                                                       "export default { fetch() {"
+                                                       " return new Response('ok'); } };\n"),
+                           &error),
             "log identity worker start: " + error);
     std::vector<WorkerEvent> events;
-    harness.observe(
-        executor, events,
-        [](const std::vector<WorkerEvent>& observed) {
-            for (const WorkerEvent& event : observed) {
-                if (event.type == WorkerEvent::Type::kLog &&
-                    event.text.find("identity-log") != std::string::npos) {
-                    return true;
-                }
+    harness.observe(executor, events, [](const std::vector<WorkerEvent>& observed) {
+        for (const WorkerEvent& event : observed) {
+            if (event.type == WorkerEvent::Type::kLog &&
+                event.text.find("identity-log") != std::string::npos) {
+                return true;
             }
-            return false;
-        });
+        }
+        return false;
+    });
     bool verified = false;
     for (const WorkerEvent& event : events) {
         if (event.type == WorkerEvent::Type::kLog &&
             event.text.find("identity-log") != std::string::npos) {
-            verified = event.application_id == "orders" &&
-                       event.generation_digest == "sha256:generation";
+            verified =
+                event.application_id == "orders" && event.generation_digest == "sha256:generation";
         }
     }
     require(verified, "worker-controlled LOG lost Host-owned identity");
@@ -383,14 +337,11 @@ void test_log_identity_is_host_owned(const std::string& worker_path) {
     std::cout << "PASS: LOG identity is attached by the Host" << std::endl;
 }
 
-void test_factory_ready_proof_is_not_compatibility_only(
-    const std::string& worker_path) {
+void test_factory_ready_proof_is_not_compatibility_only(const std::string& worker_path) {
     WorkerExecutor::WorkerFactory factory = hello_factory(worker_path);
     factory.expected_ready.extended = true;
-    factory.expected_ready.applied_feature_bits =
-        CAPSID_SANDBOX_FEATURE_RLIMITS;
-    factory.expected_ready.sandbox_profile_digest =
-        "sha256:" + std::string(64, 'a');
+    factory.expected_ready.applied_feature_bits = CAPSID_SANDBOX_FEATURE_RLIMITS;
+    factory.expected_ready.sandbox_profile_digest = "sha256:" + std::string(64, 'a');
 
     WorkerExecutor executor;
     std::string error;
@@ -398,8 +349,7 @@ void test_factory_ready_proof_is_not_compatibility_only(
             "compatibility-only READY was accepted for a Binding factory");
     require(error.find("sandbox proof") != std::string::npos,
             "Binding READY rejection lost its proof diagnostic: " + error);
-    require(!executor.available(),
-            "proof-mismatched replacement became available");
+    require(!executor.available(), "proof-mismatched replacement became available");
     std::cout << "PASS: factory pins the complete READY proof" << std::endl;
 }
 
@@ -408,16 +358,14 @@ void test_factory_lifecycle(const std::string& worker_path) {
     executor.set_metrics_enabled(true);
     EventHarness harness(executor);
     std::string error;
-    require(executor.start(hello_factory(worker_path), &error),
-            "start: " + error);
+    require(executor.start(hello_factory(worker_path), &error), "start: " + error);
     require(executor.available(), "executor must be available after start");
     require(executor.inflight() == 0, "inflight starts at 0");
 
     // Request lifecycle: begin → head/body/end → inflight back to 0.
     std::vector<WorkerEvent> events;
     begin_and_observe(executor, harness, 7, events);
-    require(has_response_head_for(events, 7),
-            "missing RESPONSE_HEAD for request 7");
+    require(has_response_head_for(events, 7), "missing RESPONSE_HEAD for request 7");
     require(has_fixed_response_head_for(events, 7, 14),
             "non-streamed response missing exact fixed-body metadata");
     require(executor.inflight() == 0, "inflight 0 after response end");
@@ -429,19 +377,18 @@ void test_factory_lifecycle(const std::string& worker_path) {
     const auto batches_before_retire =
         executor.metrics().command_batches.load(std::memory_order_relaxed);
     executor.retire_terminal_request(7);
-    require(executor.metrics().commands_submitted.load(
-                std::memory_order_relaxed) == submitted_before_retire,
+    require(executor.metrics().commands_submitted.load(std::memory_order_relaxed) ==
+                submitted_before_retire,
             "terminal retirement submitted a command");
-    require(executor.metrics().command_batches.load(
-                std::memory_order_relaxed) == batches_before_retire,
+    require(executor.metrics().command_batches.load(std::memory_order_relaxed) ==
+                batches_before_retire,
             "terminal retirement emitted a wake");
 
     // The next request proves that an old response-credit command, whether
     // still shared or already swapped locally, cannot poison the worker.
     events.clear();
     begin_and_observe(executor, harness, 9, events);
-    require(has_response_head_for(events, 9),
-            "worker unavailable after terminal retirement");
+    require(has_response_head_for(events, 9), "worker unavailable after terminal retirement");
     executor.retire_terminal_request(9);
 
     // Cancel path: a begun request returns to inflight 0 at mark_canceled
@@ -464,8 +411,7 @@ void test_factory_lifecycle(const std::string& worker_path) {
 
     // Shutdown: the worker exits and the reaper destroys it exactly once.
     executor.request_shutdown();
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     while (!executor.exited()) {
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("worker did not exit after request_shutdown");
@@ -475,7 +421,7 @@ void test_factory_lifecycle(const std::string& worker_path) {
     require(!executor.available(), "not available after exit");
     require(executor.worker() == nullptr, "worker reaped exactly once");
     executor.stop_and_join();
-    executor.stop_and_join();  // idempotent: no second destroy
+    executor.stop_and_join(); // idempotent: no second destroy
     require(executor.exit_status().clean(),
             "factory lifecycle did not observe actual Worker exit zero");
     std::cout << "PASS: factory lifecycle + exactly-once reap" << std::endl;
@@ -485,21 +431,17 @@ void test_fixed_response_requires_credit(const std::string& worker_path) {
     WorkerExecutor executor;
     EventHarness harness(executor);
     std::string error;
-    require(executor.start(hello_factory(worker_path, 8), &error),
-            "low-window start: " + error);
+    require(executor.start(hello_factory(worker_path, 8), &error), "low-window start: " + error);
 
     std::vector<WorkerEvent> events;
     begin_and_observe(executor, harness, 10, events);
-    require(has_response_head_for(events, 10),
-            "low-window response missing head");
+    require(has_response_head_for(events, 10), "low-window response missing head");
     require(!has_fixed_response_head_for(events, 10, 14),
             "fixed response exceeded available response credit");
-    require(executor.inflight() == 0,
-            "low-window response did not drain through ordinary credit");
+    require(executor.inflight() == 0, "low-window response did not drain through ordinary credit");
 
     executor.stop_and_join();
-    std::cout << "PASS: fixed response falls back below body credit"
-              << std::endl;
+    std::cout << "PASS: fixed response falls back below body credit" << std::endl;
 }
 
 void test_adopt_ready(const std::string& worker_path) {
@@ -511,27 +453,22 @@ void test_adopt_ready(const std::string& worker_path) {
     config.request_timeout_ms = 2000;
     capsid_worker* worker = nullptr;
     require(capsid_worker_spawn(&config, &worker) == CAPSID_OK, "spawn");
-    require(capsid_worker_load_bundle(
-                worker, reinterpret_cast<const std::uint8_t*>(kBundle),
-                std::char_traits<char>::length(kBundle)) == CAPSID_OK,
+    require(capsid_worker_load_bundle(worker, reinterpret_cast<const std::uint8_t*>(kBundle),
+                                      std::char_traits<char>::length(kBundle)) == CAPSID_OK,
             "load");
     require(capsid_worker_flush(worker) == CAPSID_OK, "flush");
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
-        require(flush == CAPSID_OK || flush == CAPSID_WOULD_BLOCK,
-                "flush while waiting for READY");
+        require(flush == CAPSID_OK || flush == CAPSID_WOULD_BLOCK, "flush while waiting for READY");
         capsid_event event = {};
         event.struct_size = sizeof(event);
-        const capsid_result result =
-            capsid_worker_next_event(worker, &event);
+        const capsid_result result = capsid_worker_next_event(worker, &event);
         if (result == CAPSID_OK && event.type == CAPSID_EVENT_READY) {
             break;
         }
         if (result == CAPSID_OK &&
-            (event.type == CAPSID_EVENT_ERROR ||
-             event.type == CAPSID_EVENT_EXIT)) {
+            (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT)) {
             fail("startup event before READY");
         }
         if (result != CAPSID_OK && result != CAPSID_WOULD_BLOCK) {
@@ -548,17 +485,16 @@ void test_adopt_ready(const std::string& worker_path) {
     std::string error;
     const auto adopted_pid = capsid_worker_pid(worker);
     require(executor.adopt(worker, &error), "adopt: " + error);
-    require(executor.process_id() == adopted_pid && adopted_pid > 0, "cached adopted process identity");
+    require(executor.process_id() == adopted_pid && adopted_pid > 0,
+            "cached adopted process identity");
     require(executor.available(), "available after adopt");
 
     std::vector<WorkerEvent> events;
     begin_and_observe(executor, harness, 9, events);
-    require(has_response_head_for(events, 9),
-            "missing RESPONSE_HEAD for request 9");
-    require(executor.inflight() == 0,
-            "inflight 0 after adopted lifecycle");
+    require(has_response_head_for(events, 9), "missing RESPONSE_HEAD for request 9");
+    require(executor.inflight() == 0, "inflight 0 after adopted lifecycle");
 
-    executor.stop_and_join();  // blocks until the worker thread reaped it
+    executor.stop_and_join(); // blocks until the worker thread reaped it
     require(executor.exited(), "exited after stop_and_join");
     require(executor.worker() == nullptr, "adopted worker reaped");
     require(executor.process_id() == adopted_pid, "cached adopted identity survives reaping");
@@ -588,7 +524,8 @@ void test_metrics_disabled_and_failed(const std::string& worker_path) {
     WorkerExecutor failed;
     failed.set_metrics_enabled(true);
     std::string error;
-    require(!failed.start([](capsid_worker**, std::string*) { return false; }, &error), "factory failure");
+    require(!failed.start([](capsid_worker**, std::string*) { return false; }, &error),
+            "factory failure");
     capsid::ClientIpcMetrics absent;
     require(!failed.snapshot_client_metrics(&absent), "failed factory has no client counters");
     failed.stop_and_join();
@@ -597,7 +534,8 @@ void test_metrics_disabled_and_failed(const std::string& worker_path) {
 
     WorkerExecutor disabled;
     EventHarness harness(disabled);
-    require(disabled.start(hello_factory(worker_path), &error), "disabled metrics worker: " + error);
+    require(disabled.start(hello_factory(worker_path), &error),
+            "disabled metrics worker: " + error);
     capsid::ClientIpcMetrics snapshot;
     require(!disabled.snapshot_client_metrics(&snapshot), "disabled client metrics stay disabled");
     disabled.stop_and_join();
@@ -613,7 +551,8 @@ void test_metrics_retirement(const std::string& worker_path, bool adopted = fals
     EventHarness harness(executor);
     std::string error;
     if (!adopted) {
-        require(executor.start(hello_factory(worker_path, 0, true), &error), "metrics worker: " + error);
+        require(executor.start(hello_factory(worker_path, 0, true), &error),
+                "metrics worker: " + error);
     } else {
         capsid_worker* prepared = nullptr;
         const auto factory = hello_factory(worker_path, 0, true);
@@ -628,8 +567,12 @@ void test_metrics_retirement(const std::string& worker_path, bool adopted = fals
                 event.struct_size = sizeof(event);
                 const auto result = capsid_worker_next_event(prepared, &event);
                 if (result == CAPSID_OK) {
-                    if (event.type == CAPSID_EVENT_READY) { ready = true; break; }
-                    if (event.type == CAPSID_EVENT_EXIT || event.type == CAPSID_EVENT_ERROR) break;
+                    if (event.type == CAPSID_EVENT_READY) {
+                        ready = true;
+                        break;
+                    }
+                    if (event.type == CAPSID_EVENT_EXIT || event.type == CAPSID_EVENT_ERROR)
+                        break;
                 } else if (result != CAPSID_WOULD_BLOCK || !source.wait(deadline)) {
                     break;
                 }
@@ -651,19 +594,22 @@ void test_metrics_retirement(const std::string& worker_path, bool adopted = fals
     executor.stop_and_join();
     require(executor.exit_status().clean(), "metrics worker actual exit zero");
     require(executor.exited() && executor.worker() == nullptr, "metrics worker actually reaped");
-    require(!executor.snapshot_client_metrics(nullptr), "null output must not consume final counters");
+    require(!executor.snapshot_client_metrics(nullptr),
+            "null output must not consume final counters");
     capsid::ClientIpcMetrics retired;
     const bool present = executor.snapshot_client_metrics(&retired);
-    std::cout << "METRICS retirement mode=" << (adopted ? "adopted" : "factory") << " pid=" << executor.process_id()
-              << " startup_frames=" << startup.queued_frames.load()
-              << " present=" << present << " retired_frames=" << retired.queued_frames.load()
+    std::cout << "METRICS retirement mode=" << (adopted ? "adopted" : "factory")
+              << " pid=" << executor.process_id()
+              << " startup_frames=" << startup.queued_frames.load() << " present=" << present
+              << " retired_frames=" << retired.queued_frames.load()
               << " retired_parsed=" << retired.parsed_frames.load() << std::endl;
     require(present, "retired IPC deltas must remain readable after actual reap");
     require(retired.queued_frames.load() >= 2 && retired.socket_write_bytes.load() > 0 &&
-            retired.parsed_frames.load() > 0 && retired.socket_read_bytes.load() > 0,
+                retired.parsed_frames.load() > 0 && retired.socket_read_bytes.load() > 0,
             "request and shutdown counters survive actual reap");
     capsid::ClientIpcMetrics repeated;
-    require(executor.snapshot_client_metrics(&repeated), "a retained metrics bank remains readable");
+    require(executor.snapshot_client_metrics(&repeated),
+            "a retained metrics bank remains readable");
     require_zero_metrics(repeated);
     executor.stop_and_join();
     require(executor.snapshot_client_metrics(&repeated), "repeated stop preserves drained bank");
@@ -690,7 +636,8 @@ void add_metrics(capsid::ClientIpcMetrics& total, const capsid::ClientIpcMetrics
 #undef ADD_METRIC
     const auto value = interval.queued_bytes_high_water.load();
     auto old = total.queued_bytes_high_water.load();
-    while (old < value && !total.queued_bytes_high_water.compare_exchange_weak(old, value)) {}
+    while (old < value && !total.queued_bytes_high_water.compare_exchange_weak(old, value)) {
+    }
 }
 
 void test_metrics_bank() {
@@ -714,7 +661,8 @@ void test_metrics_bank() {
 #undef SEED_METRIC
     bank.queued_bytes_high_water.store(321);
     require(!capsid::client_ipc_metrics_drain(&bank, nullptr), "null bank output rejected");
-    require(!capsid::client_ipc_metrics_drain(&bank, &bank), "bank alias rejected without consuming");
+    require(!capsid::client_ipc_metrics_drain(&bank, &bank),
+            "bank alias rejected without consuming");
     require(capsid::client_ipc_metrics_drain(&bank, &output), "transfer real atomic bank");
     index = 0;
 #define CHECK_METRIC(field) require(output.field.load() == base + ++index, "bank transfer: " #field)
@@ -749,7 +697,8 @@ void test_metrics_concurrent_retirement(const std::string& worker_path) {
         WorkerExecutor executor;
         executor.set_metrics_enabled(true);
         std::string error;
-        require(executor.start(hello_factory(worker_path, 0, true), &error), "concurrent metrics startup: " + error);
+        require(executor.start(hello_factory(worker_path, 0, true), &error),
+                "concurrent metrics startup: " + error);
         capsid::ClientIpcMetrics total;
         std::atomic<bool> done{false};
         std::atomic<unsigned> successful_reads{0};
@@ -781,41 +730,47 @@ void test_metrics_concurrent_retirement(const std::string& worker_path) {
         bool all_readers_started;
         {
             std::unique_lock<std::mutex> lock(ready_mutex);
-            all_readers_started = ready_cv.wait_for(lock, std::chrono::seconds(15), [&] { return ready == kReaders; });
+            all_readers_started = ready_cv.wait_for(lock, std::chrono::seconds(15),
+                                                    [&] { return ready == kReaders; });
         }
         executor.stop_and_join();
         done.store(true);
-        for (auto& reader : readers) reader.join();
+        for (auto& reader : readers)
+            reader.join();
         capsid::ClientIpcMetrics final;
         const bool final_present = executor.snapshot_client_metrics(&final);
         add_metrics(total, final);
-        require(all_readers_started && successful_reads.load() >= kReaders, "every sampler actually ran");
+        require(all_readers_started && successful_reads.load() >= kReaders,
+                "every sampler actually ran");
         require(executor.exit_status().clean(), "concurrent metrics worker actual exit zero");
         require(executor.exited() && executor.worker() == nullptr && final_present,
                 "concurrent metrics worker reaped and final bank retained");
         // The factory resets counters after HELLO, then queues one LOAD_BUNDLE;
         // this idle worker receives exactly one SHUTDOWN. Readers may split
         // these deltas differently but must neither duplicate nor lose them.
-        require(total.queued_frames.load() == 2, "concurrent deltas preserve both actual queued frames");
+        require(total.queued_frames.load() == 2,
+                "concurrent deltas preserve both actual queued frames");
         // READY is the one parsed frame for this idle worker. A clean
         // SHUTDOWN closes the stream; next_event constructs EXIT from EOF
         // without parsing an extra frame (client.cc read_size == 0 path).
-        require(total.parsed_frames.load() == 1, "only READY is parsed; EOF supplies the EXIT event");
-        require(total.socket_write_bytes.load() > 0 &&
-                total.socket_read_bytes.load() > 0 && total.queued_bytes_high_water.load() > 0,
+        require(total.parsed_frames.load() == 1,
+                "only READY is parsed; EOF supplies the EXIT event");
+        require(total.socket_write_bytes.load() > 0 && total.socket_read_bytes.load() > 0 &&
+                    total.queued_bytes_high_water.load() > 0,
                 "concurrent samples contain real transport work");
         capsid::ClientIpcMetrics empty;
         require(executor.snapshot_client_metrics(&empty), "drained concurrent bank");
         require_zero_metrics(empty);
         std::cout << "METRICS concurrency round=" << round << " pid=" << executor.process_id()
                   << " readers=" << kReaders << " samples=" << successful_reads.load()
-                  << " frames=" << total.queued_frames.load() << " parsed=" << total.parsed_frames.load()
-                  << " os_exit=0" << std::endl;
+                  << " frames=" << total.queued_frames.load()
+                  << " parsed=" << total.parsed_frames.load() << " os_exit=0" << std::endl;
     }
-    std::cout << "PASS: concurrent snapshots and actual reaping across " << kRounds << " workers" << std::endl;
+    std::cout << "PASS: concurrent snapshots and actual reaping across " << kRounds << " workers"
+              << std::endl;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc == 3 && std::string(argv[2]) == "--metrics-retirement") {
@@ -843,7 +798,6 @@ int main(int argc, char** argv) {
     test_factory_lifecycle(worker_path);
     test_fixed_response_requires_credit(worker_path);
     test_adopt_ready(worker_path);
-    std::cout << "PASS: WorkerExecutor ownership contract (WP-04 §8.1)"
-              << std::endl;
+    std::cout << "PASS: WorkerExecutor ownership contract (WP-04 §8.1)" << std::endl;
     return 0;
 }

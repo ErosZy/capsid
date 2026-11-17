@@ -28,8 +28,7 @@ enum class ChannelPhase {
 };
 
 inline bool phase_terminal(ChannelPhase phase) {
-    return phase == ChannelPhase::Closed ||
-           phase == ChannelPhase::Rejected ||
+    return phase == ChannelPhase::Closed || phase == ChannelPhase::Rejected ||
            phase == ChannelPhase::Cancelled;
 }
 
@@ -56,28 +55,28 @@ struct ChannelDirection {
 // User/Binding authority that created the channel. Lifetime ownership
 // lives on the entry itself (owner_kind).
 struct ChannelAuthority {
-    bool binding = false;          // false = User authority
-    uint64_t binding_id = 0;       // binding slot when binding = true
+    bool binding = false;    // false = User authority
+    uint64_t binding_id = 0; // binding slot when binding = true
 };
 
 // One channel entry; the registry is the only writer.
 struct ChannelEntry {
-    uint32_t channel_id = 0;       // host-assigned; 0 only while dialing
-    uint64_t dial_id = 0;          // worker-assigned; 0 for inbound
+    uint32_t channel_id = 0; // host-assigned; 0 only while dialing
+    uint64_t dial_id = 0;    // worker-assigned; 0 for inbound
     uint8_t owner_kind = protocol::kOwnerDuplexConnection;
     uint8_t channel_kind = protocol::kChannelKindWebSocket;
     // Retained after ACCEPT chooses WebSocket or a one-way HTTP body.
     // A fetch channel keeps its original fetch permission authority.
     bool fetch_upgrade = false;
-    uint16_t http_status = 0;       // 0 for constructor/inbound WebSockets
+    uint16_t http_status = 0; // 0 for constructor/inbound WebSockets
     uint64_t owner_request_id = 0;
-    uint64_t max_message_bytes = 0;  // effective negotiated cap
+    uint64_t max_message_bytes = 0; // effective negotiated cap
     ChannelPhase phase = ChannelPhase::Pending;
-    ChannelDirection direction[2];   // indexed by ChannelSide
+    ChannelDirection direction[2]; // indexed by ChannelSide
     ChannelAuthority authority;
     bool authority_registered = false;
 };
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

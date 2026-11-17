@@ -50,11 +50,9 @@ void require(bool condition, const std::string& message) {
 #if CAPSID_HAS_ADMIN_SERVICE
 
 class CountingBackend final : public capsid::host::AdminBackend {
-public:
-    capsid::host::DeployOutcome deploy(
-        const std::string& application,
-        const std::string& version,
-        capsid::host::OperationStatus* status) override {
+  public:
+    capsid::host::DeployOutcome deploy(const std::string& application, const std::string& version,
+                                       capsid::host::OperationStatus* status) override {
         const int call = deploy_calls.fetch_add(1) + 1;
         capsid::host::DeployOutcome outcome;
         outcome.ok = true;
@@ -66,19 +64,14 @@ public:
         return outcome;
     }
 
-    capsid::host::DeployOutcome retire(
-        const std::string&, capsid::host::OperationStatus*) override {
+    capsid::host::DeployOutcome retire(const std::string&,
+                                       capsid::host::OperationStatus*) override {
         return {};
     }
 
-    capsid::host::OperationStatus operation_status(
-        const std::string&) override {
-        return {};
-    }
+    capsid::host::OperationStatus operation_status(const std::string&) override { return {}; }
 
-    std::string app_status(const std::string&) override {
-        return "{\"active\":false}";
-    }
+    std::string app_status(const std::string&) override { return "{\"active\":false}"; }
 
     std::atomic<int> deploy_calls{0};
     std::string last_application;
@@ -92,10 +85,7 @@ struct ServiceFixture {
     capsid::host::AdminService service;
     bool joined = false;
 
-    ServiceFixture()
-        : path(),
-          options(),
-          service(make_options(), &backend) {
+    ServiceFixture() : path(), options(), service(make_options(), &backend) {
         // make_options() creates the directory and stores path/options
         // before the service copies them.
     }
@@ -117,8 +107,7 @@ struct ServiceFixture {
         options.socket.path = path;
         options.socket.mode = 0600;
         options.socket.backlog = 8;
-        options.http.api.authorization.allowed_uid =
-            static_cast<std::uint64_t>(geteuid());
+        options.http.api.authorization.allowed_uid = static_cast<std::uint64_t>(geteuid());
         options.http.api.max_header_bytes = 1024;
         options.http.api.max_body_bytes = 1024;
         options.http.header_timeout_ms = 5000;
@@ -129,19 +118,16 @@ struct ServiceFixture {
 
     void start() {
         std::string error;
-        require(service.start(&error),
-                "cannot start Admin service: " + error);
+        require(service.start(&error), "cannot start Admin service: " + error);
         struct stat metadata = {};
-        require(lstat(path.c_str(), &metadata) == 0 &&
-                    S_ISSOCK(metadata.st_mode),
+        require(lstat(path.c_str(), &metadata) == 0 && S_ISSOCK(metadata.st_mode),
                 "Admin service start returned before its socket was bound");
     }
 
     void stop_and_wait() {
         service.request_stop();
         std::string error;
-        require(service.wait(&error),
-                "Admin service did not stop cleanly: " + error);
+        require(service.wait(&error), "Admin service did not stop cleanly: " + error);
         joined = true;
     }
 };
@@ -151,15 +137,12 @@ int connect_client(const std::string& path) {
     require(fd >= 0, "cannot create Admin service client");
     struct sockaddr_un address = {};
     address.sun_family = AF_UNIX;
-    require(path.size() < sizeof(address.sun_path),
-            "Admin service fixture path is too long");
+    require(path.size() < sizeof(address.sun_path), "Admin service fixture path is too long");
     std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
-    require(connect(fd, reinterpret_cast<const struct sockaddr*>(&address),
-                    sizeof(address)) == 0,
+    require(connect(fd, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address)) == 0,
             "cannot connect to Admin service");
     const struct timeval timeout = {2, 0};
-    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                       sizeof(timeout)) == 0,
+    require(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == 0,
             "cannot bound Admin service client receive");
     return fd;
 }
@@ -168,11 +151,9 @@ void write_all(int fd, const std::string& bytes) {
     std::size_t offset = 0;
     while (offset < bytes.size()) {
 #if defined(MSG_NOSIGNAL)
-        const ssize_t count = send(fd, bytes.data() + offset,
-                                   bytes.size() - offset, MSG_NOSIGNAL);
+        const ssize_t count = send(fd, bytes.data() + offset, bytes.size() - offset, MSG_NOSIGNAL);
 #else
-        const ssize_t count = send(fd, bytes.data() + offset,
-                                   bytes.size() - offset, 0);
+        const ssize_t count = send(fd, bytes.data() + offset, bytes.size() - offset, 0);
 #endif
         if (count < 0 && errno == EINTR) {
             continue;
@@ -202,8 +183,7 @@ std::string read_to_close(int fd) {
 }
 
 std::string deploy_request(const std::string& version) {
-    const std::string body =
-        "{\"app\":\"orders\",\"version\":\"" + version + "\"}";
+    const std::string body = "{\"app\":\"orders\",\"version\":\"" + version + "\"}";
     return "POST /v1/deploy HTTP/1.1\r\nHost: local\r\n"
            "Content-Type: application/json\r\nContent-Length: " +
            std::to_string(body.size()) + "\r\n\r\n" + body;
@@ -212,8 +192,7 @@ std::string deploy_request(const std::string& version) {
 void round_trip(const std::string& path, const std::string& request) {
     const int client = connect_client(path);
     write_all(client, request);
-    require(shutdown(client, SHUT_WR) == 0,
-            "cannot finish Admin service request");
+    require(shutdown(client, SHUT_WR) == 0, "cannot finish Admin service request");
     const std::string response = read_to_close(client);
     close(client);
     require(response.rfind("HTTP/1.1 202 ", 0) == 0,
@@ -222,7 +201,7 @@ void round_trip(const std::string& path, const std::string& request) {
 
 #endif
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     require(argc == 2, "expected one Admin service test mode");
@@ -282,19 +261,14 @@ int main(int argc, char** argv) {
     if (mode == "host_admin_service_preserves_replaced_path") {
         ServiceFixture fixture;
         fixture.start();
-        require(unlink(fixture.path.c_str()) == 0,
-                "cannot detach Admin service socket pathname");
-        const int replacement = open(fixture.path.c_str(),
-                                     O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
-                                     0600);
-        require(replacement >= 0,
-                "cannot install replacement Admin pathname");
-        require(close(replacement) == 0,
-                "cannot close replacement Admin pathname");
+        require(unlink(fixture.path.c_str()) == 0, "cannot detach Admin service socket pathname");
+        const int replacement =
+            open(fixture.path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        require(replacement >= 0, "cannot install replacement Admin pathname");
+        require(close(replacement) == 0, "cannot close replacement Admin pathname");
         fixture.stop_and_wait();
         struct stat metadata = {};
-        require(lstat(fixture.path.c_str(), &metadata) == 0 &&
-                    S_ISREG(metadata.st_mode),
+        require(lstat(fixture.path.c_str(), &metadata) == 0 && S_ISREG(metadata.st_mode),
                 "Admin shutdown unlinked a pathname it did not create");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -308,8 +282,7 @@ int main(int argc, char** argv) {
         ServiceFixture fixture;
         fixture.start();
         std::string error;
-        require(!fixture.service.start(&error),
-                "Admin service accepted a duplicate start");
+        require(!fixture.service.start(&error), "Admin service accepted a duplicate start");
         require(!error.empty(), "duplicate start produced no error text");
         // The first instance is still fully functional after the rejected
         // duplicate start.
@@ -329,8 +302,7 @@ int main(int argc, char** argv) {
         ServiceFixture fixture;
         fixture.service.request_stop();
         std::string error;
-        require(!fixture.service.start(&error),
-                "Admin service started after a prior stop request");
+        require(!fixture.service.start(&error), "Admin service started after a prior stop request");
         require(!error.empty(), "stop-before-start produced no error text");
         struct stat metadata = {};
         require(lstat(fixture.path.c_str(), &metadata) != 0 && errno == ENOENT,
@@ -339,8 +311,7 @@ int main(int argc, char** argv) {
         // path must not block on a thread that never started).
         fixture.service.request_stop();
         require(fixture.service.wait(&error),
-                "stopped-before-start service did not wait cleanly: " +
-                    error);
+                "stopped-before-start service did not wait cleanly: " + error);
         fixture.joined = true;
         std::cout << "PASS" << std::endl;
         return 0;
@@ -373,19 +344,16 @@ int main(int argc, char** argv) {
                 // completes and the socket path never outlives the service.
                 fixture.service.request_stop();
                 require(fixture.service.wait(&error),
-                        "start/stop race wedged Admin service wait: " +
-                            error);
+                        "start/stop race wedged Admin service wait: " + error);
                 fixture.joined = true;
                 struct stat stray = {};
-                require(lstat(fixture.path.c_str(), &stray) != 0 &&
-                            errno == ENOENT,
+                require(lstat(fixture.path.c_str(), &stray) != 0 && errno == ENOENT,
                         "start/stop race left the socket pathname behind");
                 (void)started;
             }
             _exit(0);
         }
-        const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(30);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         int status = 0;
         for (;;) {
             const pid_t waited = waitpid(child, &status, WNOHANG);
@@ -421,8 +389,7 @@ int main(int argc, char** argv) {
             fixture.stop_and_wait();
             _exit(0);
         }
-        const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(1);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
         int status = 0;
         for (;;) {
             const pid_t waited = waitpid(child, &status, WNOHANG);

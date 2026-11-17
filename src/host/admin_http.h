@@ -35,19 +35,15 @@ struct AdminHttpOptions {
 // stop) interrupts the read loops promptly instead of waiting out the
 // HTTP deadlines. Transport failures return false with a static redacted
 // error text; backend failures never leak internals.
-bool serve_accepted_admin_http_connection(int fd,
-                                          const AdminHttpOptions& options,
-                                          AdminBackend* backend,
-                                          std::string* error);
+bool serve_accepted_admin_http_connection(int fd, const AdminHttpOptions& options,
+                                          AdminBackend* backend, std::string* error);
 
 // Accepts exactly one Unix-stream connection from listener_fd (which stays
 // owned by the caller) and serves it through
 // serve_accepted_admin_http_connection.
-bool serve_one_admin_http_connection(int listener_fd,
-                                     const AdminHttpOptions& options,
-                                     AdminBackend* backend,
-                                     std::string* error);
+bool serve_one_admin_http_connection(int listener_fd, const AdminHttpOptions& options,
+                                     AdminBackend* backend, std::string* error);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

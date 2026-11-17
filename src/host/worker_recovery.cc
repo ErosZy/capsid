@@ -21,25 +21,20 @@ namespace {
 
 using ErrorCode = WorkerRecoveryErrorCode;
 
-void set_error(WorkerRecoveryError &error,
-               ErrorCode code,
-               std::string path,
-               std::string message) {
+void set_error(WorkerRecoveryError& error, ErrorCode code, std::string path, std::string message) {
     error.code = code;
     error.path = std::move(path);
     error.message = std::move(message);
 }
 
-bool valid_policy(const WorkerRecoveryPolicy &policy) {
-    if (policy.max_events == 0U ||
-        policy.max_events > kMaxTrackedInstabilityEvents) {
+bool valid_policy(const WorkerRecoveryPolicy& policy) {
+    if (policy.max_events == 0U || policy.max_events > kMaxTrackedInstabilityEvents) {
         return false;
     }
     if (policy.window_ms == 0U) {
         return false;
     }
-    if (policy.backoff_initial_ms == 0U ||
-        policy.backoff_maximum_ms < policy.backoff_initial_ms) {
+    if (policy.backoff_initial_ms == 0U || policy.backoff_maximum_ms < policy.backoff_initial_ms) {
         return false;
     }
     // Jitter is expressed in basis points; more than +-100% is meaningless.
@@ -56,8 +51,8 @@ bool valid_policy(const WorkerRecoveryPolicy &policy) {
     // scaling used in replacement_delay_ms(); a policy that could overflow is
     // rejected instead of silently truncating the delay.
     const std::uint64_t max_factor = 10000U + policy.jitter_basis_points;
-    const std::uint64_t max_scaled = static_cast<std::uint64_t>(
-        std::numeric_limits<std::int64_t>::max());
+    const std::uint64_t max_scaled =
+        static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
     if (policy.backoff_maximum_ms > max_scaled / max_factor) {
         return false;
     }
@@ -67,7 +62,7 @@ bool valid_policy(const WorkerRecoveryPolicy &policy) {
 // Validates the lifecycle document with the full active-state contract and
 // then checks the phase/document pairing exactly like the service lifecycle
 // slice: a malformed identifier can never count events or schedule work.
-bool lifecycle_consistent(const ServiceLifecycleState &lifecycle) {
+bool lifecycle_consistent(const ServiceLifecycleState& lifecycle) {
     if (!lifecycle.document.has_value()) {
         return lifecycle.phase == ServiceLifecyclePhase::kAbsent ||
                lifecycle.phase == ServiceLifecyclePhase::kFailedClosed;
@@ -101,7 +96,7 @@ bool lifecycle_consistent(const ServiceLifecycleState &lifecycle) {
     return false;
 }
 
-bool events_sorted(const std::vector<std::uint64_t> &events) {
+bool events_sorted(const std::vector<std::uint64_t>& events) {
     for (std::size_t i = 1; i < events.size(); ++i) {
         if (events[i] < events[i - 1]) {
             return false;
@@ -118,8 +113,7 @@ bool instability_kind_is_expected(WorkerInstabilityKind kind) {
 
 // App/generation grammar lives in exactly one place: probe the active-state
 // encoder with a minimal but valid document.
-bool request_identifiers_valid(std::string_view application,
-                               std::string_view generation) {
+bool request_identifiers_valid(std::string_view application, std::string_view generation) {
     ActiveStateDocument probe;
     probe.state = ActiveServiceState::kActive;
     probe.application = std::string(application);
@@ -135,7 +129,7 @@ bool valid_application_id(std::string_view application) {
     return request_identifiers_valid(application, kProbeGeneration);
 }
 
-bool request_is_valid(const StartupPermitRequest &request) {
+bool request_is_valid(const StartupPermitRequest& request) {
     return (request.lane == StartupPermitLane::kDeploy ||
             request.lane == StartupPermitLane::kReplacement) &&
            request_identifiers_valid(request.application, request.generation);
@@ -147,18 +141,18 @@ bool request_is_valid(const StartupPermitRequest &request) {
 // App/generation), and a non-empty last_granted_application must be a valid
 // App ID (it would otherwise participate in fairness selection). A malformed
 // existing queue fails closed with kInvalidState and stays untouched.
-bool queue_invariants_ok(const FairStartupPermitQueue &queue) {
+bool queue_invariants_ok(const FairStartupPermitQueue& queue) {
     if (!queue.last_granted_application.empty() &&
         !valid_application_id(queue.last_granted_application)) {
         return false;
     }
     for (std::size_t i = 0; i < queue.queued.size(); ++i) {
-        const StartupPermitRequest &request = queue.queued[i];
+        const StartupPermitRequest& request = queue.queued[i];
         if (!request_is_valid(request)) {
             return false;
         }
         for (std::size_t j = 0; j < i; ++j) {
-            const StartupPermitRequest &other = queue.queued[j];
+            const StartupPermitRequest& other = queue.queued[j];
             if (other.ticket == request.ticket) {
                 return false;
             }
@@ -176,8 +170,7 @@ bool queue_invariants_ok(const FairStartupPermitQueue &queue) {
 // Exponential backoff capped before jitter is applied: the cap is on the
 // base delay, and jitter may push the final delay above it. valid_policy()
 // guarantees the jittered product cannot overflow the signed scaling.
-std::uint64_t replacement_delay_ms(const WorkerRecoveryPolicy &policy,
-                                   std::uint32_t attempts,
+std::uint64_t replacement_delay_ms(const WorkerRecoveryPolicy& policy, std::uint32_t attempts,
                                    std::int32_t jitter_basis_points) {
     std::uint64_t base = policy.backoff_initial_ms;
     const std::uint64_t cap = policy.backoff_maximum_ms;
@@ -188,18 +181,16 @@ std::uint64_t replacement_delay_ms(const WorkerRecoveryPolicy &policy,
         }
         base *= 2;
     }
-    const std::int64_t scaled =
-        static_cast<std::int64_t>(base) * (10000 + jitter_basis_points);
+    const std::int64_t scaled = static_cast<std::int64_t>(base) * (10000 + jitter_basis_points);
     return static_cast<std::uint64_t>(scaled / 10000);
 }
 
-}  // namespace
+} // namespace
 
-WorkerRecoveryDecision record_worker_instability(
-    const GenerationRecoveryState &state,
-    const WorkerRecoveryPolicy &policy,
-    const ServiceLifecycleState &lifecycle,
-    const WorkerInstabilityObservation &observation) {
+WorkerRecoveryDecision record_worker_instability(const GenerationRecoveryState& state,
+                                                 const WorkerRecoveryPolicy& policy,
+                                                 const ServiceLifecycleState& lifecycle,
+                                                 const WorkerInstabilityObservation& observation) {
     WorkerRecoveryDecision decision;
     decision.state = state;
     decision.instability_kind = observation.kind;
@@ -229,13 +220,11 @@ WorkerRecoveryDecision record_worker_instability(
     case WorkerInstabilityKind::kOperatorRetire:
         break;
     default:
-        set_error(decision.error, ErrorCode::kInvalidState, "/kind",
-                  "unknown instability kind");
+        set_error(decision.error, ErrorCode::kInvalidState, "/kind", "unknown instability kind");
         return decision;
     }
     const std::int32_t jitter = observation.chosen_jitter_basis_points;
-    const std::int32_t jitter_limit =
-        static_cast<std::int32_t>(policy.jitter_basis_points);
+    const std::int32_t jitter_limit = static_cast<std::int32_t>(policy.jitter_basis_points);
     if (jitter < -jitter_limit || jitter > jitter_limit) {
         set_error(decision.error, ErrorCode::kInvalidJitter, "/jitter",
                   "chosen jitter exceeds the policy jitter");
@@ -260,8 +249,7 @@ WorkerRecoveryDecision record_worker_instability(
             return decision;
         }
     }
-    if (state.has_last_observed_time &&
-        observation.now_ms < state.last_observed_ms) {
+    if (state.has_last_observed_time && observation.now_ms < state.last_observed_ms) {
         set_error(decision.error, ErrorCode::kClockRegression, "/state",
                   "monotonic clock regressed");
         return decision;
@@ -299,8 +287,7 @@ WorkerRecoveryDecision record_worker_instability(
     // events never carry a worker generation and are exempt.
     if (!instability_kind_is_expected(observation.kind) &&
         observation.worker_generation != lifecycle.document->generation &&
-        !request_identifiers_valid(state.application,
-                                   observation.worker_generation)) {
+        !request_identifiers_valid(state.application, observation.worker_generation)) {
         set_error(decision.error, ErrorCode::kInvalidState, "/worker-generation",
                   "worker generation is malformed");
         return decision;
@@ -313,8 +300,7 @@ WorkerRecoveryDecision record_worker_instability(
     // Normal drain, host shutdown and operator retire consume no budget and
     // schedule no replacement.
     if (instability_kind_is_expected(observation.kind)) {
-        decision.disposition =
-            GenerationRecoveryDisposition::kIgnoredExpectedEvent;
+        decision.disposition = GenerationRecoveryDisposition::kIgnoredExpectedEvent;
         return decision;
     }
     // The recovery state predates the active generation: the whole state is
@@ -348,11 +334,9 @@ WorkerRecoveryDecision record_worker_instability(
     // keep the newest events, which are exactly the ones the next window
     // trim would keep anyway.
     if (window.size() > kMaxTrackedInstabilityEvents) {
-        window.erase(
-            window.begin(),
-            window.end() -
-                static_cast<std::vector<std::uint64_t>::difference_type>(
-                    kMaxTrackedInstabilityEvents));
+        window.erase(window.begin(),
+                     window.end() - static_cast<std::vector<std::uint64_t>::difference_type>(
+                                        kMaxTrackedInstabilityEvents));
     }
     decision.state.instability_events_ms = std::move(window);
 
@@ -360,8 +344,7 @@ WorkerRecoveryDecision record_worker_instability(
     // max_events begins quarantine and suppresses replacement in the same
     // result, never retry, never replacement.
     if (decision.events_in_window > policy.max_events) {
-        decision.disposition =
-            GenerationRecoveryDisposition::kBeginQuarantine;
+        decision.disposition = GenerationRecoveryDisposition::kBeginQuarantine;
         decision.begin_quarantine = true;
         return decision;
     }
@@ -369,16 +352,14 @@ WorkerRecoveryDecision record_worker_instability(
     // A replacement is only needed when the pool has a capacity deficit; a
     // full pool still counts the event but must not spawn. This is not a
     // singleflight join — no replacement exists, one is simply not needed.
-    if (observation.ready_workers_after_removal >=
-        observation.target_ready_workers) {
+    if (observation.ready_workers_after_removal >= observation.target_ready_workers) {
         decision.disposition = GenerationRecoveryDisposition::kContinueActive;
         return decision;
     }
 
     // One in-flight replacement per App is enough; joining it counts the
     // event but must not schedule a second spawn or advance the backoff.
-    if (observation.replacements_in_flight_for_app >=
-        policy.replacements_concurrent_per_app) {
+    if (observation.replacements_in_flight_for_app >= policy.replacements_concurrent_per_app) {
         decision.replacement_singleflight_exists = true;
         decision.disposition = GenerationRecoveryDisposition::kContinueActive;
         return decision;
@@ -386,8 +367,8 @@ WorkerRecoveryDecision record_worker_instability(
 
     // Only an actually scheduled replacement advances the attempt counter,
     // and the counter saturates instead of wrapping back to zero.
-    decision.replacement_delay_ms = replacement_delay_ms(
-        policy, decision.state.replacement_attempts_since_stable, jitter);
+    decision.replacement_delay_ms =
+        replacement_delay_ms(policy, decision.state.replacement_attempts_since_stable, jitter);
     decision.schedule_replacement = true;
     decision.acquire_startup_permit = true;
     decision.acquire_memory_permit = true;
@@ -399,16 +380,14 @@ WorkerRecoveryDecision record_worker_instability(
     return decision;
 }
 
-WorkerStabilityResult observe_worker_stability(
-    const GenerationRecoveryState &state,
-    const WorkerRecoveryPolicy &policy,
-    std::uint64_t continuously_ready_since_ms,
-    std::uint64_t now_ms) {
+WorkerStabilityResult observe_worker_stability(const GenerationRecoveryState& state,
+                                               const WorkerRecoveryPolicy& policy,
+                                               std::uint64_t continuously_ready_since_ms,
+                                               std::uint64_t now_ms) {
     WorkerStabilityResult result;
     result.state = state;
     if (!valid_policy(policy)) {
-        set_error(result.error, ErrorCode::kInvalidPolicy, "/policy",
-                  "recovery policy is invalid");
+        set_error(result.error, ErrorCode::kInvalidPolicy, "/policy", "recovery policy is invalid");
         return result;
     }
     // Without a lifecycle to compare against, the state's own App/generation
@@ -437,8 +416,7 @@ WorkerStabilityResult observe_worker_stability(
         }
     }
     if (state.has_last_observed_time && now_ms < state.last_observed_ms) {
-        set_error(result.error, ErrorCode::kClockRegression, "/state",
-                  "monotonic clock regressed");
+        set_error(result.error, ErrorCode::kClockRegression, "/state", "monotonic clock regressed");
         return result;
     }
     // READY can only be observed in the past; a future READY timestamp is a
@@ -459,9 +437,8 @@ WorkerStabilityResult observe_worker_stability(
     return result;
 }
 
-FailedRequestAction decide_failed_request_action(
-    const WorkerRecoveryDecision &recovery,
-    const FailedRequestRetryContext &request) {
+FailedRequestAction decide_failed_request_action(const WorkerRecoveryDecision& recovery,
+                                                 const FailedRequestRetryContext& request) {
     // A response head that already left the gateway must never be rewritten.
     if (request.response_head_sent) {
         return FailedRequestAction::kAbortStartedResponse;
@@ -470,8 +447,7 @@ FailedRequestAction decide_failed_request_action(
     // v1 retries only worker/IPC/protocol failures; OOM, CPU timeouts and
     // health recycles are resources the gateway must not amplify.
     if (!recovery.ok || recovery.begin_quarantine ||
-        recovery.disposition !=
-            GenerationRecoveryDisposition::kContinueActive) {
+        recovery.disposition != GenerationRecoveryDisposition::kContinueActive) {
         return FailedRequestAction::kSynthesize503;
     }
     switch (recovery.instability_kind) {
@@ -485,19 +461,16 @@ FailedRequestAction decide_failed_request_action(
     // One retry, GET/HEAD, no body, no response head yet, enough deadline and
     // a READY worker from the same active generation.
     if ((request.method != "GET" && request.method != "HEAD") ||
-        request.request_body_present_or_started ||
-        !request.deadline_allows_retry ||
-        !request.same_active_generation_worker_available ||
-        request.retries_already_attempted > 0) {
+        request.request_body_present_or_started || !request.deadline_allows_retry ||
+        !request.same_active_generation_worker_available || request.retries_already_attempted > 0) {
         return FailedRequestAction::kSynthesize503;
     }
     return FailedRequestAction::kRetryOnceSameGeneration;
 }
 
-StartupPermitQueueResult enqueue_startup_permit_request(
-    const FairStartupPermitQueue &queue,
-    const StartupPermitRequest &request,
-    std::size_t maximum_queued) {
+StartupPermitQueueResult enqueue_startup_permit_request(const FairStartupPermitQueue& queue,
+                                                        const StartupPermitRequest& request,
+                                                        std::size_t maximum_queued) {
     StartupPermitQueueResult result;
     result.queue = queue;
     // The caller-supplied queue is validated first and stays untouched: a
@@ -520,7 +493,7 @@ StartupPermitQueueResult enqueue_startup_permit_request(
         return result;
     }
     // Tickets are unique across the whole queue, not just per App.
-    for (const StartupPermitRequest &queued : queue.queued) {
+    for (const StartupPermitRequest& queued : queue.queued) {
         if (queued.ticket == request.ticket) {
             set_error(result.error, ErrorCode::kInvalidRequest, "/ticket",
                       "duplicate startup permit ticket");
@@ -532,7 +505,7 @@ StartupPermitQueueResult enqueue_startup_permit_request(
     // App/generation (deploy requests never join), and joining adds no queue
     // entry, so it cannot hit the queue limit.
     if (request.lane == StartupPermitLane::kReplacement) {
-        for (const StartupPermitRequest &queued : queue.queued) {
+        for (const StartupPermitRequest& queued : queue.queued) {
             if (queued.lane == StartupPermitLane::kReplacement &&
                 queued.application == request.application &&
                 queued.generation == request.generation) {
@@ -550,7 +523,7 @@ StartupPermitQueueResult enqueue_startup_permit_request(
         result.queue.queued.push_back(request);
     }
     result.ok = true;
-    for (const StartupPermitRequest &queued : result.queue.queued) {
+    for (const StartupPermitRequest& queued : result.queue.queued) {
         if (queued.lane == StartupPermitLane::kDeploy) {
             ++result.queued_deploys;
         } else {
@@ -560,9 +533,8 @@ StartupPermitQueueResult enqueue_startup_permit_request(
     return result;
 }
 
-StartupPermitGrantResult grant_next_startup_permit(
-    const FairStartupPermitQueue &queue,
-    bool permit_available) {
+StartupPermitGrantResult grant_next_startup_permit(const FairStartupPermitQueue& queue,
+                                                   bool permit_available) {
     StartupPermitGrantResult result;
     result.queue = queue;
     // The caller-supplied queue is validated before anything is granted; a
@@ -589,7 +561,7 @@ StartupPermitGrantResult grant_next_startup_permit(
         result.queue.last_granted_application = result.granted->application;
     }
     result.ok = true;
-    for (const StartupPermitRequest &queued : result.queue.queued) {
+    for (const StartupPermitRequest& queued : result.queue.queued) {
         if (queued.lane == StartupPermitLane::kDeploy) {
             ++result.queued_deploys;
         } else {
@@ -599,4 +571,4 @@ StartupPermitGrantResult grant_next_startup_permit(
     return result;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

@@ -26,14 +26,12 @@ typedef struct guarded_config {
     uint64_t after;
 } guarded_config;
 
-_Static_assert(sizeof(capsid_worker_config) ==
-                   CAPSID_V7_CONFIG_FROZEN_SIZE,
+_Static_assert(sizeof(capsid_worker_config) == CAPSID_V7_CONFIG_FROZEN_SIZE,
                "capsid_worker_config grew: ABI v7 layout is frozen");
-_Static_assert(_Alignof(capsid_worker_config) ==
-                   CAPSID_V7_CONFIG_FROZEN_ALIGN,
+_Static_assert(_Alignof(capsid_worker_config) == CAPSID_V7_CONFIG_FROZEN_ALIGN,
                "capsid_worker_config alignment changed");
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     static const uint64_t before = UINT64_C(0x1122334455667788);
     static const uint64_t after = UINT64_C(0x8877665544332211);
     guarded_config guarded;
@@ -48,8 +46,7 @@ int main(int argc, char **argv) {
     }
     if (guarded.config.struct_size != sizeof(capsid_worker_config) ||
         guarded.config.abi_version != CAPSID_ABI_VERSION ||
-        guarded.config.sandbox_network_namespace_fd != -1 ||
-        guarded.config.egress_reserved != 0) {
+        guarded.config.sandbox_network_namespace_fd != -1 || guarded.config.egress_reserved != 0) {
         fprintf(stderr, "FAIL: init defaults changed\n");
         return 1;
     }
@@ -59,8 +56,7 @@ int main(int argc, char **argv) {
         /* Null out_worker exercises argument validation without
          * spawning; the frozen entry must reject it exactly as
          * before. */
-        if (capsid_worker_spawn(&guarded.config, NULL) !=
-                CAPSID_INVALID_ARGUMENT ||
+        if (capsid_worker_spawn(&guarded.config, NULL) != CAPSID_INVALID_ARGUMENT ||
             capsid_worker_spawn(NULL, NULL) != CAPSID_INVALID_ARGUMENT) {
             fprintf(stderr, "FAIL: spawn argument contract changed\n");
             return 1;

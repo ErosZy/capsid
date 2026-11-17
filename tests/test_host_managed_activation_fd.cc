@@ -51,8 +51,7 @@ void make_directory(const std::string& path) {
 void write_file(const std::string& path, const std::string& bytes) {
     FILE* file = std::fopen(path.c_str(), "wb");
     require(file != nullptr, "open fixture file");
-    require(std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size(),
-            "write fixture file");
+    require(std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size(), "write fixture file");
     require(std::fclose(file) == 0, "close fixture file");
 }
 
@@ -68,8 +67,8 @@ extern "C" int __wrap_close(int fd) {
     std::lock_guard<std::mutex> guard(probe.mutex);
     if (probe.enabled) {
         struct stat st = {};
-        const bool app_directory = fstat(fd, &st) == 0 &&
-            st.st_dev == probe.device && st.st_ino == probe.inode;
+        const bool app_directory =
+            fstat(fd, &st) == 0 && st.st_dev == probe.device && st.st_ino == probe.inode;
         if (app_directory || fd == probe.reused) {
             const int result = __real_close(fd);
             if (result == 0) {
@@ -89,22 +88,22 @@ int main(int argc, char** argv) {
     require(argc == 3, "expected activation FD mode and worker path");
     const std::string mode = argv[1];
     const bool replay = mode == "host_managed_activation_fd_replay" ||
-        mode == "host_managed_activation_fd_replay_persist_failure";
+                        mode == "host_managed_activation_fd_replay_persist_failure";
     const bool persist_failure = mode == "host_managed_activation_fd_persist_failure" ||
-        mode == "host_managed_activation_fd_replay_persist_failure";
+                                 mode == "host_managed_activation_fd_replay_persist_failure";
     require(replay || persist_failure || mode == "host_managed_activation_fd_fresh",
             "unknown activation FD test mode");
     const std::string root = temporary_directory();
-    for (const auto& suffix : {"/apps", "/apps/orders", "/apps/orders/v1",
-                               "/state", "/state/apps", "/state/apps/orders",
-                               "/secrets", "/secrets/orders"}) {
+    for (const auto& suffix : {"/apps", "/apps/orders", "/apps/orders/v1", "/state", "/state/apps",
+                               "/state/apps/orders", "/secrets", "/secrets/orders"}) {
         make_directory(root + suffix);
     }
     const std::string app_state = root + "/state/apps/orders";
-    write_file(root + "/apps/orders/v1/capsid.json",
+    write_file(
+        root + "/apps/orders/v1/capsid.json",
         R"({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":[]},"pool":{"minReady":1,"maxWorkers":1}})");
     write_file(root + "/apps/orders/v1/bundle.mjs",
-        "export default { fetch: () => new Response('fd-ownership-ok') };");
+               "export default { fetch: () => new Response('fd-ownership-ok') };");
     const int apps = open((root + "/apps").c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     const int secrets = open((root + "/secrets").c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     require(apps >= 0 && secrets >= 0, "open fixture roots");

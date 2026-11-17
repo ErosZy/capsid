@@ -7,6 +7,7 @@ with direct_passthrough so the response is genuinely chunked.
 Run with gunicorn sync workers (dual-process protocol parity):
     gunicorn --workers 2 --bind 0.0.0.0:8000 flask_app:app
 """
+
 import json
 
 from flask import Flask, Response
@@ -16,6 +17,7 @@ app = Flask(__name__)
 
 def _pad(size):
     return "x" * size
+
 
 J1K = json.dumps({"status": "ok", "app": "flask", "pad": _pad(1024)})
 J8K = json.dumps({"status": "ok", "app": "flask", "pad": _pad(8192)})
@@ -136,8 +138,11 @@ def matrix_bytes(label: str):
     size = MATRIX_SIZES.get(label)
     if size is None:
         return Response("not found", status=404)
-    return Response(MATRIX_BYTES[label], mimetype="application/octet-stream",
-                    headers={"Content-Length": str(size)})
+    return Response(
+        MATRIX_BYTES[label],
+        mimetype="application/octet-stream",
+        headers={"Content-Length": str(size)},
+    )
 
 
 @app.get("/@capsid/orders/bench/matrix-stream-<label>")

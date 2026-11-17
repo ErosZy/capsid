@@ -38,12 +38,12 @@ inline constexpr std::size_t kMaxTrustedKeys = 64;
 // key bytes live on disk until load(); the descriptor is just the pointer.
 struct TrustedKeyDescriptor {
     std::string key_id;
-    std::string key_path;  // must be absolute
+    std::string key_path; // must be absolute
 };
 
 // Immutable (after load) key store. See the file comment for the contract.
 class TrustedKeyStore {
-public:
+  public:
     // Loads every descriptor's key from disk with the §9.5 verification
     // contract. On any failure returns an empty store and a stable error.
     static TrustedKeyStore load(std::span<const TrustedKeyDescriptor> descriptors,
@@ -56,13 +56,13 @@ public:
 
     std::size_t size() const { return keys_.size(); }
 
-private:
+  private:
     // Owned memory: the views in keys_ point here.
     std::vector<std::string> ids_;
     std::vector<std::array<std::uint8_t, kEd25519PublicKeyBytes>> raw_keys_;
     std::vector<TrustedBytecodeKey> keys_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

@@ -10,11 +10,10 @@ namespace capsid_test {
 namespace {
 
 class JsonCursor {
-public:
-    explicit JsonCursor(const std::string &text) : text_(text), offset_(0) {}
+  public:
+    explicit JsonCursor(const std::string& text) : text_(text), offset_(0) {}
 
-    bool top_level_scalars(std::map<std::string, std::string> *fields,
-                           std::string *error) {
+    bool top_level_scalars(std::map<std::string, std::string>* fields, std::string* error) {
         skip_space();
         if (!consume('{')) {
             return fail(error, "WPT report must be a JSON object");
@@ -54,8 +53,8 @@ public:
         }
     }
 
-private:
-    bool skip_value(unsigned depth, std::string *error) {
+  private:
+    bool skip_value(unsigned depth, std::string* error) {
         if (depth > 64) {
             return fail(error, "JSON nesting is too deep");
         }
@@ -117,8 +116,8 @@ private:
         const size_t begin = offset_;
         while (offset_ < text_.size()) {
             const char value = text_[offset_];
-            if (std::isspace(static_cast<unsigned char>(value)) ||
-                value == ',' || value == '}' || value == ']') {
+            if (std::isspace(static_cast<unsigned char>(value)) || value == ',' || value == '}' ||
+                value == ']') {
                 break;
             }
             ++offset_;
@@ -137,8 +136,9 @@ private:
         if (scalar[digit] == '0') {
             ++digit;
         } else if (scalar[digit] >= '1' && scalar[digit] <= '9') {
-            do { ++digit; } while (digit < scalar.size() &&
-                scalar[digit] >= '0' && scalar[digit] <= '9');
+            do {
+                ++digit;
+            } while (digit < scalar.size() && scalar[digit] >= '0' && scalar[digit] <= '9');
         } else {
             return fail(error, "invalid JSON scalar");
         }
@@ -167,14 +167,13 @@ private:
         return digit == scalar.size() || fail(error, "invalid JSON scalar");
     }
 
-    bool parse_string(std::string *output, std::string *error) {
+    bool parse_string(std::string* output, std::string* error) {
         if (!consume('"')) {
             return fail(error, "expected JSON string");
         }
         output->clear();
         while (offset_ < text_.size()) {
-            const unsigned char value =
-                static_cast<unsigned char>(text_[offset_++]);
+            const unsigned char value = static_cast<unsigned char>(text_[offset_++]);
             if (value == '"') {
                 return true;
             }
@@ -190,64 +189,62 @@ private:
             }
             const char escaped = text_[offset_++];
             switch (escaped) {
-                case '"':
-                case '\\':
-                case '/':
-                    output->push_back(escaped);
-                    break;
-                case 'b':
-                    output->push_back('\b');
-                    break;
-                case 'f':
-                    output->push_back('\f');
-                    break;
-                case 'n':
-                    output->push_back('\n');
-                    break;
-                case 'r':
-                    output->push_back('\r');
-                    break;
-                case 't':
-                    output->push_back('\t');
-                    break;
-                case 'u': {
-                    if (offset_ + 4 > text_.size()) {
-                        return fail(error, "truncated JSON unicode escape");
-                    }
-                    for (unsigned index = 0; index < 4; ++index) {
-                        if (!std::isxdigit(static_cast<unsigned char>(
-                                text_[offset_ + index]))) {
-                            return fail(error, "invalid JSON unicode escape");
-                        }
-                    }
-                    const unsigned code = static_cast<unsigned>(std::strtoul(
-                        text_.substr(offset_, 4).c_str(), NULL, 16));
-                    // Decode escaped ASCII keys as well, so e.g. passed and
-                    // \u0070assed cannot evade duplicate-field detection.
-                    if (code < 0x80) {
-                        output->push_back(static_cast<char>(code));
-                    } else if (code < 0x800) {
-                        output->push_back(static_cast<char>(0xc0 | (code >> 6)));
-                        output->push_back(static_cast<char>(0x80 | (code & 0x3f)));
-                    } else {
-                        output->push_back(static_cast<char>(0xe0 | (code >> 12)));
-                        output->push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3f)));
-                        output->push_back(static_cast<char>(0x80 | (code & 0x3f)));
-                    }
-                    offset_ += 4;
-                    break;
+            case '"':
+            case '\\':
+            case '/':
+                output->push_back(escaped);
+                break;
+            case 'b':
+                output->push_back('\b');
+                break;
+            case 'f':
+                output->push_back('\f');
+                break;
+            case 'n':
+                output->push_back('\n');
+                break;
+            case 'r':
+                output->push_back('\r');
+                break;
+            case 't':
+                output->push_back('\t');
+                break;
+            case 'u': {
+                if (offset_ + 4 > text_.size()) {
+                    return fail(error, "truncated JSON unicode escape");
                 }
-                default:
-                    return fail(error, "invalid JSON escape");
+                for (unsigned index = 0; index < 4; ++index) {
+                    if (!std::isxdigit(static_cast<unsigned char>(text_[offset_ + index]))) {
+                        return fail(error, "invalid JSON unicode escape");
+                    }
+                }
+                const unsigned code =
+                    static_cast<unsigned>(std::strtoul(text_.substr(offset_, 4).c_str(), NULL, 16));
+                // Decode escaped ASCII keys as well, so e.g. passed and
+                // \u0070assed cannot evade duplicate-field detection.
+                if (code < 0x80) {
+                    output->push_back(static_cast<char>(code));
+                } else if (code < 0x800) {
+                    output->push_back(static_cast<char>(0xc0 | (code >> 6)));
+                    output->push_back(static_cast<char>(0x80 | (code & 0x3f)));
+                } else {
+                    output->push_back(static_cast<char>(0xe0 | (code >> 12)));
+                    output->push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3f)));
+                    output->push_back(static_cast<char>(0x80 | (code & 0x3f)));
+                }
+                offset_ += 4;
+                break;
+            }
+            default:
+                return fail(error, "invalid JSON escape");
             }
         }
         return fail(error, "unterminated JSON string");
     }
 
     void skip_space() {
-        while (offset_ < text_.size() &&
-               (text_[offset_] == ' ' || text_[offset_] == '\t' ||
-                text_[offset_] == '\n' || text_[offset_] == '\r')) {
+        while (offset_ < text_.size() && (text_[offset_] == ' ' || text_[offset_] == '\t' ||
+                                          text_[offset_] == '\n' || text_[offset_] == '\r')) {
             ++offset_;
         }
     }
@@ -260,25 +257,25 @@ private:
         return false;
     }
 
-    bool at_end(std::string *error) const {
+    bool at_end(std::string* error) const {
         if (offset_ != text_.size()) {
             return fail(error, "trailing data after WPT JSON report");
         }
         return true;
     }
 
-    static bool fail(std::string *error, const std::string &message) {
+    static bool fail(std::string* error, const std::string& message) {
         if (error) {
             *error = message;
         }
         return false;
     }
 
-    const std::string &text_;
+    const std::string& text_;
     size_t offset_;
 };
 
-bool parse_positive_integer(const std::string &value, unsigned long long *out) {
+bool parse_positive_integer(const std::string& value, unsigned long long* out) {
     if (value.empty()) {
         return false;
     }
@@ -291,7 +288,7 @@ bool parse_positive_integer(const std::string &value, unsigned long long *out) {
         return false;
     }
     errno = 0;
-    char *end = NULL;
+    char* end = NULL;
     const unsigned long long parsed = std::strtoull(value.c_str(), &end, 10);
     if (errno == ERANGE || !end || *end != '\0') {
         return false;
@@ -300,10 +297,9 @@ bool parse_positive_integer(const std::string &value, unsigned long long *out) {
     return true;
 }
 
-}  // namespace
+} // namespace
 
-bool validate_wpt_nonzero_report(const std::string &json,
-                                 std::string *error) {
+bool validate_wpt_nonzero_report(const std::string& json, std::string* error) {
     std::map<std::string, std::string> fields;
     JsonCursor cursor(json);
     if (!cursor.top_level_scalars(&fields, error)) {
@@ -345,7 +341,7 @@ bool validate_wpt_nonzero_report(const std::string &json,
     return true;
 }
 
-bool validate_wpt_success_report(const std::string &json, std::string *error) {
+bool validate_wpt_success_report(const std::string& json, std::string* error) {
     if (!validate_wpt_nonzero_report(json, error)) {
         return false;
     }
@@ -354,7 +350,7 @@ bool validate_wpt_success_report(const std::string &json, std::string *error) {
     if (!cursor.top_level_scalars(&fields, error)) {
         return false;
     }
-    const auto require_value = [&](const char *field, const char *expected) {
+    const auto require_value = [&](const char* field, const char* expected) {
         if (fields.count(field) && fields[field] == expected) {
             return true;
         }
@@ -368,8 +364,8 @@ bool validate_wpt_success_report(const std::string &json, std::string *error) {
         !require_value("passed", "true")) {
         return false;
     }
-    for (const char *field : {"failures", "missingExpectedFailures"}) {
-        const std::string &value = fields[field];
+    for (const char* field : {"failures", "missingExpectedFailures"}) {
+        const std::string& value = fields[field];
         if (value.size() < 2 || value.front() != '[' || value.back() != ']' ||
             value.find_first_not_of(" \r\n\t", 1) != value.size() - 1) {
             if (error) {
@@ -381,4 +377,4 @@ bool validate_wpt_success_report(const std::string &json, std::string *error) {
     return true;
 }
 
-}  // namespace capsid_test
+} // namespace capsid_test

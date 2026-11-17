@@ -6,8 +6,8 @@
 #include <utility>
 
 namespace capsid::host {
-QuarantineRequest::QuarantineRequest(ManagedHostOptions* options,
-    std::string generation, std::function<bool()> still_current)
+QuarantineRequest::QuarantineRequest(ManagedHostOptions* options, std::string generation,
+                                     std::function<bool()> still_current)
     : options_(options), generation_(std::move(generation)),
       still_current_(std::move(still_current)) {}
 
@@ -18,11 +18,16 @@ DeployOutcome QuarantineRequest::result() const {
 
 void QuarantineRequest::finish(DeployOutcome outcome) {
     if (!outcome.ok && options_ && options_->log) {
-        options_->log->log(LogLane::kControl,
-            {.event = log_events::kQuarantine, .app = options_->application,
-             .generation = generation_, .result = "fail", .message = outcome.error});
+        options_->log->log(LogLane::kControl, {.event = log_events::kQuarantine,
+                                               .app = options_->application,
+                                               .generation = generation_,
+                                               .result = "fail",
+                                               .message = outcome.error});
     }
-    { std::lock_guard<std::mutex> lock(mutex_); result_ = std::move(outcome); }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        result_ = std::move(outcome);
+    }
     completed.store(true);
 }
 
@@ -41,8 +46,10 @@ QuarantineDispatcher::QuarantineDispatcher() : thread_([this] { run(); }) {}
 QuarantineDispatcher::~QuarantineDispatcher() { stop_and_join(); }
 
 bool QuarantineDispatcher::enqueue(const std::shared_ptr<QuarantineRequest>& request) {
-    if (!request) return false;
-    if (request->submitted_.exchange(true)) return true;
+    if (!request)
+        return false;
+    if (request->submitted_.exchange(true))
+        return true;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!stopping_) {
@@ -67,17 +74,24 @@ void QuarantineDispatcher::run() {
         {
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait(lock, [this] { return stopping_ || !pending_.empty(); });
-            if (pending_.empty()) return;
-            request = pending_.front().lock(); pending_.pop_front();
+            if (pending_.empty())
+                return;
+            request = pending_.front().lock();
+            pending_.pop_front();
         }
-        if (request) request->run();
+        if (request)
+            request->run();
     }
 }
 
 void QuarantineDispatcher::stop_and_join() {
     std::call_once(stop_once_, [this] {
-        { std::lock_guard<std::mutex> lock(mutex_); stopping_ = true; }
-        cv_.notify_one(); thread_.join();
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stopping_ = true;
+        }
+        cv_.notify_one();
+        thread_.join();
     });
 }
 } // namespace capsid::host

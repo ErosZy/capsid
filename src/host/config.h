@@ -33,8 +33,7 @@ inline constexpr std::uint32_t kMaxStaticPoolWorkers = 4096U;
 // manifest.json, index.js and one binding's opaque config member.
 inline constexpr std::size_t kMaxBindingManifestBytes = 1024U * 1024U;
 inline constexpr std::size_t kMaxBindingSourceBytes = 16U * 1024U * 1024U;
-inline constexpr std::size_t kMaxBindingGenerationSourceBytes =
-    64U * 1024U * 1024U;
+inline constexpr std::size_t kMaxBindingGenerationSourceBytes = 64U * 1024U * 1024U;
 inline constexpr std::size_t kMaxBindingConfigBytes = 256U * 1024U;
 
 enum class ConfigDocument {
@@ -65,9 +64,7 @@ struct ConfigValidationResult {
 // Pure, fail-closed validation boundary. On success, error must be empty and
 // carry kNone. On failure, path is an RFC 6901 JSON Pointer to the rejected
 // value and message is safe for an operator-facing diagnostic.
-ConfigValidationResult validate_config_json(
-    ConfigDocument document,
-    std::string_view json);
+ConfigValidationResult validate_config_json(ConfigDocument document, std::string_view json);
 
 // Binding manifest validation (docs/binding-technical-design.md §2.2/§4.1):
 // the capsid/binding-v1 document with fixed sandbox profiles, the build's
@@ -87,9 +84,7 @@ bool valid_binding_id(std::string_view value);
 // request and stays fail-closed on any shape it cannot map. Shared with the
 // local-capsid.json data planes (single-worker / static-pool) so one
 // document grammar cannot diverge into two.
-bool parse_app_request(const std::vector<std::uint8_t>& bytes,
-                       AppRequest* app,
-                       std::string* error);
+bool parse_app_request(const std::vector<std::uint8_t>& bytes, AppRequest* app, std::string* error);
 
 // Shared byte-size and duration grammars (worker.memoryMax, request
 // timeouts, pool.queueTimeout). Exported for the local-capsid.json data
@@ -97,6 +92,6 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
 bool parse_size_bytes(const std::string& text, std::uint64_t* out);
 bool parse_duration_ms(const std::string& text, std::uint64_t* out);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

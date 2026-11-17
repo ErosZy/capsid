@@ -14,7 +14,7 @@ std::wstring directory(HMODULE module) {
     const auto slash = value.find_last_of(L"\\/");
     return slash == std::wstring::npos ? std::wstring() : value.substr(0, slash);
 }
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc != 4) {
@@ -27,8 +27,8 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         HMODULE module = GetModuleHandleA(argv[i]);
         const auto actual = module == nullptr ? std::wstring() : directory(module);
-        if (actual.empty() || CompareStringOrdinal(expected.c_str(), -1, actual.c_str(), -1,
-                                                  TRUE) != CSTR_EQUAL) {
+        if (actual.empty() ||
+            CompareStringOrdinal(expected.c_str(), -1, actual.c_str(), -1, TRUE) != CSTR_EQUAL) {
             std::fprintf(stderr, "FAIL: %s was not loaded from the consumer directory\n", argv[i]);
             return 1;
         }

@@ -18,33 +18,32 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require(bool condition, const std::string &message) {
+void require(bool condition, const std::string& message) {
     if (!condition) {
         fail(message);
     }
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot open fixture: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-void wait_for_ready(capsid_worker *worker) {
+void wait_for_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
@@ -62,9 +61,8 @@ void wait_for_ready(capsid_worker *worker) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker startup error: ") +
-                     std::string(
-                         reinterpret_cast<const char *>(event.payload.data),
-                         event.payload.size));
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
+                                 event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited before READY");
@@ -80,16 +78,14 @@ void wait_for_ready(capsid_worker *worker) {
 
         capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
-        descriptor.events =
-            POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
-void run_binding_request(capsid_worker *worker, std::string *body) {
+void run_binding_request(capsid_worker* worker, std::string* body) {
     require_result(
-        capsid_worker_begin_bodyless_request(
-            worker, 1, "GET", "https://example.test/", NULL, 0),
+        capsid_worker_begin_bodyless_request(worker, 1, "GET", "https://example.test/", NULL, 0),
         "begin bodyless request");
 
     bool response_end = false;
@@ -109,13 +105,10 @@ void run_binding_request(capsid_worker *worker, std::string *body) {
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
-                body->append(
-                    reinterpret_cast<const char *>(event.payload.data),
-                    event.payload.size);
-                require_result(
-                    capsid_worker_grant_response_credit(
-                        worker, event.request_id, event.payload.size),
-                    "grant response credit");
+                body->append(reinterpret_cast<const char*>(event.payload.data), event.payload.size);
+                require_result(capsid_worker_grant_response_credit(worker, event.request_id,
+                                                                   event.payload.size),
+                               "grant response credit");
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_END) {
@@ -124,9 +117,8 @@ void run_binding_request(capsid_worker *worker, std::string *body) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("request error: ") +
-                     std::string(
-                         reinterpret_cast<const char *>(event.payload.data),
-                         event.payload.size));
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
+                                 event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited before the response completed");
@@ -142,15 +134,14 @@ void run_binding_request(capsid_worker *worker, std::string *body) {
 
         capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
-        descriptor.events =
-            POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 3) {
         fail("usage: test-worker-binding-windows <capsid-worker> "
              "<binding-call-fixture>");
@@ -183,11 +174,11 @@ int main(int argc, char **argv) {
     capsid_worker_config_init(&config);
     config.worker_path = worker_path.c_str();
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
     require(worker != NULL, "spawn returned a null worker");
 
-    const char *modules[] = { "capsid:utils", "capsid:getopts" };
+    const char* modules[] = {"capsid:utils", "capsid:getopts"};
     capsid_binding_policy policy = {};
     policy.modules = modules;
     policy.module_count = 2;
@@ -211,25 +202,19 @@ int main(int argc, char **argv) {
     binding.struct_size = sizeof(binding);
     binding.version = CAPSID_BINDING_DESCRIPTOR_VERSION;
     binding.binding_name = "mongo";
-    binding.source.data =
-        reinterpret_cast<const uint8_t *>(binding_source.data());
+    binding.source.data = reinterpret_cast<const uint8_t*>(binding_source.data());
     binding.source.size = binding_source.size();
-    binding.config_json.data =
-        reinterpret_cast<const uint8_t *>(config_json);
+    binding.config_json.data = reinterpret_cast<const uint8_t*>(config_json);
     binding.config_json.size = sizeof(config_json) - 1;
     binding.secrets = NULL;
     binding.secret_count = 0;
     binding.policy = &policy;
     binding.sandbox = &sandbox;
 
-    require_result(capsid_worker_load_binding(worker, &binding),
-                   "load binding");
+    require_result(capsid_worker_load_binding(worker, &binding), "load binding");
     require_result(
-        capsid_worker_load_bundle_named(
-            worker,
-            reinterpret_cast<const uint8_t *>(app_bundle.data()),
-            app_bundle.size(),
-            "file:///capsid/test/binding-call.js"),
+        capsid_worker_load_bundle_named(worker, reinterpret_cast<const uint8_t*>(app_bundle.data()),
+                                        app_bundle.size(), "file:///capsid/test/binding-call.js"),
         "load bundle");
 
     wait_for_ready(worker);
@@ -237,10 +222,8 @@ int main(int argc, char **argv) {
     std::string body;
     run_binding_request(worker, &body);
     require(body.find("result:binding:{\"collection\":\"users\"}:"
-                      "windows-smoke:windows-global:windows-module-mark") !=
-                std::string::npos,
-            "Binding facade response did not carry the Binding result: " +
-                body);
+                      "windows-smoke:windows-global:windows-module-mark") != std::string::npos,
+            "Binding facade response did not carry the Binding result: " + body);
 
     require_result(capsid_worker_shutdown(worker), "shutdown worker");
     capsid_worker_destroy(worker);

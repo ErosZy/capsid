@@ -20,19 +20,17 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "network-namespace-test: " << message << std::endl;
     std::exit(1);
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot read fixture: ") + path);
     }
-    return std::string(
-        std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 #if defined(__linux__)
@@ -48,7 +46,7 @@ bool send_descriptor(int socket_fd, int descriptor) {
     message.msg_iovlen = 1;
     message.msg_control = control;
     message.msg_controllen = sizeof(control);
-    struct cmsghdr *header = CMSG_FIRSTHDR(&message);
+    struct cmsghdr* header = CMSG_FIRSTHDR(&message);
     header->cmsg_level = SOL_SOCKET;
     header->cmsg_type = SCM_RIGHTS;
     header->cmsg_len = CMSG_LEN(sizeof(int));
@@ -70,22 +68,19 @@ int receive_descriptor(int socket_fd) {
     if (recvmsg(socket_fd, &message, 0) != 1) {
         return -1;
     }
-    for (struct cmsghdr *header = CMSG_FIRSTHDR(&message);
-         header;
+    for (struct cmsghdr* header = CMSG_FIRSTHDR(&message); header;
          header = CMSG_NXTHDR(&message, header)) {
-        if (header->cmsg_level == SOL_SOCKET &&
-            header->cmsg_type == SCM_RIGHTS &&
+        if (header->cmsg_level == SOL_SOCKET && header->cmsg_type == SCM_RIGHTS &&
             header->cmsg_len == CMSG_LEN(sizeof(int))) {
             int descriptor = -1;
-            std::memcpy(
-                &descriptor, CMSG_DATA(header), sizeof(descriptor));
+            std::memcpy(&descriptor, CMSG_DATA(header), sizeof(descriptor));
             return descriptor;
         }
     }
     return -1;
 }
 
-uint32_t wait_ready(capsid_worker *worker) {
+uint32_t wait_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(10);
     for (;;) {
@@ -95,33 +90,29 @@ uint32_t wait_ready(capsid_worker *worker) {
         }
         capsid_event event = {};
         event.struct_size = sizeof(event);
-        const capsid_result result =
-            capsid_worker_next_event(worker, &event);
+        const capsid_result result = capsid_worker_next_event(worker, &event);
         if (result == CAPSID_OK) {
             if (event.type == CAPSID_EVENT_READY) {
                 return event.flags;
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker startup error: ") +
-                     std::string(
-                         reinterpret_cast<const char *>(
-                             event.payload.data),
-                         event.payload.size));
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
+                                 event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited before READY");
             }
             continue;
         }
-        if (result != CAPSID_WOULD_BLOCK ||
-            std::chrono::steady_clock::now() >= deadline) {
+        if (result != CAPSID_WOULD_BLOCK || std::chrono::steady_clock::now() >= deadline) {
             fail("worker READY timeout");
         }
         usleep(1000);
     }
 }
 
-int run(const char *worker_path, const char *fixture_path) {
+int run(const char* worker_path, const char* fixture_path) {
     // Regression: pin a descriptor at fd 4 before any other descriptor is
     // allocated, so the parent-side fd layout (pin=4, target namespace=5,
     // IPC socketpair=6/7) pushes the spawn's namespace-fd copy onto the
@@ -151,10 +142,8 @@ int run(const char *worker_path, const char *fixture_path) {
         if (unshare(CLONE_NEWNET) != 0) {
             _exit(77);
         }
-        const int descriptor =
-            open("/proc/self/ns/net", O_RDONLY | O_CLOEXEC);
-        if (descriptor < 0 ||
-            !send_descriptor(control[1], descriptor)) {
+        const int descriptor = open("/proc/self/ns/net", O_RDONLY | O_CLOEXEC);
+        if (descriptor < 0 || !send_descriptor(control[1], descriptor)) {
             _exit(78);
         }
         close(descriptor);
@@ -171,9 +160,7 @@ int run(const char *worker_path, const char *fixture_path) {
         waitpid(owner, &status, 0);
         close(control[0]);
         if (WIFEXITED(status) && WEXITSTATUS(status) == 77) {
-            std::cerr
-                << "network namespace creation unavailable"
-                << std::endl;
+            std::cerr << "network namespace creation unavailable" << std::endl;
             return 77;
         }
         fail("namespace owner did not provide a descriptor");
@@ -193,19 +180,15 @@ int run(const char *worker_path, const char *fixture_path) {
     config.worker_path = worker_path;
     config.strict_sandbox = 1;
     config.sandbox_network_namespace_fd = target_namespace;
-    config.sandbox_required_features =
-        CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE;
-    capsid_worker *worker = NULL;
+    config.sandbox_required_features = CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE;
+    capsid_worker* worker = NULL;
     const capsid_result spawn = capsid_worker_spawn(&config, &worker);
     if (spawn != CAPSID_OK) {
-        fail(std::string("worker spawn failed: ") +
-             capsid_result_string(spawn));
+        fail(std::string("worker spawn failed: ") + capsid_result_string(spawn));
     }
     const std::string bundle = read_file(fixture_path);
-    if (capsid_worker_load_bundle(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size()) != CAPSID_OK) {
+    if (capsid_worker_load_bundle(worker, reinterpret_cast<const uint8_t*>(bundle.data()),
+                                  bundle.size()) != CAPSID_OK) {
         fail("load bundle failed");
     }
     const uint32_t features = wait_ready(worker);
@@ -214,13 +197,10 @@ int run(const char *worker_path, const char *fixture_path) {
     }
 
     const std::string worker_namespace_path =
-        std::string("/proc/") +
-        std::to_string(capsid_worker_pid(worker)) +
-        "/ns/net";
+        std::string("/proc/") + std::to_string(capsid_worker_pid(worker)) + "/ns/net";
     struct stat worker_stat = {};
     if (stat(worker_namespace_path.c_str(), &worker_stat) != 0 ||
-        worker_stat.st_dev != target_stat.st_dev ||
-        worker_stat.st_ino != target_stat.st_ino) {
+        worker_stat.st_dev != target_stat.st_dev || worker_stat.st_ino != target_stat.st_ino) {
         fail("worker did not enter the supplied network namespace");
     }
 
@@ -242,12 +222,12 @@ int run(const char *worker_path, const char *fixture_path) {
 
 #endif
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
 #if !defined(__linux__)
-    (void) argc;
-    (void) argv;
+    (void)argc;
+    (void)argv;
     return 77;
 #else
     if (argc != 3) {

@@ -17,12 +17,13 @@ namespace capsid::host {
 // destroy its pool while the management thread is waiting for the App
 // operation lock; no task ever pins a pool or waits for a pool mutex.
 class QuarantineRequest {
-public:
+  public:
     QuarantineRequest(ManagedHostOptions* options, std::string generation,
                       std::function<bool()> still_current);
     std::atomic<bool> completed{false};
     DeployOutcome result() const;
-private:
+
+  private:
     friend class QuarantineDispatcher;
     void run();
     void finish(DeployOutcome outcome);
@@ -35,7 +36,7 @@ private:
 };
 
 class QuarantineDispatcher {
-public:
+  public:
     QuarantineDispatcher();
     ~QuarantineDispatcher();
     QuarantineDispatcher(const QuarantineDispatcher&) = delete;
@@ -44,7 +45,8 @@ public:
     // Join producers first. Pending live requests are completed, not
     // dropped on shutdown; expired aborted-generation requests are skipped.
     void stop_and_join();
-private:
+
+  private:
     void run();
     std::mutex mutex_;
     std::condition_variable cv_;

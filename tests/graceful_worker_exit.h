@@ -19,14 +19,8 @@ namespace capsid_test {
 
 struct GracefulWorkerExit {
     GracefulWorkerExit()
-        : shutdown_result(CAPSID_OK),
-          flush_result(CAPSID_OK),
-          event_result(CAPSID_OK),
-          channel_closed(false),
-          error_events(0),
-          reaped(false),
-          wait_error(0),
-          status(0) {}
+        : shutdown_result(CAPSID_OK), flush_result(CAPSID_OK), event_result(CAPSID_OK),
+          channel_closed(false), error_events(0), reaped(false), wait_error(0), status(0) {}
 
     capsid_result shutdown_result;
     capsid_result flush_result;
@@ -41,16 +35,13 @@ struct GracefulWorkerExit {
 
     bool clean() const {
         return shutdown_result == CAPSID_OK && flush_result == CAPSID_OK &&
-               event_result == CAPSID_OK && channel_closed && error_events == 0 &&
-               reaped && wait_error == 0 && WIFEXITED(status) &&
-               WEXITSTATUS(status) == 0;
+               event_result == CAPSID_OK && channel_closed && error_events == 0 && reaped &&
+               wait_error == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
     }
 };
 
-inline GracefulWorkerExit wait_for_worker_exit(
-    capsid_worker *worker,
-    uint32_t timeout_ms,
-    bool request_shutdown) {
+inline GracefulWorkerExit wait_for_worker_exit(capsid_worker* worker, uint32_t timeout_ms,
+                                               bool request_shutdown) {
     GracefulWorkerExit result;
     const int64_t worker_pid = capsid_worker_pid(worker);
     if (worker_pid <= 0) {
@@ -61,10 +52,8 @@ inline GracefulWorkerExit wait_for_worker_exit(
     // Pin process identity before requesting exit. Reopening a numeric PID
     // while polling can observe a different process after PID reuse.
 #if defined(_WIN32)
-    HANDLE process = OpenProcess(
-        SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-        FALSE,
-        static_cast<DWORD>(worker_pid));
+    HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                 static_cast<DWORD>(worker_pid));
     if (process == NULL) {
         result.wait_error = EINVAL;
         return result;
@@ -82,8 +71,7 @@ inline GracefulWorkerExit wait_for_worker_exit(
 
     bool flushed = !request_shutdown;
     const std::chrono::steady_clock::time_point deadline =
-        std::chrono::steady_clock::now() +
-        std::chrono::milliseconds(timeout_ms);
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     while (std::chrono::steady_clock::now() < deadline) {
         if (!flushed) {
             result.flush_result = capsid_worker_flush(worker);
@@ -101,9 +89,9 @@ inline GracefulWorkerExit wait_for_worker_exit(
             capsid_event event = {};
             event.struct_size = sizeof(event);
             const capsid_result next = capsid_worker_next_event(worker, &event);
-            if (next == CAPSID_WOULD_BLOCK) break;
-            if (next == CAPSID_CLOSED ||
-                (next == CAPSID_OK && event.type == CAPSID_EVENT_EXIT)) {
+            if (next == CAPSID_WOULD_BLOCK)
+                break;
+            if (next == CAPSID_CLOSED || (next == CAPSID_OK && event.type == CAPSID_EVENT_EXIT)) {
                 result.channel_closed = true;
                 break;
             }
@@ -111,8 +99,8 @@ inline GracefulWorkerExit wait_for_worker_exit(
                 result.event_result = next;
                 return result;
             }
-            if (event.type == CAPSID_EVENT_ERROR ||
-                event.type == CAPSID_EVENT_REQUEST_TIMEOUT) ++result.error_events;
+            if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_REQUEST_TIMEOUT)
+                ++result.error_events;
         }
 
         if (!result.reaped) {
@@ -132,8 +120,7 @@ inline GracefulWorkerExit wait_for_worker_exit(
             }
 #else
             int status = 0;
-            const pid_t waited =
-                waitpid(static_cast<pid_t>(worker_pid), &status, WNOHANG);
+            const pid_t waited = waitpid(static_cast<pid_t>(worker_pid), &status, WNOHANG);
             if (waited == static_cast<pid_t>(worker_pid)) {
                 result.reaped = true;
                 result.status = status;
@@ -144,17 +131,17 @@ inline GracefulWorkerExit wait_for_worker_exit(
             }
 #endif
         }
-        if (result.reaped && result.channel_closed) return result;
+        if (result.reaped && result.channel_closed)
+            return result;
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     return result;
 }
 
-inline GracefulWorkerExit shutdown_and_wait(capsid_worker *worker,
-                                           uint32_t timeout_ms) {
+inline GracefulWorkerExit shutdown_and_wait(capsid_worker* worker, uint32_t timeout_ms) {
     return wait_for_worker_exit(worker, timeout_ms, true);
 }
 
-}  // namespace capsid_test
+} // namespace capsid_test
 
 #endif

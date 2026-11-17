@@ -1,0 +1,14 @@
+{
+  "name": "capsid-devtools",
+  "private": true,
+  "description": "Pinned repository formatting tools; not runtime dependencies",
+  "scripts": {
+    "format": "node tools/format-run.mjs --write",
+    "format:check": "node tools/format-run.mjs --check",
+    "format:list": "node tools/format-run.mjs --list"
+  },
+  "devDependencies": {
+    "acorn": "8.15.0",
+    "prettier": "3.8.3"
+  }
+}

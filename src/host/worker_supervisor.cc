@@ -24,8 +24,7 @@ void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
 
 // A probe schedule marker meaning "never due" (unconfigured App, or
 // probing disabled by a zero host interval).
-inline constexpr std::uint64_t kProbeDisabled =
-    std::numeric_limits<std::uint64_t>::max();
+inline constexpr std::uint64_t kProbeDisabled = std::numeric_limits<std::uint64_t>::max();
 
 // A submitted probe that the executor's worker thread never began (its
 // ProbeState shows neither in_flight nor complete) within this window is
@@ -35,7 +34,7 @@ inline constexpr std::uint64_t kProbeDisabled =
 // latency on the worker thread.
 inline constexpr std::uint64_t kProbeSubmitSkipWindowMs = 250;
 
-}  // namespace
+} // namespace
 
 // M2 item 5a (direction A): the per-App active-health probe scheduler.
 // The pool is the only recovery engine; this thread only decides when to
@@ -53,8 +52,7 @@ inline constexpr std::uint64_t kProbeSubmitSkipWindowMs = 250;
 // 3. Shutdown is never instability: the stop signal is checked at every
 //    gate, and nothing observed after stop counts toward any budget.
 
-WorkerSupervisor::WorkerSupervisor(WorkerSupervisorOptions options)
-    : options_(std::move(options)) {
+WorkerSupervisor::WorkerSupervisor(WorkerSupervisorOptions options) : options_(std::move(options)) {
     thread_ = std::thread(&WorkerSupervisor::run, this);
 }
 
@@ -63,9 +61,7 @@ WorkerSupervisor::~WorkerSupervisor() {
     join();
 }
 
-void WorkerSupervisor::request_stop() {
-    stopped_.store(true, std::memory_order_relaxed);
-}
+void WorkerSupervisor::request_stop() { stopped_.store(true, std::memory_order_relaxed); }
 
 void WorkerSupervisor::join() {
     if (thread_.joinable()) {
@@ -80,22 +76,20 @@ bool WorkerSupervisor::stop_requested() const {
 }
 
 std::uint64_t WorkerSupervisor::monotonic_ms() const {
-    return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
+    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                          std::chrono::steady_clock::now().time_since_epoch())
+                                          .count());
 }
 
 std::int32_t WorkerSupervisor::jitter_basis_points() const {
-    const std::int32_t limit =
-        static_cast<std::int32_t>(options_.policy.jitter_basis_points);
+    const std::int32_t limit = static_cast<std::int32_t>(options_.policy.jitter_basis_points);
     std::uniform_int_distribution<std::int32_t> distribution(-limit, limit);
     return distribution(jitter_rng_);
 }
 
 bool WorkerSupervisor::sleep_interruptible(std::uint64_t milliseconds) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::milliseconds(milliseconds);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
     while (std::chrono::steady_clock::now() < deadline) {
         if (stop_requested()) {
             return false;
@@ -162,8 +156,7 @@ void WorkerSupervisor::run() {
                 // The probe never began on the worker thread within the
                 // submit window: a skip, not a verdict (§7.4). The next
                 // schedule re-arms the probe.
-                if (monotonic_ms() - probe_submitted_ms_ >=
-                    kProbeSubmitSkipWindowMs) {
+                if (monotonic_ms() - probe_submitted_ms_ >= kProbeSubmitSkipWindowMs) {
                     probe_in_flight_ = false;
                     schedule_next_probe();
                 }
@@ -174,18 +167,15 @@ void WorkerSupervisor::run() {
                 probe_in_flight_ = false;
                 probe_failure(pool, executor);
             }
-        } else if (next_probe_due_ms_ != kProbeDisabled &&
-                   monotonic_ms() >= next_probe_due_ms_) {
+        } else if (next_probe_due_ms_ != kProbeDisabled && monotonic_ms() >= next_probe_due_ms_) {
             // Fire the probe THROUGH the executor's probe channel. The
             // URL mirrors the data-plane shape — an absolute URL with the
             // App id as the authority — so the app's fetch handler
             // observes the probe exactly like a real request. A bare
             // relative path would not construct (the worker's URL parser
             // requires a scheme).
-            std::string url = "http://" +
-                              options_.managed_options->application +
-                              (health_check_.path[0] == '/' ? "" : "/") +
-                              health_check_.path;
+            std::string url = "http://" + options_.managed_options->application +
+                              (health_check_.path[0] == '/' ? "" : "/") + health_check_.path;
             executor->submit_probe(url);
             probe_in_flight_ = true;
             probe_submitted_ms_ = monotonic_ms();
@@ -209,16 +199,14 @@ void WorkerSupervisor::clear_probe_target() {
     consecutive_probe_failures_ = 0;
 }
 
-bool WorkerSupervisor::target_is_current(
-    const std::shared_ptr<GenerationPool>& pool,
-    const std::shared_ptr<WorkerExecutor>& executor) const {
+bool WorkerSupervisor::target_is_current(const std::shared_ptr<GenerationPool>& pool,
+                                         const std::shared_ptr<WorkerExecutor>& executor) const {
     return !stop_requested() && options_.current_pool() == pool &&
            pool->current_worker_snapshot() == executor && !stop_requested();
 }
 
-void WorkerSupervisor::rearm_probe(
-    const std::shared_ptr<GenerationPool>& pool,
-    const std::shared_ptr<WorkerExecutor>& executor) {
+void WorkerSupervisor::rearm_probe(const std::shared_ptr<GenerationPool>& pool,
+                                   const std::shared_ptr<WorkerExecutor>& executor) {
     probe_pool_ = pool;
     probe_target_ = executor;
     probe_in_flight_ = false;
@@ -236,17 +224,15 @@ void WorkerSupervisor::rearm_probe(
     // is not built on Windows (see docs/windows.md); managed_options is
     // never wired there, so the default (unconfigured) probe applies.
     else if (options_.managed_options != nullptr) {
-        health_check_ = managed_read_health_check(
-            options_.managed_options, anchored_generation_);
+        health_check_ = managed_read_health_check(options_.managed_options, anchored_generation_);
     }
 #endif
     // Every new worker gets at least one initial check: the initial
     // probe is due immediately, in parallel with the pool's stability
     // window.
-    next_probe_due_ms_ =
-        (health_check_.configured && options_.active_health_interval_ms > 0)
-            ? monotonic_ms()
-            : kProbeDisabled;
+    next_probe_due_ms_ = (health_check_.configured && options_.active_health_interval_ms > 0)
+                             ? monotonic_ms()
+                             : kProbeDisabled;
 }
 
 void WorkerSupervisor::probe_success() {
@@ -254,9 +240,8 @@ void WorkerSupervisor::probe_success() {
     schedule_next_probe();
 }
 
-void WorkerSupervisor::probe_failure(
-    const std::shared_ptr<GenerationPool>& pool,
-    const std::shared_ptr<WorkerExecutor>& executor) {
+void WorkerSupervisor::probe_failure(const std::shared_ptr<GenerationPool>& pool,
+                                     const std::shared_ptr<WorkerExecutor>& executor) {
     if (!target_is_current(pool, executor)) {
         clear_probe_target();
         return;
@@ -268,9 +253,8 @@ void WorkerSupervisor::probe_failure(
     fields.app = options_.managed_options->application;
     fields.generation = anchored_generation_;
     fields.result = "failed";
-    fields.message = "health probe failed (" +
-                     std::to_string(consecutive_probe_failures_) +
-                     " consecutive)";
+    fields.message =
+        "health probe failed (" + std::to_string(consecutive_probe_failures_) + " consecutive)";
     emit_log(options_.log, LogLane::kApp, std::move(fields));
     if (options_.active_health_failures > 0 &&
         consecutive_probe_failures_ >= options_.active_health_failures) {
@@ -293,12 +277,9 @@ void WorkerSupervisor::probe_failure(
 // Next probe due after the interval, jittered with the policy's
 // basis-point range (same scaling convention as the recovery backoff).
 void WorkerSupervisor::schedule_next_probe() {
-    const std::int64_t interval =
-        static_cast<std::int64_t>(options_.active_health_interval_ms);
-    const std::int64_t scaled =
-        interval * (10000 + jitter_basis_points());
-    next_probe_due_ms_ = monotonic_ms() +
-                         static_cast<std::uint64_t>(scaled / 10000);
+    const std::int64_t interval = static_cast<std::int64_t>(options_.active_health_interval_ms);
+    const std::int64_t scaled = interval * (10000 + jitter_basis_points());
+    next_probe_due_ms_ = monotonic_ms() + static_cast<std::uint64_t>(scaled / 10000);
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

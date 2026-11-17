@@ -112,12 +112,10 @@ constexpr std::string_view kFullDocument = R"json({
   }
 })json";
 
-void require_valid_parse(std::string_view json, const char* label,
-                         ParsedHostConfig* out) {
+void require_valid_parse(std::string_view json, const char* label, ParsedHostConfig* out) {
     const auto validation = validate_config_json(ConfigDocument::kHost, json);
-    require(validation.ok, std::string(label) + " is not schema-valid: '" +
-                               validation.error.path + "': " +
-                               validation.error.message);
+    require(validation.ok, std::string(label) + " is not schema-valid: '" + validation.error.path +
+                               "': " + validation.error.message);
     std::string error;
     require(parse_host_config(json, out, &error),
             std::string(label) + " was rejected by the typed parse: " + error);
@@ -127,9 +125,8 @@ void require_parse_error(std::string_view json, const char* label) {
     // The document must be schema-valid: the gate under test lives in the
     // typed parse, not in validate_config_json.
     const auto validation = validate_config_json(ConfigDocument::kHost, json);
-    require(validation.ok, std::string(label) + " is not schema-valid: '" +
-                               validation.error.path + "': " +
-                               validation.error.message);
+    require(validation.ok, std::string(label) + " is not schema-valid: '" + validation.error.path +
+                               "': " + validation.error.message);
     ParsedHostConfig config;
     std::string error;
     require(!parse_host_config(json, &config, &error),
@@ -141,29 +138,23 @@ void test_full_document_maps_every_field() {
     ParsedHostConfig config;
     require_valid_parse(kFullDocument, "full document", &config);
 
-    require(config.applications_root == "/srv/apps",
-            "applicationsRoot did not map");
+    require(config.applications_root == "/srv/apps", "applicationsRoot did not map");
     require(config.state_root == "/var/lib/capsid", "stateRoot did not map");
-    require(config.secret_root_template ==
-                "/var/lib/capsid/secrets/{application}",
+    require(config.secret_root_template == "/var/lib/capsid/secrets/{application}",
             "secretRootTemplate did not map");
-    require(config.admin_unix_path == "/run/capsid/admin.sock",
-            "admin.unix did not map");
+    require(config.admin_unix_path == "/run/capsid/admin.sock", "admin.unix did not map");
     require(config.admin_mode == 0600, "admin.mode did not map");
 
     require(config.listeners.size() == 1, "listeners did not map");
     const auto& listener = config.listeners[0];
     require(listener.name == "public", "listener.name did not map");
     require(listener.tcp == "0.0.0.0:8443", "listener.tcp did not map");
-    require(listener.public_scheme == "https",
-            "listener.publicScheme did not map");
+    require(listener.public_scheme == "https", "listener.publicScheme did not map");
     require(listener.public_authority == "apps.example.com",
             "listener.publicAuthority did not map");
     require(listener.routing.mode == "path", "routing.mode did not map");
-    require(listener.routing.suffix == "x-capsid-app",
-            "routing.suffix did not map");
-    require(listener.limits.connections == 128,
-            "limits.connections did not map");
+    require(listener.routing.suffix == "x-capsid-app", "routing.suffix did not map");
+    require(listener.limits.connections == 128, "limits.connections did not map");
     require(listener.limits.header_bytes == 64U * 1024U,
             "limits.headerBytes did not convert to bytes");
     require(listener.limits.header_timeout_ms == 5000,
@@ -171,8 +162,7 @@ void test_full_document_maps_every_field() {
     require(listener.limits.body_idle_timeout_ms == 30000,
             "limits.bodyIdleTimeout did not convert to ms");
     require(listener.cors.configured, "cors did not map");
-    require(listener.cors.allowed_origins.size() == 1 &&
-                listener.cors.allowed_origins[0] == "*",
+    require(listener.cors.allowed_origins.size() == 1 && listener.cors.allowed_origins[0] == "*",
             "cors.allowedOrigins did not map");
     require(listener.cors.allowed_methods.size() == 2 &&
                 listener.cors.allowed_methods[0] == "GET" &&
@@ -182,60 +172,45 @@ void test_full_document_maps_every_field() {
                 listener.cors.allowed_headers[0] == "content-type" &&
                 listener.cors.allowed_headers[1] == "x-request-id",
             "cors.allowedHeaders did not normalize to lowercase");
-    require(listener.cors.max_age_ms == 86400000,
-            "cors.maxAge did not convert to ms");
+    require(listener.cors.max_age_ms == 86400000, "cors.maxAge did not convert to ms");
     require(listener.limits.stream_idle_timeout_ms == 60000,
             "limits.streamIdleTimeout did not convert to ms");
 
-    require(config.policy.module_allowlist.size() == 2,
-            "permissions.modules did not map");
-    require(config.policy.env_patterns.size() == 2,
-            "permissions.environmentNames did not map");
-    require(config.policy.fs_read_roots.size() == 1,
-            "permissions.fsReadRoots did not map");
-    require(config.policy.fetch_targets.size() == 2,
-            "permissions.fetchTargets did not map");
+    require(config.policy.module_allowlist.size() == 2, "permissions.modules did not map");
+    require(config.policy.env_patterns.size() == 2, "permissions.environmentNames did not map");
+    require(config.policy.fs_read_roots.size() == 1, "permissions.fsReadRoots did not map");
+    require(config.policy.fetch_targets.size() == 2, "permissions.fetchTargets did not map");
     require(config.policy.fetch_targets[0].host == "api.internal" &&
                 config.policy.fetch_targets[0].ports.size() == 2,
             "fetch target ports did not map");
-    require(config.policy.fetch_targets[1].ports.empty(),
-            "any-port fetch target gained ports");
+    require(config.policy.fetch_targets[1].ports.empty(), "any-port fetch target gained ports");
     require(config.policy.storage_allowed, "storage_allowed did not flip");
     require(config.policy.storage_namespaces.size() == 1,
             "permissions.storageNamespaces did not map");
     require(config.policy.stdio_allowed, "stdio_allowed did not flip");
-    require(config.policy.stdio_streams.size() == 1,
-            "permissions.stdioStreams did not map");
+    require(config.policy.stdio_streams.size() == 1, "permissions.stdioStreams did not map");
 
     require(config.isolation_mode == "strict", "isolation.mode did not map");
-    require(config.isolation_required.size() == 1 &&
-                config.isolation_required[0] == "pid",
+    require(config.isolation_required.size() == 1 && config.isolation_required[0] == "pid",
             "isolation.required did not map");
-    require(config.isolation_cgroup_root == "/sys/fs/cgroup",
-            "isolation.cgroupRoot did not map");
+    require(config.isolation_cgroup_root == "/sys/fs/cgroup", "isolation.cgroupRoot did not map");
 
-    require(config.trusted_keys.size() == 2,
-            "trustedBytecodeKeys did not map");
+    require(config.trusted_keys.size() == 2, "trustedBytecodeKeys did not map");
     require(config.trusted_keys[0].key_id == "release-key" &&
-                config.trusted_keys[0].key_path ==
-                    "/etc/capsid/keys/release.raw",
+                config.trusted_keys[0].key_path == "/etc/capsid/keys/release.raw",
             "trusted key descriptor did not map");
     require(config.trusted_keys[1].key_id == "ci-key" &&
                 config.trusted_keys[1].key_path == "/etc/capsid/keys/ci.raw",
             "second trusted key descriptor did not map");
 
-    require(config.defaults.worker.js_heap == "64MiB",
-            "defaults.worker.jsHeap did not map");
+    require(config.defaults.worker.js_heap == "64MiB", "defaults.worker.jsHeap did not map");
     require(config.defaults.worker.process_address_space == "256MiB",
             "defaults.worker.processAddressSpace did not map");
-    require(config.defaults.worker.memory_max == "128MiB",
-            "defaults.worker.memoryMax did not map");
+    require(config.defaults.worker.memory_max == "128MiB", "defaults.worker.memoryMax did not map");
     require(config.defaults.worker.file_descriptors == 64,
             "defaults.worker.fileDescriptors did not map");
-    require(config.defaults.worker.pids_max == 32,
-            "defaults.worker.pidsMax did not map");
-    require(config.defaults.request.timeout == "30s",
-            "defaults.request.timeout did not map");
+    require(config.defaults.worker.pids_max == 32, "defaults.worker.pidsMax did not map");
+    require(config.defaults.request.timeout == "30s", "defaults.request.timeout did not map");
     require(config.policy.default_request_timeout_ms == 30000 &&
                 config.policy.max_request_timeout_ms == 60000,
             "request timeout tiers did not reach the deployment policy");
@@ -247,15 +222,13 @@ void test_full_document_maps_every_field() {
             "defaults.request.streamIdleTimeoutMs did not map");
     require(config.defaults.request.write_timeout_ms == 15000,
             "defaults.request.writeTimeoutMs did not map");
-    require(config.defaults.pool.queue_requests == 64,
-            "defaults.pool.queueRequests did not map");
+    require(config.defaults.pool.queue_requests == 64, "defaults.pool.queueRequests did not map");
     require(config.defaults.pool.queue_header_bytes == 64U * 1024U,
             "defaults.pool.queueHeaderBytes did not convert");
     require(config.defaults.pool.queue_timeout_ms == 5000,
             "defaults.pool.queueTimeout did not convert");
 
-    require(config.maximums.worker.memory_max == "512MiB",
-            "maximums.worker.memoryMax did not map");
+    require(config.maximums.worker.memory_max == "512MiB", "maximums.worker.memoryMax did not map");
     require(config.policy.max_worker_memory_bytes == 512U * 1024U * 1024U,
             "maximums.worker.memoryMax did not reach the policy");
     require(config.policy.max_requests_per_worker == 32,
@@ -274,14 +247,11 @@ void test_full_document_maps_every_field() {
     require(config.policy.max_queue_timeout_ms == 10000,
             "maximums.pool.queueTimeout did not reach the policy");
 
-    require(config.capacity.workers_total == 4,
-            "capacity.workersTotal did not map");
-    require(config.policy.max_workers == 4,
-            "capacity.workersTotal did not reach the policy");
+    require(config.capacity.workers_total == 4, "capacity.workersTotal did not map");
+    require(config.policy.max_workers == 4, "capacity.workersTotal did not reach the policy");
     require(config.capacity.activation_surge_workers == 2,
             "capacity.activationSurgeWorkers did not map");
-    require(config.capacity.startups_concurrent == 2,
-            "capacity.startupsConcurrent did not map");
+    require(config.capacity.startups_concurrent == 2, "capacity.startupsConcurrent did not map");
     require(config.capacity.queued_requests_total == 128,
             "capacity.queuedRequestsTotal did not map");
     require(config.capacity.queued_header_bytes_total == 128U * 1024U,
@@ -325,17 +295,16 @@ void test_channels_section_maps_and_gates() {
     "sendBudgetBytes": 33554432,
     "perChannelQueueBytes": 2097152
   }
-})json", "channels-mapped", &mapped);
+})json",
+                        "channels-mapped", &mapped);
     require(mapped.channels.configured, "channels section flag");
-    require(mapped.channels.max_channels == 64 &&
-                mapped.channels.max_message_bytes == 2097152 &&
+    require(mapped.channels.max_channels == 64 && mapped.channels.max_message_bytes == 2097152 &&
                 mapped.channels.reassembly_budget_bytes == 33554432 &&
                 mapped.channels.send_budget_bytes == 33554432 &&
                 mapped.channels.per_channel_queue_bytes == 2097152,
             "channels fields mapped");
     // defaults where absent
-    require(mapped.channels.close_timeout_ms == 0 &&
-                mapped.channels.dial_timeout_ms == 0,
+    require(mapped.channels.close_timeout_ms == 0 && mapped.channels.dial_timeout_ms == 0,
             "absent timeouts keep zero = deployment default");
 
     // illegal limits: message cap below the A2 floor
@@ -346,7 +315,8 @@ void test_channels_section_maps_and_gates() {
   "secretRootTemplate": "/secrets/{application}",
   "admin": {"unix": "/run/capsid/admin.sock"},
   "channels": {"maxMessageBytes": 512}
-})json", "channels-message-below-floor");
+})json",
+                        "channels-message-below-floor");
     // illegal limits: channel count over the A2 ceiling
     require_parse_error(R"json({
   "apiVersion": "capsid/host-v1",
@@ -355,7 +325,8 @@ void test_channels_section_maps_and_gates() {
   "secretRootTemplate": "/secrets/{application}",
   "admin": {"unix": "/run/capsid/admin.sock"},
   "channels": {"maxChannels": 4096}
-})json", "channels-count-over-ceiling");
+})json",
+                        "channels-count-over-ceiling");
     // illegal limits: per-channel queue over the 4 MiB cap
     require_parse_error(R"json({
   "apiVersion": "capsid/host-v1",
@@ -364,7 +335,8 @@ void test_channels_section_maps_and_gates() {
   "secretRootTemplate": "/secrets/{application}",
   "admin": {"unix": "/run/capsid/admin.sock"},
   "channels": {"perChannelQueueBytes": 8388608}
-})json", "channels-queue-over-cap");
+})json",
+                        "channels-queue-over-cap");
     // minimal document keeps channels unconfigured (v4 carriage)
     ParsedHostConfig minimal;
     require_valid_parse(
@@ -388,20 +360,16 @@ void test_minimal_document_parses() {
           "admin": {"unix": "/run/capsid/admin.sock"}
         })json",
         "minimal document", &config);
-    require(config.admin_mode == 0600,
-            "absent admin.mode must keep the 0600 default");
+    require(config.admin_mode == 0600, "absent admin.mode must keep the 0600 default");
     require(config.listeners.empty(), "absent listeners must stay empty");
-    require(config.policy.module_allowlist.empty(),
-            "absent permissions must stay empty");
+    require(config.policy.module_allowlist.empty(), "absent permissions must stay empty");
     require(!config.policy.storage_allowed && !config.policy.stdio_allowed,
             "absent permissions must not flip the allow flags");
-    require(config.isolation_mode.empty(),
-            "absent isolation.mode must stay empty");
+    require(config.isolation_mode.empty(), "absent isolation.mode must stay empty");
     require(config.trusted_keys.empty(), "absent keys must stay empty");
     require(config.capacity.workers_total == 1,
             "absent capacity.workersTotal must keep the default");
-    require(config.policy.max_workers == 1,
-            "absent capacity must keep max_workers 1");
+    require(config.policy.max_workers == 1, "absent capacity must keep max_workers 1");
     require(config.capacity.activation_surge_workers == 0,
             "absent capacity.activationSurgeWorkers must default to 0");
 }
@@ -412,16 +380,13 @@ void test_bindings_root_maps() {
     ParsedHostConfig config;
     require_valid_parse(
         R"json({"apiVersion":"capsid/host-v2","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/var/lib/capsid/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},"bindingsRoot":"/etc/capsid/bindings"})json",
-        "host v2 with bindingsRoot",
-        &config);
+        "host v2 with bindingsRoot", &config);
     require(config.bindings_root == "/etc/capsid/bindings",
             "bindingsRoot did not map into the typed model");
     require_valid_parse(
         R"json({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/var/lib/capsid/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"}})json",
-        "host v1 without bindingsRoot",
-        &config);
-    require(config.bindings_root.empty(),
-            "v1 document produced a bindingsRoot");
+        "host v1 without bindingsRoot", &config);
+    require(config.bindings_root.empty(), "v1 document produced a bindingsRoot");
 }
 
 void test_semantic_gates() {
@@ -473,8 +438,7 @@ void test_semantic_gates() {
           "capacity": {"workersTotal": 4,
                        "activationSurgeWorkers": -1}
         })json";
-    require_parse_error(negative_surge,
-                        "negative capacity.activationSurgeWorkers");
+    require_parse_error(negative_surge, "negative capacity.activationSurgeWorkers");
 
     std::string missing_root =
         R"json({
@@ -493,8 +457,7 @@ void test_semantic_gates() {
           "secretRootTemplate": "/secrets/app",
           "admin": {"unix": "/run/capsid/admin.sock"}
         })json";
-    require_parse_error(missing_template,
-                        "secretRootTemplate without {application}");
+    require_parse_error(missing_template, "secretRootTemplate without {application}");
 }
 
 void test_grammar_gates() {
@@ -622,13 +585,11 @@ void test_grammar_gates() {
             "allowedHeaders": ["x"]
           }}]
         })json";
-    require_parse_error(mixed_wildcard_origins,
-                        "cors wildcard mixed with exact origins");
+    require_parse_error(mixed_wildcard_origins, "cors wildcard mixed with exact origins");
 }
 
 void test_cors_tokens_use_the_http_tchar_grammar() {
-    for (const std::string token : {
-             "M#", "M$", "M%", "M&", "M^", "M`", "M|"}) {
+    for (const std::string token : {"M#", "M$", "M%", "M&", "M^", "M`", "M|"}) {
         require(capsid::host::valid_cors_method_token(token),
                 "valid HTTP method tchar was rejected: " + token);
         require(capsid::host::valid_cors_header_token(token),
@@ -651,12 +612,9 @@ void test_cors_preflight_without_requested_headers() {
 
     boost::beast::http::request<boost::beast::http::string_body> request;
     request.method(boost::beast::http::verb::options);
-    request.set(boost::beast::http::field::origin,
-                "http://allowed.test");
-    request.set(boost::beast::http::field::access_control_request_method,
-                "POST");
-    require(cors.prepare(request) ==
-                capsid::host::CorsDecision::kPreflightAllowed,
+    request.set(boost::beast::http::field::origin, "http://allowed.test");
+    request.set(boost::beast::http::field::access_control_request_method, "POST");
+    require(cors.prepare(request) == capsid::host::CorsDecision::kPreflightAllowed,
             "headerless CORS preflight was rejected");
 
     boost::beast::http::response<boost::beast::http::string_body> response;
@@ -667,16 +625,23 @@ void test_cors_preflight_without_requested_headers() {
 
 void test_request_timeout_tiers_are_finite_and_ordered() {
     const auto document = [](const std::string& tiers) {
-        return std::string(R"json({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},)json") + tiers + "}";
+        return std::string(
+                   R"json({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},)json") +
+               tiers + "}";
     };
     ParsedHostConfig config;
     std::string error;
-    require(parse_host_config(document(R"("defaults":{"request":{"timeout":"100ms"}},"maximums":{"request":{"timeout":"120ms"}})"), &config, &error),
-            "valid finite timeout tiers rejected: " + error);
+    require(
+        parse_host_config(
+            document(
+                R"("defaults":{"request":{"timeout":"100ms"}},"maximums":{"request":{"timeout":"120ms"}})"),
+            &config, &error),
+        "valid finite timeout tiers rejected: " + error);
     require(config.policy.default_request_timeout_ms == 100 &&
                 config.policy.max_request_timeout_ms == 120,
             "finite timeout tiers were discarded");
-    for (const auto& tiers : std::vector<std::string>{
+    for (
+        const auto& tiers : std::vector<std::string>{
             R"("defaults":{"request":{"timeout":"0ms"}})",
             R"("maximums":{"request":{"timeout":"0ms"}})",
             R"("maximums":{"request":{"timeout":"9223372036854775808ms"}})",
@@ -697,31 +662,32 @@ void test_error_is_stable_and_safe() {
           "secretRootTemplate": "/secrets/{application}",
           "admin": {"unix": "/run/capsid/admin.sock", "mode": "0640"}
         })json";
-    require(!parse_host_config(document, &config, &error),
-            "bad-mode document was accepted");
-    require(error == "admin.mode must be 0600",
-            "stable error text changed: '" + error + "'");
-    require(error.find('/') == std::string::npos,
-            "error text leaks a path: '" + error + "'");
+    require(!parse_host_config(document, &config, &error), "bad-mode document was accepted");
+    require(error == "admin.mode must be 0600", "stable error text changed: '" + error + "'");
+    require(error.find('/') == std::string::npos, "error text leaks a path: '" + error + "'");
 }
 
 void test_ipv6_fetch_authorities_reach_the_host_policy() {
     const auto document = [](const std::string& authority) {
-        return std::string(R"({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},"permissions":{"fetchTargets":[")") + authority + R"("]}})";
+        return std::string(
+                   R"({"apiVersion":"capsid/host-v1","applicationsRoot":"/srv/apps","stateRoot":"/var/lib/capsid","secretRootTemplate":"/secrets/{application}","admin":{"unix":"/run/capsid/admin.sock","mode":"0600"},"permissions":{"fetchTargets":[")") +
+               authority + R"("]}})";
     };
-    for (const auto& authority : std::vector<std::string>{
-            "[::1]:443,8443", "[0:0:0:0:0:0:0:1]:443,8443"}) {
+    for (const auto& authority :
+         std::vector<std::string>{"[::1]:443,8443", "[0:0:0:0:0:0:0:1]:443,8443"}) {
         ParsedHostConfig config;
         std::string error;
         require(parse_host_config(document(authority), &config, &error),
                 "bracketed IPv6 Host fetch authority rejected: " + error);
-        require(config.policy.fetch_targets.size() == 1 && config.policy.fetch_targets[0].host == "::1" &&
+        require(config.policy.fetch_targets.size() == 1 &&
+                    config.policy.fetch_targets[0].host == "::1" &&
                     config.policy.fetch_targets[0].ports == std::vector<std::uint16_t>({443, 8443}),
                 "IPv6 Host fetch authority gained or lost ports");
     }
-    for (const auto& authority : std::vector<std::string>{
-            "[::1]:", "[::1]:443,", "[::1]:65536", "[::1]extra:443", "[fe80::1%1]:443",
-            "[fe80::1%lo0]:443", "[fe80::1%25lo0]:443", "[::ffff:127.0.0.1%1]:443", "[::1%1]", "::1"}) {
+    for (const auto& authority :
+         std::vector<std::string>{"[::1]:", "[::1]:443,", "[::1]:65536", "[::1]extra:443",
+                                  "[fe80::1%1]:443", "[fe80::1%lo0]:443", "[fe80::1%25lo0]:443",
+                                  "[::ffff:127.0.0.1%1]:443", "[::1%1]", "::1"}) {
         ParsedHostConfig config;
         std::string error;
         require(!parse_host_config(document(authority), &config, &error),
@@ -729,7 +695,7 @@ void test_ipv6_fetch_authorities_reach_the_host_policy() {
     }
 }
 
-}  // namespace
+} // namespace
 
 int main() {
     test_full_document_maps_every_field();

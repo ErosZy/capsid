@@ -78,7 +78,7 @@ struct Schema {
         kArray,
         kDynamicMap,
         kBoolean,
-        kOpaqueObject,  // any JSON object, any keys; size-bounded in phase 2
+        kOpaqueObject, // any JSON object, any keys; size-bounded in phase 2
     };
 
     Kind kind;
@@ -123,8 +123,7 @@ struct Schema {
 constexpr Schema kStringSchema{Schema::Kind::kString};
 constexpr Schema kIntegerSchema{Schema::Kind::kInteger};
 constexpr Schema kBooleanSchema{Schema::Kind::kBoolean};
-constexpr Schema kPositiveIntegerSchema{
-    Schema::Kind::kInteger, {}, false, {}, 1};
+constexpr Schema kPositiveIntegerSchema{Schema::Kind::kInteger, {}, false, {}, 1};
 
 // Host/App apiVersion values: Binding v1 enables the v2 pair alongside the
 // frozen v1 documents. Anything else stays "unsupported value".
@@ -157,15 +156,13 @@ constexpr std::array kAdminMembers{
     Member{"unix", &kStringSchema, false},
     Member{"mode", &kStringSchema, false},
 };
-constexpr Schema kAdminSchema{
-    Schema::Kind::kObject, std::span<const Member>(kAdminMembers)};
+constexpr Schema kAdminSchema{Schema::Kind::kObject, std::span<const Member>(kAdminMembers)};
 
 constexpr std::array kRoutingMembers{
     Member{"mode", &kStringSchema, false},
     Member{"suffix", &kStringSchema, false},
 };
-constexpr Schema kRoutingSchema{
-    Schema::Kind::kObject, std::span<const Member>(kRoutingMembers)};
+constexpr Schema kRoutingSchema{Schema::Kind::kObject, std::span<const Member>(kRoutingMembers)};
 
 constexpr std::array kListenerLimitMembers{
     Member{"channels", &kPositiveIntegerSchema, false},
@@ -176,8 +173,8 @@ constexpr std::array kListenerLimitMembers{
     Member{"bodyIdleTimeout", &kStringSchema, false},
     Member{"streamIdleTimeout", &kStringSchema, false},
 };
-constexpr Schema kListenerLimitSchema{
-    Schema::Kind::kObject, std::span<const Member>(kListenerLimitMembers)};
+constexpr Schema kListenerLimitSchema{Schema::Kind::kObject,
+                                      std::span<const Member>(kListenerLimitMembers)};
 
 constexpr std::array kCorsMembers{
     Member{"allowedOrigins", &kStringArraySchema, true},
@@ -185,8 +182,7 @@ constexpr std::array kCorsMembers{
     Member{"allowedHeaders", &kStringArraySchema, true},
     Member{"maxAge", &kStringSchema, false},
 };
-constexpr Schema kCorsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kCorsMembers)};
+constexpr Schema kCorsSchema{Schema::Kind::kObject, std::span<const Member>(kCorsMembers)};
 
 constexpr std::array kListenerMembers{
     Member{"name", &kStringSchema, false},
@@ -198,8 +194,7 @@ constexpr std::array kListenerMembers{
     Member{"limits", &kListenerLimitSchema, false},
     Member{"cors", &kCorsSchema, false},
 };
-constexpr Schema kListenerSchema{
-    Schema::Kind::kObject, std::span<const Member>(kListenerMembers)};
+constexpr Schema kListenerSchema{Schema::Kind::kObject, std::span<const Member>(kListenerMembers)};
 
 constexpr Schema kListenerArraySchema{
     .kind = Schema::Kind::kArray,
@@ -224,16 +219,16 @@ constexpr std::array kHostPermissionsMembers{
     Member{"storageNamespaces", &kStringArraySchema, false},
     Member{"stdioStreams", &kStringArraySchema, false},
 };
-constexpr Schema kHostPermissionsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kHostPermissionsMembers)};
+constexpr Schema kHostPermissionsSchema{Schema::Kind::kObject,
+                                        std::span<const Member>(kHostPermissionsMembers)};
 
 constexpr std::array kIsolationMembers{
     Member{"mode", &kStringSchema, false},
     Member{"required", &kStringArraySchema, false},
     Member{"cgroupRoot", &kStringSchema, false},
 };
-constexpr Schema kIsolationSchema{
-    Schema::Kind::kObject, std::span<const Member>(kIsolationMembers)};
+constexpr Schema kIsolationSchema{Schema::Kind::kObject,
+                                  std::span<const Member>(kIsolationMembers)};
 
 // Key names are free (release identifiers); values are public key paths.
 constexpr Schema kTrustedBytecodeKeysSchema{
@@ -250,8 +245,7 @@ constexpr std::array kWorkerMembers{
     Member{"fileDescriptors", &kPositiveIntegerSchema, false},
     Member{"pidsMax", &kIntegerSchema, false},
 };
-constexpr Schema kWorkerSchema{
-    Schema::Kind::kObject, std::span<const Member>(kWorkerMembers)};
+constexpr Schema kWorkerSchema{Schema::Kind::kObject, std::span<const Member>(kWorkerMembers)};
 
 constexpr std::array kRequestMembers{
     Member{"timeout", &kStringSchema, false},
@@ -260,8 +254,7 @@ constexpr std::array kRequestMembers{
     Member{"streamIdleTimeoutMs", &kIntegerSchema, false},
     Member{"writeTimeoutMs", &kIntegerSchema, false},
 };
-constexpr Schema kRequestSchema{
-    Schema::Kind::kObject, std::span<const Member>(kRequestMembers)};
+constexpr Schema kRequestSchema{Schema::Kind::kObject, std::span<const Member>(kRequestMembers)};
 
 // Host-side pool config carries only the queue fields; the App pool adds
 // the required fixed-size members and equality below.
@@ -270,16 +263,14 @@ constexpr std::array kPoolQueueMembers{
     Member{"queueHeaderBytes", &kStringSchema, false},
     Member{"queueTimeout", &kStringSchema, false},
 };
-constexpr Schema kHostPoolSchema{
-    Schema::Kind::kObject, std::span<const Member>(kPoolQueueMembers)};
+constexpr Schema kHostPoolSchema{Schema::Kind::kObject, std::span<const Member>(kPoolQueueMembers)};
 
 constexpr std::array kTierMembers{
     Member{"worker", &kWorkerSchema, false},
     Member{"request", &kRequestSchema, false},
     Member{"pool", &kHostPoolSchema, false},
 };
-constexpr Schema kTierSchema{
-    Schema::Kind::kObject, std::span<const Member>(kTierMembers)};
+constexpr Schema kTierSchema{Schema::Kind::kObject, std::span<const Member>(kTierMembers)};
 
 constexpr std::array kCapacityMembers{
     Member{"channelsTotal", &kPositiveIntegerSchema, false},
@@ -294,15 +285,14 @@ constexpr std::array kCapacityMembers{
     Member{"queuedHeaderBytesTotal", &kStringSchema, false},
     Member{"workerMemoryCommitTotal", &kStringSchema, false},
 };
-constexpr Schema kCapacitySchema{
-    Schema::Kind::kObject, std::span<const Member>(kCapacityMembers)};
+constexpr Schema kCapacitySchema{Schema::Kind::kObject, std::span<const Member>(kCapacityMembers)};
 
 constexpr std::array kCrashBudgetMembers{
     Member{"maxEvents", &kIntegerSchema, false},
     Member{"window", &kStringSchema, false},
 };
-constexpr Schema kCrashBudgetSchema{
-    Schema::Kind::kObject, std::span<const Member>(kCrashBudgetMembers)};
+constexpr Schema kCrashBudgetSchema{Schema::Kind::kObject,
+                                    std::span<const Member>(kCrashBudgetMembers)};
 
 constexpr std::array kRestartBackoffMembers{
     Member{"initial", &kStringSchema, false},
@@ -310,8 +300,8 @@ constexpr std::array kRestartBackoffMembers{
     Member{"jitter", &kStringSchema, false},
     Member{"stableReset", &kStringSchema, false},
 };
-constexpr Schema kRestartBackoffSchema{
-    Schema::Kind::kObject, std::span<const Member>(kRestartBackoffMembers)};
+constexpr Schema kRestartBackoffSchema{Schema::Kind::kObject,
+                                       std::span<const Member>(kRestartBackoffMembers)};
 
 constexpr std::array kRecoveryMembers{
     Member{"crashBudget", &kCrashBudgetSchema, false},
@@ -320,8 +310,7 @@ constexpr std::array kRecoveryMembers{
     Member{"activeHealthInterval", &kStringSchema, false},
     Member{"activeHealthFailures", &kIntegerSchema, false},
 };
-constexpr Schema kRecoverySchema{
-    Schema::Kind::kObject, std::span<const Member>(kRecoveryMembers)};
+constexpr Schema kRecoverySchema{Schema::Kind::kObject, std::span<const Member>(kRecoveryMembers)};
 
 // GLM T08: host-level channel limits (FetchRPC v4 A2). All members
 // optional positive integers; the typed projection validates the
@@ -336,8 +325,7 @@ constexpr std::array kChannelsMembers{
     Member{"idleTimeoutMs", &kPositiveIntegerSchema, false},
     Member{"perChannelQueueBytes", &kPositiveIntegerSchema, false},
 };
-constexpr Schema kChannelsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kChannelsMembers)};
+constexpr Schema kChannelsSchema{Schema::Kind::kObject, std::span<const Member>(kChannelsMembers)};
 
 constexpr std::array kHostMembers{
     Member{"apiVersion", &kHostApiVersionSchema, true},
@@ -355,8 +343,7 @@ constexpr std::array kHostMembers{
     Member{"channels", &kChannelsSchema, false},
     Member{"recovery", &kRecoverySchema, false},
 };
-constexpr Schema kHostSchema{
-    Schema::Kind::kObject, std::span<const Member>(kHostMembers)};
+constexpr Schema kHostSchema{Schema::Kind::kObject, std::span<const Member>(kHostMembers)};
 
 // --- Environment request schemas ---
 //
@@ -400,26 +387,22 @@ constexpr std::array kFsReadMembers{
     Member{"allow", &kStringArraySchema, false},
     Member{"deny", &kStringArraySchema, false},
 };
-constexpr Schema kFsReadSchema{
-    Schema::Kind::kObject, std::span<const Member>(kFsReadMembers)};
+constexpr Schema kFsReadSchema{Schema::Kind::kObject, std::span<const Member>(kFsReadMembers)};
 
 constexpr std::array kFsMembers{
     Member{"read", &kFsReadSchema, false},
 };
-constexpr Schema kFsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kFsMembers)};
+constexpr Schema kFsSchema{Schema::Kind::kObject, std::span<const Member>(kFsMembers)};
 
 constexpr std::array kFetchMembers{
     Member{"allow", &kStringArraySchema, false},
 };
-constexpr Schema kFetchSchema{
-    Schema::Kind::kObject, std::span<const Member>(kFetchMembers)};
+constexpr Schema kFetchSchema{Schema::Kind::kObject, std::span<const Member>(kFetchMembers)};
 
 constexpr std::array kStorageMembers{
     Member{"namespaces", &kStringArraySchema, false},
 };
-constexpr Schema kStorageSchema{
-    Schema::Kind::kObject, std::span<const Member>(kStorageMembers)};
+constexpr Schema kStorageSchema{Schema::Kind::kObject, std::span<const Member>(kStorageMembers)};
 
 constexpr std::array kAppPermissionsMembers{
     Member{"modules", &kStringArraySchema, false},
@@ -429,8 +412,8 @@ constexpr std::array kAppPermissionsMembers{
     Member{"storage", &kStorageSchema, false},
     Member{"stdio", &kStringArraySchema, false},
 };
-constexpr Schema kAppPermissionsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kAppPermissionsMembers)};
+constexpr Schema kAppPermissionsSchema{Schema::Kind::kObject,
+                                       std::span<const Member>(kAppPermissionsMembers)};
 
 // App pool: required fixed size plus the shared queue fields.
 constexpr std::array kAppPoolMembers{
@@ -456,8 +439,8 @@ constexpr std::array kHealthCheckMembers{
     Member{"path", &kStringSchema, false},
     Member{"timeout", &kStringSchema, false},
 };
-constexpr Schema kHealthCheckSchema{
-    Schema::Kind::kObject, std::span<const Member>(kHealthCheckMembers)};
+constexpr Schema kHealthCheckSchema{Schema::Kind::kObject,
+                                    std::span<const Member>(kHealthCheckMembers)};
 
 constexpr std::array kApplicationMembers{
     Member{"apiVersion", &kAppApiVersionSchema, true},
@@ -468,8 +451,8 @@ constexpr std::array kApplicationMembers{
     Member{"pool", &kAppPoolSchema, true},
     Member{"healthCheck", &kHealthCheckSchema, false},
 };
-constexpr Schema kApplicationSchema{
-    Schema::Kind::kObject, std::span<const Member>(kApplicationMembers)};
+constexpr Schema kApplicationSchema{Schema::Kind::kObject,
+                                    std::span<const Member>(kApplicationMembers)};
 
 // --- Binding v1 schemas (docs/binding-technical-design.md §2) -----------
 
@@ -498,15 +481,15 @@ constexpr Schema kOpaqueObjectSchema{Schema::Kind::kOpaqueObject};
 constexpr std::array kBindingNetMembers{
     Member{"allow", &kNetTargetArraySchema, false},
 };
-constexpr Schema kBindingNetSchema{
-    Schema::Kind::kObject, std::span<const Member>(kBindingNetMembers)};
+constexpr Schema kBindingNetSchema{Schema::Kind::kObject,
+                                   std::span<const Member>(kBindingNetMembers)};
 
 constexpr std::array kBindingFsMembers{
     Member{"read", &kStringArraySchema, false},
     Member{"write", &kStringArraySchema, false},
 };
-constexpr Schema kBindingFsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kBindingFsMembers)};
+constexpr Schema kBindingFsSchema{Schema::Kind::kObject,
+                                  std::span<const Member>(kBindingFsMembers)};
 
 constexpr std::array kBindingPermissionsMembers{
     Member{"net", &kBindingNetSchema, false},
@@ -514,14 +497,14 @@ constexpr std::array kBindingPermissionsMembers{
     Member{"env", &kBindingEnvArraySchema, false},
     Member{"stdio", &kStringArraySchema, false},
 };
-constexpr Schema kBindingPermissionsSchema{
-    Schema::Kind::kObject, std::span<const Member>(kBindingPermissionsMembers)};
+constexpr Schema kBindingPermissionsSchema{Schema::Kind::kObject,
+                                           std::span<const Member>(kBindingPermissionsMembers)};
 
 constexpr std::array kBindingSecretMembers{
     Member{"valueFrom", &kSecretKeyIdSchema, true},
 };
-constexpr Schema kBindingSecretSchema{
-    Schema::Kind::kObject, std::span<const Member>(kBindingSecretMembers)};
+constexpr Schema kBindingSecretSchema{Schema::Kind::kObject,
+                                      std::span<const Member>(kBindingSecretMembers)};
 constexpr Schema kBindingSecretsSchema{
     .kind = Schema::Kind::kDynamicMap,
     .dynamic_value_schema = &kBindingSecretSchema,
@@ -533,8 +516,8 @@ constexpr std::array kBindingEntryMembers{
     Member{"config", &kOpaqueObjectSchema, false},
     Member{"secrets", &kBindingSecretsSchema, false},
 };
-constexpr Schema kBindingEntrySchema{
-    Schema::Kind::kObject, std::span<const Member>(kBindingEntryMembers)};
+constexpr Schema kBindingEntrySchema{Schema::Kind::kObject,
+                                     std::span<const Member>(kBindingEntryMembers)};
 constexpr Schema kBindingsSchema{
     .kind = Schema::Kind::kDynamicMap,
     .dynamic_value_schema = &kBindingEntrySchema,
@@ -558,8 +541,7 @@ constexpr std::array kHostV2Members{
     Member{"recovery", &kRecoverySchema, false},
     Member{"bindingsRoot", &kStringSchema, false},
 };
-constexpr Schema kHostV2Schema{
-    Schema::Kind::kObject, std::span<const Member>(kHostV2Members)};
+constexpr Schema kHostV2Schema{Schema::Kind::kObject, std::span<const Member>(kHostV2Members)};
 
 constexpr std::array kAppV2Members{
     Member{"apiVersion", &kAppApiVersionSchema, true},
@@ -571,8 +553,7 @@ constexpr std::array kAppV2Members{
     Member{"healthCheck", &kHealthCheckSchema, false},
     Member{"bindings", &kBindingsSchema, false},
 };
-constexpr Schema kAppV2Schema{
-    Schema::Kind::kObject, std::span<const Member>(kAppV2Members)};
+constexpr Schema kAppV2Schema{Schema::Kind::kObject, std::span<const Member>(kAppV2Members)};
 
 // --- Binding manifest schemas (§2.2) ------------------------------------
 
@@ -616,8 +597,8 @@ constexpr std::array kBindingManifestMembers{
     Member{"sandbox", &kBindingManifestSandboxSchema, false},
     Member{"permissions", &kBindingManifestPermissionsSchema, true},
 };
-constexpr Schema kBindingManifestSchema{
-    Schema::Kind::kObject, std::span<const Member>(kBindingManifestMembers)};
+constexpr Schema kBindingManifestSchema{Schema::Kind::kObject,
+                                        std::span<const Member>(kBindingManifestMembers)};
 
 // The apiVersion member selects the root schema: v2 values pick the v2
 // table, anything else falls back to the frozen v1 table so every v1 error
@@ -690,13 +671,11 @@ bool valid_environment_pattern(std::string_view value) {
             return false;
         }
     }
-    return value.find('*') == std::string_view::npos ||
-           value.find('*') == value.size() - 1;
+    return value.find('*') == std::string_view::npos || value.find('*') == value.size() - 1;
 }
 
 bool valid_environment_name(std::string_view value) {
-    return value.find('*') == std::string_view::npos &&
-           valid_environment_pattern(value);
+    return value.find('*') == std::string_view::npos && valid_environment_pattern(value);
 }
 
 // Secret key IDs: exactly [A-Za-z0-9._-], no empty or dot component
@@ -724,13 +703,12 @@ bool valid_environment_value(std::string_view bytes) {
 // The §4.1 sandbox profile names are fixed by the Capsid build. An unknown
 // name is rejected before it can reach the sandbox launcher.
 constexpr std::string_view kSandboxProfiles[] = {
-    "network-client", "filesystem-read", "filesystem-write",
-    "filesystem-watch", "sqlite", "wasi",
+    "network-client", "filesystem-read", "filesystem-write", "filesystem-watch", "sqlite", "wasi",
 };
 
 bool is_sandbox_profile(std::string_view value) {
-    return std::find(std::begin(kSandboxProfiles), std::end(kSandboxProfiles),
-                     value) != std::end(kSandboxProfiles);
+    return std::find(std::begin(kSandboxProfiles), std::end(kSandboxProfiles), value) !=
+           std::end(kSandboxProfiles);
 }
 
 // The §3.3 grantable-module set, restricted to what this TJS build dispatches
@@ -738,17 +716,14 @@ bool is_sandbox_profile(std::string_view value) {
 // details and fail closed in package manifests. User facades with ambient
 // authority are also never grantable to the Binding Runtime.
 constexpr std::string_view kBindingKnownModules[] = {
-    "capsid:assert",        "capsid:getopts",       "capsid:hashing",
-    "capsid:internal/core", "capsid:internal/path", "capsid:ipaddr",
-    "capsid:path",          "capsid:readline",      "capsid:sqlite",
-    "capsid:utils",         "capsid:uuid",
-    "capsid:wasi",
+    "capsid:assert",        "capsid:getopts", "capsid:hashing", "capsid:internal/core",
+    "capsid:internal/path", "capsid:ipaddr",  "capsid:path",    "capsid:readline",
+    "capsid:sqlite",        "capsid:utils",   "capsid:uuid",    "capsid:wasi",
 };
 
 bool is_binding_module(std::string_view value) {
-    return std::find(std::begin(kBindingKnownModules),
-                     std::end(kBindingKnownModules),
-                     value) != std::end(kBindingKnownModules);
+    return std::find(std::begin(kBindingKnownModules), std::end(kBindingKnownModules), value) !=
+           std::end(kBindingKnownModules);
 }
 
 bool valid_port(std::string_view port) {
@@ -782,14 +757,11 @@ bool valid_hostname(std::string_view host) {
             continue;
         }
         const std::size_t label_size = index - start;
-        if (label_size == 0 || label_size > 63 ||
-            host[start] == '-' || host[index - 1] == '-') {
+        if (label_size == 0 || label_size > 63 || host[start] == '-' || host[index - 1] == '-') {
             return false;
         }
-        for (std::size_t label_index = start; label_index < index;
-             ++label_index) {
-            const unsigned char ch =
-                static_cast<unsigned char>(host[label_index]);
+        for (std::size_t label_index = start; label_index < index; ++label_index) {
+            const unsigned char ch = static_cast<unsigned char>(host[label_index]);
             if (!(std::isalnum(ch) || ch == '-')) {
                 return false;
             }
@@ -832,9 +804,10 @@ bool parse_ipv6_literal(std::string_view address, in6_addr* parsed) {
     // resulting address. The Host grammar permits only the literal address;
     // check its alphabet before native validation/canonicalization.
     if (address.empty() || !std::all_of(address.begin(), address.end(), [](char c) {
-            return c == ':' || c == '.' || (c >= '0' && c <= '9') ||
-                (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-        })) return false;
+            return c == ':' || c == '.' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                   (c >= 'A' && c <= 'F');
+        }))
+        return false;
     return inet_pton(AF_INET6, std::string(address).c_str(), parsed) == 1;
 }
 
@@ -892,12 +865,10 @@ bool valid_net_target(std::string_view target) {
                valid_port(target.substr(close + 2));
     }
     const std::size_t colon = target.find(':');
-    if (colon == std::string_view::npos ||
-        target.find(':', colon + 1) != std::string_view::npos) {
+    if (colon == std::string_view::npos || target.find(':', colon + 1) != std::string_view::npos) {
         return false;
     }
-    return valid_host_spec(target.substr(0, colon)) &&
-           valid_port(target.substr(colon + 1));
+    return valid_host_spec(target.substr(0, colon)) && valid_port(target.substr(colon + 1));
 }
 
 // Dispatches the named grammar; an unknown grammar name fails closed.
@@ -940,9 +911,7 @@ bool can_descend(const Schema& schema, json_t* node) {
 // Recursion descends into arrays by index and dynamic maps by escaped key;
 // values with deferred type errors are skipped here and handled in phase 2.
 // Recursion depth is bounded by the schema depth, never by the input.
-bool check_unknown_fields(const Schema& schema,
-                          json_t* node,
-                          const std::string& path,
+bool check_unknown_fields(const Schema& schema, json_t* node, const std::string& path,
                           ConfigError& error) {
     switch (schema.kind) {
     case Schema::Kind::kObject:
@@ -955,8 +924,7 @@ bool check_unknown_fields(const Schema& schema,
             // currently rejects NUL object keys even with JSON_ALLOW_NUL; keep
             // the check below so a future parser-policy change cannot cause
             // silent C-string truncation.
-            const std::string_view key(json_object_iter_key(iter),
-                                       json_object_iter_key_len(iter));
+            const std::string_view key(json_object_iter_key(iter), json_object_iter_key_len(iter));
             if (key.find('\0') != std::string_view::npos) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path;
@@ -971,11 +939,9 @@ bool check_unknown_fields(const Schema& schema,
                 return false;
             }
             if (can_descend(*member->schema, json_object_iter_value(iter))) {
-                const std::string child_path =
-                    path + "/" + escape_pointer_component(member->name);
-                if (!check_unknown_fields(*member->schema,
-                                          json_object_iter_value(iter),
-                                          child_path, error)) {
+                const std::string child_path = path + "/" + escape_pointer_component(member->name);
+                if (!check_unknown_fields(*member->schema, json_object_iter_value(iter), child_path,
+                                          error)) {
                     return false;
                 }
             }
@@ -987,8 +953,7 @@ bool check_unknown_fields(const Schema& schema,
         }
         for (size_t i = 0; i < json_array_size(node); ++i) {
             const std::string child_path = path + "/" + std::to_string(i);
-            if (!check_unknown_fields(*schema.element_schema,
-                                      json_array_get(node, i), child_path,
+            if (!check_unknown_fields(*schema.element_schema, json_array_get(node, i), child_path,
                                       error)) {
                 return false;
             }
@@ -1000,19 +965,16 @@ bool check_unknown_fields(const Schema& schema,
         }
         for (void* iter = json_object_iter(node); iter != nullptr;
              iter = json_object_iter_next(node, iter)) {
-            const std::string_view key(json_object_iter_key(iter),
-                                       json_object_iter_key_len(iter));
+            const std::string_view key(json_object_iter_key(iter), json_object_iter_key_len(iter));
             if (key.find('\0') != std::string_view::npos) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path;
                 error.message = "object key contains a NUL byte";
                 return false;
             }
-            const std::string child_path =
-                path + "/" + escape_pointer_component(key);
-            if (!check_unknown_fields(*schema.dynamic_value_schema,
-                                      json_object_iter_value(iter), child_path,
-                                      error)) {
+            const std::string child_path = path + "/" + escape_pointer_component(key);
+            if (!check_unknown_fields(*schema.dynamic_value_schema, json_object_iter_value(iter),
+                                      child_path, error)) {
                 return false;
             }
         }
@@ -1021,7 +983,7 @@ bool check_unknown_fields(const Schema& schema,
     case Schema::Kind::kInteger:
     case Schema::Kind::kBoolean:
     case Schema::Kind::kOpaqueObject:
-        return true;  // leaves (opaque objects accept any key)
+        return true; // leaves (opaque objects accept any key)
     }
     return true;
 }
@@ -1030,9 +992,7 @@ bool check_unknown_fields(const Schema& schema,
 // cross-member equality. The unknown-field sweep guarantees every fixed
 // object key here is declared, so member lookup cannot fail; the
 // fail-closed branch below is defensive only.
-bool validate_values(const Schema& schema,
-                     json_t* node,
-                     const std::string& path,
+bool validate_values(const Schema& schema, json_t* node, const std::string& path,
                      ConfigError& error) {
     switch (schema.kind) {
     case Schema::Kind::kObject: {
@@ -1044,8 +1004,7 @@ bool validate_values(const Schema& schema,
         }
         for (void* iter = json_object_iter(node); iter != nullptr;
              iter = json_object_iter_next(node, iter)) {
-            const std::string_view key(json_object_iter_key(iter),
-                                       json_object_iter_key_len(iter));
+            const std::string_view key(json_object_iter_key(iter), json_object_iter_key_len(iter));
             if (key.find('\0') != std::string_view::npos) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path;
@@ -1059,16 +1018,14 @@ bool validate_values(const Schema& schema,
                 error.message = "unknown configuration field";
                 return false;
             }
-            const std::string child_path =
-                path + "/" + escape_pointer_component(member->name);
-            if (!validate_values(*member->schema, json_object_iter_value(iter),
-                                 child_path, error)) {
+            const std::string child_path = path + "/" + escape_pointer_component(member->name);
+            if (!validate_values(*member->schema, json_object_iter_value(iter), child_path,
+                                 error)) {
                 return false;
             }
         }
         for (const Member& member : schema.members) {
-            if (member.required &&
-                !json_object_get(node, std::string(member.name).c_str())) {
+            if (member.required && !json_object_get(node, std::string(member.name).c_str())) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path + "/" + escape_pointer_component(member.name);
                 error.message = "missing required field";
@@ -1076,13 +1033,10 @@ bool validate_values(const Schema& schema,
             }
         }
         for (const MemberPair& pair : schema.equal_members) {
-            const json_t* first_value =
-                json_object_get(node, std::string(pair.first).c_str());
-            const json_t* second_value =
-                json_object_get(node, std::string(pair.second).c_str());
+            const json_t* first_value = json_object_get(node, std::string(pair.first).c_str());
+            const json_t* second_value = json_object_get(node, std::string(pair.second).c_str());
             if (first_value != nullptr && second_value != nullptr &&
-                json_integer_value(first_value) !=
-                    json_integer_value(second_value)) {
+                json_integer_value(first_value) != json_integer_value(second_value)) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path;
                 error.message = "cross-field values must be equal";
@@ -1091,11 +1045,9 @@ bool validate_values(const Schema& schema,
         }
         for (const MemberPair& pair : schema.exactly_one_pairs) {
             const bool first_present =
-                json_object_get(node, std::string(pair.first).c_str()) !=
-                nullptr;
+                json_object_get(node, std::string(pair.first).c_str()) != nullptr;
             const bool second_present =
-                json_object_get(node, std::string(pair.second).c_str()) !=
-                nullptr;
+                json_object_get(node, std::string(pair.second).c_str()) != nullptr;
             if (first_present == second_present) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path;
@@ -1120,8 +1072,8 @@ bool validate_values(const Schema& schema,
         }
         for (size_t i = 0; i < json_array_size(node); ++i) {
             const std::string child_path = path + "/" + std::to_string(i);
-            if (!validate_values(*schema.element_schema,
-                                 json_array_get(node, i), child_path, error)) {
+            if (!validate_values(*schema.element_schema, json_array_get(node, i), child_path,
+                                 error)) {
                 return false;
             }
         }
@@ -1130,7 +1082,7 @@ bool validate_values(const Schema& schema,
             for (size_t i = 0; i < json_array_size(node); ++i) {
                 const json_t* element = json_array_get(node, i);
                 if (!json_is_string(element)) {
-                    continue;  // type errors were already reported
+                    continue; // type errors were already reported
                 }
                 const std::string_view value(json_string_value(element),
                                              json_string_length(element));
@@ -1156,8 +1108,7 @@ bool validate_values(const Schema& schema,
             error.message = "internal schema error";
             return false;
         }
-        if (schema.max_members != 0 &&
-            json_object_size(node) > schema.max_members) {
+        if (schema.max_members != 0 && json_object_size(node) > schema.max_members) {
             error.code = ConfigErrorCode::kResourceLimit;
             error.path = path;
             error.message = "too many entries";
@@ -1165,26 +1116,22 @@ bool validate_values(const Schema& schema,
         }
         for (void* iter = json_object_iter(node); iter != nullptr;
              iter = json_object_iter_next(node, iter)) {
-            const std::string_view key(json_object_iter_key(iter),
-                                       json_object_iter_key_len(iter));
+            const std::string_view key(json_object_iter_key(iter), json_object_iter_key_len(iter));
             if (key.find('\0') != std::string_view::npos) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path;
                 error.message = "object key contains a NUL byte";
                 return false;
             }
-            if (!schema.grammar.empty() &&
-                !matches_grammar(schema.grammar, key)) {
+            if (!schema.grammar.empty() && !matches_grammar(schema.grammar, key)) {
                 error.code = ConfigErrorCode::kInvalidValue;
                 error.path = path + "/" + escape_pointer_component(key);
                 error.message = "invalid member name";
                 return false;
             }
-            const std::string child_path =
-                path + "/" + escape_pointer_component(key);
-            if (!validate_values(*schema.dynamic_value_schema,
-                                 json_object_iter_value(iter), child_path,
-                                 error)) {
+            const std::string child_path = path + "/" + escape_pointer_component(key);
+            if (!validate_values(*schema.dynamic_value_schema, json_object_iter_value(iter),
+                                 child_path, error)) {
                 return false;
             }
         }
@@ -1215,9 +1162,8 @@ bool validate_values(const Schema& schema,
             return false;
         }
         if (!schema.allowed_strings.empty() &&
-            std::find(schema.allowed_strings.begin(),
-                      schema.allowed_strings.end(),
-                      value) == schema.allowed_strings.end()) {
+            std::find(schema.allowed_strings.begin(), schema.allowed_strings.end(), value) ==
+                schema.allowed_strings.end()) {
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = path;
             error.message = "unsupported value";
@@ -1244,8 +1190,7 @@ bool validate_values(const Schema& schema,
             error.message = "expected a JSON integer";
             return false;
         }
-        if (schema.min_value.has_value() &&
-            json_integer_value(node) < *schema.min_value) {
+        if (schema.min_value.has_value() && json_integer_value(node) < *schema.min_value) {
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = path;
             error.message = "value below minimum";
@@ -1270,8 +1215,7 @@ bool validate_values(const Schema& schema,
         // Depth is bounded by the parser's document nesting limit; the
         // member is bounded by its compact serialized byte size.
         {
-            char* compact =
-                json_dumps(node, JSON_COMPACT | JSON_ENSURE_ASCII);
+            char* compact = json_dumps(node, JSON_COMPACT | JSON_ENSURE_ASCII);
             if (compact == nullptr) {
                 error.code = ConfigErrorCode::kResourceLimit;
                 error.path = path;
@@ -1295,7 +1239,7 @@ bool validate_values(const Schema& schema,
     return false;
 }
 
-}  // namespace
+} // namespace
 
 bool valid_binding_id(std::string_view value) {
     if (value.empty() || value.size() > 63) {
@@ -1306,8 +1250,7 @@ bool valid_binding_id(std::string_view value) {
     }
     for (const char c : value) {
         const unsigned char ch = static_cast<unsigned char>(c);
-        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
-              ch == '-')) {
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-')) {
             return false;
         }
     }
@@ -1318,11 +1261,9 @@ namespace {
 
 // Shared envelope: byte limit -> strict parse -> unknown fields -> values ->
 // optional post-check. Every rejected document reports an RFC 6901 pointer.
-ConfigValidationResult validate_document(
-    std::size_t byte_limit,
-    std::string_view json,
-    const Schema* (*select_schema)(const json_t* root),
-    bool (*post_check)(json_t*, ConfigError&)) {
+ConfigValidationResult validate_document(std::size_t byte_limit, std::string_view json,
+                                         const Schema* (*select_schema)(const json_t* root),
+                                         bool (*post_check)(json_t*, ConfigError&)) {
     ConfigValidationResult result;
 
     // The byte limit is inclusive and applies before any parsing.
@@ -1339,9 +1280,8 @@ ConfigValidationResult validate_document(
     // parser (json_error_null_byte_in_key -> kInvalidJson), and raw NUL
     // bytes in the input remain rejected by the lexer.
     json_error_t parse_error;
-    json_t* root = json_loadb(json.data(), json.size(),
-                              JSON_REJECT_DUPLICATES | JSON_ALLOW_NUL,
-                              &parse_error);
+    json_t* root =
+        json_loadb(json.data(), json.size(), JSON_REJECT_DUPLICATES | JSON_ALLOW_NUL, &parse_error);
     if (root == nullptr) {
         result.ok = false;
         const enum json_error_code parse_code = json_error_code(&parse_error);
@@ -1357,9 +1297,9 @@ ConfigValidationResult validate_document(
         result.error.code = code;
         // A parse failure has no JSON value to point at; the pointer is the
         // document root. The message carries only positions, never input.
-        result.error.message =
-            std::string(reason) + " at line " + std::to_string(parse_error.line) +
-            " column " + std::to_string(parse_error.column);
+        result.error.message = std::string(reason) + " at line " +
+                               std::to_string(parse_error.line) + " column " +
+                               std::to_string(parse_error.column);
         return result;
     }
 
@@ -1398,15 +1338,13 @@ bool check_app_consistency(json_t* root, ConfigError& error) {
     }
     const json_t* min_ready = json_object_get(pool, "minReady");
     const json_t* max_workers = json_object_get(pool, "maxWorkers");
-    if (json_is_integer(min_ready) &&
-        json_integer_value(min_ready) > kMaxStaticPoolWorkers) {
+    if (json_is_integer(min_ready) && json_integer_value(min_ready) > kMaxStaticPoolWorkers) {
         error.code = ConfigErrorCode::kResourceLimit;
         error.path = "/pool/minReady";
         error.message = "static pool worker limit exceeded";
         return false;
     }
-    if (json_is_integer(max_workers) &&
-        json_integer_value(max_workers) > kMaxStaticPoolWorkers) {
+    if (json_is_integer(max_workers) && json_integer_value(max_workers) > kMaxStaticPoolWorkers) {
         error.code = ConfigErrorCode::kResourceLimit;
         error.path = "/pool/maxWorkers";
         error.message = "static pool worker limit exceeded";
@@ -1425,10 +1363,8 @@ bool check_manifest_consistency(json_t* root, ConfigError& error) {
     const json_t* requires_list =
         sandbox != nullptr ? json_object_get(sandbox, "requires") : nullptr;
     if (json_is_array(requires_list)) {
-        for (std::size_t index = 0; index < json_array_size(requires_list);
-             ++index) {
-            profiles.insert(
-                json_string_value(json_array_get(requires_list, index)));
+        for (std::size_t index = 0; index < json_array_size(requires_list); ++index) {
+            profiles.insert(json_string_value(json_array_get(requires_list, index)));
         }
     }
 
@@ -1438,27 +1374,22 @@ bool check_manifest_consistency(json_t* root, ConfigError& error) {
 
     const json_t* permissions = json_object_get(root, "permissions");
     std::unordered_set<std::string> modules;
-    const json_t* module_list =
-        json_object_get(permissions, "modules");
+    const json_t* module_list = json_object_get(permissions, "modules");
     if (json_is_array(module_list)) {
-        for (std::size_t index = 0; index < json_array_size(module_list);
-             ++index) {
-            modules.insert(
-                json_string_value(json_array_get(module_list, index)));
+        for (std::size_t index = 0; index < json_array_size(module_list); ++index) {
+            modules.insert(json_string_value(json_array_get(module_list, index)));
         }
     }
     if (modules.count("capsid:sqlite") && !profiles.count("sqlite")) {
         error.code = ConfigErrorCode::kInvalidValue;
         error.path = "/permissions/modules";
-        error.message =
-            "capsid:sqlite requires the sqlite sandbox profile";
+        error.message = "capsid:sqlite requires the sqlite sandbox profile";
         return false;
     }
     if (modules.count("capsid:wasi") && !profiles.count("wasi")) {
         error.code = ConfigErrorCode::kInvalidValue;
         error.path = "/permissions/modules";
-        error.message =
-            "capsid:wasi requires the wasi sandbox profile";
+        error.message = "capsid:wasi requires the wasi sandbox profile";
         return false;
     }
     const json_t* net = json_object_get(permissions, "net");
@@ -1467,8 +1398,7 @@ bool check_manifest_consistency(json_t* root, ConfigError& error) {
         if (granted(allow) && !profiles.count("network-client")) {
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = "/permissions/net/allow";
-            error.message =
-                "net permissions require the network-client sandbox profile";
+            error.message = "net permissions require the network-client sandbox profile";
             return false;
         }
     }
@@ -1479,44 +1409,35 @@ bool check_manifest_consistency(json_t* root, ConfigError& error) {
         if (granted(read) && !profiles.count("filesystem-read")) {
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = "/permissions/fs/read";
-            error.message =
-                "fs read permissions require the filesystem-read sandbox profile";
+            error.message = "fs read permissions require the filesystem-read sandbox profile";
             return false;
         }
         const json_t* write = json_object_get(fs, "write");
         if (granted(write) && !profiles.count("filesystem-write")) {
             error.code = ConfigErrorCode::kInvalidValue;
             error.path = "/permissions/fs/write";
-            error.message =
-                "fs write permissions require the filesystem-write sandbox profile";
+            error.message = "fs write permissions require the filesystem-write sandbox profile";
             return false;
         }
     }
     return true;
 }
 
-}  // namespace
+} // namespace
 
-ConfigValidationResult validate_config_json(ConfigDocument document,
-                                            std::string_view json) {
+ConfigValidationResult validate_config_json(ConfigDocument document, std::string_view json) {
     return validate_document(
         kMaxConfigBytes, json,
-        document == ConfigDocument::kHost ? &select_host_root
-                                          : &select_app_root,
-        document == ConfigDocument::kApplication
-            ? &check_app_consistency
-            : nullptr);
+        document == ConfigDocument::kHost ? &select_host_root : &select_app_root,
+        document == ConfigDocument::kApplication ? &check_app_consistency : nullptr);
 }
 
 ConfigValidationResult validate_binding_manifest(std::string_view json) {
-    return validate_document(kMaxBindingManifestBytes, json,
-                             &select_manifest_root,
+    return validate_document(kMaxBindingManifestBytes, json, &select_manifest_root,
                              &check_manifest_consistency);
 }
 
-namespace {
-
-}  // namespace
+namespace {} // namespace
 
 // Size grammar for worker.memoryMax: a decimal number with an explicit
 // upper-case IEC/SI suffix (KiB, MiB, GiB, KB, MB, GB). A bare number is
@@ -1593,47 +1514,59 @@ bool parse_duration_ms(const std::string& text, std::uint64_t* out) {
 }
 
 bool parse_fetch_target_text(std::string_view text, FetchTarget* out) {
-    if (!out || text.empty() || text.find('\0') != std::string_view::npos) return false;
+    if (!out || text.empty() || text.find('\0') != std::string_view::npos)
+        return false;
     FetchTarget parsed;
     std::string_view ports;
     bool has_ports = false;
     if (text.front() == '[') {
         const auto close = text.find(']');
-        if (close == std::string_view::npos) return false;
+        if (close == std::string_view::npos)
+            return false;
         const std::string literal(text.substr(1, close - 1));
         in6_addr address;
         char canonical[INET6_ADDRSTRLEN];
         if (!parse_ipv6_literal(literal, &address) ||
-            !inet_ntop(AF_INET6, &address, canonical, sizeof(canonical))) return false;
+            !inet_ntop(AF_INET6, &address, canonical, sizeof(canonical)))
+            return false;
         parsed.host = canonical;
         if (close + 1 < text.size()) {
-            if (text[close + 1] != ':') return false;
-            ports = text.substr(close + 2); has_ports = true;
+            if (text[close + 1] != ':')
+                return false;
+            ports = text.substr(close + 2);
+            has_ports = true;
         }
     } else {
         const auto colon = text.find(':');
         parsed.host = text.substr(0, colon);
-        if (parsed.host.empty() || text.find(']') != std::string_view::npos) return false;
+        if (parsed.host.empty() || text.find(']') != std::string_view::npos)
+            return false;
         if (colon != std::string_view::npos) {
-            ports = text.substr(colon + 1); has_ports = true;
+            ports = text.substr(colon + 1);
+            has_ports = true;
         }
     }
     if (has_ports) {
         std::size_t begin = 0;
         for (;;) {
             const auto comma = ports.find(',', begin);
-            const auto part = ports.substr(begin, comma == std::string_view::npos
-                ? std::string_view::npos : comma - begin);
-            if (part.empty()) return false;
+            const auto part = ports.substr(
+                begin, comma == std::string_view::npos ? std::string_view::npos : comma - begin);
+            if (part.empty())
+                return false;
             std::uint32_t value = 0;
             for (const char digit : part) {
-                if (digit < '0' || digit > '9') return false;
+                if (digit < '0' || digit > '9')
+                    return false;
                 value = value * 10 + static_cast<unsigned>(digit - '0');
-                if (value > 65535) return false;
+                if (value > 65535)
+                    return false;
             }
-            if (value == 0) return false;
+            if (value == 0)
+                return false;
             parsed.ports.push_back(static_cast<std::uint16_t>(value));
-            if (comma == std::string_view::npos) break;
+            if (comma == std::string_view::npos)
+                break;
             begin = comma + 1;
         }
     }
@@ -1649,13 +1582,11 @@ bool parse_fetch_target_text(std::string_view text, FetchTarget* out) {
 // anonymous namespace and declared in config.h: the local-capsid.json
 // data planes (single-worker / static-pool) reuse the same parser so one
 // document grammar cannot diverge into two.
-bool parse_app_request(const std::vector<std::uint8_t>& bytes,
-                       AppRequest* app,
+bool parse_app_request(const std::vector<std::uint8_t>& bytes, AppRequest* app,
                        std::string* error) {
     json_error_t parse_error;
-    json_t* root = json_loadb(
-        reinterpret_cast<const char*>(bytes.data()), bytes.size(),
-        JSON_REJECT_DUPLICATES, &parse_error);
+    json_t* root = json_loadb(reinterpret_cast<const char*>(bytes.data()), bytes.size(),
+                              JSON_REJECT_DUPLICATES, &parse_error);
     if (root == nullptr || !json_is_object(root)) {
         *error = "invalid capsid.json";
         if (root) {
@@ -1773,8 +1704,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                     return false;
                 }
                 for (const unsigned char ch : namespace_name) {
-                    if (!(std::isalnum(ch) || ch == '_' || ch == '-' ||
-                          ch == '.')) {
+                    if (!(std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.')) {
                         *error = "invalid capsid.json storage namespace";
                         json_decref(root);
                         return false;
@@ -1802,8 +1732,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                 // The Runtime stdio grammar is exactly stdin/stdout/stderr;
                 // reject an unknown stream name before staging.
                 const std::string stream = json_string_value(item);
-                if (stream != "stdin" && stream != "stdout" &&
-                    stream != "stderr") {
+                if (stream != "stdin" && stream != "stdout" && stream != "stderr") {
                     *error = "invalid capsid.json permissions.stdio stream";
                     json_decref(root);
                     return false;
@@ -1819,8 +1748,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         json_t* max_workers = json_object_get(pool, "maxWorkers");
         if (json_is_integer(min_ready)) {
             const json_int_t value = json_integer_value(min_ready);
-            if (value <= 0 ||
-                value > static_cast<json_int_t>(kMaxStaticPoolWorkers)) {
+            if (value <= 0 || value > static_cast<json_int_t>(kMaxStaticPoolWorkers)) {
                 *error = "invalid capsid.json pool.minReady";
                 json_decref(root);
                 return false;
@@ -1829,8 +1757,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         }
         if (json_is_integer(max_workers)) {
             const json_int_t value = json_integer_value(max_workers);
-            if (value <= 0 ||
-                value > static_cast<json_int_t>(kMaxStaticPoolWorkers)) {
+            if (value <= 0 || value > static_cast<json_int_t>(kMaxStaticPoolWorkers)) {
                 *error = "invalid capsid.json pool.maxWorkers";
                 json_decref(root);
                 return false;
@@ -1863,8 +1790,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         }
         json_t* queue_timeout = json_object_get(pool, "queueTimeout");
         if (json_is_string(queue_timeout)) {
-            if (!parse_duration_ms(json_string_value(queue_timeout),
-                                   &app->queue_timeout_ms)) {
+            if (!parse_duration_ms(json_string_value(queue_timeout), &app->queue_timeout_ms)) {
                 *error = "invalid capsid.json pool.queueTimeout";
                 json_decref(root);
                 return false;
@@ -1882,8 +1808,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
     if (worker != nullptr && json_is_object(worker)) {
         json_t* memory_max = json_object_get(worker, "memoryMax");
         if (json_is_string(memory_max)) {
-            if (!parse_size_bytes(json_string_value(memory_max),
-                                  &app->memory_bytes)) {
+            if (!parse_size_bytes(json_string_value(memory_max), &app->memory_bytes)) {
                 *error = "invalid capsid.json worker.memoryMax";
                 json_decref(root);
                 return false;
@@ -1891,8 +1816,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         }
         json_t* js_heap = json_object_get(worker, "jsHeap");
         if (json_is_string(js_heap)) {
-            if (!parse_size_bytes(json_string_value(js_heap),
-                                  &app->js_heap_bytes)) {
+            if (!parse_size_bytes(json_string_value(js_heap), &app->js_heap_bytes)) {
                 *error = "invalid capsid.json worker.jsHeap";
                 json_decref(root);
                 return false;
@@ -1900,8 +1824,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         }
         json_t* address_space = json_object_get(worker, "processAddressSpace");
         if (json_is_string(address_space)) {
-            if (!parse_size_bytes(json_string_value(address_space),
-                                  &app->process_address_bytes)) {
+            if (!parse_size_bytes(json_string_value(address_space), &app->process_address_bytes)) {
                 *error = "invalid capsid.json worker.processAddressSpace";
                 json_decref(root);
                 return false;
@@ -1910,8 +1833,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         json_t* descriptors = json_object_get(worker, "fileDescriptors");
         if (json_is_integer(descriptors)) {
             const json_int_t value = json_integer_value(descriptors);
-            if (value <= 0 ||
-                value > std::numeric_limits<std::uint32_t>::max()) {
+            if (value <= 0 || value > std::numeric_limits<std::uint32_t>::max()) {
                 *error = "invalid capsid.json worker.fileDescriptors";
                 json_decref(root);
                 return false;
@@ -1926,11 +1848,10 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
     if (request != nullptr && json_is_object(request)) {
         json_t* timeout = json_object_get(request, "timeout");
         if (json_is_string(timeout)) {
-            if (!parse_duration_ms(json_string_value(timeout),
-                                   &app->request_timeout_ms) ||
+            if (!parse_duration_ms(json_string_value(timeout), &app->request_timeout_ms) ||
                 app->request_timeout_ms == 0 ||
-                app->request_timeout_ms > static_cast<std::uint64_t>(
-                    std::numeric_limits<std::int64_t>::max())) {
+                app->request_timeout_ms >
+                    static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                 *error = "invalid capsid.json request.timeout";
                 json_decref(root);
                 return false;
@@ -1951,8 +1872,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         // values to the data plane (maxStreamingInflightPerWorker /
         // streamIdleTimeoutMs). 0 = field not set (the shard keeps its
         // defaults of 2 slots and 60s idle).
-        json_t* max_streaming = json_object_get(
-            request, "maxStreamingInflightPerWorker");
+        json_t* max_streaming = json_object_get(request, "maxStreamingInflightPerWorker");
         if (json_is_integer(max_streaming)) {
             const json_int_t value = json_integer_value(max_streaming);
             if (value < 0) {
@@ -1961,8 +1881,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
                 json_decref(root);
                 return false;
             }
-            app->max_streaming_inflight_per_worker =
-                static_cast<std::uint64_t>(value);
+            app->max_streaming_inflight_per_worker = static_cast<std::uint64_t>(value);
         }
         json_t* stream_idle = json_object_get(request, "streamIdleTimeoutMs");
         if (json_is_integer(stream_idle)) {
@@ -2007,9 +1926,7 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
         json_t* timeout = json_object_get(health_check, "timeout");
         if (json_is_string(timeout)) {
             std::uint64_t timeout_ms = 0;
-            if (!parse_duration_ms(json_string_value(timeout),
-                                   &timeout_ms) ||
-                timeout_ms == 0) {
+            if (!parse_duration_ms(json_string_value(timeout), &timeout_ms) || timeout_ms == 0) {
                 *error = "invalid capsid.json healthCheck.timeout";
                 json_decref(root);
                 return false;
@@ -2021,4 +1938,4 @@ bool parse_app_request(const std::vector<std::uint8_t>& bytes,
     return true;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

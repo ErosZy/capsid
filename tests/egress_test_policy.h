@@ -9,7 +9,7 @@
  * success opts in explicitly through the same public ABI as an embedder.
  */
 class LoopbackEgressPolicy {
-public:
+  public:
     LoopbackEgressPolicy() {
         capsid_egress_rule_init(&rules_[0]);
         rules_[0].action = CAPSID_EGRESS_ALLOW;
@@ -25,11 +25,9 @@ public:
         policy_.rule_count = 2;
     }
 
-    void attach(capsid_worker_config *config) const {
-        config->egress_policy = &policy_;
-    }
+    void attach(capsid_worker_config* config) const { config->egress_policy = &policy_; }
 
-private:
+  private:
     capsid_egress_rule rules_[2];
     capsid_egress_policy policy_;
 };

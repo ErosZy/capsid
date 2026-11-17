@@ -23,22 +23,15 @@ extern "C" {
 
 namespace {
 
-void close_unrelated_descriptors(int ipc_fd,
-                                 int network_namespace_fd) {
+void close_unrelated_descriptors(int ipc_fd, int network_namespace_fd) {
 #if defined(__linux__) && defined(__NR_close_range)
     // Use close_range to close everything above the highest reserved fd.
     // IPC and network-namespace fds are placed above the range the dynamic
     // linker may reuse during startup (musl reopens fd 3).
     const unsigned int max_reserved =
-        static_cast<unsigned int>(
-            network_namespace_fd > ipc_fd
-                ? network_namespace_fd
-                : ipc_fd);
+        static_cast<unsigned int>(network_namespace_fd > ipc_fd ? network_namespace_fd : ipc_fd);
     if (max_reserved >= 3 &&
-        syscall(__NR_close_range,
-                max_reserved + 1,
-                ~static_cast<unsigned int>(0),
-                0) == 0) {
+        syscall(__NR_close_range, max_reserved + 1, ~static_cast<unsigned int>(0), 0) == 0) {
         return;
     }
 #endif
@@ -51,14 +44,11 @@ void close_unrelated_descriptors(int ipc_fd,
 #else
     struct rlimit limit;
     rlim_t maximum = 65536;
-    if (getrlimit(RLIMIT_NOFILE, &limit) == 0 &&
-        limit.rlim_max != RLIM_INFINITY) {
+    if (getrlimit(RLIMIT_NOFILE, &limit) == 0 && limit.rlim_max != RLIM_INFINITY) {
         maximum = limit.rlim_max;
     }
     for (rlim_t fd = 3; fd < maximum; ++fd) {
-        if (fd != static_cast<rlim_t>(ipc_fd) &&
-            fd != static_cast<rlim_t>(
-                      network_namespace_fd)) {
+        if (fd != static_cast<rlim_t>(ipc_fd) && fd != static_cast<rlim_t>(network_namespace_fd)) {
             close(static_cast<int>(fd));
         }
     }
@@ -95,9 +85,9 @@ bool redirect_stdio_to_dev_null() {
     return true;
 }
 
-}  // namespace
+} // namespace
 
-int capsid_worker_main(int argc, char **argv, const CapsidWorkerIo* io) {
+int capsid_worker_main(int argc, char** argv, const CapsidWorkerIo* io) {
     int ipc_fd = -1;
     int network_namespace_fd = -1;
     bool close_stdio = false;
@@ -107,17 +97,12 @@ int capsid_worker_main(int argc, char **argv, const CapsidWorkerIo* io) {
             // The spawner passes the inherited OS handle value; convert it
             // back into a CRT descriptor. Handle values are preserved
             // verbatim across CreateProcess inheritance.
-            ipc_fd = _open_osfhandle(
-                static_cast<intptr_t>(
-                    std::strtoull(argv[++i], NULL, 10)),
-                _O_RDWR | _O_BINARY);
+            ipc_fd = _open_osfhandle(static_cast<intptr_t>(std::strtoull(argv[++i], NULL, 10)),
+                                     _O_RDWR | _O_BINARY);
 #else
             ipc_fd = std::atoi(argv[++i]);
 #endif
-        } else if (std::strcmp(
-                       argv[i],
-                       "--network-namespace-fd") == 0 &&
-                   i + 1 < argc) {
+        } else if (std::strcmp(argv[i], "--network-namespace-fd") == 0 && i + 1 < argc) {
             // Linux-only in practice (the spawner rejects namespace fds
             // outside Linux); parsed for CLI symmetry on every platform.
             network_namespace_fd = std::atoi(argv[++i]);
@@ -153,7 +138,5 @@ int capsid_worker_main(int argc, char **argv, const CapsidWorkerIo* io) {
 }
 
 #if !defined(CAPSID_WORKER_CUSTOM_ENTRY)
-int main(int argc, char** argv) {
-    return capsid_worker_main(argc, argv, nullptr);
-}
+int main(int argc, char** argv) { return capsid_worker_main(argc, argv, nullptr); }
 #endif

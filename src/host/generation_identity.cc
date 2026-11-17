@@ -28,8 +28,7 @@ namespace capsid::host {
 std::string sha256_hex(std::span<const std::uint8_t> bytes) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
-    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size,
-                   EVP_sha256(), nullptr) != 1 ||
+    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size, EVP_sha256(), nullptr) != 1 ||
         digest_size != 32) {
         return {};
     }
@@ -51,28 +50,24 @@ std::string compute_binding_manifest_digest(std::string_view json) {
         return {};
     }
     json_error_t parse_error;
-    json_t* root = json_loadb(json.data(), json.size(),
-                              JSON_REJECT_DUPLICATES, &parse_error);
+    json_t* root = json_loadb(json.data(), json.size(), JSON_REJECT_DUPLICATES, &parse_error);
     if (root == nullptr) {
         return {};
     }
-    char* canonical = json_dumps(
-        root, JSON_COMPACT | JSON_SORT_KEYS | JSON_ENSURE_ASCII);
+    char* canonical = json_dumps(root, JSON_COMPACT | JSON_SORT_KEYS | JSON_ENSURE_ASCII);
     json_decref(root);
     if (canonical == nullptr) {
         return {};
     }
     const std::string digest = sha256_hex(std::span<const std::uint8_t>(
-        reinterpret_cast<const std::uint8_t*>(canonical),
-        std::strlen(canonical)));
+        reinterpret_cast<const std::uint8_t*>(canonical), std::strlen(canonical)));
     std::free(canonical);
     return digest;
 }
 
 namespace {
 
-void append_length_prefixed(std::vector<std::uint8_t> &output,
-                            std::string_view value) {
+void append_length_prefixed(std::vector<std::uint8_t>& output, std::string_view value) {
     const std::uint32_t size = static_cast<std::uint32_t>(value.size());
     output.push_back(static_cast<std::uint8_t>(size >> 24));
     output.push_back(static_cast<std::uint8_t>(size >> 16));
@@ -81,7 +76,7 @@ void append_length_prefixed(std::vector<std::uint8_t> &output,
     output.insert(output.end(), value.begin(), value.end());
 }
 
-void append_count(std::vector<std::uint8_t> &output, std::size_t count) {
+void append_count(std::vector<std::uint8_t>& output, std::size_t count) {
     const std::uint32_t value = static_cast<std::uint32_t>(count);
     output.push_back(static_cast<std::uint8_t>(value >> 24));
     output.push_back(static_cast<std::uint8_t>(value >> 16));
@@ -89,20 +84,18 @@ void append_count(std::vector<std::uint8_t> &output, std::size_t count) {
     output.push_back(static_cast<std::uint8_t>(value));
 }
 
-}  // namespace
+} // namespace
 
-std::string compute_generation_digest(const GenerationIdentityInput &input) {
+std::string compute_generation_digest(const GenerationIdentityInput& input) {
     // v2 (GLM T08): the record gains protocol_limits_digest — protocol
     // selection and channel limits now take part in the identity.
     static constexpr char kDomain[] = "capsid-generation-v2\0";
-    std::vector<std::uint8_t> message(
-        reinterpret_cast<const std::uint8_t *>(kDomain),
-        reinterpret_cast<const std::uint8_t *>(kDomain) + sizeof(kDomain) - 1);
+    std::vector<std::uint8_t> message(reinterpret_cast<const std::uint8_t*>(kDomain),
+                                      reinterpret_cast<const std::uint8_t*>(kDomain) +
+                                          sizeof(kDomain) - 1);
 
     const std::string_view artifact =
-        input.selected_artifact == SelectedArtifactKind::kSource
-            ? "source"
-            : "trusted-bytecode";
+        input.selected_artifact == SelectedArtifactKind::kSource ? "source" : "trusted-bytecode";
     const std::string_view fields[] = {
         input.application_id,
         input.source_digest,
@@ -121,13 +114,10 @@ std::string compute_generation_digest(const GenerationIdentityInput &input) {
         append_length_prefixed(message, field);
     }
     return sha256_hex(message);
-
 }
 
-
-std::string compute_protocol_limits_digest(
-    std::uint16_t wire_version,
-    const capsid::protocol::ChannelLimits& limits_in) {
+std::string compute_protocol_limits_digest(std::uint16_t wire_version,
+                                           const capsid::protocol::ChannelLimits& limits_in) {
     // defaults filled in: absent fields hash as their deployment
     // defaults so explicit-default configs keep one identity
     capsid::protocol::ChannelLimits limits = limits_in;
@@ -153,47 +143,32 @@ std::string compute_protocol_limits_digest(
         limits.per_channel_queue_bytes = 4u * 1024u * 1024u;
     }
     static constexpr char kDomain[] = "capsid-protocol-limits-v1\0";
-    std::vector<std::uint8_t> message(
-        reinterpret_cast<const std::uint8_t*>(kDomain),
-        reinterpret_cast<const std::uint8_t*>(kDomain) +
-            sizeof(kDomain) - 1);
-    append_length_prefixed(
-        message,
-        std::to_string(static_cast<unsigned>(wire_version)));
+    std::vector<std::uint8_t> message(reinterpret_cast<const std::uint8_t*>(kDomain),
+                                      reinterpret_cast<const std::uint8_t*>(kDomain) +
+                                          sizeof(kDomain) - 1);
+    append_length_prefixed(message, std::to_string(static_cast<unsigned>(wire_version)));
     append_length_prefixed(message, std::to_string(limits.max_channels));
-    append_length_prefixed(
-        message, std::to_string(limits.max_message_bytes));
-    append_length_prefixed(
-        message, std::to_string(limits.reassembly_budget_bytes));
-    append_length_prefixed(
-        message, std::to_string(limits.send_budget_bytes));
-    append_length_prefixed(
-        message, std::to_string(limits.close_timeout_ms));
-    append_length_prefixed(
-        message, std::to_string(limits.dial_timeout_ms));
-    append_length_prefixed(
-        message, std::to_string(limits.idle_timeout_ms));
-    append_length_prefixed(
-        message, std::to_string(limits.per_channel_queue_bytes));
+    append_length_prefixed(message, std::to_string(limits.max_message_bytes));
+    append_length_prefixed(message, std::to_string(limits.reassembly_budget_bytes));
+    append_length_prefixed(message, std::to_string(limits.send_budget_bytes));
+    append_length_prefixed(message, std::to_string(limits.close_timeout_ms));
+    append_length_prefixed(message, std::to_string(limits.dial_timeout_ms));
+    append_length_prefixed(message, std::to_string(limits.idle_timeout_ms));
+    append_length_prefixed(message, std::to_string(limits.per_channel_queue_bytes));
     return sha256_hex(message);
 }
 
-std::string compute_binding_set_digest(
-    const std::vector<BindingSetDigestEntry> &entries) {
+std::string compute_binding_set_digest(const std::vector<BindingSetDigestEntry>& entries) {
     std::vector<BindingSetDigestEntry> sorted = entries;
-    std::sort(sorted.begin(), sorted.end(),
-              [](const BindingSetDigestEntry &a,
-                 const BindingSetDigestEntry &b) {
-                  return a.id < b.id;
-              });
+    std::sort(
+        sorted.begin(), sorted.end(),
+        [](const BindingSetDigestEntry& a, const BindingSetDigestEntry& b) { return a.id < b.id; });
     std::vector<std::uint8_t> message;
     static constexpr char kDomain[] = "capsid-binding-set-v2\0";
-    message.insert(
-        message.end(),
-        reinterpret_cast<const std::uint8_t *>(kDomain),
-        reinterpret_cast<const std::uint8_t *>(kDomain) + sizeof(kDomain) - 1);
+    message.insert(message.end(), reinterpret_cast<const std::uint8_t*>(kDomain),
+                   reinterpret_cast<const std::uint8_t*>(kDomain) + sizeof(kDomain) - 1);
     append_count(message, sorted.size());
-    for (const BindingSetDigestEntry &entry : sorted) {
+    for (const BindingSetDigestEntry& entry : sorted) {
         const std::string_view fields[] = {
             entry.id,
             entry.manifest_digest,
@@ -209,7 +184,7 @@ std::string compute_binding_set_digest(
         std::vector<std::string> keys = entry.secret_key_ids;
         std::sort(keys.begin(), keys.end());
         append_count(message, keys.size());
-        for (const std::string &key : keys) {
+        for (const std::string& key : keys) {
             append_length_prefixed(message, key);
         }
         append_length_prefixed(message, entry.secret_revision);
@@ -217,4 +192,4 @@ std::string compute_binding_set_digest(
     return sha256_hex(message);
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

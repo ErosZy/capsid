@@ -4,6 +4,7 @@
 The peer modes create only this test's processes and temporary records. They
 are not production sampler options and never generate performance data.
 """
+
 import argparse
 from contextlib import redirect_stdout
 import ctypes
@@ -22,7 +23,11 @@ import unittest
 from unittest.mock import patch
 
 ap = argparse.ArgumentParser(add_help=False)
-ap.add_argument("--runtime", type=Path, default=Path(__file__).resolve().parents[1] / "bench/measurement_runtime.py")
+ap.add_argument(
+    "--runtime",
+    type=Path,
+    default=Path(__file__).resolve().parents[1] / "bench/measurement_runtime.py",
+)
 ap.add_argument("--peer", action="store_true")
 ap.add_argument("--controller", type=int)
 ap.add_argument("--group-controller", action="store_true")
@@ -39,8 +44,18 @@ spec.loader.exec_module(runtime)
 
 
 def peer_command(records, *options):
-    return [sys.executable, "-B", "-u", str(Path(__file__).resolve()), "--runtime", str(args.runtime.resolve()),
-            "--peer", "--records", str(records), *options]
+    return [
+        sys.executable,
+        "-B",
+        "-u",
+        str(Path(__file__).resolve()),
+        "--runtime",
+        str(args.runtime.resolve()),
+        "--peer",
+        "--records",
+        str(records),
+        *options,
+    ]
 
 
 def read_records(path):
@@ -55,12 +70,13 @@ def wait_for(predicate, timeout=4):
     while not predicate():
         if time.monotonic() >= deadline:
             return False
-        time.sleep(.01)
+        time.sleep(0.01)
     return True
 
 
 def run_peer():
     if args.reap_children:
+
         def reap_children(*_):
             while True:
                 try:
@@ -69,9 +85,12 @@ def run_peer():
                     return
                 if pid == 0:
                     return
+
         signal.signal(signal.SIGCHLD, reap_children)
     identity = runtime.ProcFS().identity(os.getpid())
-    payload = (json.dumps({"role": args.role, "pid": identity.pid, "start": identity.start}) + "\n").encode()
+    payload = (
+        json.dumps({"role": args.role, "pid": identity.pid, "start": identity.start}) + "\n"
+    ).encode()
     descriptor = os.open(args.records, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
         os.write(descriptor, payload)
@@ -91,6 +110,7 @@ def run_peer():
 def run_controller():
     def interrupted(signum, _):
         raise SystemExit(128 + signum)
+
     signal.signal(signal.SIGINT, interrupted)
     signal.signal(signal.SIGTERM, interrupted)
     with (args.records.parent / "controller.log").open("wb") as output:
@@ -102,7 +122,7 @@ def run_controller():
             tree = runtime.OwnedProcess(peer_command(args.records), stdout=output)
         try:
             while True:
-                time.sleep(.05)
+                time.sleep(0.05)
         finally:
             report = tree.close()
             (args.records.parent / "cleanup.json").write_text(json.dumps(report))
@@ -122,9 +142,13 @@ I = runtime.ProcessIdentity
 class ModelTests(unittest.TestCase):
     def test_recursive_ancestry_session_and_foreign_processes(self):
         root = I(10, 100, 1, 10, "S")
-        snapshot = {10: root, 11: I(11, 101, 10, 10, "S"),
-                    12: I(12, 102, 11, 10, "S"), 13: I(13, 103, 11, 13, "S"),
-                    21: I(21, 105, 1, 21, "S")}
+        snapshot = {
+            10: root,
+            11: I(11, 101, 10, 10, "S"),
+            12: I(12, 102, 11, 10, "S"),
+            13: I(13, 103, 11, 13, "S"),
+            21: I(21, 105, 1, 21, "S"),
+        }
         owned = runtime.owned_identities(root, {10: root}, snapshot)
         self.assertEqual(set(owned), {10, 11, 12, 13})
         order = [p.pid for p in runtime.postorder(owned, 10)]
@@ -151,8 +175,12 @@ class ModelTests(unittest.TestCase):
             identity = proc.identity(42)
             self.assertEqual(identity, I(42, 123, 2, 42, "S"))
             self.assertIsNone(proc.identity(99))
-            for content, code in (("", "pss-format"), ("Pss: 0 kB\n", "pss-nonpositive"),
-                                  ("Pss: nan kB\n", "pss-format"), ("Pss: 1 MB\n", "pss-format")):
+            for content, code in (
+                ("", "pss-format"),
+                ("Pss: 0 kB\n", "pss-nonpositive"),
+                ("Pss: nan kB\n", "pss-format"),
+                ("Pss: 1 MB\n", "pss-format"),
+            ):
                 with self.subTest(content=content):
                     (folder / "smaps_rollup").write_text(content)
                     with self.assertRaises(runtime.ProbeError) as raised:
@@ -168,17 +196,20 @@ class ModelTests(unittest.TestCase):
     def test_two_equal_positive_samples_and_bounded_drift(self):
         def sample(value, pid=1):
             return {"pss_kb": value, "processes": [{"pid": pid, "start": 7, "pss_kb": value}]}
+
         iterator = iter([sample(10), sample(11), sample(11)])
         delays = []
-        result = runtime.stable_pss(lambda: next(iterator), interval=.25, sleep=delays.append)
+        result = runtime.stable_pss(lambda: next(iterator), interval=0.25, sleep=delays.append)
         self.assertEqual(result["pss_readings_kb"], [11, 11])
         self.assertEqual(len(result["samples"]), 3)
-        self.assertEqual(delays, [.25, .25])
+        self.assertEqual(delays, [0.25, 0.25])
         count = 0
+
         def drift():
             nonlocal count
             count += 1
             return sample(count)
+
         with self.assertRaises(runtime.ProbeError) as raised:
             runtime.stable_pss(drift, attempts=4, sleep=lambda _: None)
         self.assertEqual(raised.exception.code, "pss-unstable")
@@ -189,13 +220,19 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "process-changed")
 
     def test_invalid_samples_and_read_failures_never_become_zero(self):
-        for value in (None, {}, {"pss_kb": 0, "processes": []},
-                      {"pss_kb": True, "processes": [{}]},
-                      {"pss_kb": 1, "processes": [{"pid": 1, "start": 7, "pss_kb": 2}]}):
+        for value in (
+            None,
+            {},
+            {"pss_kb": 0, "processes": []},
+            {"pss_kb": True, "processes": [{}]},
+            {"pss_kb": 1, "processes": [{"pid": 1, "start": 7, "pss_kb": 2}]},
+        ):
             with self.subTest(value=value), self.assertRaises(runtime.ProbeError):
                 runtime.stable_pss(lambda: value, sleep=lambda _: None)
+
         def denied():
             raise PermissionError("test denied")
+
         with self.assertRaises(runtime.ProbeError) as raised:
             runtime.stable_pss(denied)
         self.assertEqual(raised.exception.record()["status"], "error")
@@ -229,7 +266,9 @@ class ModelTests(unittest.TestCase):
                 accepted.close()
 
 
-@unittest.skipUnless(sys.platform == "linux", "actual /proc process/PSS qualification is Linux-only")
+@unittest.skipUnless(
+    sys.platform == "linux", "actual /proc process/PSS qualification is Linux-only"
+)
 class LinuxProcessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="capsid-measurement-process-")
@@ -241,30 +280,42 @@ class LinuxProcessTests(unittest.TestCase):
         self.temp.cleanup()
 
     def identities_gone(self, records):
-        return all((current := self.proc.identity(p["pid"])) is None or current.start != p["start"]
-                   for p in records)
+        return all(
+            (current := self.proc.identity(p["pid"])) is None or current.start != p["start"]
+            for p in records
+        )
 
     def test_constructor_failure_after_spawn_still_owns_actual_descendants(self):
         for error_type in (PermissionError, KeyboardInterrupt):
             with self.subTest(error=error_type.__name__):
                 records_path = self.folder / (error_type.__name__ + ".jsonl")
                 reaper = runtime.Subreaper()
+
                 class InterruptedIdentity(runtime.ProcFS):
                     fired = False
+
                     def identity(inner, pid):
                         if not inner.fired:
                             self.assertTrue(wait_for(lambda: len(read_records(records_path)) == 3))
                             inner.fired = True
                             raise error_type("injected interruption after spawn")
                         return super().identity(pid)
+
                 observed = []
                 try:
                     with (self.folder / "constructor.log").open("wb") as output:
                         with self.assertRaises(error_type):
-                            runtime.OwnedProcess(peer_command(records_path), stdout=output, proc=InterruptedIdentity())
+                            runtime.OwnedProcess(
+                                peer_command(records_path),
+                                stdout=output,
+                                proc=InterruptedIdentity(),
+                            )
                     observed = read_records(records_path)
                     self.assertEqual(len(observed), 3)
-                    self.assertTrue(self.identities_gone(observed), "constructor abandoned an already started descendant")
+                    self.assertTrue(
+                        self.identities_gone(observed),
+                        "constructor abandoned an already started descendant",
+                    )
                 finally:
                     observed = observed or read_records(records_path)
                     for process in observed:
@@ -282,19 +333,22 @@ class LinuxProcessTests(unittest.TestCase):
                                 pass
                         if self.identities_gone(observed):
                             break
-                        time.sleep(.01)
+                        time.sleep(0.01)
                     reaper.close()
 
     def test_actual_grandchildren_pss_and_postorder_reaping_preserve_foreign_child(self):
         with (self.folder / "peer.log").open("wb") as output:
             tree = runtime.OwnedProcess(peer_command(self.records), stdout=output)
-            foreign = subprocess.Popen([sys.executable, "-B", "-c", "import time;time.sleep(30)"],
-                                       start_new_session=True)
+            foreign = subprocess.Popen(
+                [sys.executable, "-B", "-c", "import time;time.sleep(30)"], start_new_session=True
+            )
             try:
                 self.assertTrue(wait_for(lambda: len(read_records(self.records)) == 3))
                 records = read_records(self.records)
                 sample = tree.sample()
-                self.assertEqual({p["pid"] for p in sample["processes"]}, {p["pid"] for p in records})
+                self.assertEqual(
+                    {p["pid"] for p in sample["processes"]}, {p["pid"] for p in records}
+                )
                 self.assertGreater(sample["pss_kb"], 0)
                 report = tree.close()
                 self.assertEqual(report["ownedPidsRemaining"], 0)
@@ -314,7 +368,9 @@ class LinuxProcessTests(unittest.TestCase):
         with (self.folder / "peer.log").open("wb") as output:
             tree = runtime.OwnedProcess(peer_command(self.records, "--parent-exits"), stdout=output)
             try:
-                self.assertTrue(wait_for(lambda: len(read_records(self.records)) == 3 and not tree.alive()))
+                self.assertTrue(
+                    wait_for(lambda: len(read_records(self.records)) == 3 and not tree.alive())
+                )
                 records = read_records(self.records)
                 with self.assertRaises(runtime.ProbeError) as raised:
                     tree.sample()
@@ -343,7 +399,9 @@ class LinuxProcessTests(unittest.TestCase):
 
     def test_reaped_worker_cannot_disappear_from_a_later_pss_sample(self):
         with (self.folder / "peer.log").open("wb") as output:
-            tree = runtime.OwnedProcess(peer_command(self.records, "--reap-children"), stdout=output)
+            tree = runtime.OwnedProcess(
+                peer_command(self.records, "--reap-children"), stdout=output
+            )
             try:
                 self.assertTrue(wait_for(lambda: len(read_records(self.records)) == 3))
                 records = read_records(self.records)
@@ -351,28 +409,52 @@ class LinuxProcessTests(unittest.TestCase):
                 child = next(p for p in records if p["role"] == "child")
                 os.kill(child["pid"], signal.SIGKILL)
                 self.assertTrue(wait_for(lambda: self.proc.identity(child["pid"]) is None))
-                self.assertTrue(tree.alive(), "controller/root stays alive while a worker disappears")
+                self.assertTrue(
+                    tree.alive(), "controller/root stays alive while a worker disappears"
+                )
                 with self.assertRaises(runtime.ProbeError):
                     tree.sample()
             finally:
                 tree.close()
 
     def test_controller_signal_cleans_actual_tree(self):
-        for grouped, sig in ((grouped, sig) for grouped in (False, True) for sig in (signal.SIGINT, signal.SIGTERM)):
+        for grouped, sig in (
+            (grouped, sig) for grouped in (False, True) for sig in (signal.SIGINT, signal.SIGTERM)
+        ):
             with self.subTest(signal=sig, grouped=grouped):
                 records = self.folder / f"processes-{grouped}-{sig.name}.jsonl"
                 reaper = runtime.Subreaper()
-                controller = subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()),
-                    "--runtime", str(args.runtime.resolve()), "--controller", str(sig), "--records", str(records),
-                    *(['--group-controller'] if grouped else [])],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                controller = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-B",
+                        str(Path(__file__).resolve()),
+                        "--runtime",
+                        str(args.runtime.resolve()),
+                        "--controller",
+                        str(sig),
+                        "--records",
+                        str(records),
+                        *(["--group-controller"] if grouped else []),
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
                 observed = []
                 try:
-                    self.assertTrue(wait_for(lambda: len(read_records(records)) == (6 if grouped else 3)))
+                    self.assertTrue(
+                        wait_for(lambda: len(read_records(records)) == (6 if grouped else 3))
+                    )
                     observed = read_records(records)
                     controller.send_signal(sig)
                     self.assertEqual(controller.wait(timeout=6), 128 + sig)
-                    self.assertEqual(json.loads((self.folder / "cleanup.json").read_text())["ownedPidsRemaining"], 0)
+                    self.assertEqual(
+                        json.loads((self.folder / "cleanup.json").read_text())[
+                            "ownedPidsRemaining"
+                        ],
+                        0,
+                    )
                     self.assertTrue(self.identities_gone(observed))
                 finally:
                     if controller.poll() is None:
@@ -389,39 +471,51 @@ class LinuxProcessTests(unittest.TestCase):
                     reaper.close()
 
     def test_owned_group_samples_two_roots_without_client_or_foreign_process(self):
-        other = self.folder / 'other-root.jsonl'
-        with (self.folder / 'forest.log').open('wb') as logs:
-            foreign = subprocess.Popen([sys.executable, '-B', '-c', 'import time; time.sleep(30)'])
+        other = self.folder / "other-root.jsonl"
+        with (self.folder / "forest.log").open("wb") as logs:
+            foreign = subprocess.Popen([sys.executable, "-B", "-c", "import time; time.sleep(30)"])
             group = runtime.OwnedGroup()
             try:
                 first = group.spawn(peer_command(self.records), stdout=logs)
                 second = group.spawn(peer_command(other), stdout=logs)
-                client = group.spawn([sys.executable, '-B', '-c', 'import time; time.sleep(30)'], stdout=logs)
-                self.assertTrue(wait_for(lambda: len(read_records(self.records)) == len(read_records(other)) == 3))
+                client = group.spawn(
+                    [sys.executable, "-B", "-c", "import time; time.sleep(30)"], stdout=logs
+                )
+                self.assertTrue(
+                    wait_for(
+                        lambda: len(read_records(self.records)) == len(read_records(other)) == 3
+                    )
+                )
                 observed = read_records(self.records) + read_records(other)
                 sample = group.sample([first, second])
-                self.assertEqual({p['pid'] for p in observed}, {p['pid'] for p in sample['processes']})
-                self.assertNotIn(client.root.pid, {p['pid'] for p in sample['processes']})
+                self.assertEqual(
+                    {p["pid"] for p in observed}, {p["pid"] for p in sample["processes"]}
+                )
+                self.assertNotIn(client.root.pid, {p["pid"] for p in sample["processes"]})
                 client.close()
                 self.assertIs(runtime.OwnedProcess._group, group)
-                self.assertEqual(6, len(group.sample([first, second])['processes']))
-                self.assertEqual(0, group.close()['ownedPidsRemaining'])
+                self.assertEqual(6, len(group.sample([first, second])["processes"]))
+                self.assertEqual(0, group.close()["ownedPidsRemaining"])
                 self.assertTrue(self.identities_gone(observed))
-                self.assertIsNone(foreign.poll(), 'foreign child must survive all owned root cleanups')
+                self.assertIsNone(
+                    foreign.poll(), "foreign child must survive all owned root cleanups"
+                )
             finally:
                 group.close()
-                foreign.terminate(); foreign.wait(timeout=3)
+                foreign.terminate()
+                foreign.wait(timeout=3)
         self.assertFalse(runtime.OwnedProcess._active)
 
     def test_owned_group_failed_launch_does_not_restore_reaper_or_lose_roots(self):
-        with (self.folder / 'forest.log').open('wb') as logs, runtime.OwnedGroup() as group:
+        with (self.folder / "forest.log").open("wb") as logs, runtime.OwnedGroup() as group:
             root = group.spawn(peer_command(self.records), stdout=logs)
             self.assertTrue(wait_for(lambda: len(read_records(self.records)) == 3))
             observed = read_records(self.records)
-            with self.assertRaises(FileNotFoundError): group.spawn([str(self.folder / 'missing-program')], stdout=logs)
+            with self.assertRaises(FileNotFoundError):
+                group.spawn([str(self.folder / "missing-program")], stdout=logs)
             self.assertTrue(root.alive())
             self.assertIs(runtime.OwnedProcess._group, group)
-            client = group.spawn([sys.executable, '-B', '-c', 'raise SystemExit(7)'], stdout=logs)
+            client = group.spawn([sys.executable, "-B", "-c", "raise SystemExit(7)"], stdout=logs)
             self.assertTrue(wait_for(lambda: not client.alive()))
             client.close()
             self.assertEqual(7, client.process.returncode)
@@ -430,36 +524,50 @@ class LinuxProcessTests(unittest.TestCase):
         self.assertFalse(runtime.OwnedProcess._active)
 
     def test_owned_group_rejects_nested_foreign_duplicate_and_closed_measurement_roots(self):
-        with (self.folder / 'forest.log').open('wb') as logs, runtime.OwnedGroup() as group:
+        with (self.folder / "forest.log").open("wb") as logs, runtime.OwnedGroup() as group:
             root = group.spawn(peer_command(self.records), stdout=logs)
             self.assertTrue(wait_for(lambda: len(read_records(self.records)) == 3))
             for selected in ([], [root, root], [object()]):
-                with self.subTest(selected=selected), self.assertRaises(runtime.ProbeError): group.sample(selected)
-            with self.assertRaises(runtime.ProbeError): runtime.OwnedGroup()
-            with self.assertRaises(runtime.ProbeError): runtime.OwnedProcess(['unused'], stdout=logs)
+                with self.subTest(selected=selected), self.assertRaises(runtime.ProbeError):
+                    group.sample(selected)
+            with self.assertRaises(runtime.ProbeError):
+                runtime.OwnedGroup()
+            with self.assertRaises(runtime.ProbeError):
+                runtime.OwnedProcess(["unused"], stdout=logs)
             root.close()
-            with self.assertRaises(runtime.ProbeError): group.sample([root])
+            with self.assertRaises(runtime.ProbeError):
+                group.sample([root])
 
     def test_owned_group_cleanup_failure_still_closes_other_roots_and_stays_failure(self):
-        with (self.folder / 'forest.log').open('wb') as logs:
+        with (self.folder / "forest.log").open("wb") as logs:
             group = runtime.OwnedGroup()
             first = group.spawn(peer_command(self.records), stdout=logs)
-            second = group.spawn([sys.executable, '-B', '-c', 'import time; time.sleep(30)'], stdout=logs)
+            second = group.spawn(
+                [sys.executable, "-B", "-c", "import time; time.sleep(30)"], stdout=logs
+            )
             try:
                 self.assertTrue(wait_for(lambda: len(read_records(self.records)) == 3))
                 observed = read_records(self.records)
-                with patch.object(first, 'close', side_effect=runtime.ProbeError('injected-cleanup', 'owned fixture failure')):
-                    with self.assertRaises(runtime.ProbeError): group.close()
+                with patch.object(
+                    first,
+                    "close",
+                    side_effect=runtime.ProbeError("injected-cleanup", "owned fixture failure"),
+                ):
+                    with self.assertRaises(runtime.ProbeError):
+                        group.close()
                 self.assertTrue(second.closed)
                 self.assertTrue(first.alive())
-                with self.assertRaises(runtime.ProbeError): group.close()
+                with self.assertRaises(runtime.ProbeError):
+                    group.close()
                 self.assertTrue(group.closed)
                 self.assertFalse(runtime.OwnedProcess._active)
                 self.assertTrue(self.identities_gone(observed))
             finally:
                 if not group.closed:
-                    try: group.close()
-                    except runtime.ProbeError: pass
+                    try:
+                        group.close()
+                    except runtime.ProbeError:
+                        pass
 
 
 if __name__ == "__main__":

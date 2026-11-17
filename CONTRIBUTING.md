@@ -42,6 +42,16 @@ Release builds require clean Git provenance. Use a separate prepared checkout;
 do not reset your current tree, forge an identity or bypass a clean-source
 check to obtain a package.
 
+## Source Formatting
+
+Follow [source formatting](docs/formatting.md) for the pinned development-only
+clang-format, Prettier and Ruff setup. Run `npm run format` to apply maintained
+source style and `npm run format:check` before committing (npm.cmd on Windows).
+Use `npm run format:list` to inspect scope. Do not format vendor, generated
+streams/tables, locked fixtures, historical evidence or performance archives.
+The separate Formatting workflow enforces this policy without weakening the
+existing runtime gates. Formatting does not transfer release qualification.
+
 ## Code and Contract Rules
 
 - Keep the public C11 ABI and C++11 wrapper usable. Host-internal targets may

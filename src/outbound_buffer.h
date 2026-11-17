@@ -30,57 +30,49 @@
 namespace capsid {
 
 class OutboundBuffer {
-public:
+  public:
     // Writer contract: write up to `size` bytes and return the number
     // written (>=0), 0 to stall (EAGAIN), or -1 for a fatal error.
-    typedef ssize_t (*Writer)(const uint8_t *data, size_t size,
-                              void *opaque);
+    typedef ssize_t (*Writer)(const uint8_t* data, size_t size, void* opaque);
 
-    OutboundBuffer()
-        : write_offset_(0), frame_end_(0), frame_start_(0) {}
+    OutboundBuffer() : write_offset_(0), frame_end_(0), frame_start_(0) {}
 
     // Appends one encoded frame. The caller has already checked wire
     // capacity; the frame-size limit is enforced here. The sent prefix
     // is compacted before the append so physical memory stays bounded
     // even under sustained partial writes.
-    bool append(uint16_t type,
-                uint32_t flags,
-                uint64_t request_id,
-                const uint8_t *payload,
-                size_t payload_size,
-                uint16_t version = capsid::protocol::kVersion) {
+    bool append(uint16_t type, uint32_t flags, uint64_t request_id, const uint8_t* payload,
+                size_t payload_size, uint16_t version = capsid::protocol::kVersion) {
         if (payload_size > capsid::protocol::kMaxPayloadSize) {
             return false;
         }
         compact_if_needed();
-        return capsid::protocol::append_encoded_versioned(
-            version, type, flags, request_id, payload, payload_size,
-            &storage_);
+        return capsid::protocol::append_encoded_versioned(version, type, flags, request_id, payload,
+                                                          payload_size, &storage_);
     }
 
     // Sends whole frames, one frame at a time; stops on a stall, a
     // partially buffered trailing frame, or a fatal writer error.
     // Returns false on fatal error only.
-    bool flush(Writer writer, void *opaque) {
+    bool flush(Writer writer, void* opaque) {
         while (write_offset_ < storage_.size()) {
             if (write_offset_ >= frame_end_) {
                 frame_start_ = write_offset_;
                 frame_end_ = next_frame_end(write_offset_);
                 if (frame_end_ <= write_offset_) {
-                    break;  // trailing frame not fully buffered yet
+                    break; // trailing frame not fully buffered yet
                 }
             }
             const size_t remaining = frame_end_ - write_offset_;
-            const ssize_t count =
-                writer(&storage_[write_offset_], remaining, opaque);
+            const ssize_t count = writer(&storage_[write_offset_], remaining, opaque);
             if (count > 0) {
                 write_offset_ += static_cast<size_t>(count);
                 continue;
             }
             if (count == 0) {
-                break;  // stall (EAGAIN)
+                break; // stall (EAGAIN)
             }
-            return false;  // fatal
+            return false; // fatal
         }
         if (write_offset_ == storage_.size()) {
             storage_.clear();
@@ -97,22 +89,19 @@ public:
     size_t storage_size() const { return storage_.size(); }
     bool drained() const { return write_offset_ == storage_.size(); }
 
-private:
+  private:
     // End offset of the complete frame starting at `offset`, or
     // `offset` itself when the frame is not fully buffered yet.
     size_t next_frame_end(size_t offset) const {
         if (offset + capsid::protocol::kHeaderSize > storage_.size()) {
             return offset;
         }
-        const uint8_t *header = &storage_[offset];
+        const uint8_t* header = &storage_[offset];
         // magic(4) version(2) type(2) flags(4) id(8) size(4), LE.
         const uint32_t payload_size =
-            static_cast<uint32_t>(header[20]) |
-            (static_cast<uint32_t>(header[21]) << 8) |
-            (static_cast<uint32_t>(header[22]) << 16) |
-            (static_cast<uint32_t>(header[23]) << 24);
-        const size_t frame_size =
-            capsid::protocol::kHeaderSize + payload_size;
+            static_cast<uint32_t>(header[20]) | (static_cast<uint32_t>(header[21]) << 8) |
+            (static_cast<uint32_t>(header[22]) << 16) | (static_cast<uint32_t>(header[23]) << 24);
+        const size_t frame_size = capsid::protocol::kHeaderSize + payload_size;
         if (offset + frame_size > storage_.size()) {
             return offset;
         }
@@ -129,9 +118,8 @@ private:
             return;
         }
         if (frame_start_ >= kCompactThreshold) {
-            storage_.erase(
-                storage_.begin(),
-                storage_.begin() + static_cast<ptrdiff_t>(frame_start_));
+            storage_.erase(storage_.begin(),
+                           storage_.begin() + static_cast<ptrdiff_t>(frame_start_));
             write_offset_ -= frame_start_;
             frame_end_ -= frame_start_;
             frame_start_ = 0;
@@ -142,10 +130,10 @@ private:
 
     std::vector<uint8_t> storage_;
     size_t write_offset_;
-    size_t frame_end_;    // end of the frame being flushed (a boundary)
-    size_t frame_start_;  // start of the frame being flushed (kept)
+    size_t frame_end_;   // end of the frame being flushed (a boundary)
+    size_t frame_start_; // start of the frame being flushed (kept)
 };
 
-}  // namespace capsid
+} // namespace capsid
 
-#endif  // CAPSID_SRC_OUTBOUND_BUFFER_H_
+#endif // CAPSID_SRC_OUTBOUND_BUFFER_H_

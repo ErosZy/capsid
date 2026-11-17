@@ -19,7 +19,7 @@ namespace host {
 // leaves the effective set without them and channel requests fail
 // fast and explicitly. The wire version is never auto-downgraded.
 struct ProtocolLaunch {
-    bool use_v4 = true;    // first-party hosts: v4 carriage
+    bool use_v4 = true; // first-party hosts: v4 carriage
     capsid_protocol_options options{};
 
     // The options descriptor must ALWAYS be initialized (two-way size
@@ -28,10 +28,11 @@ struct ProtocolLaunch {
     ProtocolLaunch() {
         capsid_protocol_options_init(&options, sizeof(options));
         options.wire_version = capsid::protocol::kVersionV4;
-        options.capabilities = CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL |
-            CAPSID_PROTOCOL_CAP_UPGRADE | CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2 |
-            CAPSID_PROTOCOL_CAP_CHANNEL_CONFIRM | CAPSID_PROTOCOL_CAP_CHANNEL_CLOSE_FINAL |
-            CAPSID_PROTOCOL_CAP_FETCH_UPGRADE | CAPSID_PROTOCOL_CAP_CONNECTION_LIFETIME;
+        options.capabilities =
+            CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL | CAPSID_PROTOCOL_CAP_UPGRADE |
+            CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2 | CAPSID_PROTOCOL_CAP_CHANNEL_CONFIRM |
+            CAPSID_PROTOCOL_CAP_CHANNEL_CLOSE_FINAL | CAPSID_PROTOCOL_CAP_FETCH_UPGRADE |
+            CAPSID_PROTOCOL_CAP_CONNECTION_LIFETIME;
     }
 
     static ProtocolLaunch from(const ChannelsConfig& channels) {
@@ -39,25 +40,18 @@ struct ProtocolLaunch {
         launch.options.wire_version = 4;
         if (channels.configured) {
             launch.options.capabilities =
-                CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2 |
-                CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL |
-                CAPSID_PROTOCOL_CAP_UPGRADE |
-                CAPSID_PROTOCOL_CAP_HALF_CLOSE |
+                CAPSID_PROTOCOL_CAP_CHANNEL_LAYOUT_A2 | CAPSID_PROTOCOL_CAP_DUPLEX_CHANNEL |
+                CAPSID_PROTOCOL_CAP_UPGRADE | CAPSID_PROTOCOL_CAP_HALF_CLOSE |
                 CAPSID_PROTOCOL_CAP_CHANNEL_CONFIRM | CAPSID_PROTOCOL_CAP_CHANNEL_CLOSE_FINAL |
                 CAPSID_PROTOCOL_CAP_FETCH_UPGRADE | CAPSID_PROTOCOL_CAP_CONNECTION_LIFETIME;
             launch.options.max_channels = channels.max_channels;
-            launch.options.max_message_bytes =
-                channels.max_message_bytes;
-            launch.options.reassembly_budget_bytes =
-                channels.reassembly_budget_bytes;
-            launch.options.send_budget_bytes =
-                channels.send_budget_bytes;
-            launch.options.close_timeout_ms =
-                channels.close_timeout_ms;
+            launch.options.max_message_bytes = channels.max_message_bytes;
+            launch.options.reassembly_budget_bytes = channels.reassembly_budget_bytes;
+            launch.options.send_budget_bytes = channels.send_budget_bytes;
+            launch.options.close_timeout_ms = channels.close_timeout_ms;
             launch.options.dial_timeout_ms = channels.dial_timeout_ms;
             launch.options.idle_timeout_ms = channels.idle_timeout_ms;
-            launch.options.per_channel_queue_bytes =
-                channels.per_channel_queue_bytes;
+            launch.options.per_channel_queue_bytes = channels.per_channel_queue_bytes;
         }
         return launch;
     }
@@ -65,17 +59,15 @@ struct ProtocolLaunch {
 
 // Spawns through the selected entry point. Existing embedding entries
 // keep capsid_worker_spawn (v3) — this helper is host-internal.
-inline capsid_result spawn_with_protocol(
-    const capsid_worker_config* config,
-    const ProtocolLaunch& launch,
-    capsid_worker** out) {
+inline capsid_result spawn_with_protocol(const capsid_worker_config* config,
+                                         const ProtocolLaunch& launch, capsid_worker** out) {
     if (launch.use_v4) {
         return capsid_worker_spawn_ex(config, &launch.options, out);
     }
     return capsid_worker_spawn(config, out);
 }
 
-}  // namespace host
-}  // namespace capsid
+} // namespace host
+} // namespace capsid
 
 #endif

@@ -3,9 +3,7 @@ import pathlib
 import unittest
 
 
-PATH = pathlib.Path(__file__).with_name(
-    "generate-txiki-upgrade-report.py"
-)
+PATH = pathlib.Path(__file__).with_name("generate-txiki-upgrade-report.py")
 SPEC = importlib.util.spec_from_file_location("txiki_report", PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -46,9 +44,7 @@ class TxikiUpgradeReportTest(unittest.TestCase):
         inventory = MODULE.surface_inventory(root)
         visible = inventory["modules"]["application_visible"]
         self.assertTrue(visible)
-        self.assertTrue(
-            all(module.startswith("capsid:") for module in visible)
-        )
+        self.assertTrue(all(module.startswith("capsid:") for module in visible))
 
 
 if __name__ == "__main__":

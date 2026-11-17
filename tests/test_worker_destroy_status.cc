@@ -16,7 +16,8 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 void require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition)
+        throw std::runtime_error(message);
 }
 
 struct Worker {
@@ -42,14 +43,13 @@ void await_event(capsid_worker* worker, capsid_event_type type) {
                 require(event.status == 0, "IPC EXIT status is unused, including abnormal exits");
             return;
         }
-        require(next == CAPSID_WOULD_BLOCK ||
-                    (next == CAPSID_OK && event.type == CAPSID_EVENT_LOG),
+        require(next == CAPSID_WOULD_BLOCK || (next == CAPSID_OK && event.type == CAPSID_EVENT_LOG),
                 "unexpected event while waiting for READY/EXIT");
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     throw std::runtime_error("bounded READY/EXIT deadline");
 }
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) try {
     require(argc == 3, "expected mode and actual Worker path");
@@ -63,7 +63,8 @@ int main(int argc, char** argv) try {
         require(capsid_worker_spawn(&config, &worker.value) == CAPSID_OK, "spawn");
         const std::string source = "export default {fetch() { return new Response('ok'); }};";
         require(capsid_worker_load_bundle(worker.value,
-                    reinterpret_cast<const std::uint8_t*>(source.data()), source.size()) == CAPSID_OK,
+                                          reinterpret_cast<const std::uint8_t*>(source.data()),
+                                          source.size()) == CAPSID_OK,
                 "load actual Worker");
         await_event(worker.value, CAPSID_EVENT_READY);
         require((mode == "terminated" ? capsid_worker_terminate(worker.value)
@@ -80,7 +81,8 @@ int main(int argc, char** argv) try {
         do {
             waited = waitpid(pid, &status, WNOHANG);
             require(waited >= 0 || errno == EINTR, "external reap failed");
-            if (waited == pid) break;
+            if (waited == pid)
+                break;
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         } while (Clock::now() < deadline);
         require(waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
@@ -94,7 +96,8 @@ int main(int argc, char** argv) try {
     if (mode == "clean") {
         require(status.clean(), "real shutdown must retain OS exit zero");
     } else if (mode == "terminated") {
-        require(status.observed && !status.clean() && !status.destroy_forced && status.wait_error == 0,
+        require(status.observed && !status.clean() && !status.destroy_forced &&
+                    status.wait_error == 0,
                 "external termination must retain a non-clean OS result");
 #if defined(_WIN32)
         require(status.exit_code == 1 && status.signal == 0, "TerminateProcess exit code");
@@ -102,11 +105,13 @@ int main(int argc, char** argv) try {
         require(status.signal == SIGKILL, "SIGKILL exit signal");
 #endif
     } else if (mode == "null") {
-        require(!status.observed && !status.clean() && !status.destroy_forced && status.wait_error == 0,
+        require(!status.observed && !status.clean() && !status.destroy_forced &&
+                    status.wait_error == 0,
                 "null worker must not invent exit zero");
 #if !defined(_WIN32)
     } else if (mode == "reaped") {
-        require(!status.observed && !status.clean() && !status.destroy_forced && status.wait_error == ECHILD,
+        require(!status.observed && !status.clean() && !status.destroy_forced &&
+                    status.wait_error == ECHILD,
                 "already reaped child must remain unknown without signaling its PID");
 #endif
     } else {

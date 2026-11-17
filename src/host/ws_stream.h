@@ -14,7 +14,7 @@ namespace ws {
 // never causes a 64 MiB frame allocation. UTF-8 state spans continuation
 // frames and IPC fragments. The caller pauses reads when credit is zero.
 class StreamDecoder {
-public:
+  public:
     struct Item {
         uint8_t opcode = kBinary;
         bool start = false, end = false, text = false;
@@ -24,13 +24,13 @@ public:
     enum Result { NeedMore, ItemReady, Error };
     explicit StreamDecoder(uint64_t max_message, Role role = kServer)
         : max_message_(max_message), role_(role) {}
-    Result consume(const uint8_t *bytes, size_t size, size_t *used,
-                   uint64_t credit, Item *item);
+    Result consume(const uint8_t* bytes, size_t size, size_t* used, uint64_t credit, Item* item);
     uint16_t error_code() const { return error_code_; }
-    const std::string &error() const { return error_; }
-private:
-    Result fail(uint16_t code, const char *error);
-    bool utf8(const uint8_t *bytes, size_t size, bool final);
+    const std::string& error() const { return error_; }
+
+  private:
+    Result fail(uint16_t code, const char* error);
+    bool utf8(const uint8_t* bytes, size_t size, bool final);
     uint64_t max_message_, message_bytes_ = 0, remaining_ = 0, offset_ = 0;
     Role role_;
     std::array<uint8_t, 14> header_{};
@@ -45,7 +45,7 @@ private:
     uint16_t error_code_ = 1002;
     std::string error_;
 };
-}  // namespace ws
-}  // namespace host
-}  // namespace capsid
+} // namespace ws
+} // namespace host
+} // namespace capsid
 #endif

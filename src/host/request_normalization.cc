@@ -31,9 +31,7 @@ namespace {
 
 using ErrorCode = RequestNormalizationErrorCode;
 
-void set_error(RequestNormalizationError &error,
-               ErrorCode code,
-               std::string path,
+void set_error(RequestNormalizationError& error, ErrorCode code, std::string path,
                std::string message) {
     error.code = code;
     error.path = std::move(path);
@@ -41,15 +39,11 @@ void set_error(RequestNormalizationError &error,
 }
 
 // Hand-written ASCII checks: locale-independent.
-bool ascii_digit(char c) {
-    return c >= '0' && c <= '9';
-}
+bool ascii_digit(char c) { return c >= '0' && c <= '9'; }
 bool ascii_hex(char c) {
     return ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
-bool ascii_lower(char c) {
-    return c >= 'a' && c <= 'z';
-}
+bool ascii_lower(char c) { return c >= 'a' && c <= 'z'; }
 char ascii_lower_char(char c) {
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
 }
@@ -59,9 +53,21 @@ bool token_char(char c) {
         return true;
     }
     switch (c) {
-    case '!': case '#': case '$': case '%': case '&': case '\'':
-    case '*': case '+': case '-': case '.': case '^': case '_':
-    case '`': case '|': case '~':
+    case '!':
+    case '#':
+    case '$':
+    case '%':
+    case '&':
+    case '\'':
+    case '*':
+    case '+':
+    case '-':
+    case '.':
+    case '^':
+    case '_':
+    case '`':
+    case '|':
+    case '~':
         return true;
     default:
         return false;
@@ -77,8 +83,7 @@ bool valid_application_id(std::string_view value) {
         return false;
     }
     for (const char c : value) {
-        if (!(ascii_lower(c) || ascii_digit(c) || c == '.' || c == '_' ||
-              c == '-')) {
+        if (!(ascii_lower(c) || ascii_digit(c) || c == '.' || c == '_' || c == '-')) {
             return false;
         }
     }
@@ -88,8 +93,7 @@ bool valid_application_id(std::string_view value) {
 // DNS label: [a-z0-9-]+, no leading or trailing hyphen.
 // DNS label: [a-z0-9-]+, at most 63 bytes, no leading or trailing hyphen.
 bool valid_label(std::string_view label) {
-    if (label.empty() || label.size() > 63 || label.front() == '-' ||
-        label.back() == '-') {
+    if (label.empty() || label.size() > 63 || label.front() == '-' || label.back() == '-') {
         return false;
     }
     for (const char c : label) {
@@ -101,7 +105,7 @@ bool valid_label(std::string_view label) {
 }
 
 struct ParsedAuthority {
-    std::string host;  // lowercase
+    std::string host; // lowercase
     std::optional<std::uint16_t> port;
 };
 
@@ -109,22 +113,20 @@ struct ParsedAuthority {
 // [1, 65535]. Userinfo, bracketed literals, empty/trailing labels,
 // oversized labels (>63 bytes) or hostnames (>253 bytes) and empty or
 // non-numeric ports are rejected.
-bool parse_authority(std::string_view value, ParsedAuthority *out) {
+bool parse_authority(std::string_view value, ParsedAuthority* out) {
     if (value.empty() || value.size() > kMaxPublicAuthorityBytes) {
         return false;
     }
     const std::size_t colon = value.find(':');
     const std::string_view host_part = value.substr(0, colon);
     const bool has_port = colon != std::string_view::npos;
-    const std::string_view port_part =
-        has_port ? value.substr(colon + 1) : std::string_view();
+    const std::string_view port_part = has_port ? value.substr(colon + 1) : std::string_view();
 
     std::string host;
     host.reserve(host_part.size());
     for (const char c : host_part) {
         const char lowered = ascii_lower_char(c);
-        if (ascii_lower(lowered) || ascii_digit(lowered) || lowered == '-' ||
-            lowered == '.') {
+        if (ascii_lower(lowered) || ascii_digit(lowered) || lowered == '-' || lowered == '.') {
             host.push_back(lowered);
         } else {
             return false;
@@ -168,11 +170,9 @@ bool parse_authority(std::string_view value, ParsedAuthority *out) {
     return true;
 }
 
-static bool validate_policy(const RequestRoutingPolicy &policy,
-                            RequestNormalizationError &error) {
+static bool validate_policy(const RequestRoutingPolicy& policy, RequestNormalizationError& error) {
     if (policy.public_scheme != "http" && policy.public_scheme != "https") {
-        set_error(error, ErrorCode::kInvalidListenerPolicy,
-                  "/listener/publicScheme",
+        set_error(error, ErrorCode::kInvalidListenerPolicy, "/listener/publicScheme",
                   "public scheme must be exactly http or https");
         return false;
     }
@@ -180,16 +180,13 @@ static bool validate_policy(const RequestRoutingPolicy &policy,
     // into a routing branch (which would also bypass the trust check).
     switch (policy.mode) {
     case RequestRoutingMode::kSubdomain: {
-        if (policy.subdomain_suffix.empty() ||
-            policy.subdomain_suffix.front() != '.') {
-            set_error(error, ErrorCode::kInvalidListenerPolicy,
-                      "/listener/routing/suffix",
+        if (policy.subdomain_suffix.empty() || policy.subdomain_suffix.front() != '.') {
+            set_error(error, ErrorCode::kInvalidListenerPolicy, "/listener/routing/suffix",
                       "subdomain suffix must start with a dot");
             return false;
         }
         if (policy.subdomain_suffix.find(':') != std::string_view::npos) {
-            set_error(error, ErrorCode::kInvalidListenerPolicy,
-                      "/listener/routing/suffix",
+            set_error(error, ErrorCode::kInvalidListenerPolicy, "/listener/routing/suffix",
                       "subdomain suffix must not contain a port");
             return false;
         }
@@ -201,12 +198,9 @@ static bool validate_policy(const RequestRoutingPolicy &policy,
         std::size_t start = 0;
         while (start <= suffix.size()) {
             const std::size_t dot = suffix.find('.', start);
-            const std::size_t end =
-                dot == std::string::npos ? suffix.size() : dot;
-            if (!valid_label(
-                    std::string_view(suffix).substr(start, end - start))) {
-                set_error(error, ErrorCode::kInvalidListenerPolicy,
-                          "/listener/routing/suffix",
+            const std::size_t end = dot == std::string::npos ? suffix.size() : dot;
+            if (!valid_label(std::string_view(suffix).substr(start, end - start))) {
+                set_error(error, ErrorCode::kInvalidListenerPolicy, "/listener/routing/suffix",
                           "subdomain suffix is not a valid domain");
                 return false;
             }
@@ -220,32 +214,28 @@ static bool validate_policy(const RequestRoutingPolicy &policy,
     case RequestRoutingMode::kPath:
     case RequestRoutingMode::kHeader: {
         ParsedAuthority parsed;
-        if (policy.public_authority.empty() ||
-            !parse_authority(policy.public_authority, &parsed)) {
-            set_error(error, ErrorCode::kInvalidListenerPolicy,
-                      "/listener/publicAuthority",
+        if (policy.public_authority.empty() || !parse_authority(policy.public_authority, &parsed)) {
+            set_error(error, ErrorCode::kInvalidListenerPolicy, "/listener/publicAuthority",
                       "public authority must be host[:port]");
             return false;
         }
-        if (policy.mode == RequestRoutingMode::kHeader &&
-            !policy.trusted_header_routing) {
-            set_error(error, ErrorCode::kUntrustedHeaderRouting,
-                      "/listener/routing/mode",
+        if (policy.mode == RequestRoutingMode::kHeader && !policy.trusted_header_routing) {
+            set_error(error, ErrorCode::kUntrustedHeaderRouting, "/listener/routing/mode",
                       "header routing requires a trusted listener");
             return false;
         }
         return true;
     }
     }
-    set_error(error, ErrorCode::kInvalidListenerPolicy,
-              "/listener/routing/mode", "unknown routing mode");
+    set_error(error, ErrorCode::kInvalidListenerPolicy, "/listener/routing/mode",
+              "unknown routing mode");
     return false;
 }
 
 // Origin-form target validation. The query is opaque: percent escapes must
 // be well-formed, but encoded slashes and dot segments are only rejected in
 // the path.
-bool validate_target(std::string_view target, RequestNormalizationError &error) {
+bool validate_target(std::string_view target, RequestNormalizationError& error) {
     if (target.size() > kMaxPublicRequestTargetBytes) {
         set_error(error, ErrorCode::kResourceLimit, "/target",
                   "request target exceeds the size limit");
@@ -272,8 +262,7 @@ bool validate_target(std::string_view target, RequestNormalizationError &error) 
     }
     for (std::size_t index = 0; index < target.size(); ++index) {
         if (target[index] == '%') {
-            if (index + 2 >= target.size() ||
-                !ascii_hex(target[index + 1]) ||
+            if (index + 2 >= target.size() || !ascii_hex(target[index + 1]) ||
                 !ascii_hex(target[index + 2])) {
                 set_error(error, ErrorCode::kInvalidTarget, "/target",
                           "request target has a malformed percent escape");
@@ -289,12 +278,14 @@ bool validate_target(std::string_view target, RequestNormalizationError &error) 
             continue;
         }
         auto hex_value = [](char c) -> int {
-            if (c >= '0' && c <= '9') return c - '0';
-            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= '0' && c <= '9')
+                return c - '0';
+            if (c >= 'a' && c <= 'f')
+                return c - 'a' + 10;
             return c - 'A' + 10;
         };
-        const unsigned char byte = static_cast<unsigned char>(
-            (hex_value(path[index + 1]) << 4) | hex_value(path[index + 2]));
+        const unsigned char byte = static_cast<unsigned char>((hex_value(path[index + 1]) << 4) |
+                                                              hex_value(path[index + 2]));
         if (byte == '/' || byte == '\\') {
             set_error(error, ErrorCode::kInvalidTarget, "/target",
                       "request path contains an encoded slash");
@@ -305,8 +296,7 @@ bool validate_target(std::string_view target, RequestNormalizationError &error) 
     std::size_t start = 0;
     while (start <= path.size()) {
         const std::size_t slash = path.find('/', start);
-        const std::size_t end = slash == std::string_view::npos ? path.size()
-                                                                : slash;
+        const std::size_t end = slash == std::string_view::npos ? path.size() : slash;
         const std::string_view segment = path.substr(start, end - start);
         if (segment == "." || segment == "..") {
             set_error(error, ErrorCode::kInvalidTarget, "/target",
@@ -318,13 +308,14 @@ bool validate_target(std::string_view target, RequestNormalizationError &error) 
         for (std::size_t index = 0; index < segment.size(); ++index) {
             if (segment[index] == '%' && index + 2 < segment.size()) {
                 auto hex_value = [](char c) -> int {
-                    if (c >= '0' && c <= '9') return c - '0';
-                    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                    if (c >= '0' && c <= '9')
+                        return c - '0';
+                    if (c >= 'a' && c <= 'f')
+                        return c - 'a' + 10;
                     return c - 'A' + 10;
                 };
-                decoded.push_back(static_cast<char>(
-                    (hex_value(segment[index + 1]) << 4) |
-                    hex_value(segment[index + 2])));
+                decoded.push_back(static_cast<char>((hex_value(segment[index + 1]) << 4) |
+                                                    hex_value(segment[index + 2])));
                 index += 2;
             } else {
                 decoded.push_back(segment[index]);
@@ -345,17 +336,14 @@ bool validate_target(std::string_view target, RequestNormalizationError &error) 
 
 // Fixed hop-by-hop and forwarding field names (lowercase).
 bool is_hop_by_hop(std::string_view name) {
-    return name == "connection" || name == "keep-alive" ||
-           name == "proxy-connection" || name == "te" ||
-           name == "trailer" || name == "transfer-encoding" ||
-           name == "upgrade";
+    return name == "connection" || name == "keep-alive" || name == "proxy-connection" ||
+           name == "te" || name == "trailer" || name == "transfer-encoding" || name == "upgrade";
 }
 bool is_forwarding(std::string_view name) {
-    return name == "forwarded" || name == "x-real-ip" ||
-           name.starts_with("x-forwarded-");
+    return name == "forwarded" || name == "x-real-ip" || name.starts_with("x-forwarded-");
 }
 
-}  // namespace
+} // namespace
 
 bool is_valid_public_authority(std::string_view value) {
     ParsedAuthority parsed;
@@ -365,8 +353,7 @@ bool is_valid_public_authority(std::string_view value) {
 // Exported policy validation with an optional error slot. The listener
 // adapter (PR-09b) uses this before binding so startup fails closed on a
 // malformed policy; callers that only want the boolean may pass null.
-bool is_valid_routing_policy(const RequestRoutingPolicy &policy,
-                             RequestNormalizationError *error) {
+bool is_valid_routing_policy(const RequestRoutingPolicy& policy, RequestNormalizationError* error) {
     RequestNormalizationError local;
     if (error == nullptr) {
         error = &local;
@@ -394,9 +381,7 @@ bool header_value_has_token(std::string_view value, std::string_view token) {
     while (pos <= value.size()) {
         const size_t comma = value.find(',', pos);
         const std::string_view item = value.substr(
-            pos, comma == std::string_view::npos
-                     ? std::string_view::npos
-                     : comma - pos);
+            pos, comma == std::string_view::npos ? std::string_view::npos : comma - pos);
         size_t b = 0;
         size_t e = item.size();
         while (b < e && (item[b] == ' ' || item[b] == '\t')) {
@@ -408,8 +393,7 @@ bool header_value_has_token(std::string_view value, std::string_view token) {
         if (e - b == token.size()) {
             bool equal = true;
             for (size_t i = 0; i < token.size(); ++i) {
-                if (ascii_lower_char(item[b + i]) !=
-                    ascii_lower_char(token[i])) {
+                if (ascii_lower_char(item[b + i]) != ascii_lower_char(token[i])) {
                     equal = false;
                     break;
                 }
@@ -438,22 +422,25 @@ bool header_equals_token(std::string_view value, std::string_view token) {
     return true;
 }
 
-}  // namespace
+} // namespace
 
-WebSocketUpgradeCheck check_websocket_upgrade(
-    const std::vector<PublicRequestHeaderView>& views,
-    std::string_view method, unsigned http_version) {
+WebSocketUpgradeCheck check_websocket_upgrade(const std::vector<PublicRequestHeaderView>& views,
+                                              std::string_view method, unsigned http_version) {
     bool websocket = false;
     for (const auto& view : views) {
-        if (name_iequals(view.name, "upgrade") &&
-                header_value_has_token(view.value, "websocket")) websocket = true;
+        if (name_iequals(view.name, "upgrade") && header_value_has_token(view.value, "websocket"))
+            websocket = true;
     }
-    if (!websocket) return WebSocketUpgradeCheck::kNone;
-    if (method != "GET" || http_version < 11) return WebSocketUpgradeCheck::kBadHandshake;
+    if (!websocket)
+        return WebSocketUpgradeCheck::kNone;
+    if (method != "GET" || http_version < 11)
+        return WebSocketUpgradeCheck::kBadHandshake;
 
     const auto trim = [](std::string_view value) {
-        while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.remove_prefix(1);
-        while (!value.empty() && (value.back() == ' ' || value.back() == '\t')) value.remove_suffix(1);
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\t'))
+            value.remove_prefix(1);
+        while (!value.empty() && (value.back() == ' ' || value.back() == '\t'))
+            value.remove_suffix(1);
         return value;
     };
     const auto tokens = [&](std::string_view value, std::set<std::string_view>* unique,
@@ -461,16 +448,21 @@ WebSocketUpgradeCheck check_websocket_upgrade(
         for (;;) {
             const size_t comma = value.find(',');
             const std::string_view item = trim(value.substr(0, comma));
-            if (item.empty()) return false;
+            if (item.empty())
+                return false;
             size_t slash = std::string_view::npos;
             for (size_t i = 0; i < item.size(); ++i) {
-                if (token_char(item[i])) continue;
-                if (!allow_version || item[i] != '/' || slash != std::string_view::npos ||
-                        i == 0 || i + 1 == item.size()) return false;
+                if (token_char(item[i]))
+                    continue;
+                if (!allow_version || item[i] != '/' || slash != std::string_view::npos || i == 0 ||
+                    i + 1 == item.size())
+                    return false;
                 slash = i;
             }
-            if (unique && !unique->insert(item).second) return false;
-            if (comma == std::string_view::npos) return true;
+            if (unique && !unique->insert(item).second)
+                return false;
+            if (comma == std::string_view::npos)
+                return true;
             value.remove_prefix(comma + 1);
         }
     };
@@ -480,13 +472,15 @@ WebSocketUpgradeCheck check_websocket_upgrade(
     std::set<std::string_view> protocols;
     for (const PublicRequestHeaderView& view : views) {
         if (name_iequals(view.name, "connection")) {
-            if (!tokens(view.value, nullptr, false)) return WebSocketUpgradeCheck::kBadHandshake;
+            if (!tokens(view.value, nullptr, false))
+                return WebSocketUpgradeCheck::kBadHandshake;
             connection_upgrade |= header_value_has_token(view.value, "upgrade");
         } else if (name_iequals(view.name, "upgrade")) {
-            if (!tokens(view.value, nullptr, true)) return WebSocketUpgradeCheck::kBadHandshake;
+            if (!tokens(view.value, nullptr, true))
+                return WebSocketUpgradeCheck::kBadHandshake;
         } else if (name_iequals(view.name, "sec-websocket-key")) {
             if (key != nullptr) {
-                return WebSocketUpgradeCheck::kBadKey;  // duplicated
+                return WebSocketUpgradeCheck::kBadKey; // duplicated
             }
             key = &view;
         } else if (name_iequals(view.name, "sec-websocket-version")) {
@@ -495,16 +489,16 @@ WebSocketUpgradeCheck check_websocket_upgrade(
             }
             version = &view;
         } else if (name_iequals(view.name, "sec-websocket-protocol")) {
-            if (!tokens(view.value, &protocols, false)) return WebSocketUpgradeCheck::kBadHandshake;
+            if (!tokens(view.value, &protocols, false))
+                return WebSocketUpgradeCheck::kBadHandshake;
         }
     }
-    if (!connection_upgrade) return WebSocketUpgradeCheck::kBadHandshake;
-    if (version == nullptr ||
-        !header_equals_token(trim(version->value), "13")) {
+    if (!connection_upgrade)
+        return WebSocketUpgradeCheck::kBadHandshake;
+    if (version == nullptr || !header_equals_token(trim(version->value), "13")) {
         return WebSocketUpgradeCheck::kUnsupportedVersion;
     }
-    if (key == nullptr ||
-        !capsid::host::ws::validate_client_key(std::string(trim(key->value)))) {
+    if (key == nullptr || !capsid::host::ws::validate_client_key(std::string(trim(key->value)))) {
         return WebSocketUpgradeCheck::kBadKey;
     }
     return WebSocketUpgradeCheck::kValid;
@@ -512,19 +506,22 @@ WebSocketUpgradeCheck check_websocket_upgrade(
 
 WebSocketUpgradeRejection websocket_upgrade_rejection(WebSocketUpgradeCheck check) {
     switch (check) {
-    case WebSocketUpgradeCheck::kBadKey: return {400, "invalid Sec-WebSocket-Key"};
-    case WebSocketUpgradeCheck::kBadHandshake: return {400, "invalid WebSocket handshake"};
-    case WebSocketUpgradeCheck::kUnsupportedVersion: return {426, "unsupported Sec-WebSocket-Version"};
+    case WebSocketUpgradeCheck::kBadKey:
+        return {400, "invalid Sec-WebSocket-Key"};
+    case WebSocketUpgradeCheck::kBadHandshake:
+        return {400, "invalid WebSocket handshake"};
+    case WebSocketUpgradeCheck::kUnsupportedVersion:
+        return {426, "unsupported Sec-WebSocket-Version"};
     case WebSocketUpgradeCheck::kValid:
-    case WebSocketUpgradeCheck::kNone: return {};
+    case WebSocketUpgradeCheck::kNone:
+        return {};
     }
     return {400, "invalid WebSocket handshake"};
 }
 
-RequestNormalizationResult normalize_public_request(
-    const RequestRoutingPolicy &policy,
-    std::string_view target,
-    std::span<const PublicRequestHeaderView> headers) {
+RequestNormalizationResult
+normalize_public_request(const RequestRoutingPolicy& policy, std::string_view target,
+                         std::span<const PublicRequestHeaderView> headers) {
     RequestNormalizationResult result;
 
     // Resource limits first: header count and total header bytes.
@@ -534,7 +531,7 @@ RequestNormalizationResult normalize_public_request(
         return result;
     }
     std::size_t total_bytes = 0;
-    for (const PublicRequestHeaderView &header : headers) {
+    for (const PublicRequestHeaderView& header : headers) {
         total_bytes += header.name.size() + header.value.size();
     }
     if (total_bytes > kMaxPublicRequestHeaderBytes) {
@@ -559,18 +556,16 @@ RequestNormalizationResult normalize_public_request(
     std::size_t capsid_app_count = 0;
     std::vector<std::string> connection_nominated;
     for (std::size_t index = 0; index < headers.size(); ++index) {
-        const PublicRequestHeaderView &header = headers[index];
+        const PublicRequestHeaderView& header = headers[index];
         if (header.name.empty()) {
-            set_error(result.error, ErrorCode::kInvalidHeader,
-                      "/headers/" + std::to_string(index),
+            set_error(result.error, ErrorCode::kInvalidHeader, "/headers/" + std::to_string(index),
                       "header name must not be empty");
             return result;
         }
         for (const char c : header.name) {
             if (!token_char(c)) {
                 set_error(result.error, ErrorCode::kInvalidHeader,
-                          "/headers/" + std::to_string(index),
-                          "header name is not a valid token");
+                          "/headers/" + std::to_string(index), "header name is not a valid token");
                 return result;
             }
         }
@@ -591,8 +586,8 @@ RequestNormalizationResult normalize_public_request(
         const std::string_view lowered = lowered_names.back();
         if (lowered == "host") {
             if (host_index.has_value()) {
-                set_error(result.error, ErrorCode::kInvalidHeader,
-                          "/headers/host", "duplicate Host header");
+                set_error(result.error, ErrorCode::kInvalidHeader, "/headers/host",
+                          "duplicate Host header");
                 return result;
             }
             host_index = index;
@@ -608,8 +603,7 @@ RequestNormalizationResult normalize_public_request(
             std::size_t start = 0;
             while (start <= header.value.size()) {
                 while (start < header.value.size() &&
-                       (header.value[start] == ' ' ||
-                        header.value[start] == '\t')) {
+                       (header.value[start] == ' ' || header.value[start] == '\t')) {
                     ++start;
                 }
                 std::size_t end = header.value.find(',', start);
@@ -617,13 +611,11 @@ RequestNormalizationResult normalize_public_request(
                     end = header.value.size();
                 }
                 std::size_t token_end = end;
-                while (token_end > start &&
-                       (header.value[token_end - 1] == ' ' ||
-                        header.value[token_end - 1] == '\t')) {
+                while (token_end > start && (header.value[token_end - 1] == ' ' ||
+                                             header.value[token_end - 1] == '\t')) {
                     --token_end;
                 }
-                const std::string_view token =
-                    header.value.substr(start, token_end - start);
+                const std::string_view token = header.value.substr(start, token_end - start);
                 if (token.empty()) {
                     set_error(result.error, ErrorCode::kInvalidHeader,
                               "/headers/" + std::to_string(index),
@@ -676,9 +668,8 @@ RequestNormalizationResult normalize_public_request(
         for (const char c : policy.subdomain_suffix) {
             suffix.push_back(ascii_lower_char(c));
         }
-        const std::string_view suffix_domain =
-            std::string_view(suffix).substr(1);
-        const std::string &host = host_authority.host;
+        const std::string_view suffix_domain = std::string_view(suffix).substr(1);
+        const std::string& host = host_authority.host;
         if (host.size() <= suffix_domain.size() ||
             host.substr(host.size() - suffix_domain.size()) != suffix_domain ||
             host[host.size() - suffix_domain.size() - 1] != '.') {
@@ -687,8 +678,8 @@ RequestNormalizationResult normalize_public_request(
                       "Host does not match the subdomain suffix");
             return result;
         }
-        const std::string_view prefix = std::string_view(host).substr(
-            0, host.size() - suffix_domain.size() - 1);
+        const std::string_view prefix =
+            std::string_view(host).substr(0, host.size() - suffix_domain.size() - 1);
         if (prefix.empty() || prefix.find('.') != std::string_view::npos) {
             set_error(result.error, ErrorCode::kInvalidAuthority,
                       "/headers/" + std::to_string(*host_index),
@@ -704,8 +695,7 @@ RequestNormalizationResult normalize_public_request(
             return result;
         }
         application = std::string(prefix);
-        url = std::string(policy.public_scheme) + "://" + application +
-              suffix;
+        url = std::string(policy.public_scheme) + "://" + application + suffix;
         if (host_authority.port.has_value()) {
             url += ":" + std::to_string(*host_authority.port);
         }
@@ -718,8 +708,7 @@ RequestNormalizationResult normalize_public_request(
             ParsedAuthority parsed;
             if (!parse_authority(policy.public_authority, &parsed)) {
                 set_error(result.error, ErrorCode::kInvalidListenerPolicy,
-                          "/listener/publicAuthority",
-                          "public authority must be host[:port]");
+                          "/listener/publicAuthority", "public authority must be host[:port]");
                 return result;
             }
             authority = parsed.host;
@@ -735,13 +724,9 @@ RequestNormalizationResult normalize_public_request(
                 return result;
             }
             const std::size_t app_start = kPathPrefix.size();
-            const std::size_t app_end =
-                target.find_first_of("/?", app_start);
-            const std::size_t end = app_end == std::string_view::npos
-                                        ? target.size()
-                                        : app_end;
-            const std::string_view app =
-                target.substr(app_start, end - app_start);
+            const std::size_t app_end = target.find_first_of("/?", app_start);
+            const std::size_t end = app_end == std::string_view::npos ? target.size() : app_end;
+            const std::string_view app = target.substr(app_start, end - app_start);
             if (app.empty() || !valid_application_id(app)) {
                 set_error(result.error, ErrorCode::kRouteNotFound, "/target",
                           "path routing requires a valid App segment");
@@ -756,24 +741,20 @@ RequestNormalizationResult normalize_public_request(
             } else {
                 rewritten = "/" + std::string(target.substr(end));
             }
-            url = std::string(policy.public_scheme) + "://" + authority +
-                  rewritten;
+            url = std::string(policy.public_scheme) + "://" + authority + rewritten;
         } else {
             // Header routing: trusted listener, exactly one Capsid-App.
             if (capsid_app_count == 0) {
-                set_error(result.error, ErrorCode::kRouteNotFound,
-                          "/headers/capsid-app",
+                set_error(result.error, ErrorCode::kRouteNotFound, "/headers/capsid-app",
                           "header routing requires a Capsid-App header");
                 return result;
             }
             if (capsid_app_count > 1) {
-                set_error(result.error, ErrorCode::kInvalidHeader,
-                          "/headers/capsid-app",
+                set_error(result.error, ErrorCode::kInvalidHeader, "/headers/capsid-app",
                           "duplicate Capsid-App header");
                 return result;
             }
-            const std::string_view app_value =
-                headers[*capsid_app_index].value;
+            const std::string_view app_value = headers[*capsid_app_index].value;
             if (!valid_application_id(app_value)) {
                 set_error(result.error, ErrorCode::kRouteNotFound,
                           "/headers/" + std::to_string(*capsid_app_index),
@@ -781,18 +762,17 @@ RequestNormalizationResult normalize_public_request(
                 return result;
             }
             application = std::string(app_value);
-            url = std::string(policy.public_scheme) + "://" + authority +
-                  std::string(target);
+            url = std::string(policy.public_scheme) + "://" + authority + std::string(target);
         }
     }
 
     // Output headers: input order, lowercase names, unsafe fields removed.
     for (std::size_t index = 0; index < headers.size(); ++index) {
         const std::string_view name = lowered_names[index];
-        bool removed = name == "host" || name == "capsid-app" ||
-                       is_hop_by_hop(name) || is_forwarding(name);
+        bool removed =
+            name == "host" || name == "capsid-app" || is_hop_by_hop(name) || is_forwarding(name);
         if (!removed) {
-            for (const std::string &nominated : connection_nominated) {
+            for (const std::string& nominated : connection_nominated) {
                 if (name == nominated) {
                     removed = true;
                     break;
@@ -814,4 +794,4 @@ RequestNormalizationResult normalize_public_request(
     return result;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

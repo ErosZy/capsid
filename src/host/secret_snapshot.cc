@@ -31,9 +31,7 @@ namespace {
 
 using ErrorCode = SecretSnapshotErrorCode;
 
-void set_error(SecretSnapshotCompileResult &result,
-               ErrorCode code,
-               std::string path,
+void set_error(SecretSnapshotCompileResult& result, ErrorCode code, std::string path,
                std::string message) {
     result.ok = false;
     result.error.code = code;
@@ -60,8 +58,7 @@ std::string escape_pointer_component(std::string_view component) {
 std::string sha256_hex(std::span<const std::uint8_t> bytes) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
-    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size,
-                   EVP_sha256(), nullptr) != 1 ||
+    if (EVP_Digest(bytes.data(), bytes.size(), digest, &digest_size, EVP_sha256(), nullptr) != 1 ||
         digest_size != 32) {
         return {};
     }
@@ -75,8 +72,7 @@ std::string sha256_hex(std::span<const std::uint8_t> bytes) {
     return result;
 }
 
-void append_length_prefixed(std::vector<std::uint8_t> &output,
-                            std::string_view value) {
+void append_length_prefixed(std::vector<std::uint8_t>& output, std::string_view value) {
     const std::uint32_t size = static_cast<std::uint32_t>(value.size());
     output.push_back(static_cast<std::uint8_t>(size >> 24));
     output.push_back(static_cast<std::uint8_t>(size >> 16));
@@ -108,13 +104,11 @@ bool valid_environment_pattern(std::string_view value) {
             return false;
         }
     }
-    return value.find('*') == std::string_view::npos ||
-           value.find('*') == value.size() - 1;
+    return value.find('*') == std::string_view::npos || value.find('*') == value.size() - 1;
 }
 
 bool valid_environment_name(std::string_view value) {
-    return value.find('*') == std::string_view::npos &&
-           valid_environment_pattern(value);
+    return value.find('*') == std::string_view::npos && valid_environment_pattern(value);
 }
 
 // Secret key IDs: exactly [A-Za-z0-9._-], no empty or dot component
@@ -141,17 +135,15 @@ bool valid_opaque_revision(std::string_view value) {
     }
     for (const char c : value) {
         const unsigned char ch = static_cast<unsigned char>(c);
-        if (!(std::isalnum(ch) || ch == '.' || ch == '_' || ch == ':' ||
-              ch == '@' || ch == '+' || ch == '-')) {
+        if (!(std::isalnum(ch) || ch == '.' || ch == '_' || ch == ':' || ch == '@' || ch == '+' ||
+              ch == '-')) {
             return false;
         }
     }
     return true;
 }
 
-bool has_nul_byte(std::string_view bytes) {
-    return bytes.find('\0') != std::string_view::npos;
-}
+bool has_nul_byte(std::string_view bytes) { return bytes.find('\0') != std::string_view::npos; }
 
 // Minimal strict UTF-8 validation: overlong forms, surrogates and
 // out-of-range code points are rejected.
@@ -181,19 +173,16 @@ bool valid_utf8(std::string_view bytes) {
             return false;
         }
         for (std::size_t step = 1; step <= continuation; ++step) {
-            const unsigned char ch =
-                static_cast<unsigned char>(bytes[index + step]);
+            const unsigned char ch = static_cast<unsigned char>(bytes[index + step]);
             if ((ch & 0xc0) != 0x80) {
                 return false;
             }
             code_point = (code_point << 6) | (ch & 0x3f);
         }
         // Overlong and surrogate encodings.
-        if ((continuation == 1 && code_point < 0x80) ||
-            (continuation == 2 && code_point < 0x800) ||
+        if ((continuation == 1 && code_point < 0x80) || (continuation == 2 && code_point < 0x800) ||
             (continuation == 3 && code_point < 0x10000) ||
-            (code_point >= 0xd800 && code_point <= 0xdfff) ||
-            code_point > 0x10ffff) {
+            (code_point >= 0xd800 && code_point <= 0xdfff) || code_point > 0x10ffff) {
             return false;
         }
         index += continuation + 1;
@@ -203,8 +192,7 @@ bool valid_utf8(std::string_view bytes) {
 
 // Whether an environment name matches a validated Host allowlist entry
 // (exact match or one-trailing-'*' prefix).
-bool host_allows_name(std::span<const std::string_view> patterns,
-                      std::string_view name) {
+bool host_allows_name(std::span<const std::string_view> patterns, std::string_view name) {
     for (const std::string_view pattern : patterns) {
         if (pattern == "*") {
             return true;
@@ -212,10 +200,8 @@ bool host_allows_name(std::span<const std::string_view> patterns,
         if (pattern == name) {
             return true;
         }
-        if (pattern.size() > 1 && pattern.back() == '*' &&
-            name.size() >= pattern.size() - 1 &&
-            name.substr(0, pattern.size() - 1) ==
-                pattern.substr(0, pattern.size() - 1)) {
+        if (pattern.size() > 1 && pattern.back() == '*' && name.size() >= pattern.size() - 1 &&
+            name.substr(0, pattern.size() - 1) == pattern.substr(0, pattern.size() - 1)) {
             return true;
         }
     }
@@ -236,10 +222,9 @@ std::string json_escape(std::string_view value) {
     return escaped;
 }
 
-}  // namespace
+} // namespace
 
-SecretSnapshotCompileResult compile_secret_snapshot(
-    const SecretSnapshotCompileInput &input) {
+SecretSnapshotCompileResult compile_secret_snapshot(const SecretSnapshotCompileInput& input) {
     SecretSnapshotCompileResult result;
 
     // The module gate only applies when the App actually requests
@@ -259,8 +244,7 @@ SecretSnapshotCompileResult compile_secret_snapshot(
     }
 
     // Host allowlist entries must honor the Runtime grammar.
-    for (std::size_t index = 0; index < input.host_environment_names.size();
-         ++index) {
+    for (std::size_t index = 0; index < input.host_environment_names.size(); ++index) {
         if (!valid_environment_pattern(input.host_environment_names[index])) {
             set_error(result, ErrorCode::kInvalidEnvironmentPattern,
                       "/host/environmentNames/" + std::to_string(index),
@@ -273,18 +257,17 @@ SecretSnapshotCompileResult compile_secret_snapshot(
     // per-source content limits. Paths point into /permissions/env.
     std::vector<std::string_view> request_names;
     request_names.reserve(input.requests.size());
-    for (const EnvironmentRequest &request : input.requests) {
-        const std::string entry_path =
-            "/permissions/env/" + escape_pointer_component(request.name);
+    for (const EnvironmentRequest& request : input.requests) {
+        const std::string entry_path = "/permissions/env/" + escape_pointer_component(request.name);
         if (!valid_environment_name(request.name)) {
             set_error(result, ErrorCode::kInvalidEnvironmentName, entry_path,
                       "invalid environment name");
             return result;
         }
-        if (std::find(request_names.begin(), request_names.end(),
-                      request.name) != request_names.end()) {
-            set_error(result, ErrorCode::kDuplicateEnvironmentName,
-                      entry_path, "duplicate environment name");
+        if (std::find(request_names.begin(), request_names.end(), request.name) !=
+            request_names.end()) {
+            set_error(result, ErrorCode::kDuplicateEnvironmentName, entry_path,
+                      "duplicate environment name");
             return result;
         }
         request_names.push_back(request.name);
@@ -292,34 +275,29 @@ SecretSnapshotCompileResult compile_secret_snapshot(
         const bool has_literal = request.value.has_value();
         const bool has_secret = request.value_from.has_value();
         if (has_literal == has_secret) {
-            set_error(result, ErrorCode::kInvalidEnvironmentRequest,
-                      entry_path,
+            set_error(result, ErrorCode::kInvalidEnvironmentRequest, entry_path,
                       "environment entry needs exactly one value source");
             return result;
         }
         if (has_literal) {
             if (has_nul_byte(*request.value)) {
-                set_error(result, ErrorCode::kInvalidValue,
-                          entry_path + "/value",
+                set_error(result, ErrorCode::kInvalidValue, entry_path + "/value",
                           "environment value contains a NUL byte");
                 return result;
             }
             if (!valid_utf8(*request.value)) {
-                set_error(result, ErrorCode::kInvalidValue,
-                          entry_path + "/value",
+                set_error(result, ErrorCode::kInvalidValue, entry_path + "/value",
                           "environment value is not valid UTF-8");
                 return result;
             }
             if (request.value->size() > kMaxEnvironmentValueBytes) {
-                set_error(result, ErrorCode::kValueTooLarge,
-                          entry_path + "/value",
+                set_error(result, ErrorCode::kValueTooLarge, entry_path + "/value",
                           "environment value exceeds the size limit");
                 return result;
             }
         } else {
             if (!valid_secret_key_id(*request.value_from)) {
-                set_error(result, ErrorCode::kInvalidSecretKey,
-                          entry_path + "/valueFrom",
+                set_error(result, ErrorCode::kInvalidSecretKey, entry_path + "/valueFrom",
                           "invalid secret key ID");
                 return result;
             }
@@ -339,16 +317,15 @@ SecretSnapshotCompileResult compile_secret_snapshot(
     // Resolved secret validation: the resolved set must contain exactly the
     // distinct requested keys, with safe key IDs, values and revisions.
     // Value content errors point at the requesting request.
-    std::map<std::string_view, const EnvironmentRequest *> requested_keys;
-    for (const EnvironmentRequest &request : input.requests) {
+    std::map<std::string_view, const EnvironmentRequest*> requested_keys;
+    for (const EnvironmentRequest& request : input.requests) {
         if (request.value_from.has_value()) {
             requested_keys.emplace(*request.value_from, &request);
         }
     }
-    std::map<std::string_view, const ResolvedSecret *> resolved_by_key;
-    for (std::size_t index = 0; index < input.resolved_secrets.size();
-         ++index) {
-        const ResolvedSecret &secret = input.resolved_secrets[index];
+    std::map<std::string_view, const ResolvedSecret*> resolved_by_key;
+    for (std::size_t index = 0; index < input.resolved_secrets.size(); ++index) {
+        const ResolvedSecret& secret = input.resolved_secrets[index];
         // Key validity is established before any key-derived path is built,
         // so an invalid key is reported with a fixed index-based path and
         // never spliced into the diagnostic.
@@ -362,19 +339,17 @@ SecretSnapshotCompileResult compile_secret_snapshot(
             "/resolvedSecrets/" + escape_pointer_component(secret.key_id);
         if (resolved_by_key.find(secret.key_id) != resolved_by_key.end()) {
             set_error(result, ErrorCode::kDuplicateResolvedSecret,
-                      "/resolvedSecrets/" + std::to_string(index),
-                      "duplicate resolved secret");
+                      "/resolvedSecrets/" + std::to_string(index), "duplicate resolved secret");
             return result;
         }
         const auto requested = requested_keys.find(secret.key_id);
         if (requested == requested_keys.end()) {
-            set_error(result, ErrorCode::kUnexpectedResolvedSecret,
-                      resolved_path, "resolved secret was not requested");
+            set_error(result, ErrorCode::kUnexpectedResolvedSecret, resolved_path,
+                      "resolved secret was not requested");
             return result;
         }
         const std::string request_path =
-            "/permissions/env/" +
-            escape_pointer_component(requested->second->name) + "/valueFrom";
+            "/permissions/env/" + escape_pointer_component(requested->second->name) + "/valueFrom";
         if (has_nul_byte(secret.value)) {
             set_error(result, ErrorCode::kInvalidValue, request_path,
                       "secret value contains a NUL byte");
@@ -391,19 +366,16 @@ SecretSnapshotCompileResult compile_secret_snapshot(
             return result;
         }
         if (!valid_opaque_revision(secret.opaque_revision)) {
-            set_error(result, ErrorCode::kInvalidSecretRevision,
-                      resolved_path + "/opaqueRevision",
+            set_error(result, ErrorCode::kInvalidSecretRevision, resolved_path + "/opaqueRevision",
                       "unsafe secret revision");
             return result;
         }
         resolved_by_key.emplace(secret.key_id, &secret);
     }
-    for (const auto &[key, request] : requested_keys) {
+    for (const auto& [key, request] : requested_keys) {
         if (resolved_by_key.find(key) == resolved_by_key.end()) {
             set_error(result, ErrorCode::kMissingResolvedSecret,
-                      "/permissions/env/" +
-                          escape_pointer_component(request->name) +
-                          "/valueFrom",
+                      "/permissions/env/" + escape_pointer_component(request->name) + "/valueFrom",
                       "resolved secret is missing");
             return result;
         }
@@ -413,11 +385,10 @@ SecretSnapshotCompileResult compile_secret_snapshot(
     // name and construct owned storage. (The entry-count budget was already
     // enforced before per-request processing.)
     std::size_t total_bytes = 0;
-    for (const EnvironmentRequest &request : input.requests) {
-        const std::size_t value_size =
-            request.value.has_value() ? request.value->size()
-                                      : resolved_by_key[*request.value_from]
-                                            ->value.size();
+    for (const EnvironmentRequest& request : input.requests) {
+        const std::size_t value_size = request.value.has_value()
+                                           ? request.value->size()
+                                           : resolved_by_key[*request.value_from]->value.size();
         total_bytes += request.name.size() + value_size;
     }
     if (total_bytes > kMaxEnvironmentSnapshotBytes) {
@@ -435,14 +406,14 @@ SecretSnapshotCompileResult compile_secret_snapshot(
     };
     std::vector<SortedEntry> sorted;
     sorted.reserve(input.requests.size());
-    for (const EnvironmentRequest &request : input.requests) {
+    for (const EnvironmentRequest& request : input.requests) {
         SortedEntry entry;
         entry.name = std::string(request.name);
         if (request.value.has_value()) {
             entry.value = std::string(*request.value);
             entry.source = EnvironmentValueSource::kLiteral;
         } else {
-            const ResolvedSecret &secret = *resolved_by_key[*request.value_from];
+            const ResolvedSecret& secret = *resolved_by_key[*request.value_from];
             entry.value = std::string(secret.value);
             entry.source = EnvironmentValueSource::kSecret;
             entry.secret_key_id = std::string(secret.key_id);
@@ -450,10 +421,9 @@ SecretSnapshotCompileResult compile_secret_snapshot(
         }
         sorted.push_back(std::move(entry));
     }
-    std::sort(sorted.begin(), sorted.end(),
-              [](const SortedEntry &left, const SortedEntry &right) {
-                  return left.name < right.name;
-              });
+    std::sort(sorted.begin(), sorted.end(), [](const SortedEntry& left, const SortedEntry& right) {
+        return left.name < right.name;
+    });
 
     result.snapshot.entries_.reserve(sorted.size());
     result.snapshot.metadata_.reserve(sorted.size());
@@ -461,17 +431,14 @@ SecretSnapshotCompileResult compile_secret_snapshot(
     bool first_entry = true;
     std::vector<std::uint8_t> revision_message;
     {
-        static constexpr char kRevisionDomain[] =
-            "capsid-secret-revision-v1\0";
-        revision_message.assign(
-            reinterpret_cast<const std::uint8_t *>(kRevisionDomain),
-            reinterpret_cast<const std::uint8_t *>(kRevisionDomain) +
-                sizeof(kRevisionDomain) - 1);
+        static constexpr char kRevisionDomain[] = "capsid-secret-revision-v1\0";
+        revision_message.assign(reinterpret_cast<const std::uint8_t*>(kRevisionDomain),
+                                reinterpret_cast<const std::uint8_t*>(kRevisionDomain) +
+                                    sizeof(kRevisionDomain) - 1);
         append_length_prefixed(revision_message, input.application_id);
     }
-    for (const SortedEntry &entry : sorted) {
-        result.snapshot.entries_.push_back(
-            EnvironmentSnapshotEntry{entry.name, entry.value});
+    for (const SortedEntry& entry : sorted) {
+        result.snapshot.entries_.push_back(EnvironmentSnapshotEntry{entry.name, entry.value});
         EnvironmentSnapshotMetadata metadata;
         metadata.name = entry.name;
         metadata.source = entry.source;
@@ -483,17 +450,12 @@ SecretSnapshotCompileResult compile_secret_snapshot(
             environment_json += ',';
         }
         first_entry = false;
-        environment_json += "{\"name\":\"" + json_escape(entry.name) +
-                            "\",\"source\":\"" +
-                            (entry.source == EnvironmentValueSource::kSecret
-                                 ? "secret"
-                                 : "literal") +
-                            "\"";
+        environment_json +=
+            "{\"name\":\"" + json_escape(entry.name) + "\",\"source\":\"" +
+            (entry.source == EnvironmentValueSource::kSecret ? "secret" : "literal") + "\"";
         if (entry.source == EnvironmentValueSource::kSecret) {
-            environment_json += ",\"keyId\":\"" +
-                                json_escape(entry.secret_key_id) +
-                                "\",\"revision\":\"" +
-                                json_escape(entry.opaque_revision) + "\"";
+            environment_json += ",\"keyId\":\"" + json_escape(entry.secret_key_id) +
+                                "\",\"revision\":\"" + json_escape(entry.opaque_revision) + "\"";
             append_length_prefixed(revision_message, entry.name);
             append_length_prefixed(revision_message, entry.secret_key_id);
             append_length_prefixed(revision_message, entry.opaque_revision);
@@ -520,7 +482,7 @@ SecretSnapshotCompileResult compile_secret_snapshot(
 std::vector<capsid_env_entry> SecretSnapshot::runtime_entries() const {
     std::vector<capsid_env_entry> result;
     result.reserve(entries_.size());
-    for (const EnvironmentSnapshotEntry &entry : entries_) {
+    for (const EnvironmentSnapshotEntry& entry : entries_) {
         capsid_env_entry descriptor;
         descriptor.struct_size = sizeof(capsid_env_entry);
         descriptor.name = entry.name.c_str();
@@ -531,4 +493,4 @@ std::vector<capsid_env_entry> SecretSnapshot::runtime_entries() const {
     return result;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

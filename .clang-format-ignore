@@ -1,0 +1,10 @@
+vendor/**
+patches/**
+licenses/**
+bench/results/**
+bench/bench-apps/php-slim/vendor/**
+tests/fixtures/**
+tests/wpt/**
+docs/evidence/**
+docs/history/archives/**
+perf-site/**

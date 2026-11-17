@@ -14,7 +14,10 @@ const char* label_escape(const std::string& value) {
     static thread_local std::string escaped;
     escaped.clear();
     for (const char c : value) {
-        if (c == '\n') { escaped += "\\n"; continue; }
+        if (c == '\n') {
+            escaped += "\\n";
+            continue;
+        }
         if (c == '"' || c == '\\') {
             escaped.push_back('\\');
         }
@@ -23,26 +26,28 @@ const char* label_escape(const std::string& value) {
     return escaped.c_str();
 }
 
-}  // namespace
+} // namespace
 
-void MetricsRegistry::set_process_snapshot_provider(
-    ProcessSnapshotProvider provider) {
+void MetricsRegistry::set_process_snapshot_provider(ProcessSnapshotProvider provider) {
     std::lock_guard<std::mutex> lock(mutex_);
     process_snapshot_ = std::move(provider);
 }
 void MetricsRegistry::observe_channel_budget(std::shared_ptr<ServiceChannelBudget> budget,
-                                             const std::string &listener) {
-    if (!budget) return;
-    std::string labels = "scope=\"" + std::string(listener.empty() ? "service" : "listener") + "\",listener=\"";
-    labels += label_escape(listener); labels += "\"";
+                                             const std::string& listener) {
+    if (!budget)
+        return;
+    std::string labels =
+        "scope=\"" + std::string(listener.empty() ? "service" : "listener") + "\",listener=\"";
+    labels += label_escape(listener);
+    labels += "\"";
     std::lock_guard<std::mutex> lock(mutex_);
-    auto &slot = channel_budgets_[labels];
-    if (auto old = slot.lock(); old && old != budget) throw std::invalid_argument("duplicate live channel metrics scope");
+    auto& slot = channel_budgets_[labels];
+    if (auto old = slot.lock(); old && old != budget)
+        throw std::invalid_argument("duplicate live channel metrics scope");
     slot = std::move(budget);
 }
 
-void MetricsRegistry::count_worker_event(const std::string& event,
-                                         const std::string& app,
+void MetricsRegistry::count_worker_event(const std::string& event, const std::string& app,
                                          const std::string& generation) {
     std::string key = "worker_events_total{event=\"";
     key += label_escape(event);
@@ -55,8 +60,8 @@ void MetricsRegistry::count_worker_event(const std::string& event,
     ++counters_[std::move(key)];
 }
 
-void MetricsRegistry::set_recovery_instability_budget_remaining(
-    const std::string& app, std::uint64_t value) {
+void MetricsRegistry::set_recovery_instability_budget_remaining(const std::string& app,
+                                                                std::uint64_t value) {
     std::string key = "recovery_instability_budget_remaining{app=\"";
     key += label_escape(app);
     key += "\"}";
@@ -64,8 +69,7 @@ void MetricsRegistry::set_recovery_instability_budget_remaining(
     gauges_[std::move(key)] = value;
 }
 
-void MetricsRegistry::set_recovery_backoff_ms(const std::string& app,
-                                              std::uint64_t value) {
+void MetricsRegistry::set_recovery_backoff_ms(const std::string& app, std::uint64_t value) {
     std::string key = "recovery_backoff_ms{app=\"";
     key += label_escape(app);
     key += "\"}";
@@ -73,8 +77,7 @@ void MetricsRegistry::set_recovery_backoff_ms(const std::string& app,
     gauges_[std::move(key)] = value;
 }
 
-void MetricsRegistry::count_recovery_startup_permit_grant(
-    const std::string& app) {
+void MetricsRegistry::count_recovery_startup_permit_grant(const std::string& app) {
     std::string key = "recovery_startup_permits_total{app=\"";
     key += label_escape(app);
     key += "\"}";
@@ -98,8 +101,7 @@ void MetricsRegistry::count_recovery_retire(const std::string& app) {
     ++counters_[std::move(key)];
 }
 
-void MetricsRegistry::count_deploy_stage(const std::string& stage,
-                                         const std::string& result,
+void MetricsRegistry::count_deploy_stage(const std::string& stage, const std::string& result,
                                          const std::string& app) {
     std::string key = "deploy_stages_total{stage=\"";
     key += label_escape(stage);
@@ -112,8 +114,7 @@ void MetricsRegistry::count_deploy_stage(const std::string& stage,
     ++counters_[std::move(key)];
 }
 
-void MetricsRegistry::count_deploy_operation(const std::string& result,
-                                             const std::string& app) {
+void MetricsRegistry::count_deploy_operation(const std::string& result, const std::string& app) {
     std::string key = "deploy_operations_total{result=\"";
     key += label_escape(result);
     key += "\",app=\"";
@@ -123,8 +124,7 @@ void MetricsRegistry::count_deploy_operation(const std::string& result,
     ++counters_[std::move(key)];
 }
 
-void MetricsRegistry::set_isolation_required_features(const std::string& app,
-                                                      std::uint64_t value) {
+void MetricsRegistry::set_isolation_required_features(const std::string& app, std::uint64_t value) {
     std::string key = "isolation_required_features{app=\"";
     key += label_escape(app);
     key += "\"}";
@@ -132,8 +132,7 @@ void MetricsRegistry::set_isolation_required_features(const std::string& app,
     gauges_[std::move(key)] = value;
 }
 
-void MetricsRegistry::set_isolation_applied_features(const std::string& app,
-                                                     std::uint64_t value) {
+void MetricsRegistry::set_isolation_applied_features(const std::string& app, std::uint64_t value) {
     std::string key = "isolation_applied_features{app=\"";
     key += label_escape(app);
     key += "\"}";
@@ -141,8 +140,7 @@ void MetricsRegistry::set_isolation_applied_features(const std::string& app,
     gauges_[std::move(key)] = value;
 }
 
-void MetricsRegistry::count_isolation_failure(const std::string& kind,
-                                              const std::string& app) {
+void MetricsRegistry::count_isolation_failure(const std::string& kind, const std::string& app) {
     std::string key = "isolation_failures_total{kind=\"";
     key += label_escape(kind);
     key += "\",app=\"";
@@ -152,8 +150,7 @@ void MetricsRegistry::count_isolation_failure(const std::string& kind,
     ++counters_[std::move(key)];
 }
 
-void MetricsRegistry::set_log_dropped(const std::string& app,
-                                      std::uint64_t value) {
+void MetricsRegistry::set_log_dropped(const std::string& app, std::uint64_t value) {
     std::string key = "log_dropped_total{app=\"";
     key += label_escape(app);
     key += "\"}";
@@ -161,23 +158,21 @@ void MetricsRegistry::set_log_dropped(const std::string& app,
     gauges_[std::move(key)] = value;
 }
 
-std::string MetricsRegistry::render_counters(
-    const std::map<std::string, std::uint64_t>& series) const {
+std::string
+MetricsRegistry::render_counters(const std::map<std::string, std::uint64_t>& series) const {
     // series keys are "name{labels}" — the name is the text before '{'.
     // A "_total" suffix marks a counter; everything else is a gauge.
     std::string out;
     std::string current_name;
     for (const auto& [key, value] : series) {
         const std::string::size_type brace = key.find('{');
-        const std::string name =
-            brace == std::string::npos ? key : key.substr(0, brace);
+        const std::string name = brace == std::string::npos ? key : key.substr(0, brace);
         if (name != current_name) {
             current_name = name;
             const bool is_counter = name.find("_total") != std::string::npos;
             // The TYPE line must carry the same capsid_ prefix as the
             // series lines below, or the family name diverges.
-            out += "# TYPE capsid_" + name + " " +
-                   (is_counter ? "counter" : "gauge") + "\n";
+            out += "# TYPE capsid_" + name + " " + (is_counter ? "counter" : "gauge") + "\n";
         }
         out += "capsid_" + key + " " + std::to_string(value) + "\n";
     }
@@ -193,34 +188,37 @@ std::string MetricsRegistry::render_prometheus_text() const {
         std::lock_guard<std::mutex> lock(mutex_);
         counters = counters_;
         gauges = gauges_;
-        budgets = channel_budgets_; process = process_snapshot_;
+        budgets = channel_budgets_;
+        process = process_snapshot_;
     }
     // Process family: host and worker RSS/PSS/CPU sampled at render time.
     if (process) {
         const ProcessMetricsSnapshot snapshot = process();
         counters["process_rss_bytes{}"] = snapshot.rss_bytes;
         counters["process_pss_bytes{}"] = snapshot.pss_bytes;
-        counters["process_cpu_seconds_total{}"] =
-            snapshot.cpu_seconds_total;
-        gauges["worker_rss_bytes{app=\"\",pid=\"" +
-               std::to_string(snapshot.worker_pid) + "\"}"] =
+        counters["process_cpu_seconds_total{}"] = snapshot.cpu_seconds_total;
+        gauges["worker_rss_bytes{app=\"\",pid=\"" + std::to_string(snapshot.worker_pid) + "\"}"] =
             snapshot.worker_rss_bytes;
     }
-    for (const auto &[labels, weak] : budgets) {
-        const auto budget = weak.lock(); if (!budget) continue;
+    for (const auto& [labels, weak] : budgets) {
+        const auto budget = weak.lock();
+        if (!budget)
+            continue;
         const auto snapshot = budget->snapshot();
-        gauges["channel_active{"+labels+"}"] = snapshot.active;
-        gauges["channel_http_inflight{"+labels+"}"] = snapshot.http_inflight;
-        gauges["channel_reservations{"+labels+"}"] = snapshot.channels.used;
-        gauges["channel_pending_dials{"+labels+"}"] = snapshot.dials.used;
-        gauges["channel_queue_bytes{"+labels+"}"] = snapshot.queue.used;
-        const auto resource = [&](const char *name, const ChannelBudgetSnapshot::Resource &value) {
-            const auto key = "resource=\""+std::string(name)+"\","+labels+"}";
-            gauges["channel_budget_limit{"+key] = value.limit;
-            gauges["channel_budget_high_water{"+key] = value.high_water;
-            counters["channel_budget_rejections_total{"+key] = value.rejected;
+        gauges["channel_active{" + labels + "}"] = snapshot.active;
+        gauges["channel_http_inflight{" + labels + "}"] = snapshot.http_inflight;
+        gauges["channel_reservations{" + labels + "}"] = snapshot.channels.used;
+        gauges["channel_pending_dials{" + labels + "}"] = snapshot.dials.used;
+        gauges["channel_queue_bytes{" + labels + "}"] = snapshot.queue.used;
+        const auto resource = [&](const char* name, const ChannelBudgetSnapshot::Resource& value) {
+            const auto key = "resource=\"" + std::string(name) + "\"," + labels + "}";
+            gauges["channel_budget_limit{" + key] = value.limit;
+            gauges["channel_budget_high_water{" + key] = value.high_water;
+            counters["channel_budget_rejections_total{" + key] = value.rejected;
         };
-        resource("channels",snapshot.channels); resource("dials",snapshot.dials); resource("queue_bytes",snapshot.queue);
+        resource("channels", snapshot.channels);
+        resource("dials", snapshot.dials);
+        resource("queue_bytes", snapshot.queue);
     }
     // Deterministic render: counters first (fixed family order via the
     // sorted maps), then gauges.
@@ -229,4 +227,4 @@ std::string MetricsRegistry::render_prometheus_text() const {
     return out;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

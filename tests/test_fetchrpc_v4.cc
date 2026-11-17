@@ -41,14 +41,14 @@ namespace {
 
 int failures = 0;
 
-void require(bool condition, const std::string &message) {
+void require(bool condition, const std::string& message) {
     if (!condition) {
         std::fprintf(stderr, "FAIL: %s\n", message.c_str());
         ++failures;
     }
 }
 
-std::vector<uint8_t> unhex(const std::string &hex) {
+std::vector<uint8_t> unhex(const std::string& hex) {
     std::vector<uint8_t> out;
     if (hex.size() % 2 != 0) {
         return out;
@@ -61,8 +61,8 @@ std::vector<uint8_t> unhex(const std::string &hex) {
     return out;
 }
 
-std::string hex_of(const std::vector<uint8_t> &bytes) {
-    static const char *kDigits = "0123456789abcdef";
+std::string hex_of(const std::vector<uint8_t>& bytes) {
+    static const char* kDigits = "0123456789abcdef";
     std::string out;
     out.reserve(bytes.size() * 2);
     for (size_t i = 0; i < bytes.size(); ++i) {
@@ -81,19 +81,19 @@ namespace model {
 enum Side { kHost = 0, kWorker = 1 };
 
 struct Channel {
-    std::string state;  // pending|dialing|open|rejected|closing|closed|cancelled
+    std::string state; // pending|dialing|open|rejected|closing|closed|cancelled
     uint64_t dial_id = 0;
     uint64_t message_cap = 0;
     uint64_t message_bytes_so_far[2] = {0, 0};
     bool message_open[2] = {false, false};
     bool message_text[2] = {false, false};
     uint64_t credit[2] = {65536, 65536};
-    bool half_closed[2] = {false, false};   // by Side
-    bool close_sent[2] = {false, false};    // by Side
+    bool half_closed[2] = {false, false}; // by Side
+    bool close_sent[2] = {false, false};  // by Side
 };
 
 struct Reference {
-    uint32_t announced[2] = {0, 0};          // Hello/READY bitsets
+    uint32_t announced[2] = {0, 0}; // Hello/READY bitsets
     uint32_t effective = 0;
     bool hello_seen = false;
     bool ready_seen = false;
@@ -108,8 +108,7 @@ struct Reference {
         return p::kCapabilitiesKnownMask;
     }
 
-    std::string apply(Side from, const capsid::protocol::Frame &frame,
-                      std::string *detail) {
+    std::string apply(Side from, const capsid::protocol::Frame& frame, std::string* detail) {
         namespace p = capsid::protocol;
         // bootstrap: first frame must be HELLO from the host
         if (!hello_seen) {
@@ -158,19 +157,16 @@ struct Reference {
         case p::kResponseHead:
             return upgrade_response(from, frame, detail);
         default:
-            return "ok";  // non-channel v4 frames (carriage) pass through
+            return "ok"; // non-channel v4 frames (carriage) pass through
         }
     }
 
-    std::string hello(const capsid::protocol::Frame &frame,
-                      std::string *) {
+    std::string hello(const capsid::protocol::Frame& frame, std::string*) {
         namespace p = capsid::protocol;
         if (frame.payload.size() < p::kHelloV4TailSize) {
             return "invalid hello capabilities";
         }
-        const uint8_t *tail =
-            frame.payload.data() + frame.payload.size() -
-            p::kHelloV4TailSize;
+        const uint8_t* tail = frame.payload.data() + frame.payload.size() - p::kHelloV4TailSize;
         const uint32_t caps = p::load_u32_at(tail);
         const uint32_t reserved = p::load_u32_at(tail + 4);
         (void)reserved;
@@ -185,15 +181,12 @@ struct Reference {
         return "ok";
     }
 
-    std::string ready(const capsid::protocol::Frame &frame,
-                      std::string *) {
+    std::string ready(const capsid::protocol::Frame& frame, std::string*) {
         namespace p = capsid::protocol;
         if (frame.payload.size() < p::kHelloV4TailSize) {
             return "invalid hello capabilities";
         }
-        const uint8_t *tail =
-            frame.payload.data() + frame.payload.size() -
-            p::kHelloV4TailSize;
+        const uint8_t* tail = frame.payload.data() + frame.payload.size() - p::kHelloV4TailSize;
         const uint32_t caps = p::load_u32_at(tail);
         if (!p::capabilities_satisfy_closure(caps)) {
             return "invalid hello capabilities";
@@ -204,7 +197,7 @@ struct Reference {
         return "ok";
     }
 
-    bool require_cap(uint32_t bit, std::string *error) {
+    bool require_cap(uint32_t bit, std::string* error) {
         if ((effective & bit) == 0) {
             if (error) {
                 *error = "channel frame without capability";
@@ -214,7 +207,7 @@ struct Reference {
         return true;
     }
 
-    Channel *live(uint32_t id, std::string *error) {
+    Channel* live(uint32_t id, std::string* error) {
         std::map<uint32_t, Channel>::iterator it = channels.find(id);
         if (it == channels.end()) {
             if (error) {
@@ -222,9 +215,8 @@ struct Reference {
             }
             return nullptr;
         }
-        if (it->second.state == "closed" ||
-                it->second.state == "cancelled" ||
-                it->second.state == "rejected") {
+        if (it->second.state == "closed" || it->second.state == "cancelled" ||
+            it->second.state == "rejected") {
             if (error) {
                 *error = "unknown channel";
             }
@@ -233,8 +225,7 @@ struct Reference {
         return &it->second;
     }
 
-    std::string channel_open(Side from, const capsid::protocol::Frame &f,
-                             std::string *) {
+    std::string channel_open(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
@@ -243,8 +234,7 @@ struct Reference {
             return "channel open direction";
         }
         p::ChannelOpenPayload open;
-        if (!p::decode_channel_open(f.payload.data(), f.payload.size(),
-                                    &open, &last_error)) {
+        if (!p::decode_channel_open(f.payload.data(), f.payload.size(), &open, &last_error)) {
             return "invalid channel payload";
         }
         if (open.channel_id != 0 || open.dial_id == 0) {
@@ -262,8 +252,7 @@ struct Reference {
         return "ok";
     }
 
-    std::string channel_accept(Side from, const capsid::protocol::Frame &f,
-                               std::string *) {
+    std::string channel_accept(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
@@ -272,8 +261,7 @@ struct Reference {
             return "channel open direction";
         }
         p::ChannelAcceptPayload accept;
-        if (!p::decode_channel_accept(f.payload.data(), f.payload.size(),
-                                      &accept, &last_error)) {
+        if (!p::decode_channel_accept(f.payload.data(), f.payload.size(), &accept, &last_error)) {
             return "invalid channel payload";
         }
         auto it = pending_dials.find(accept.dial_id);
@@ -285,16 +273,13 @@ struct Reference {
             return "unknown channel";
         }
         channel.state = "open";
-        channel.message_cap = std::min(channel.message_cap,
-                                       accept.accepted_max_message_bytes);
+        channel.message_cap = std::min(channel.message_cap, accept.accepted_max_message_bytes);
         channels[accept.channel_id] = channel;
         pending_dials.erase(it);
         return "ok";
     }
 
-    std::string channel_reject(Side from,
-                               const capsid::protocol::Frame &f,
-                               std::string *) {
+    std::string channel_reject(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
@@ -303,31 +288,27 @@ struct Reference {
             return "channel open direction";
         }
         p::ChannelRejectPayload reject;
-        if (!p::decode_channel_reject(f.payload.data(), f.payload.size(),
-                                      &reject, &last_error)) {
+        if (!p::decode_channel_reject(f.payload.data(), f.payload.size(), &reject, &last_error)) {
             return "invalid channel payload";
         }
         auto it = pending_dials.find(reject.dial_id);
-        if (it == pending_dials.end() ||
-                it->second.state != "dialing") {
+        if (it == pending_dials.end() || it->second.state != "dialing") {
             return "unknown channel";
         }
         pending_dials.erase(it);
         return "ok";
     }
 
-    std::string channel_data(Side from, const capsid::protocol::Frame &f,
-                             std::string *) {
+    std::string channel_data(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
         }
         uint32_t id = 0;
-        if (!p::decode_channel_data_id(f.payload.data(), f.payload.size(),
-                                       &id, &last_error)) {
+        if (!p::decode_channel_data_id(f.payload.data(), f.payload.size(), &id, &last_error)) {
             return "invalid channel payload";
         }
-        Channel *channel = live(id, &last_error);
+        Channel* channel = live(id, &last_error);
         if (channel == nullptr) {
             return last_error;
         }
@@ -354,8 +335,10 @@ struct Reference {
         if (accumulated > channel->message_cap) {
             return "message size exceeded";
         }
-        if (!start && text != channel->message_text[from]) return "fragmentation";
-        if (channel->credit[from] < message_bytes) return "channel credit underflow";
+        if (!start && text != channel->message_text[from])
+            return "fragmentation";
+        if (channel->credit[from] < message_bytes)
+            return "channel credit underflow";
         if (start) {
             channel->message_open[from] = true;
             channel->message_text[from] = text;
@@ -368,46 +351,39 @@ struct Reference {
         return "ok";
     }
 
-    std::string channel_credit(Side from,
-                               const capsid::protocol::Frame &f,
-                               std::string *) {
+    std::string channel_credit(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
         }
         p::ChannelCreditPayload grant;
-        if (!p::decode_channel_credit(f.payload.data(), f.payload.size(),
-                                      &grant, &last_error)) {
+        if (!p::decode_channel_credit(f.payload.data(), f.payload.size(), &grant, &last_error)) {
             return "invalid channel payload";
         }
-        Channel *channel = live(grant.channel_id, &last_error);
+        Channel* channel = live(grant.channel_id, &last_error);
         if (channel == nullptr) {
             return last_error;
         }
         // credit flows TO the peer
         const Side beneficiary = from == kHost ? kWorker : kHost;
-        if (channel->credit[beneficiary] >
-            UINT64_MAX - grant.credit) {
+        if (channel->credit[beneficiary] > UINT64_MAX - grant.credit) {
             return "channel credit overflow";
         }
         channel->credit[beneficiary] += grant.credit;
         return "ok";
     }
 
-    std::string channel_half_close(Side from,
-                                   const capsid::protocol::Frame &f,
-                                   std::string *) {
+    std::string channel_half_close(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapHalfClose, &last_error)) {
             return last_error;
         }
         uint32_t id = 0;
-        if (!p::decode_channel_data_id(f.payload.data(), f.payload.size(),
-                                       &id, &last_error) ||
-                f.payload.size() != 4) {
+        if (!p::decode_channel_data_id(f.payload.data(), f.payload.size(), &id, &last_error) ||
+            f.payload.size() != 4) {
             return "invalid channel payload";
         }
-        Channel *channel = live(id, &last_error);
+        Channel* channel = live(id, &last_error);
         if (channel == nullptr) {
             return last_error;
         }
@@ -421,19 +397,16 @@ struct Reference {
         return "ok";
     }
 
-    std::string channel_close(Side from,
-                              const capsid::protocol::Frame &f,
-                              std::string *) {
+    std::string channel_close(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
         }
         p::ChannelClosePayload close;
-        if (!p::decode_channel_close(f.payload.data(), f.payload.size(),
-                                     &close, &last_error)) {
-            return last_error;  // exact close-code matrix string
+        if (!p::decode_channel_close(f.payload.data(), f.payload.size(), &close, &last_error)) {
+            return last_error; // exact close-code matrix string
         }
-        Channel *channel = live(close.channel_id, &last_error);
+        Channel* channel = live(close.channel_id, &last_error);
         if (channel == nullptr) {
             return last_error;
         }
@@ -449,19 +422,16 @@ struct Reference {
         return "ok";
     }
 
-    std::string channel_cancel(Side from,
-                               const capsid::protocol::Frame &f,
-                               std::string *) {
+    std::string channel_cancel(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapDuplexChannel, &last_error)) {
             return last_error;
         }
         p::ChannelCancelPayload cancel;
-        if (!p::decode_channel_cancel(f.payload.data(), f.payload.size(),
-                                      &cancel, &last_error)) {
+        if (!p::decode_channel_cancel(f.payload.data(), f.payload.size(), &cancel, &last_error)) {
             return "invalid channel payload";
         }
-        Channel *channel = live(cancel.channel_id, &last_error);
+        Channel* channel = live(cancel.channel_id, &last_error);
         if (channel == nullptr) {
             return last_error;
         }
@@ -469,9 +439,7 @@ struct Reference {
         return "ok";
     }
 
-    std::string upgrade_request(Side from,
-                                const capsid::protocol::Frame &f,
-                                std::string *) {
+    std::string upgrade_request(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapUpgrade, &last_error)) {
             return last_error;
@@ -480,7 +448,7 @@ struct Reference {
             return "invalid upgrade response";
         }
         if ((f.flags & p::kFlagRequestUpgrade) == 0) {
-            return "ok";  // normal request, not upgrade traffic
+            return "ok"; // normal request, not upgrade traffic
         }
         p::UpgradeTail tail;
         if (!p::decode_upgrade_head(f, &tail, &last_error)) {
@@ -497,9 +465,7 @@ struct Reference {
         return "ok";
     }
 
-    std::string upgrade_response(Side from,
-                                 const capsid::protocol::Frame &f,
-                                 std::string *) {
+    std::string upgrade_response(Side from, const capsid::protocol::Frame& f, std::string*) {
         namespace p = capsid::protocol;
         if (!require_cap(p::kCapUpgrade, &last_error)) {
             return last_error;
@@ -507,10 +473,8 @@ struct Reference {
         if (from != kWorker) {
             return "invalid upgrade response";
         }
-        const bool upgrade_flag =
-            (f.flags & p::kFlagResponseUpgrade) != 0;
-        const bool fixed_body =
-            (f.flags & p::kFlagResponseFixedBody) != 0;
+        const bool upgrade_flag = (f.flags & p::kFlagResponseUpgrade) != 0;
+        const bool fixed_body = (f.flags & p::kFlagResponseFixedBody) != 0;
         uint32_t status = 0;
         if (f.payload.size() < 4) {
             return "invalid channel payload";
@@ -525,10 +489,8 @@ struct Reference {
             }
             // non-101 to a pending upgrade releases the reservation
             if (last_upgrade_pending != 0) {
-                std::map<uint32_t, Channel>::iterator it =
-                    channels.find(last_upgrade_pending);
-                if (it != channels.end() &&
-                        it->second.state == "pending") {
+                std::map<uint32_t, Channel>::iterator it = channels.find(last_upgrade_pending);
+                if (it != channels.end() && it->second.state == "pending") {
                     channels.erase(it);
                 }
                 last_upgrade_pending = 0;
@@ -539,19 +501,16 @@ struct Reference {
             return "invalid upgrade response";
         }
         p::UpgradeTail tail;
-        if (!p::decode_upgrade_tail(f.payload.data() + f.payload.size() - 12,
-                                    12,
-                                    &tail, &last_error)) {
+        if (!p::decode_upgrade_tail(f.payload.data() + f.payload.size() - 12, 12, &tail,
+                                    &last_error)) {
             return "invalid channel payload";
         }
-        std::map<uint32_t, Channel>::iterator it =
-            channels.find(tail.channel_id);
+        std::map<uint32_t, Channel>::iterator it = channels.find(tail.channel_id);
         if (it == channels.end() || it->second.state != "pending") {
             return "unknown channel";
         }
         it->second.state = "open";
-        it->second.message_cap =
-            std::min(it->second.message_cap, tail.max_message_bytes);
+        it->second.message_cap = std::min(it->second.message_cap, tail.max_message_bytes);
         return "ok";
     }
 
@@ -559,22 +518,23 @@ struct Reference {
     std::string last_error;
 };
 
-}  // namespace model
+} // namespace model
 
 // A2 payload decode dispatcher: routes by the vector's decode tag,
 // decodes strictly, and (for round-trip parity) re-encodes. Returns
 // false with the exact contract error on rejection.
-bool decode_a2(const std::string &decode,
-               const capsid::protocol::Frame &frame,
-               std::string *error) {
+bool decode_a2(const std::string& decode, const capsid::protocol::Frame& frame,
+               std::string* error) {
     namespace p = capsid::protocol;
-    const uint8_t *data = frame.payload.data();
+    const uint8_t* data = frame.payload.data();
     size_t size = frame.payload.size();
     if (decode == "upgrade-tail") {
         p::UpgradeTail head_tail;
-        if (!p::decode_upgrade_head(frame, &head_tail, error)) return false;
+        if (!p::decode_upgrade_head(frame, &head_tail, error))
+            return false;
         if (size < 12) {
-            if (error) *error = "invalid channel payload";
+            if (error)
+                *error = "invalid channel payload";
             return false;
         }
         data += size - 12;
@@ -586,8 +546,7 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_channel_open(out, &re) &&
-               re.size() == size &&
+        return p::encode_channel_open(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "accept") {
@@ -596,8 +555,7 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_channel_accept(out, &re) &&
-               re.size() == size &&
+        return p::encode_channel_accept(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "reject") {
@@ -606,8 +564,7 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_channel_reject(out, &re) &&
-               re.size() == size &&
+        return p::encode_channel_reject(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "credit") {
@@ -616,14 +573,12 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_channel_credit(out, &re) &&
-               re.size() == size &&
+        return p::encode_channel_credit(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "halfclose") {
         uint32_t id = 0;
-        return p::decode_channel_data_id(data, size, &id, error) &&
-               size == 4;
+        return p::decode_channel_data_id(data, size, &id, error) && size == 4;
     }
     if (decode == "close") {
         p::ChannelClosePayload out;
@@ -631,8 +586,7 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_channel_close(out, &re) &&
-               re.size() == size &&
+        return p::encode_channel_close(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "cancel") {
@@ -641,16 +595,16 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_channel_cancel(out, &re) &&
-               re.size() == size &&
+        return p::encode_channel_cancel(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "ack") {
         p::ChannelAckPayload out;
-        if (!p::decode_channel_ack(data, size, &out, error)) return false;
+        if (!p::decode_channel_ack(data, size, &out, error))
+            return false;
         std::vector<uint8_t> re;
         return p::encode_channel_ack(out, &re) && re.size() == size &&
-            std::equal(re.begin(), re.end(), data);
+               std::equal(re.begin(), re.end(), data);
     }
     if (decode == "upgrade-tail") {
         p::UpgradeTail out;
@@ -658,8 +612,7 @@ bool decode_a2(const std::string &decode,
             return false;
         }
         std::vector<uint8_t> re;
-        return p::encode_upgrade_tail(out, &re) &&
-               re.size() == size &&
+        return p::encode_upgrade_tail(out, &re) && re.size() == size &&
                std::equal(re.begin(), re.end(), data);
     }
     if (decode == "data") {
@@ -667,7 +620,7 @@ bool decode_a2(const std::string &decode,
         return p::decode_channel_data_id(data, size, &id, error);
     }
     if (decode == "hello-tail" || decode == "none") {
-        return true;  // handled elsewhere (real decoder)
+        return true; // handled elsewhere (real decoder)
     }
     if (decode == "ready-tail") {
         // reference READY-tail rule (contract §1.2): at least 8 tail
@@ -680,13 +633,11 @@ bool decode_a2(const std::string &decode,
             }
             return false;
         }
-        const uint8_t *tail =
-            frame.payload.data() + frame.payload.size() - 8;
+        const uint8_t* tail = frame.payload.data() + frame.payload.size() - 8;
         const uint32_t caps = p::load_u32_at(tail);
         const uint32_t reserved = p::load_u32_at(tail + 4);
-        if (reserved != 0 ||
-                (caps & ~p::kCapabilitiesKnownMask) != 0 ||
-                !p::capabilities_satisfy_closure(caps)) {
+        if (reserved != 0 || (caps & ~p::kCapabilitiesKnownMask) != 0 ||
+            !p::capabilities_satisfy_closure(caps)) {
             if (error) {
                 *error = "invalid hello capabilities";
             }
@@ -702,23 +653,21 @@ bool decode_a2(const std::string &decode,
 
 // SequenceTarget adapter over the reference model.
 class ReferenceTarget : public fetchrpc_sequences::SequenceTarget {
-public:
+  public:
     void reset() override { reference_ = model::Reference(); }
-    std::string apply(const std::string &dir,
-                      const capsid::protocol::Frame &frame) override {
-        const std::string result = reference_.apply(
-            dir == "h2w" ? model::kHost : model::kWorker,
-            frame, nullptr);
+    std::string apply(const std::string& dir, const capsid::protocol::Frame& frame) override {
+        const std::string result =
+            reference_.apply(dir == "h2w" ? model::kHost : model::kWorker, frame, nullptr);
         return result == "ok" ? result : "error:" + result;
     }
 
     model::Reference reference_;
 };
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
-    const char *path = argc > 1 ? argv[1] : nullptr;
+int main(int argc, char** argv) {
+    const char* path = argc > 1 ? argv[1] : nullptr;
     if (!path) {
         std::fprintf(stderr, "usage: %s <vectors.json>\n", argv[0]);
         return 2;
@@ -731,23 +680,20 @@ int main(int argc, char **argv) {
     std::stringstream buffer;
     buffer << in.rdbuf();
     json_error_t json_error;
-    json_t *root = json_loads(buffer.str().c_str(), JSON_REJECT_DUPLICATES, &json_error);
+    json_t* root = json_loads(buffer.str().c_str(), JSON_REJECT_DUPLICATES, &json_error);
     if (!root) {
-        std::fprintf(stderr, "FAIL: vectors JSON parse error %s:%d %s\n",
-                     path, json_error.line, json_error.text);
+        std::fprintf(stderr, "FAIL: vectors JSON parse error %s:%d %s\n", path, json_error.line,
+                     json_error.text);
         return 2;
     }
 
     // strict schema
-    const json_t *schema_version =
-        json_object_get(root, "schema_version");
-    require(json_is_integer(schema_version) &&
-                json_integer_value(schema_version) == 2,
+    const json_t* schema_version = json_object_get(root, "schema_version");
+    require(json_is_integer(schema_version) && json_integer_value(schema_version) == 2,
             "schema_version is exactly 2");
-    const json_t *frames = json_object_get(root, "frames");
-    const json_t *sequences = json_object_get(root, "sequences");
-    require(json_is_array(frames) && json_array_size(frames) >= 40,
-            "frames array present");
+    const json_t* frames = json_object_get(root, "frames");
+    const json_t* sequences = json_object_get(root, "sequences");
+    require(json_is_array(frames) && json_array_size(frames) >= 40, "frames array present");
     require(json_is_array(sequences) && json_array_size(sequences) >= 20,
             "sequences array present");
 
@@ -755,24 +701,17 @@ int main(int argc, char **argv) {
     std::map<std::string, std::string> frame_expect;
 
     size_t index;
-    json_t *value;
+    json_t* value;
     json_array_foreach(frames, index, value) {
-        const std::string name =
-            json_string_value(json_object_get(value, "name"));
-        const std::string hex =
-            json_string_value(json_object_get(value, "hex"));
-        const std::string decode =
-            json_string_value(json_object_get(value, "decode"));
-        const std::string expect =
-            json_string_value(json_object_get(value, "expect"));
-        const bool a2_limits =
-            json_is_true(json_object_get(value, "a2_limits"));
-        require(!name.empty() && !hex.empty() && !expect.empty(),
-                "frame entry complete: " + name);
+        const std::string name = json_string_value(json_object_get(value, "name"));
+        const std::string hex = json_string_value(json_object_get(value, "hex"));
+        const std::string decode = json_string_value(json_object_get(value, "decode"));
+        const std::string expect = json_string_value(json_object_get(value, "expect"));
+        const bool a2_limits = json_is_true(json_object_get(value, "a2_limits"));
+        require(!name.empty() && !hex.empty() && !expect.empty(), "frame entry complete: " + name);
         const std::vector<uint8_t> wire = unhex(hex);
         require(!wire.empty(), "hex decodes: " + name);
-        require(frame_wire.count(name) == 0,
-                "frame names unique: " + name);
+        require(frame_wire.count(name) == 0, "frame names unique: " + name);
         frame_wire[name] = wire;
         frame_expect[name] = expect;
 
@@ -780,8 +719,7 @@ int main(int argc, char **argv) {
         // by the shipped v3 parser with the exact version string.
         capsid::protocol::Parser v3;
         capsid::protocol::Frame frame;
-        require(v3.append(wire.data(), wire.size()),
-                "v3 parser buffers: " + name);
+        require(v3.append(wire.data(), wire.size()), "v3 parser buffers: " + name);
         require(v3.next(&frame) == capsid::protocol::kParseError,
                 "v3 parser rejects v4 frame: " + name);
         require(v3.error() == "unsupported protocol version",
@@ -790,21 +728,18 @@ int main(int argc, char **argv) {
         if (expect == "v4-parser-ok") {
             capsid::protocol::Parser v4(4);
             capsid::protocol::Frame parsed;
-            require(v4.append(wire.data(), wire.size()),
-                    "v4 parser buffers: " + name);
+            require(v4.append(wire.data(), wire.size()), "v4 parser buffers: " + name);
             require(v4.next(&parsed) == capsid::protocol::kParseFrame,
                     "v4 parser accepts: " + name);
             std::vector<uint8_t> re;
-            require(capsid::protocol::encode_versioned(4, parsed, &re),
-                    "v4 encode: " + name);
+            require(capsid::protocol::encode_versioned(4, parsed, &re), "v4 encode: " + name);
             require(re == wire, "v4 round trip identical: " + name);
             std::string payload_error;
             require(decode_a2(decode, parsed, &payload_error),
-                    "positive payload decoder accepts: " + name +
-                        " (error: " + payload_error + ")");
+                    "positive payload decoder accepts: " + name + " (error: " + payload_error +
+                        ")");
         } else if (expect.rfind("v4-parser-error:", 0) == 0) {
-            const std::string want =
-                expect.substr(std::string("v4-parser-error:").size());
+            const std::string want = expect.substr(std::string("v4-parser-error:").size());
             // Hello-family vectors exercise the REAL startup decoder;
             // the parser may also reject first (unknown bits) - either
             // layer may fire, but the string is the contract's
@@ -817,33 +752,25 @@ int main(int argc, char **argv) {
                 bool rejected = result == capsid::protocol::kParseError;
                 if (!rejected) {
                     capsid::WorkerStartupConfig config;
-                    rejected = !capsid::decode_hello(parsed, &config,
-                                                     &error);
+                    rejected = !capsid::decode_hello(parsed, &config, &error);
                 }
-                require(rejected,
-                        "parser or startup decoder rejects: " + name);
-                require(error == want,
-                        "hello rejection exact: " + name +
-                            " (got: " + error + ")");
+                require(rejected, "parser or startup decoder rejects: " + name);
+                require(error == want, "hello rejection exact: " + name + " (got: " + error + ")");
             } else {
                 capsid::protocol::Parser v4(4);
                 capsid::protocol::Frame parsed;
                 require(v4.append(wire.data(), wire.size()), "buffers");
-                capsid::protocol::ParseResult result =
-                    v4.next(&parsed);
+                capsid::protocol::ParseResult result = v4.next(&parsed);
                 if (result == capsid::protocol::kParseError) {
                     require(v4.error() == want,
-                            "parser error exact: " + name +
-                                " (got: " + v4.error() + ")");
+                            "parser error exact: " + name + " (got: " + v4.error() + ")");
                 } else {
                     // grammar passed; the A2 payload decoder must
                     // reject with the exact contract string
                     std::string error;
-                    require(!decode_a2(decode, parsed, &error),
-                            "payload decoder rejects: " + name);
+                    require(!decode_a2(decode, parsed, &error), "payload decoder rejects: " + name);
                     require(error == want,
-                            "payload error exact: " + name +
-                                " (got: " + error + ")");
+                            "payload error exact: " + name + " (got: " + error + ")");
                 }
             }
         }
@@ -853,16 +780,13 @@ int main(int argc, char **argv) {
             capsid::protocol::Parser v4(4);
             capsid::protocol::Frame parsed;
             v4.append(wire.data(), wire.size());
-            require(v4.next(&parsed) == capsid::protocol::kParseFrame,
-                    "hello parses: " + name);
+            require(v4.next(&parsed) == capsid::protocol::kParseFrame, "hello parses: " + name);
             capsid::WorkerStartupConfig config;
             std::string error;
             require(capsid::decode_hello(parsed, &config, &error),
-                    "real startup decoder accepts: " + name +
-                        " (error: " + error + ")");
+                    "real startup decoder accepts: " + name + " (error: " + error + ")");
             if (a2_limits) {
-                require(config.channel_limits_present,
-                        "A2 limits decoded: " + name);
+                require(config.channel_limits_present, "A2 limits decoded: " + name);
                 require(config.channel_limits.max_channels == 128,
                         "A2 limits carry values: " + name);
             }
@@ -872,10 +796,8 @@ int main(int argc, char **argv) {
     {
         ReferenceTarget target;
         const std::set<std::string> executed =
-            fetchrpc_sequences::run_sequences(sequences, frame_wire,
-                                              &target, &failures);
-        require(executed.size() == json_array_size(sequences),
-                "every sequence executed");
+            fetchrpc_sequences::run_sequences(sequences, frame_wire, &target, &failures);
+        require(executed.size() == json_array_size(sequences), "every sequence executed");
     }
 
     json_decref(root);

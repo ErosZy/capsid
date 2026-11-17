@@ -69,7 +69,7 @@ struct Sha1 {
         h[4] += e;
     }
 
-    void update(const uint8_t *data, size_t size) {
+    void update(const uint8_t* data, size_t size) {
         total += size;
         while (size > 0) {
             const size_t take = 64 - used < size ? 64 - used : size;
@@ -106,10 +106,9 @@ struct Sha1 {
     }
 };
 
-const char kBase64Alphabet[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const char kBase64Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-std::string base64_encode(const uint8_t *data, size_t size) {
+std::string base64_encode(const uint8_t* data, size_t size) {
     std::string out;
     out.reserve((size + 2) / 3 * 4);
     size_t i = 0;
@@ -131,8 +130,8 @@ std::string base64_encode(const uint8_t *data, size_t size) {
         out.push_back('=');
         out.push_back('=');
     } else if (rest == 2) {
-        const uint32_t v = (static_cast<uint32_t>(data[i]) << 16) |
-                           (static_cast<uint32_t>(data[i + 1]) << 8);
+        const uint32_t v =
+            (static_cast<uint32_t>(data[i]) << 16) | (static_cast<uint32_t>(data[i + 1]) << 8);
         out.push_back(kBase64Alphabet[(v >> 18) & 63]);
         out.push_back(kBase64Alphabet[(v >> 12) & 63]);
         out.push_back(kBase64Alphabet[(v >> 6) & 63]);
@@ -141,40 +140,37 @@ std::string base64_encode(const uint8_t *data, size_t size) {
     return out;
 }
 
-bool is_control(uint8_t opcode) {
-    return opcode >= 0x8;
-}
+bool is_control(uint8_t opcode) { return opcode >= 0x8; }
 
 bool valid_opcode(uint8_t opcode) {
-    return opcode == kContinuation || opcode == kText || opcode == kBinary ||
-           opcode == kClose || opcode == kPing || opcode == kPong;
+    return opcode == kContinuation || opcode == kText || opcode == kBinary || opcode == kClose ||
+           opcode == kPing || opcode == kPong;
 }
 
-void append_u16_be(std::vector<uint8_t> *out, uint16_t value) {
+void append_u16_be(std::vector<uint8_t>* out, uint16_t value) {
     out->push_back(static_cast<uint8_t>(value >> 8));
     out->push_back(static_cast<uint8_t>(value));
 }
 
-void append_u64_be(std::vector<uint8_t> *out, uint64_t value) {
+void append_u64_be(std::vector<uint8_t>* out, uint64_t value) {
     for (int i = 7; i >= 0; --i) {
         out->push_back(static_cast<uint8_t>(value >> (i * 8)));
     }
 }
 
-}  // namespace
+} // namespace
 
-std::string compute_accept_key(const std::string &client_key) {
+std::string compute_accept_key(const std::string& client_key) {
     static const char kGuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     Sha1 sha;
-    sha.update(reinterpret_cast<const uint8_t *>(client_key.data()),
-               client_key.size());
-    sha.update(reinterpret_cast<const uint8_t *>(kGuid), sizeof(kGuid) - 1);
+    sha.update(reinterpret_cast<const uint8_t*>(client_key.data()), client_key.size());
+    sha.update(reinterpret_cast<const uint8_t*>(kGuid), sizeof(kGuid) - 1);
     uint8_t digest[20];
     sha.digest(digest);
     return base64_encode(digest, sizeof(digest));
 }
 
-bool validate_client_key(const std::string &key) {
+bool validate_client_key(const std::string& key) {
     if (key.size() != 24 || key[22] != '=' || key[23] != '=') {
         return false;
     }
@@ -189,30 +185,26 @@ bool validate_client_key(const std::string &key) {
     return true;
 }
 
-bool encode(const Frame &frame,
-            Role role,
-            uint32_t mask,
-            std::vector<uint8_t> *output) {
+bool encode(const Frame& frame, Role role, uint32_t mask, std::vector<uint8_t>* output) {
     if (!output || !valid_opcode(frame.opcode)) {
         return false;
     }
     if (is_control(frame.opcode)) {
         if (!frame.fin) {
-            return false;  // fragmented control frame
+            return false; // fragmented control frame
         }
         if (frame.payload.size() > 125) {
-            return false;  // control payload limit
+            return false; // control payload limit
         }
     }
     if (role == kServer && mask != 0) {
-        return false;  // server frames must not be masked
+        return false; // server frames must not be masked
     }
     // kClient is always masked; an all-zero mask key is legal. kServer
     // encodes unmasked. (mask is ignored for kServer.)
     output->clear();
     output->reserve(2 + 8 + frame.payload.size());
-    uint8_t head0 = static_cast<uint8_t>(frame.fin ? 0x80 : 0x00) |
-                    (frame.opcode & 0x0F);
+    uint8_t head0 = static_cast<uint8_t>(frame.fin ? 0x80 : 0x00) | (frame.opcode & 0x0F);
     output->push_back(head0);
     const bool masked = role == kClient;
     uint8_t head1 = masked ? 0x80 : 0x00;
@@ -236,23 +228,19 @@ bool encode(const Frame &frame,
         size_t i = 0;
         for (const uint8_t byte : frame.payload) {
             const size_t k = i % 4;
-            const uint8_t mask_byte =
-                static_cast<uint8_t>(mask >> (24 - k * 8));
+            const uint8_t mask_byte = static_cast<uint8_t>(mask >> (24 - k * 8));
             output->push_back(byte ^ mask_byte);
             ++i;
         }
     } else {
-        output->insert(output->end(),
-                       frame.payload.begin(),
-                       frame.payload.end());
+        output->insert(output->end(), frame.payload.begin(), frame.payload.end());
     }
     return true;
 }
 
-Parser::Parser(Role role)
-    : role_(role), offset_(0) {}
+Parser::Parser(Role role) : role_(role), offset_(0) {}
 
-bool Parser::append(const uint8_t *data, size_t size) {
+bool Parser::append(const uint8_t* data, size_t size) {
     if (!error_.empty()) {
         return false;
     }
@@ -286,14 +274,12 @@ void Parser::compact_if_needed() {
         return;
     }
     if (offset_ >= buffer_.size() / 2) {
-        buffer_.erase(
-            buffer_.begin(),
-            buffer_.begin() + static_cast<ptrdiff_t>(offset_));
+        buffer_.erase(buffer_.begin(), buffer_.begin() + static_cast<ptrdiff_t>(offset_));
         offset_ = 0;
     }
 }
 
-ParseResult Parser::next(Frame *frame) {
+ParseResult Parser::next(Frame* frame) {
     if (!frame || !error_.empty()) {
         return kParseError;
     }
@@ -301,7 +287,7 @@ ParseResult Parser::next(Frame *frame) {
     if (buffered < 2) {
         return kParseNeedMore;
     }
-    const uint8_t *header = &buffer_[offset_];
+    const uint8_t* header = &buffer_[offset_];
     const bool fin = (header[0] & 0x80) != 0;
     if ((header[0] & 0x70) != 0) {
         error_ = "reserved bits set";
@@ -366,19 +352,17 @@ ParseResult Parser::next(Frame *frame) {
         return kParseError;
     }
     const size_t mask_size = masked ? 4 : 0;
-    const size_t frame_size = header_size + mask_size +
-                              static_cast<size_t>(length);
+    const size_t frame_size = header_size + mask_size + static_cast<size_t>(length);
     if (buffered < frame_size) {
         return kParseNeedMore;
     }
     frame->fin = fin;
     frame->opcode = opcode;
-    frame->payload.assign(
-        buffer_.begin() + static_cast<ptrdiff_t>(offset_ + header_size +
-                                                 mask_size),
-        buffer_.begin() + static_cast<ptrdiff_t>(offset_ + frame_size));
+    frame->payload.assign(buffer_.begin() +
+                              static_cast<ptrdiff_t>(offset_ + header_size + mask_size),
+                          buffer_.begin() + static_cast<ptrdiff_t>(offset_ + frame_size));
     if (masked) {
-        const uint8_t *mask_bytes = header + header_size;
+        const uint8_t* mask_bytes = header + header_size;
         for (size_t i = 0; i < frame->payload.size(); ++i) {
             frame->payload[i] ^= mask_bytes[i % 4];
         }
@@ -388,6 +372,6 @@ ParseResult Parser::next(Frame *frame) {
     return kParseFrame;
 }
 
-}  // namespace ws
-}  // namespace host
-}  // namespace capsid
+} // namespace ws
+} // namespace host
+} // namespace capsid

@@ -28,12 +28,12 @@
 
 namespace {
 
-void fail(const char *message) {
+void fail(const char* message) {
     fprintf(stderr, "FAIL: %s\n", message);
     std::exit(1);
 }
 
-void require(bool condition, const char *message) {
+void require(bool condition, const char* message) {
     if (!condition) {
         fail(message);
     }
@@ -49,13 +49,12 @@ double now_seconds() {
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
         fail("clock_gettime");
     }
-    return static_cast<double>(ts.tv_sec) +
-           static_cast<double>(ts.tv_nsec) / 1000000000.0;
+    return static_cast<double>(ts.tv_sec) + static_cast<double>(ts.tv_nsec) / 1000000000.0;
 #endif
 }
 
-std::string read_file(const char *path) {
-    FILE *handle = std::fopen(path, "rb");
+std::string read_file(const char* path) {
+    FILE* handle = std::fopen(path, "rb");
     if (handle == nullptr) {
         fail("cannot open bundle");
     }
@@ -72,8 +71,7 @@ std::string read_file(const char *path) {
 // Blocks until the next event is available and returns CAPSID_OK with the
 // event filled; the event payload stays valid until the next call, so
 // callers must handle the payload before calling again.
-capsid_result wait_for_event(capsid_worker *worker, double deadline,
-                             capsid_event *event) {
+capsid_result wait_for_event(capsid_worker* worker, double deadline, capsid_event* event) {
     for (;;) {
         capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
@@ -104,16 +102,15 @@ capsid_result wait_for_event(capsid_worker *worker, double deadline,
     }
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 3) {
-        std::fprintf(stderr, "usage: %s <capsid-worker> <bundle.mjs>\n",
-                     argv[0]);
+        std::fprintf(stderr, "usage: %s <capsid-worker> <bundle.mjs>\n", argv[0]);
         return 2;
     }
-    const char *worker_path = argv[1];
-    const char *bundle_path = argv[2];
+    const char* worker_path = argv[1];
+    const char* bundle_path = argv[2];
 
     // C++ topology surface. available_cpus() is Linux-only (sched_getaffinity);
     // on other platforms it is an empty set whose out-of-range access is
@@ -146,26 +143,21 @@ int main(int argc, char **argv) {
     config.strict_sandbox = 0;
     config.capability_policy = &policy.descriptor();
 
-    capsid_worker *worker = nullptr;
-    require(capsid_worker_spawn(&config, &worker) == CAPSID_OK,
-            "could not spawn worker");
+    capsid_worker* worker = nullptr;
+    require(capsid_worker_spawn(&config, &worker) == CAPSID_OK, "could not spawn worker");
 
     // Contract: load the bundle BEFORE waiting for READY (mirrors
     // test_worker_integration — the HELLO/READY handshake completes once
     // the module is loaded).
     const std::string bundle = read_file(bundle_path);
-    require(capsid_worker_load_bundle_named(
-                worker,
-                reinterpret_cast<const uint8_t *>(bundle.data()),
-                bundle.size(),
-                "smoke.mjs") == CAPSID_OK,
+    require(capsid_worker_load_bundle_named(worker, reinterpret_cast<const uint8_t*>(bundle.data()),
+                                            bundle.size(), "smoke.mjs") == CAPSID_OK,
             "could not load bundle");
 
     const double startup_deadline = now_seconds() + 15.0;
     for (;;) {
         capsid_event event;
-        require(wait_for_event(worker, startup_deadline, &event) == CAPSID_OK,
-                "startup event");
+        require(wait_for_event(worker, startup_deadline, &event) == CAPSID_OK, "startup event");
         if (event.type == CAPSID_EVENT_READY) {
             break;
         }
@@ -174,9 +166,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    require(capsid_worker_begin_bodyless_request(
-                worker, 1, "GET", "https://example.test/smoke", nullptr, 0) ==
-                CAPSID_OK,
+    require(capsid_worker_begin_bodyless_request(worker, 1, "GET", "https://example.test/smoke",
+                                                 nullptr, 0) == CAPSID_OK,
             "could not begin request");
 
     const double request_deadline = now_seconds() + 15.0;
@@ -185,24 +176,21 @@ int main(int argc, char **argv) {
     size_t body_size = 0;
     for (;;) {
         capsid_event event;
-        require(wait_for_event(worker, request_deadline, &event) == CAPSID_OK,
-                "request event");
+        require(wait_for_event(worker, request_deadline, &event) == CAPSID_OK, "request event");
         if (event.type == CAPSID_EVENT_REQUEST_CREDIT) {
             continue;
         }
         if (event.type == CAPSID_EVENT_RESPONSE_HEAD) {
-            require(event.request_id == 1 && event.status == 200,
-                    "unexpected response head");
+            require(event.request_id == 1 && event.status == 200, "unexpected response head");
             received_head = true;
             continue;
         }
         if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
-            require(event.request_id == 1 && received_head,
-                    "unexpected response body");
+            require(event.request_id == 1 && received_head, "unexpected response body");
             body_size += event.payload.size;
             require(capsid_worker_grant_response_credit(
-                        worker, event.request_id,
-                        static_cast<uint32_t>(event.payload.size)) == CAPSID_OK,
+                        worker, event.request_id, static_cast<uint32_t>(event.payload.size)) ==
+                        CAPSID_OK,
                     "could not replenish response credit");
             continue;
         }
@@ -218,12 +206,10 @@ int main(int argc, char **argv) {
     require(received_head && received_end, "incomplete response");
     require(body_size == 16, "unexpected response body size");
 
-    require(capsid_worker_shutdown(worker) == CAPSID_OK,
-            "graceful shutdown failed");
+    require(capsid_worker_shutdown(worker) == CAPSID_OK, "graceful shutdown failed");
     for (;;) {
         capsid_event event;
-        require(wait_for_event(worker, now_seconds() + 15.0, &event) ==
-                    CAPSID_OK,
+        require(wait_for_event(worker, now_seconds() + 15.0, &event) == CAPSID_OK,
                 "shutdown event");
         if (event.type == CAPSID_EVENT_EXIT) {
             break;

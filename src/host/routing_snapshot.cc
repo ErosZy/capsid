@@ -5,8 +5,7 @@
 namespace capsid::host {
 
 std::shared_ptr<const RoutingSnapshot> RoutingSnapshot::build(
-    std::vector<std::pair<std::string, std::shared_ptr<GenerationPool>>>
-        routes) {
+    std::vector<std::pair<std::string, std::shared_ptr<GenerationPool>>> routes) {
     std::shared_ptr<RoutingSnapshot> snapshot(new RoutingSnapshot());
     // Tombstones first: a later live entry for the same name overrides the
     // tombstone, so a redeploy after a retire revives the route regardless
@@ -18,15 +17,14 @@ std::shared_ptr<const RoutingSnapshot> RoutingSnapshot::build(
     }
     for (auto& route : routes) {
         if (route.second == nullptr) {
-            continue;  // already collected as a tombstone
+            continue; // already collected as a tombstone
         }
         // Duplicates would make find() ambiguous; the coordinator must
         // never publish them, so the last writer is NOT silently honored.
         if (snapshot->routes_.find(route.first) != snapshot->routes_.end()) {
             continue;
         }
-        snapshot->routes_.emplace(std::move(route.first),
-                                  std::move(route.second));
+        snapshot->routes_.emplace(std::move(route.first), std::move(route.second));
         // A live pool beats a tombstone for the same name, whichever order
         // the publisher used.
         snapshot->tombstones_.erase(route.first);
@@ -34,8 +32,7 @@ std::shared_ptr<const RoutingSnapshot> RoutingSnapshot::build(
     return snapshot;
 }
 
-std::shared_ptr<GenerationPool> RoutingSnapshot::find(
-    std::string_view application) const {
+std::shared_ptr<GenerationPool> RoutingSnapshot::find(std::string_view application) const {
     const auto it = routes_.find(std::string(application));
     if (it == routes_.end()) {
         return nullptr;
@@ -58,11 +55,10 @@ bool RoutingSnapshot::retired(std::string_view application) const {
 #elif defined(_MSC_VER)
 // The same intentional compatibility API has MSVC diagnostic C4996.
 #pragma warning(push)
-#pragma warning(disable: 4996)
+#pragma warning(disable : 4996)
 #endif
 void RoutingTable::publish(std::shared_ptr<const RoutingSnapshot> snapshot) {
-    std::atomic_store_explicit(&snapshot_, std::move(snapshot),
-                               std::memory_order_release);
+    std::atomic_store_explicit(&snapshot_, std::move(snapshot), std::memory_order_release);
     generation_.fetch_add(1, std::memory_order_relaxed);
 }
 
@@ -71,7 +67,8 @@ std::int64_t RoutingTable::worker_process_id() const {
     if (snapshot) {
         for (const auto& route : snapshot->routes()) {
             const auto pid = route.second->worker_process_id();
-            if (pid > 0) return pid;
+            if (pid > 0)
+                return pid;
         }
     }
     return 0;
@@ -86,4 +83,4 @@ std::shared_ptr<const RoutingSnapshot> RoutingTable::load() const {
 #pragma warning(pop)
 #endif
 
-}  // namespace capsid::host
+} // namespace capsid::host

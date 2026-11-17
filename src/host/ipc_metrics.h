@@ -28,10 +28,9 @@ struct HostIpcMetrics {
     std::uint64_t event_queue_high_water = 0;
 };
 
-void write_ipc_metrics_line(std::FILE* output,
-                            const HostIpcMetrics& host,
+void write_ipc_metrics_line(std::FILE* output, const HostIpcMetrics& host,
                             const capsid::ClientIpcMetrics& client_metrics);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

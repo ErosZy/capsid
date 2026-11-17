@@ -23,14 +23,12 @@ namespace {
 // the process is gone or the query fails; the caller renders a zero
 // series, never a fabrication.
 bool read_rss_kib(pid_t pid, std::uint64_t* rss_kib) {
-    HANDLE process = OpenProcess(
-        PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (process == nullptr) {
         return false;
     }
     PROCESS_MEMORY_COUNTERS counters = {};
-    const bool ok = K32GetProcessMemoryInfo(
-                        process, &counters, sizeof(counters)) != 0;
+    const bool ok = K32GetProcessMemoryInfo(process, &counters, sizeof(counters)) != 0;
     CloseHandle(process);
     if (!ok) {
         return false;
@@ -49,8 +47,7 @@ bool read_self_pss_kib(std::uint64_t* pss_kib) {
 // CPU time of a process from GetProcessTimes (kernel + user time), in
 // 100 ns units; converted to whole seconds.
 bool read_cpu_seconds(pid_t pid, std::uint64_t* cpu_seconds) {
-    HANDLE process = OpenProcess(
-        PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (process == nullptr) {
         return false;
     }
@@ -58,8 +55,7 @@ bool read_cpu_seconds(pid_t pid, std::uint64_t* cpu_seconds) {
     FILETIME exit = {};
     FILETIME kernel = {};
     FILETIME user = {};
-    const bool ok = GetProcessTimes(
-                        process, &creation, &exit, &kernel, &user) != 0;
+    const bool ok = GetProcessTimes(process, &creation, &exit, &kernel, &user) != 0;
     CloseHandle(process);
     if (!ok) {
         return false;
@@ -68,8 +64,7 @@ bool read_cpu_seconds(pid_t pid, std::uint64_t* cpu_seconds) {
         return (static_cast<std::uint64_t>(value.dwHighDateTime) << 32) |
                static_cast<std::uint64_t>(value.dwLowDateTime);
     };
-    *cpu_seconds =
-        (to_uint64(kernel) + to_uint64(user)) / 10000000ULL;
+    *cpu_seconds = (to_uint64(kernel) + to_uint64(user)) / 10000000ULL;
     return true;
 }
 
@@ -83,10 +78,8 @@ constexpr unsigned long kPageSizeDivisor = 1024UL;
 bool read_rss_kib(pid_t pid, std::uint64_t* rss_kib) {
     char path[64];
     const int written =
-        std::snprintf(path, sizeof(path), "/proc/%ld/statm",
-                      static_cast<long>(pid));
-    if (written <= 0 ||
-        static_cast<std::size_t>(written) >= sizeof(path)) {
+        std::snprintf(path, sizeof(path), "/proc/%ld/statm", static_cast<long>(pid));
+    if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(path)) {
         return false;
     }
     FILE* file = std::fopen(path, "r");
@@ -108,8 +101,7 @@ bool read_rss_kib(pid_t pid, std::uint64_t* rss_kib) {
     if (page_size <= 0) {
         return false;
     }
-    const unsigned long page_kib =
-        static_cast<unsigned long>(page_size) / kPageSizeDivisor;
+    const unsigned long page_kib = static_cast<unsigned long>(page_size) / kPageSizeDivisor;
     *rss_kib = rss_pages * page_kib;
     return true;
 }
@@ -126,8 +118,7 @@ bool read_self_pss_kib(std::uint64_t* pss_kib) {
     char line[256] = {};
     bool found = false;
     while (std::fgets(line, sizeof(line), file) != nullptr) {
-        if (std::sscanf(line, "Pss: %llu kB",
-                        reinterpret_cast<unsigned long long*>(pss_kib)) ==
+        if (std::sscanf(line, "Pss: %llu kB", reinterpret_cast<unsigned long long*>(pss_kib)) ==
             1) {
             found = true;
             break;
@@ -141,11 +132,8 @@ bool read_self_pss_kib(std::uint64_t* pss_kib) {
 // (utime, stime), in clock ticks; converted to whole seconds.
 bool read_cpu_seconds(pid_t pid, std::uint64_t* cpu_seconds) {
     char path[64];
-    const int written =
-        std::snprintf(path, sizeof(path), "/proc/%ld/stat",
-                      static_cast<long>(pid));
-    if (written <= 0 ||
-        static_cast<std::size_t>(written) >= sizeof(path)) {
+    const int written = std::snprintf(path, sizeof(path), "/proc/%ld/stat", static_cast<long>(pid));
+    if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(path)) {
         return false;
     }
     FILE* file = std::fopen(path, "r");
@@ -169,34 +157,32 @@ bool read_cpu_seconds(pid_t pid, std::uint64_t* cpu_seconds) {
     // Fields after comm: 3=state 4=ppid 5=pgrp 6=session 7=tty 8=tpgid
     // 9=flags 10=minflt 11=cminflt 12=majflt 13=cmajflt 14=utime 15=stime.
     unsigned long long dummy[11] = {};
-    if (std::sscanf(state_start + 1, " %llu %llu %llu %llu %llu %llu "
-                                     "%llu %llu %llu %llu %llu %llu %llu",
-                    &dummy[0], &dummy[1], &dummy[2], &dummy[3],
-                    &dummy[4], &dummy[5], &dummy[6], &dummy[7], &dummy[8],
-                    &dummy[9], &dummy[10], &utime, &stime) < 13) {
+    if (std::sscanf(state_start + 1,
+                    " %llu %llu %llu %llu %llu %llu "
+                    "%llu %llu %llu %llu %llu %llu %llu",
+                    &dummy[0], &dummy[1], &dummy[2], &dummy[3], &dummy[4], &dummy[5], &dummy[6],
+                    &dummy[7], &dummy[8], &dummy[9], &dummy[10], &utime, &stime) < 13) {
         return false;
     }
     const long clk_tck = sysconf(_SC_CLK_TCK);
     if (clk_tck <= 0) {
         return false;
     }
-    *cpu_seconds = (utime + stime) /
-                   static_cast<unsigned long long>(clk_tck);
+    *cpu_seconds = (utime + stime) / static_cast<unsigned long long>(clk_tck);
     return true;
 }
-#endif  // !defined(_WIN32)
+#endif // !defined(_WIN32)
 
-}  // namespace
+} // namespace
 
-MetricsRegistry::ProcessSnapshotProvider default_process_snapshot_provider(
-    const std::atomic<pid_t>* worker_pid) {
-    return process_snapshot_provider([worker_pid] {
-        return worker_pid != nullptr ? worker_pid->load() : 0;
-    });
+MetricsRegistry::ProcessSnapshotProvider
+default_process_snapshot_provider(const std::atomic<pid_t>* worker_pid) {
+    return process_snapshot_provider(
+        [worker_pid] { return worker_pid != nullptr ? worker_pid->load() : 0; });
 }
 
-MetricsRegistry::ProcessSnapshotProvider process_snapshot_provider(
-    std::function<pid_t()> worker_pid) {
+MetricsRegistry::ProcessSnapshotProvider
+process_snapshot_provider(std::function<pid_t()> worker_pid) {
     return [worker_pid = std::move(worker_pid)]() -> ProcessMetricsSnapshot {
         ProcessMetricsSnapshot snapshot;
         // Host own footprint.
@@ -230,4 +216,4 @@ MetricsRegistry::ProcessSnapshotProvider process_snapshot_provider(
     };
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

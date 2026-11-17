@@ -30,7 +30,7 @@ bool valid_utf8(const std::uint8_t* data, std::size_t size) {
             continuation = 1;
             codepoint = lead & 0x1f;
             if (codepoint < 2) {
-                return false;  // overlong
+                return false; // overlong
             }
         } else if ((lead & 0xf0) == 0xe0) {
             continuation = 2;
@@ -52,10 +52,9 @@ bool valid_utf8(const std::uint8_t* data, std::size_t size) {
             codepoint = (codepoint << 6) | (byte & 0x3f);
         }
         if ((continuation == 2 && codepoint < 0x800) ||
-            (continuation == 3 && codepoint < 0x10000) ||
-            codepoint > 0x10ffff ||
+            (continuation == 3 && codepoint < 0x10000) || codepoint > 0x10ffff ||
             (codepoint >= 0xd800 && codepoint <= 0xdfff)) {
-            return false;  // overlong, out of range, or surrogate
+            return false; // overlong, out of range, or surrogate
         }
         index += continuation + 1;
     }
@@ -76,15 +75,14 @@ bool valid_utf8(const std::uint8_t* data, std::size_t size) {
 
 std::string build_revision(const struct stat& st) {
     std::ostringstream out;
-    out << kSecretFileRevisionPrefix << static_cast<std::uint64_t>(st.st_dev)
-        << ':' << static_cast<std::uint64_t>(st.st_ino) << ':'
-        << static_cast<std::uint64_t>(st.st_size) << ':'
-        << static_cast<std::int64_t>(CAPSID_SECRET_CTIME_SEC(st)) << ':'
+    out << kSecretFileRevisionPrefix << static_cast<std::uint64_t>(st.st_dev) << ':'
+        << static_cast<std::uint64_t>(st.st_ino) << ':' << static_cast<std::uint64_t>(st.st_size)
+        << ':' << static_cast<std::int64_t>(CAPSID_SECRET_CTIME_SEC(st)) << ':'
         << static_cast<std::int64_t>(CAPSID_SECRET_CTIME_NSEC(st));
     return out.str();
 }
 
-}  // namespace
+} // namespace
 
 bool valid_secret_key_id(const std::string& key_id) {
     if (key_id.empty() || key_id.size() > kMaxSecretKeyIdBytes) {
@@ -95,22 +93,19 @@ bool valid_secret_key_id(const std::string& key_id) {
     for (std::size_t index = 0; index < key_id.size(); ++index) {
         const char c = key_id[index];
         const bool alnum =
-            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9');
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
         if (!alnum && c != '.' && c != '_' && c != '-') {
             return false;
         }
-        if (c == '.' && index + 1 < key_id.size() &&
-            key_id[index + 1] == '.') {
+        if (c == '.' && index + 1 < key_id.size() && key_id[index + 1] == '.') {
             return false;
         }
     }
     return true;
 }
 
-std::vector<SecretFileOutcome> read_secret_files(
-    int secret_dir_fd,
-    const std::vector<std::string>& key_ids) {
+std::vector<SecretFileOutcome> read_secret_files(int secret_dir_fd,
+                                                 const std::vector<std::string>& key_ids) {
     std::vector<SecretFileOutcome> outcomes;
     outcomes.reserve(key_ids.size());
     if (secret_dir_fd < 0 || key_ids.size() > kMaxSecretsPerSnapshot) {
@@ -136,8 +131,8 @@ std::vector<SecretFileOutcome> read_secret_files(
 
         // O_NONBLOCK: opening a FIFO returns immediately instead of
         // blocking the Host; the regular-file check below rejects it.
-        const int fd = openat(secret_dir_fd, key_id.c_str(),
-                              O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+        const int fd =
+            openat(secret_dir_fd, key_id.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
         if (fd < 0) {
             if (errno == ENOENT || errno == ENOTDIR) {
                 outcome.error = "secret file does not exist";
@@ -176,9 +171,8 @@ std::vector<SecretFileOutcome> read_secret_files(
         outcome.value.resize(static_cast<std::size_t>(size));
         std::size_t offset = 0;
         while (offset < outcome.value.size()) {
-            const ssize_t count =
-                pread(fd, outcome.value.data() + offset,
-                      outcome.value.size() - offset, static_cast<off_t>(offset));
+            const ssize_t count = pread(fd, outcome.value.data() + offset,
+                                        outcome.value.size() - offset, static_cast<off_t>(offset));
             if (count < 0) {
                 if (errno == EINTR) {
                     continue;
@@ -186,10 +180,10 @@ std::vector<SecretFileOutcome> read_secret_files(
                 close(fd);
                 outcome.value.clear();
                 outcome.error = "secret file read failed";
-                break;  // single outcome; the offset check below fails it
+                break; // single outcome; the offset check below fails it
             }
             if (count == 0) {
-                break;  // truncated; identity check below catches it
+                break; // truncated; identity check below catches it
             }
             offset += static_cast<std::size_t>(count);
         }
@@ -211,13 +205,10 @@ std::vector<SecretFileOutcome> read_secret_files(
         }
         if (before.st_dev != after.st_dev || before.st_ino != after.st_ino ||
             before.st_size != after.st_size ||
-            CAPSID_SECRET_MTIME_SEC(before) !=
-                CAPSID_SECRET_MTIME_SEC(after) ||
-            CAPSID_SECRET_MTIME_NSEC(before) !=
-                CAPSID_SECRET_MTIME_NSEC(after) ||
+            CAPSID_SECRET_MTIME_SEC(before) != CAPSID_SECRET_MTIME_SEC(after) ||
+            CAPSID_SECRET_MTIME_NSEC(before) != CAPSID_SECRET_MTIME_NSEC(after) ||
             CAPSID_SECRET_CTIME_SEC(before) != CAPSID_SECRET_CTIME_SEC(after) ||
-            CAPSID_SECRET_CTIME_NSEC(before) !=
-                CAPSID_SECRET_CTIME_NSEC(after)) {
+            CAPSID_SECRET_CTIME_NSEC(before) != CAPSID_SECRET_CTIME_NSEC(after)) {
             close(fd);
             outcome.value.clear();
             outcome.error = "secret file changed while reading";
@@ -234,8 +225,7 @@ std::vector<SecretFileOutcome> read_secret_files(
                 break;
             }
         }
-        if (!invalid &&
-            !valid_utf8(outcome.value.data(), outcome.value.size())) {
+        if (!invalid && !valid_utf8(outcome.value.data(), outcome.value.size())) {
             invalid = true;
         }
         if (invalid) {
@@ -253,4 +243,4 @@ std::vector<SecretFileOutcome> read_secret_files(
     return outcomes;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

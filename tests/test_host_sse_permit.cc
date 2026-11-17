@@ -78,8 +78,7 @@ void require(bool condition, const std::string& message) {
 
 std::string read_one_ready_line(int fd) {
     std::string line;
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (line.empty() || line.back() != '\n') {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
@@ -111,8 +110,7 @@ std::uint16_t ready_port(const std::string& line) {
     const char* digits = line.c_str() + begin + marker.size();
     char* end = nullptr;
     const unsigned long port = std::strtoul(digits, &end, 10);
-    require(end != digits && port > 0 && port <= 65535,
-            "server READY record has an invalid port");
+    require(end != digits && port > 0 && port <= 65535, "server READY record has an invalid port");
     return static_cast<std::uint16_t>(port);
 }
 
@@ -125,8 +123,7 @@ const std::vector<std::uint8_t>& sse_done_bundle() {
         "    controller.close(); } }); "
         "  return new Response(stream, "
         "    { headers: { 'content-type': 'text/event-stream' } }); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -137,8 +134,7 @@ const std::vector<std::uint8_t>& sse_open_bundle() {
         "export default { fetch: () => { "
         "  return new Response(new ReadableStream({ start() {} }), "
         "    { headers: { 'content-type': 'text/event-stream' } }); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -155,8 +151,7 @@ const std::vector<std::uint8_t>& sse_uppercase_bundle() {
         "export default { fetch: () => { "
         "  return new Response(new ReadableStream({ start() {} }), "
         "    { headers: { 'content-type': 'Text/Event-Stream' } }); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -169,8 +164,7 @@ const std::vector<std::uint8_t>& sse_parameterized_bundle() {
         "export default { fetch: () => { "
         "  return new Response(new ReadableStream({ start() {} }), "
         "    { headers: { 'content-type': 'text/event-stream; charset=utf-8' } }); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -184,8 +178,7 @@ const std::vector<std::uint8_t>& plain_chunked_bundle() {
         "    controller.close(); } }); "
         "  return new Response(stream, "
         "    { headers: { 'content-type': 'application/octet-stream' } }); } };";
-    static const std::vector<std::uint8_t> bundle(source.begin(),
-                                                  source.end());
+    static const std::vector<std::uint8_t> bundle(source.begin(), source.end());
     return bundle;
 }
 
@@ -200,17 +193,18 @@ int connect_to(std::uint16_t port) {
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode SSE loopback address");
     require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
-                    sizeof(address)) == 0,
+                                      sizeof(address)) == 0,
             "cannot connect to SSE server");
     return fd;
 }
 
 void send_request(int fd, const std::string& target, bool keep_alive) {
     const std::string connection = keep_alive ? "keep-alive" : "close";
-    const std::string request =
-        "GET " + target + " HTTP/1.1\r\n"
-        "Host: public.example\r\n"
-        "Connection: " + connection + "\r\n\r\n";
+    const std::string request = "GET " + target +
+                                " HTTP/1.1\r\n"
+                                "Host: public.example\r\n"
+                                "Connection: " +
+                                connection + "\r\n\r\n";
     std::size_t sent = 0;
     while (sent < request.size()) {
         const ssize_t count =
@@ -226,17 +220,14 @@ struct RawHttpResponse {
 };
 
 // Exactly one line ("\r\n"-terminated); refills `buffer` from fd.
-std::string read_line(int fd, std::string& buffer, char* scratch,
-                      const std::size_t scratch_size,
+std::string read_line(int fd, std::string& buffer, char* scratch, const std::size_t scratch_size,
                       const std::chrono::steady_clock::time_point& deadline) {
     std::string::size_type line_end = buffer.find("\r\n");
     while (line_end == std::string::npos) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "SSE response line timed out");
+        require(std::chrono::steady_clock::now() < deadline, "SSE response line timed out");
         const ssize_t count = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         if (count == 0) {
-            fail("SSE response hit EOF mid-line; buffered so far: [" +
-                 buffer + "]");
+            fail("SSE response hit EOF mid-line; buffered so far: [" + buffer + "]");
         }
         require(count > 0, "SSE response recv failed");
         buffer.append(scratch, static_cast<std::size_t>(count));
@@ -247,12 +238,11 @@ std::string read_line(int fd, std::string& buffer, char* scratch,
     return line;
 }
 
-void require_bytes(int fd, std::string& buffer, std::size_t count,
-                   char* scratch, const std::size_t scratch_size,
+void require_bytes(int fd, std::string& buffer, std::size_t count, char* scratch,
+                   const std::size_t scratch_size,
                    const std::chrono::steady_clock::time_point& deadline) {
     while (buffer.size() < count) {
-        require(std::chrono::steady_clock::now() < deadline,
-                "SSE response body timed out");
+        require(std::chrono::steady_clock::now() < deadline, "SSE response body timed out");
         const ssize_t got = capsid::win32::recv_fd(fd, scratch, scratch_size, 0);
         require(got > 0, "SSE response body recv failed");
         buffer.append(scratch, static_cast<std::size_t>(got));
@@ -263,19 +253,16 @@ void require_bytes(int fd, std::string& buffer, std::size_t count,
 // owns what happens after — for an open SSE stream the body never ends.
 unsigned read_head(int fd) {
     char scratch[2048];
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     std::string buffer;
-    const std::string status_line = read_line(fd, buffer, scratch,
-                                              sizeof(scratch), deadline);
+    const std::string status_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline);
     const std::string::size_type sp1 = status_line.find(' ');
     require(sp1 != std::string::npos, "malformed status line");
-    const unsigned status = static_cast<unsigned>(
-        std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
+    const unsigned status =
+        static_cast<unsigned>(std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
     require(status >= 100, "invalid response status");
     std::string header_line;
-    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch),
-                                     deadline)).empty()) {
+    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline)).empty()) {
     }
     return status;
 }
@@ -284,27 +271,23 @@ unsigned read_head(int fd) {
 // Content-Length or chunked transfer decoding.
 RawHttpResponse read_response(int fd) {
     char scratch[2048];
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     std::string buffer;
-    const std::string status_line = read_line(fd, buffer, scratch,
-                                              sizeof(scratch), deadline);
+    const std::string status_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline);
     const std::string::size_type sp1 = status_line.find(' ');
     require(sp1 != std::string::npos, "malformed status line");
     RawHttpResponse response;
-    response.status = static_cast<unsigned>(
-        std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
+    response.status =
+        static_cast<unsigned>(std::strtoul(status_line.c_str() + sp1 + 1, nullptr, 10));
     require(response.status >= 100, "invalid response status");
     std::size_t body_length = 0;
     bool chunked = false;
     bool saw_content_length = false;
     std::string header_line;
-    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch),
-                                     deadline)).empty()) {
-        if (header_line.size() > 15 &&
-            header_line.compare(0, 15, "Content-Length:") == 0) {
-            body_length = static_cast<std::size_t>(
-                std::strtoul(header_line.c_str() + 15, nullptr, 10));
+    while (!(header_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline)).empty()) {
+        if (header_line.size() > 15 && header_line.compare(0, 15, "Content-Length:") == 0) {
+            body_length =
+                static_cast<std::size_t>(std::strtoul(header_line.c_str() + 15, nullptr, 10));
             saw_content_length = true;
         } else if (header_line.size() > 18 &&
                    header_line.compare(0, 18, "Transfer-Encoding:") == 0 &&
@@ -314,35 +297,29 @@ RawHttpResponse read_response(int fd) {
     }
     if (chunked) {
         for (;;) {
-            const std::string size_line =
-                read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-            const std::size_t chunk_size = static_cast<std::size_t>(
-                std::strtoul(size_line.c_str(), nullptr, 16));
+            const std::string size_line = read_line(fd, buffer, scratch, sizeof(scratch), deadline);
+            const std::size_t chunk_size =
+                static_cast<std::size_t>(std::strtoul(size_line.c_str(), nullptr, 16));
             if (chunk_size == 0) {
                 for (;;) {
                     const std::string trailer =
-                        read_line(fd, buffer, scratch, sizeof(scratch),
-                                  deadline);
+                        read_line(fd, buffer, scratch, sizeof(scratch), deadline);
                     if (trailer.empty()) {
                         break;
                     }
                 }
                 break;
             }
-            require_bytes(fd, buffer, chunk_size, scratch, sizeof(scratch),
-                          deadline);
+            require_bytes(fd, buffer, chunk_size, scratch, sizeof(scratch), deadline);
             response.body.append(buffer.substr(0, chunk_size));
             buffer.erase(0, chunk_size);
             const std::string terminator =
                 read_line(fd, buffer, scratch, sizeof(scratch), deadline);
-            require(terminator.empty(),
-                    "chunked response had a non-empty chunk terminator");
+            require(terminator.empty(), "chunked response had a non-empty chunk terminator");
         }
     } else {
-        require(saw_content_length,
-                "SSE response has neither Content-Length nor chunked");
-        require_bytes(fd, buffer, body_length, scratch, sizeof(scratch),
-                      deadline);
+        require(saw_content_length, "SSE response has neither Content-Length nor chunked");
+        require_bytes(fd, buffer, body_length, scratch, sizeof(scratch), deadline);
         response.body = buffer.substr(0, body_length);
     }
     return response;
@@ -351,21 +328,20 @@ RawHttpResponse read_response(int fd) {
 // Waits until the server closes the connection (EOF): the idle-timeout
 // signature. The connection must already have a response in flight.
 void require_connection_closed(int fd) {
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     for (;;) {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not close the idle stream");
         char byte = 0;
         const ssize_t count = capsid::win32::recv_fd(fd, &byte, 1, 0);
         if (count == 0) {
-            return;  // clean EOF: the server cancelled and closed
+            return; // clean EOF: the server cancelled and closed
         }
         if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             continue;
         }
         if (count < 0) {
-            return;  // reset / error: the server tore the connection down
+            return; // reset / error: the server tore the connection down
         }
     }
 }
@@ -379,8 +355,7 @@ RawHttpResponse http_get(std::uint16_t port, const std::string& target) {
     return response;
 }
 
-capsid::host::SingleWorkerServerOptions make_options(
-    const char* worker_path, int ready_fd) {
+capsid::host::SingleWorkerServerOptions make_options(const char* worker_path, int ready_fd) {
     capsid::host::SingleWorkerServerOptions options;
     options.worker_path = worker_path;
     options.source_bundle_path = "sse-inline";
@@ -403,14 +378,12 @@ capsid::host::SingleWorkerServerOptions make_options(
 void test_permit_full_rejects_503(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create SSE READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 2;
     options.max_streaming_inflight_per_worker = 1;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(sse_open_bundle(), &error),
-            "cannot start SSE server: " + error);
+    require(server.start(sse_open_bundle(), &error), "cannot start SSE server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // The first stream acquires the only permit and never ends (the open
@@ -422,14 +395,12 @@ void test_permit_full_rejects_503(const char* worker_path) {
     send_request(second, "/@capsid/orders/stream", true);
     const unsigned first_status = read_head(first);
     const unsigned second_status = read_head(second);
-    require(first_status == 200,
-            "first SSE request failed: " + std::to_string(first_status));
+    require(first_status == 200, "first SSE request failed: " + std::to_string(first_status));
     // The second stream cannot acquire the permit before its head: it must
     // be cancelled and answered with a synthesized 503 — never a 200 that
     // is then torn down.
     require(second_status == 503,
-            "permit-exhausted SSE must be synthesized 503, got " +
-                std::to_string(second_status));
+            "permit-exhausted SSE must be synthesized 503, got " + std::to_string(second_status));
     close(first);
     close(second);
 
@@ -442,22 +413,18 @@ void test_permit_full_rejects_503(const char* worker_path) {
 void test_permit_released_on_completion(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create SSE READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 2;
     options.max_streaming_inflight_per_worker = 1;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(sse_done_bundle(), &error),
-            "cannot start SSE server: " + error);
+    require(server.start(sse_done_bundle(), &error), "cannot start SSE server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     for (int round = 0; round < 2; ++round) {
-        const RawHttpResponse response =
-            http_get(port, "/@capsid/orders/stream");
-        require(response.status == 200,
-                "completed SSE round " + std::to_string(round) +
-                    " failed: " + std::to_string(response.status));
+        const RawHttpResponse response = http_get(port, "/@capsid/orders/stream");
+        require(response.status == 200, "completed SSE round " + std::to_string(round) +
+                                            " failed: " + std::to_string(response.status));
     }
 
     server.request_stop();
@@ -469,15 +436,13 @@ void test_permit_released_on_completion(const char* worker_path) {
 void test_idle_timeout_cancels_and_releases(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create SSE READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 2;
     options.max_streaming_inflight_per_worker = 1;
-    options.stream_idle_timeout_ms = 250;  // well below the 60s default
+    options.stream_idle_timeout_ms = 250; // well below the 60s default
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(sse_open_bundle(), &error),
-            "cannot start SSE server: " + error);
+    require(server.start(sse_open_bundle(), &error), "cannot start SSE server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // The open stream holds the permit; its head reaches the client first
@@ -496,8 +461,7 @@ void test_idle_timeout_cancels_and_releases(const char* worker_path) {
     const int next_connection = connect_to(port);
     send_request(next_connection, "/@capsid/orders/stream", true);
     const unsigned next_head = read_head(next_connection);
-    require(next_head == 200, "permit leaked after idle cancel: " +
-                                  std::to_string(next_head));
+    require(next_head == 200, "permit leaked after idle cancel: " + std::to_string(next_head));
     close(next_connection);
 
     server.request_stop();
@@ -510,14 +474,12 @@ void test_idle_timeout_cancels_and_releases(const char* worker_path) {
 void test_plain_chunked_does_not_hold_permit(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create SSE READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 2;
     options.max_streaming_inflight_per_worker = 1;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(plain_chunked_bundle(), &error),
-            "cannot start SSE server: " + error);
+    require(server.start(plain_chunked_bundle(), &error), "cannot start SSE server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const int first = connect_to(port);
@@ -528,8 +490,7 @@ void test_plain_chunked_does_not_hold_permit(const char* worker_path) {
     const RawHttpResponse second_response = read_response(second);
     require(first_response.status == 200 && second_response.status == 200,
             "plain chunked responses must not consume the streaming permit");
-    require(first_response.body.size() == 4096,
-            "plain chunked body truncated");
+    require(first_response.body.size() == 4096, "plain chunked body truncated");
     close(first);
     close(second);
 
@@ -546,14 +507,12 @@ void test_mime_matching_holds_permit(const char* worker_path,
                                      const std::vector<std::uint8_t>& bundle) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create SSE READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 2;
     options.max_streaming_inflight_per_worker = 1;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(bundle, &error),
-            "cannot start SSE server: " + error);
+    require(server.start(bundle, &error), "cannot start SSE server: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     // The first stream holds the only permit and never ends.
@@ -563,11 +522,10 @@ void test_mime_matching_holds_permit(const char* worker_path,
     send_request(second, "/@capsid/orders/stream", true);
     const unsigned first_status = read_head(first);
     const unsigned second_status = read_head(second);
-    require(first_status == 200,
-            "first SSE request failed: " + std::to_string(first_status));
-    require(second_status == 503,
-            "non-canonical event-stream type must still hold the permit, "
-            "got " + std::to_string(second_status));
+    require(first_status == 200, "first SSE request failed: " + std::to_string(first_status));
+    require(second_status == 503, "non-canonical event-stream type must still hold the permit, "
+                                  "got " +
+                                      std::to_string(second_status));
     close(first);
     close(second);
 
@@ -581,27 +539,24 @@ void test_mime_matching_holds_permit(const char* worker_path,
 void test_max_inflight_one_boundary(const char* worker_path) {
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create SSE READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.max_inflight_per_worker = 1;
     options.max_streaming_inflight_per_worker = 1;
     capsid::host::SingleWorkerServer server(std::move(options));
     std::string error;
-    require(server.start(sse_done_bundle(), &error),
-            "1/1 SSE boundary must start: " + error);
+    require(server.start(sse_done_bundle(), &error), "1/1 SSE boundary must start: " + error);
     const std::uint16_t port = ready_port(read_one_ready_line(ready[0]));
 
     const RawHttpResponse response = http_get(port, "/@capsid/orders/stream");
-    require(response.status == 200, "1/1 SSE request failed: " +
-                                        std::to_string(response.status));
+    require(response.status == 200, "1/1 SSE request failed: " + std::to_string(response.status));
 
     server.request_stop();
     require(server.wait(&error), "SSE server wait failed: " + error);
 }
 
-#endif  // CAPSID_HAS_SINGLE_WORKER_SERVER
+#endif // CAPSID_HAS_SINGLE_WORKER_SERVER
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     require(argc == 3, "expected mode and capsid-worker path");

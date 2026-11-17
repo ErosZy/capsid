@@ -41,9 +41,7 @@ Gate delivered() {
     return gate;
 }
 
-ssize_t real_write(const uint8_t*, size_t size, void*) {
-    return static_cast<ssize_t>(size);
-}
+ssize_t real_write(const uint8_t*, size_t size, void*) { return static_cast<ssize_t>(size); }
 
 void stall(Gate& gate) {
     const std::vector<uint8_t> payload(4096 - p::kHeaderSize, 'f');
@@ -77,7 +75,7 @@ void valid_order(bool ack_before_write) {
     unsigned notices = 0;
     gate.pressure_ready = [](const Gate& current, void* state) {
         require(current.ack_blocked && current.stalled && current.dial == 1 &&
-                current.peak_queue == 4096 && !current.accepted_acks,
+                    current.peak_queue == 4096 && !current.accepted_acks,
                 "notification follows the actual blocked ACK and stalled writer");
         ++*static_cast<unsigned*>(state);
         return true;
@@ -85,7 +83,8 @@ void valid_order(bool ack_before_write) {
     gate.pressure_state = &notices;
     if (ack_before_write) {
         blocked(gate);
-        require(!gate.invalid && !gate.stalled, "full queue can block ACK before the first write attempt");
+        require(!gate.invalid && !gate.stalled,
+                "full queue can block ACK before the first write attempt");
         require(!notices, "blocked ACK alone cannot publish the receipt");
         stall(gate);
     } else {
@@ -102,7 +101,7 @@ void valid_order(bool ack_before_write) {
     accepted_cancel(gate);
     require(gate.complete(), "both scheduler orders retain the complete pressure proof");
 }
-}  // namespace
+} // namespace
 
 int main() {
     valid_order(false);
@@ -112,7 +111,8 @@ int main() {
         gate.pressure_ready = [](const Gate&, void*) { return false; };
         stall(gate);
         blocked(gate);
-        require(gate.invalid && !gate.complete(), "failed physical receipt cannot establish the premise");
+        require(gate.invalid && !gate.complete(),
+                "failed physical receipt cannot establish the premise");
     }
     {
         Gate gate;

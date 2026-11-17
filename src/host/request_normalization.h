@@ -46,18 +46,17 @@ struct PublicRequestHeaderView {
 // Every required handshake field is then checked, including Connection.
 // Ordinary HTTP requests ignore incidental WebSocket key/version fields.
 enum class WebSocketUpgradeCheck {
-    kNone,                // not a websocket upgrade request
-    kValid,               // handshake headers validate
-    kBadKey,              // key missing, malformed, or duplicated -> 400
-    kBadHandshake,        // method, HTTP version or token syntax -> 400
-    kUnsupportedVersion,  // version != 13 (or duplicated)      -> 426
+    kNone,               // not a websocket upgrade request
+    kValid,              // handshake headers validate
+    kBadKey,             // key missing, malformed, or duplicated -> 400
+    kBadHandshake,       // method, HTTP version or token syntax -> 400
+    kUnsupportedVersion, // version != 13 (or duplicated)      -> 426
 };
-WebSocketUpgradeCheck check_websocket_upgrade(
-    const std::vector<PublicRequestHeaderView>& views,
-    std::string_view method, unsigned http_version);
+WebSocketUpgradeCheck check_websocket_upgrade(const std::vector<PublicRequestHeaderView>& views,
+                                              std::string_view method, unsigned http_version);
 
 struct WebSocketUpgradeRejection {
-    unsigned status = 0;  // zero means ordinary HTTP or a valid upgrade
+    unsigned status = 0; // zero means ordinary HTTP or a valid upgrade
     std::string_view body;
 };
 WebSocketUpgradeRejection websocket_upgrade_rejection(WebSocketUpgradeCheck check);
@@ -111,8 +110,7 @@ bool is_valid_public_authority(std::string_view value);
 // any normalization. error is optional (null is allowed when only the boolean
 // is wanted). The adapter calls this before binding so a malformed policy
 // fails startup closed.
-bool is_valid_routing_policy(const RequestRoutingPolicy& policy,
-                             RequestNormalizationError* error);
+bool is_valid_routing_policy(const RequestRoutingPolicy& policy, RequestNormalizationError* error);
 
 // Builds the complete worker-observable request identity from an already
 // parsed HTTP/1 request. This function validates URL/header semantics, routes
@@ -129,11 +127,10 @@ bool is_valid_routing_policy(const RequestRoutingPolicy& policy,
 // Exactly one Host header is required for every routing mode. Header routing
 // additionally requires exactly one Capsid-App header and a trusted listener.
 // On failure request is empty; on success all returned strings are owned.
-RequestNormalizationResult normalize_public_request(
-    const RequestRoutingPolicy& policy,
-    std::string_view target,
-    std::span<const PublicRequestHeaderView> headers);
+RequestNormalizationResult
+normalize_public_request(const RequestRoutingPolicy& policy, std::string_view target,
+                         std::span<const PublicRequestHeaderView> headers);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

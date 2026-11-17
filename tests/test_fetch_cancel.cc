@@ -37,36 +37,27 @@
 
 namespace {
 
-void fail(const std::string &message) {
-    throw std::runtime_error(message);
-}
+void fail(const std::string& message) { throw std::runtime_error(message); }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail("cannot open fixture");
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 class HangingServer {
-public:
+  public:
     HangingServer()
-        : listener_(-1),
-          client_(-1),
-          port_(0),
-          accepted_(false),
-          closed_(false),
-          receive_finished_(false),
-          idle_timeouts_(0),
-          receive_error_(0) {
+        : listener_(-1), client_(-1), port_(0), accepted_(false), closed_(false),
+          receive_finished_(false), idle_timeouts_(0), receive_error_(0) {
         listener_ = capsid::win32::create_tcp_socket_fd();
         if (listener_ < 0) {
             fail("cannot create hanging server");
@@ -76,18 +67,14 @@ public:
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = 0;
-        if (capsid::win32::bind_fd(
-                listener_,
-                reinterpret_cast<const struct sockaddr *>(&address),
-                sizeof(address)) != 0 ||
+        if (capsid::win32::bind_fd(listener_, reinterpret_cast<const struct sockaddr*>(&address),
+                                   sizeof(address)) != 0 ||
             capsid::win32::listen_fd(listener_, 1) != 0) {
             fail("cannot bind hanging server");
         }
         socklen_t size = sizeof(address);
-        if (capsid::win32::getsockname_fd(
-                listener_,
-                reinterpret_cast<struct sockaddr *>(&address),
-                &size) != 0) {
+        if (capsid::win32::getsockname_fd(listener_, reinterpret_cast<struct sockaddr*>(&address),
+                                          &size) != 0) {
             fail("cannot resolve hanging server port");
         }
         port_ = ntohs(address.sin_port);
@@ -114,9 +101,8 @@ public:
     }
 
     std::string application_url() const {
-        return std::string(
-                   "https://example.test/cancel-fetch?"
-                   "target=http%3A%2F%2F127.0.0.1%3A") +
+        return std::string("https://example.test/cancel-fetch?"
+                           "target=http%3A%2F%2F127.0.0.1%3A") +
                std::to_string(port_) + "%2Fhang";
     }
 
@@ -126,10 +112,10 @@ public:
     unsigned idle_timeouts() const { return idle_timeouts_.load(); }
     int receive_error() const { return receive_error_.load(); }
 
-private:
+  private:
     void serve() {
         struct Completion {
-            std::atomic<bool> &finished;
+            std::atomic<bool>& finished;
             ~Completion() { finished.store(true); }
         } completion{receive_finished_};
         capsid_pollfd descriptor = {};
@@ -156,8 +142,7 @@ private:
 #if defined(_WIN32)
             // accept_fd returns a CRT fd; Winsock recv takes the raw
             // SOCKET handle.
-            const ssize_t count =
-                capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
+            const ssize_t count = capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
 #else
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
 #endif
@@ -174,8 +159,8 @@ private:
                 // SO_RCVTIMEO reports WSAETIMEDOUT, which the shared shim
                 // currently maps to EIO. An idle read is not peer closure
                 // and must not permanently stop observing cancellation.
-                const bool idle = WSAGetLastError() == WSAETIMEDOUT ||
-                                  read_error == EAGAIN || read_error == EWOULDBLOCK;
+                const bool idle = WSAGetLastError() == WSAETIMEDOUT || read_error == EAGAIN ||
+                                  read_error == EWOULDBLOCK;
 #else
                 const bool idle = read_error == EAGAIN || read_error == EWOULDBLOCK;
 #endif
@@ -200,19 +185,18 @@ private:
     std::thread thread_;
 };
 
-void pump(capsid_worker *worker) {
+void pump(capsid_worker* worker) {
     const capsid_result flush = capsid_worker_flush(worker);
     if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
         fail("worker flush failed");
     }
     capsid_pollfd descriptor = {};
     descriptor.fd = capsid_worker_fd(worker);
-    descriptor.events =
-        POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+    descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
     capsid::win32::capsid_poll(&descriptor, 1, 10);
 }
 
-bool next_event(capsid_worker *worker, capsid_event *event) {
+bool next_event(capsid_worker* worker, capsid_event* event) {
     std::memset(event, 0, sizeof(*event));
     event->struct_size = sizeof(*event);
     const capsid_result result = capsid_worker_next_event(worker, event);
@@ -225,7 +209,7 @@ bool next_event(capsid_worker *worker, capsid_event *event) {
     return false;
 }
 
-void wait_ready(capsid_worker *worker) {
+void wait_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (std::chrono::steady_clock::now() < deadline) {
@@ -235,8 +219,7 @@ void wait_ready(capsid_worker *worker) {
             if (event.type == CAPSID_EVENT_READY) {
                 return;
             }
-            if (event.type == CAPSID_EVENT_ERROR ||
-                event.type == CAPSID_EVENT_EXIT) {
+            if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
                 fail("worker failed before READY");
             }
         }
@@ -244,9 +227,9 @@ void wait_ready(capsid_worker *worker) {
     fail("READY timeout");
 }
 
-}  // namespace
+} // namespace
 
-void exercise_cancellation(const char *worker_path, const char *fixture_path,
+void exercise_cancellation(const char* worker_path, const char* fixture_path,
                            bool wait_for_idle_timeout) {
     HangingServer server;
     const std::string bundle = read_file(fixture_path);
@@ -258,36 +241,27 @@ void exercise_cancellation(const char *worker_path, const char *fixture_path,
     LoopbackEgressPolicy egress_policy;
     egress_policy.attach(&config);
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn");
-    const std::unique_ptr<capsid_worker, decltype(&capsid_worker_destroy)>
-        worker_owner(worker, capsid_worker_destroy);
-    require_result(
-        capsid_worker_load_bundle(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size()),
-        "load");
+    const std::unique_ptr<capsid_worker, decltype(&capsid_worker_destroy)> worker_owner(
+        worker, capsid_worker_destroy);
+    require_result(capsid_worker_load_bundle(
+                       worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()),
+                   "load");
     wait_ready(worker);
 
     const std::string url = server.application_url();
-    require_result(
-        capsid_worker_begin_request(
-            worker, 61, "GET", url.c_str(), NULL, 0),
-        "begin fetch cancel");
-    require_result(
-        capsid_worker_end_request(worker, 61),
-        "end fetch cancel");
+    require_result(capsid_worker_begin_request(worker, 61, "GET", url.c_str(), NULL, 0),
+                   "begin fetch cancel");
+    require_result(capsid_worker_end_request(worker, 61), "end fetch cancel");
 
     const std::chrono::steady_clock::time_point accept_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (!server.accepted() &&
-           std::chrono::steady_clock::now() < accept_deadline) {
+    while (!server.accepted() && std::chrono::steady_clock::now() < accept_deadline) {
         pump(worker);
         capsid_event event;
         while (next_event(worker, &event)) {
-            if (event.type == CAPSID_EVENT_ERROR ||
-                event.type == CAPSID_EVENT_EXIT) {
+            if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
                 fail("fetch failed before cancellation");
             }
         }
@@ -297,8 +271,7 @@ void exercise_cancellation(const char *worker_path, const char *fixture_path,
     }
 
     if (wait_for_idle_timeout) {
-        const auto idle_deadline = std::chrono::steady_clock::now() +
-                                   std::chrono::seconds(3);
+        const auto idle_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
         while (server.idle_timeouts() == 0 && !server.receive_finished() &&
                std::chrono::steady_clock::now() < idle_deadline) {
             pump(worker);
@@ -319,8 +292,7 @@ void exercise_cancellation(const char *worker_path, const char *fixture_path,
     require_result(capsid_worker_cancel(worker, 61), "repeat fetch cancel");
     const std::chrono::steady_clock::time_point close_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (!server.closed() &&
-           std::chrono::steady_clock::now() < close_deadline) {
+    while (!server.closed() && std::chrono::steady_clock::now() < close_deadline) {
         pump(worker);
         capsid_event event;
         while (next_event(worker, &event)) {
@@ -331,38 +303,28 @@ void exercise_cancellation(const char *worker_path, const char *fixture_path,
     }
     if (!server.closed()) {
         fail("cancel did not close txiki outbound fetch connection: receive_errno=" +
-             std::to_string(server.receive_error()) + ", receive_finished=" +
-             std::to_string(server.receive_finished()));
+             std::to_string(server.receive_error()) +
+             ", receive_finished=" + std::to_string(server.receive_finished()));
     }
 
     require_result(
-        capsid_worker_begin_request(
-            worker, 61, "GET", "https://example.test/reuse", NULL, 0),
+        capsid_worker_begin_request(worker, 61, "GET", "https://example.test/reuse", NULL, 0),
         "reuse fetch-canceled id");
-    require_result(
-        capsid_worker_end_request(worker, 61),
-        "end fetch-canceled reuse");
+    require_result(capsid_worker_end_request(worker, 61), "end fetch-canceled reuse");
     bool completed = false;
     const std::chrono::steady_clock::time_point response_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (!completed &&
-           std::chrono::steady_clock::now() < response_deadline) {
+    while (!completed && std::chrono::steady_clock::now() < response_deadline) {
         pump(worker);
         capsid_event event;
         while (next_event(worker, &event)) {
-            if (event.type == CAPSID_EVENT_RESPONSE_BODY &&
-                event.request_id == 61) {
-                require_result(
-                    capsid_worker_grant_response_credit(
-                        worker,
-                        61,
-                        static_cast<uint32_t>(event.payload.size)),
-                    "grant reuse credit");
-            } else if (event.type == CAPSID_EVENT_RESPONSE_END &&
-                       event.request_id == 61) {
+            if (event.type == CAPSID_EVENT_RESPONSE_BODY && event.request_id == 61) {
+                require_result(capsid_worker_grant_response_credit(
+                                   worker, 61, static_cast<uint32_t>(event.payload.size)),
+                               "grant reuse credit");
+            } else if (event.type == CAPSID_EVENT_RESPONSE_END && event.request_id == 61) {
                 completed = true;
-            } else if (event.type == CAPSID_EVENT_ERROR ||
-                       event.type == CAPSID_EVENT_EXIT) {
+            } else if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
                 fail("worker failed after fetch cancellation");
             }
         }
@@ -370,18 +332,18 @@ void exercise_cancellation(const char *worker_path, const char *fixture_path,
     if (!completed) {
         fail("worker was not reusable after fetch cancellation");
     }
-    std::cout << "PASS fetch cancellation " <<
-        (wait_for_idle_timeout ? "after-receive-timeout" : "immediate") << std::endl;
+    std::cout << "PASS fetch cancellation "
+              << (wait_for_idle_timeout ? "after-receive-timeout" : "immediate") << std::endl;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     try {
         if (argc != 3) {
             fail("expected worker path and fixture path");
         }
         exercise_cancellation(argv[1], argv[2], false);
         exercise_cancellation(argv[1], argv[2], true);
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << std::endl;
         return 1;
     }

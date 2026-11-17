@@ -162,6 +162,9 @@ These are source-bound snapshot results, **not beta.2 benchmarks or a formal
 paired improvement over v0.2.2**. The complete sealed archives and provenance
 are linked from the [performance reference](docs/performance-benchmarks.md).
 
+For pinned C/C++, JavaScript and Python formatting commands, see
+[source formatting](docs/formatting.md).
+
 To contribute, follow [CONTRIBUTING.md](CONTRIBUTING.md). Planned work is tracked
 in [ROADMAP.md](ROADMAP.md); dated reviews and handoffs are indexed separately
 under [history and evidence](docs/history/README.md).

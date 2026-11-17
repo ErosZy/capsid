@@ -91,25 +91,35 @@ void fail(const std::string& message) {
     escaped.reserve(message.size());
     for (const char c : message) {
         switch (c) {
-            case '"': escaped += "\\\""; break;
-            case '\\': escaped += "\\\\"; break;
-            case '\n': escaped += "\\n"; break;
-            case '\r': escaped += "\\r"; break;
-            case '\t': escaped += "\\t"; break;
-            default: escaped.push_back(c); break;
+        case '"':
+            escaped += "\\\"";
+            break;
+        case '\\':
+            escaped += "\\\\";
+            break;
+        case '\n':
+            escaped += "\\n";
+            break;
+        case '\r':
+            escaped += "\\r";
+            break;
+        case '\t':
+            escaped += "\\t";
+            break;
+        default:
+            escaped.push_back(c);
+            break;
         }
     }
     const std::uint64_t timestamp_ms =
-        static_cast<std::uint64_t>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch())
-                .count());
+        static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::system_clock::now().time_since_epoch())
+                                       .count());
     std::fprintf(stderr,
                  "{\"timestamp\":\"%llu\",\"level\":\"error\","
                  "\"event\":\"startup\",\"result\":\"fail\","
                  "\"message\":\"%s\"}\n",
-                 static_cast<unsigned long long>(timestamp_ms),
-                 escaped.c_str());
+                 static_cast<unsigned long long>(timestamp_ms), escaped.c_str());
     std::exit(2);
 }
 
@@ -119,8 +129,7 @@ void fail(const std::string& message) {
 // (Node's `stdio: 'ignore'` for an extra fd leaves exactly such a slot).
 // Install a no-op invalid-parameter handler just for this lookup so an
 // unusable --ready-fd reports "not an open descriptor" instead of crashing.
-void windows_invalid_parameter_noop(const wchar_t*, const wchar_t*,
-                                    const wchar_t*, unsigned int,
+void windows_invalid_parameter_noop(const wchar_t*, const wchar_t*, const wchar_t*, unsigned int,
                                     std::uintptr_t) {}
 
 bool ready_fd_is_open(int fd) {
@@ -141,58 +150,49 @@ bool valid_application_id(const std::string& application) {
     return capsid::host::encode_active_state_json(probe).ok;
 }
 
-std::uint64_t parse_positive_integer(const std::string& value,
-                                     const char* name) {
+std::uint64_t parse_positive_integer(const std::string& value, const char* name) {
     if (value.empty()) {
         fail(std::string("--") + name + " requires a positive integer");
     }
     for (const char c : value) {
         if (c < '0' || c > '9') {
-            fail(std::string("--") + name +
-                 " requires a positive integer: " + value);
+            fail(std::string("--") + name + " requires a positive integer: " + value);
         }
     }
     errno = 0;
     char* end = nullptr;
     const unsigned long long parsed = std::strtoull(value.c_str(), &end, 10);
     if (errno != 0 || end == nullptr || *end != '\0' || parsed == 0 ||
-        parsed > static_cast<unsigned long long>(
-                      std::numeric_limits<std::int64_t>::max())) {
-        fail(std::string("--") + name +
-             " requires a positive integer: " + value);
+        parsed > static_cast<unsigned long long>(std::numeric_limits<std::int64_t>::max())) {
+        fail(std::string("--") + name + " requires a positive integer: " + value);
     }
     return static_cast<std::uint64_t>(parsed);
 }
 
 // Non-negative integer: allows the explicit 0 that disables a feature
 // (e.g. --queue-requests 0).
-std::uint64_t parse_nonnegative_integer(const std::string& value,
-                                        const char* name) {
+std::uint64_t parse_nonnegative_integer(const std::string& value, const char* name) {
     if (value.empty()) {
         fail(std::string("--") + name + " requires a non-negative integer");
     }
     for (const char c : value) {
         if (c < '0' || c > '9') {
-            fail(std::string("--") + name +
-                 " requires a non-negative integer: " + value);
+            fail(std::string("--") + name + " requires a non-negative integer: " + value);
         }
     }
     errno = 0;
     char* end = nullptr;
     const unsigned long long parsed = std::strtoull(value.c_str(), &end, 10);
     if (errno != 0 || end == nullptr || *end != '\0' ||
-        parsed > static_cast<unsigned long long>(
-                      std::numeric_limits<std::int64_t>::max())) {
-        fail(std::string("--") + name +
-             " requires a non-negative integer: " + value);
+        parsed > static_cast<unsigned long long>(std::numeric_limits<std::int64_t>::max())) {
+        fail(std::string("--") + name + " requires a non-negative integer: " + value);
     }
     return static_cast<std::uint64_t>(parsed);
 }
 
 // "250ms" / "5s" / "1m" style duration (the same grammar the effective
 // config uses for queueTimeout). Unit suffix is required.
-std::uint64_t parse_duration_ms(const std::string& value,
-                                const char* name) {
+std::uint64_t parse_duration_ms(const std::string& value, const char* name) {
     std::string::size_type number_end = 0;
     for (std::string::size_type index = 0; index < value.size(); ++index) {
         const char c = value[index];
@@ -202,8 +202,7 @@ std::uint64_t parse_duration_ms(const std::string& value,
         number_end = index + 1;
     }
     if (number_end == 0 || number_end == value.size()) {
-        fail(std::string("--") + name +
-             " requires a duration like 250ms or 5s: " + value);
+        fail(std::string("--") + name + " requires a duration like 250ms or 5s: " + value);
     }
     const std::string number_text = value.substr(0, number_end);
     const std::string unit = value.substr(number_end);
@@ -215,29 +214,23 @@ std::uint64_t parse_duration_ms(const std::string& value,
     } else if (unit == "m") {
         multiplier = 60U * 1000U;
     } else {
-        fail(std::string("--") + name +
-             " requires ms, s or m units: " + value);
+        fail(std::string("--") + name + " requires ms, s or m units: " + value);
     }
     errno = 0;
     char* end = nullptr;
-    const unsigned long long parsed =
-        std::strtoull(number_text.c_str(), &end, 10);
+    const unsigned long long parsed = std::strtoull(number_text.c_str(), &end, 10);
     if (errno != 0 || end == nullptr || *end != '\0' || parsed == 0 ||
-        parsed > static_cast<unsigned long long>(
-                      std::numeric_limits<std::uint64_t>::max() /
-                      multiplier)) {
+        parsed > static_cast<unsigned long long>(std::numeric_limits<std::uint64_t>::max() /
+                                                 multiplier)) {
         fail(std::string("--") + name + " is out of range: " + value);
     }
     return static_cast<std::uint64_t>(parsed) * multiplier;
 }
 
 // host:port; only decimal ports and non-empty hosts are accepted.
-void parse_listen(const std::string& value,
-                  std::string* out_address,
-                  std::uint16_t* out_port) {
+void parse_listen(const std::string& value, std::string* out_address, std::uint16_t* out_port) {
     const std::size_t colon = value.rfind(':');
-    if (colon == std::string::npos || colon == 0 ||
-        colon + 1 == value.size()) {
+    if (colon == std::string::npos || colon == 0 || colon + 1 == value.size()) {
         fail("--listen requires host:port");
     }
     *out_address = value.substr(0, colon);
@@ -269,8 +262,7 @@ std::vector<std::uint8_t> read_bundle(const std::string& path) {
     input.seekg(0, std::ios::beg);
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
     if (size > 0) {
-        input.read(reinterpret_cast<char*>(bytes.data()),
-                   static_cast<std::streamsize>(size));
+        input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
         if (!input) {
             fail("cannot read --source-bundle: " + path);
         }
@@ -331,14 +323,13 @@ std::atomic<bool> g_stop{false};
 // Safe open of a Host-owned directory: O_NOFOLLOW, directory, euid owner,
 // no group/other bits.
 int open_verified_root(const std::string& path, const char* what) {
-    const int fd = open(path.c_str(),
-                        O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    const int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (fd < 0) {
         fail(std::string("cannot open ") + what);
     }
     struct stat st = {};
-    if (fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode) ||
-        st.st_uid != geteuid() || (st.st_mode & 0077) != 0) {
+    if (fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode) || st.st_uid != geteuid() ||
+        (st.st_mode & 0077) != 0) {
         close(fd);
         fail(std::string("unverified ") + what);
     }
@@ -350,13 +341,12 @@ bool valid_managed_app_id(const std::string& value) {
     if (value.empty() || value.size() > 63) {
         return false;
     }
-    if (!((value[0] >= 'a' && value[0] <= 'z') ||
-          (value[0] >= '0' && value[0] <= '9'))) {
+    if (!((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= '0' && value[0] <= '9'))) {
         return false;
     }
     for (const char c : value) {
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-              c == '.' || c == '_' || c == '-')) {
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' ||
+              c == '-')) {
             return false;
         }
     }
@@ -384,8 +374,7 @@ std::vector<std::string> discover_applications(int apps_fd) {
             continue;
         }
         struct stat st = {};
-        if (fstatat(apps_fd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0 &&
-            S_ISDIR(st.st_mode)) {
+        if (fstatat(apps_fd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(st.st_mode)) {
             applications.push_back(name);
         }
     }
@@ -413,15 +402,13 @@ std::vector<std::string> discover_applications(int apps_fd) {
 // device/inode/size re-check after reading (a FIFO or symlink never blocks
 // or redirects startup, and a concurrent swap is rejected).
 std::string read_host_config(const std::string& path) {
-    const int fd = open(path.c_str(),
-                        O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+    const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (fd < 0) {
         fail("cannot open --host-config: " + path);
     }
     struct stat before = {};
-    if (fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) ||
-        before.st_uid != geteuid() || before.st_size < 0 ||
-        static_cast<std::uint64_t>(before.st_size) > 1024U * 1024U) {
+    if (fstat(fd, &before) != 0 || !S_ISREG(before.st_mode) || before.st_uid != geteuid() ||
+        before.st_size < 0 || static_cast<std::uint64_t>(before.st_size) > 1024U * 1024U) {
         close(fd);
         fail("--host-config is not a Host-owned regular file under 1 MiB");
     }
@@ -446,8 +433,8 @@ std::string read_host_config(const std::string& path) {
         json.append(buffer, static_cast<std::size_t>(count));
     }
     struct stat after = {};
-    if (fstat(fd, &after) != 0 || after.st_dev != before.st_dev ||
-        after.st_ino != before.st_ino || after.st_size != before.st_size ||
+    if (fstat(fd, &after) != 0 || after.st_dev != before.st_dev || after.st_ino != before.st_ino ||
+        after.st_size != before.st_size ||
         CAPSID_MAIN_MTIME_SEC(after) != CAPSID_MAIN_MTIME_SEC(before) ||
         CAPSID_MAIN_MTIME_NSEC(after) != CAPSID_MAIN_MTIME_NSEC(before) ||
         CAPSID_MAIN_CTIME_SEC(after) != CAPSID_MAIN_CTIME_SEC(before) ||
@@ -472,11 +459,9 @@ std::string read_host_config(const std::string& path) {
     const std::string host_json = read_host_config(host_config_path);
     // The authoritative schema boundary runs first; no second lax parser.
     const capsid::host::ConfigValidationResult validated =
-        capsid::host::validate_config_json(
-            capsid::host::ConfigDocument::kHost, host_json);
+        capsid::host::validate_config_json(capsid::host::ConfigDocument::kHost, host_json);
     if (!validated.ok) {
-        fail("host.json rejected at " + validated.error.path + ": " +
-             validated.error.message);
+        fail("host.json rejected at " + validated.error.path + ": " + validated.error.message);
     }
     capsid::host::ParsedHostConfig config;
     std::string config_error;
@@ -489,8 +474,7 @@ std::string read_host_config(const std::string& path) {
     // The store owns the key bytes; the options below hold views into it,
     // so the store must outlive every ManagedHostOptions.
     capsid::host::TrustedKeyStore trusted_keys =
-        capsid::host::TrustedKeyStore::load(config.trusted_keys,
-                                            &config_error);
+        capsid::host::TrustedKeyStore::load(config.trusted_keys, &config_error);
     if (trusted_keys.size() != config.trusted_keys.size()) {
         fail(config_error);
     }
@@ -498,29 +482,23 @@ std::string read_host_config(const std::string& path) {
         trusted_keys.keys().begin(), trusted_keys.keys().end());
     // Safe-open the roots; the secret template's parent is the dirfd the
     // coordinator opens App subdirectories from.
-    const int apps_fd = open_verified_root(config.applications_root,
-                                           "applications root");
+    const int apps_fd = open_verified_root(config.applications_root, "applications root");
     // The template must be EXACTLY <parent>/{application}: a trailing
     // suffix would be silently misinterpreted as part of the parent root.
     const std::string secret_template = config.secret_root_template;
-    const std::string::size_type placeholder =
-        secret_template.find("/{application}");
-    const std::string secret_parent =
-        secret_template.substr(0, placeholder);
+    const std::string::size_type placeholder = secret_template.find("/{application}");
+    const std::string secret_parent = secret_template.substr(0, placeholder);
     if (placeholder == std::string::npos || secret_parent.empty() ||
-        secret_template.size() !=
-            secret_parent.size() + std::string("/{application}").size()) {
+        secret_template.size() != secret_parent.size() + std::string("/{application}").size()) {
         fail("secretRootTemplate must be exactly "
              "<root>/{application}");
     }
-    const int secrets_fd = open_verified_root(secret_parent,
-                                              "secret root template");
+    const int secrets_fd = open_verified_root(secret_parent, "secret root template");
     // Fail-early validation only: the coordinator re-opens the state root
     // per operation (verified the same way); this open proves the root is
     // present and well-formed before any worker spawns.
     const int state_fd = open_verified_root(config.state_root, "state root");
-    const std::vector<std::string> applications =
-        discover_applications(apps_fd);
+    const std::vector<std::string> applications = discover_applications(apps_fd);
     if (applications.empty()) {
         fail("applications root contains no configured Apps");
     }
@@ -528,23 +506,22 @@ std::string read_host_config(const std::string& path) {
     // registry. Created after the config is validated so their lifetime
     // covers every option object below; injected into the coordinator,
     // supervisors and the Admin API.
-    auto structured_log = std::make_unique<capsid::host::StructuredLog>(
-        [](const std::string& line) {
+    auto structured_log =
+        std::make_unique<capsid::host::StructuredLog>([](const std::string& line) {
             // One JSON object per line on stderr (design §12.2); a torn
             // partial write is impossible per call (single write below the
             // PIPE_BUF ceiling on regular stderr).
-            const ssize_t written = ::write(STDERR_FILENO, line.data(),
-                                            line.size());
+            const ssize_t written = ::write(STDERR_FILENO, line.data(), line.size());
             (void)written;
         });
     auto metrics = std::make_unique<capsid::host::MetricsRegistry>();
-    auto channel_budget=std::make_shared<capsid::host::ServiceChannelBudget>(config.capacity.channels);
+    auto channel_budget =
+        std::make_shared<capsid::host::ServiceChannelBudget>(config.capacity.channels);
     metrics->observe_channel_budget(channel_budget);
     const capsid::host::ResolvedRecoveryPolicy recovery_resolved =
         capsid::host::resolve_recovery_policy(config.recovery);
     if (!recovery_resolved.ok) {
-        fail("invalid host.json recovery policy: " +
-             recovery_resolved.error);
+        fail("invalid host.json recovery policy: " + recovery_resolved.error);
     }
     // Stable ownership for every App's options (the coordinator stores
     // pointers to them).
@@ -559,11 +536,9 @@ std::string read_host_config(const std::string& path) {
         options->bindings_root = config.bindings_root;
         if (!config.bindings_root.empty()) {
             std::string scan_error;
-            if (!capsid::host::scan_bindings_root(
-                    config.bindings_root, {0, geteuid()},
-                    &options->binding_registry, &scan_error)) {
-                std::cerr << "capsid-host: bindingsRoot rejected: "
-                          << scan_error << std::endl;
+            if (!capsid::host::scan_bindings_root(config.bindings_root, {0, geteuid()},
+                                                  &options->binding_registry, &scan_error)) {
+                std::cerr << "capsid-host: bindingsRoot rejected: " << scan_error << std::endl;
                 return EXIT_FAILURE;
             }
             options->binding_registry_loaded = true;
@@ -588,13 +563,10 @@ std::string read_host_config(const std::string& path) {
     // deploy/recover outcome — so replacements respawn the same artifact
     // and effective config, and the route identity survives replacement.
     auto routing = std::make_shared<capsid::host::RoutingTable>();
-    metrics->set_process_snapshot_provider(
-        capsid::host::process_snapshot_provider([routing] {
-            return static_cast<pid_t>(routing->worker_process_id());
-        }));
+    metrics->set_process_snapshot_provider(capsid::host::process_snapshot_provider(
+        [routing] { return static_cast<pid_t>(routing->worker_process_id()); }));
     // App -> ACTIVE pool (the only pool a new request may route to).
-    std::map<std::string,
-             std::shared_ptr<capsid::host::GenerationPool>> active_pools;
+    std::map<std::string, std::shared_ptr<capsid::host::GenerationPool>> active_pools;
     // Retired/replaced pools stay pinned until their completion callback hands
     // them to the reclaimer. Joining never runs on their own pump thread.
     std::vector<std::shared_ptr<capsid::host::GenerationPool>> draining_pools;
@@ -614,8 +586,7 @@ std::string read_host_config(const std::string& path) {
     // tombstones). Caller holds pools_mutex. Allocation allowed —
     // prepare-time only, never inside a commit.
     const auto build_snapshot = [&]() {
-        std::vector<std::pair<
-            std::string, std::shared_ptr<capsid::host::GenerationPool>>> routes;
+        std::vector<std::pair<std::string, std::shared_ptr<capsid::host::GenerationPool>>> routes;
         routes.reserve(active_pools.size() + retired_apps.size());
         for (const auto& entry : active_pools) {
             routes.emplace_back(entry.first, entry.second);
@@ -629,17 +600,14 @@ std::string read_host_config(const std::string& path) {
     // Publishes a fresh snapshot over the current view (the routing table
     // itself is lock-free; the lock makes the active_pools view atomic for
     // its writers). Allocation-free — also used by the commit callbacks.
-    const auto publish_snapshot = [&]() {
-        routing->publish(build_snapshot());
-    };
+    const auto publish_snapshot = [&]() { routing->publish(build_snapshot()); };
     // The process-global weighted capacity ledger (§9.4): workersTotal is
     // the steady-state budget, activationSurgeWorkers the overlapping
     // replacement budget. Every reserve happens BEFORE any spawn, inside
     // the coordinator; the ledger is wired into every App's options below
     // and into every adopted pool's drain-complete hook.
-    capsid::host::WorkerCapacityLedger ledger(
-        config.capacity.workers_total,
-        config.capacity.activation_surge_workers);
+    capsid::host::WorkerCapacityLedger ledger(config.capacity.workers_total,
+                                              config.capacity.activation_surge_workers);
     // Ownership handoff for a warmed generation: adopt the fleet into a
     // GenerationPool (create_adopted destroys everything on failure — no
     // worker escapes) and install the event sink. A generation without its
@@ -655,125 +623,123 @@ std::string read_host_config(const std::string& path) {
     capsid::host::GenerationReclaimer generation_reclaimer;
     capsid::host::QuarantineDispatcher quarantine_dispatcher;
     const auto adopt_generation =
-        [&](const std::string& application,
-            const std::vector<capsid_worker*>& workers,
-            const capsid::host::WorkerExecutor::WorkerFactory& factory,
-            const std::string& version,
-            const std::string& generation_digest)
-        -> std::shared_ptr<capsid::host::GenerationPool> {
-            if (!factory) {
-                for (capsid_worker* worker : workers) {
-                    capsid_worker_destroy(worker);
-                }
-                return nullptr;
+        [&](const std::string& application, const std::vector<capsid_worker*>& workers,
+            const capsid::host::WorkerExecutor::WorkerFactory& factory, const std::string& version,
+            const std::string& generation_digest) -> std::shared_ptr<capsid::host::GenerationPool> {
+        if (!factory) {
+            for (capsid_worker* worker : workers) {
+                capsid_worker_destroy(worker);
             }
-            capsid::host::GenerationPoolOptions pool_options;
-            pool_options.application_id = application;
-            pool_options.version = version;
-            pool_options.generation_digest = generation_digest;
-            pool_options.workers =
-                static_cast<std::uint32_t>(workers.size());
-            pool_options.factory = factory;
-            pool_options.channel_budget = channel_budget;
-            pool_options.recovery = recovery_resolved.policy;
-            // Direction A: the pool is the only recovery engine, so it
-            // owns the shared fair startup-permit queue for its
-            // replacement spawns. Process metrics read the published
-            // routing snapshot and never borrow a worker handle.
-            pool_options.startup_permits = &startup_permits;
-            pool_options.log = structured_log.get();
-            pool_options.metrics = metrics.get();
-            const std::uint32_t pool_size = pool_options.workers;
-            const auto capacity = std::make_shared<capsid::host::WorkerPoolCapacityLease>(
-                &ledger, application, pool_size);
-            pool_options.capacity_lease = capacity;
-            // Links this drain hook to the pool created from the same
-            // prepare call (filled right after create_adopted). WEAK by
-            // design: create_adopted requires no self-held strong
-            // reference (see the pump-thread note there) — an aborted
-            // activation must be able to destroy its never-published
-            // pool through plain refcount, and a pool already under
-            // destruction must not re-arm itself.
-            const auto pool_box = std::make_shared<
-                std::weak_ptr<capsid::host::GenerationPool>>();
-            capsid::host::ManagedHostOptions* target = nullptr;
-            for (auto* options : app_options) {
-                if (options->application == application) { target = options; break; }
+            return nullptr;
+        }
+        capsid::host::GenerationPoolOptions pool_options;
+        pool_options.application_id = application;
+        pool_options.version = version;
+        pool_options.generation_digest = generation_digest;
+        pool_options.workers = static_cast<std::uint32_t>(workers.size());
+        pool_options.factory = factory;
+        pool_options.channel_budget = channel_budget;
+        pool_options.recovery = recovery_resolved.policy;
+        // Direction A: the pool is the only recovery engine, so it
+        // owns the shared fair startup-permit queue for its
+        // replacement spawns. Process metrics read the published
+        // routing snapshot and never borrow a worker handle.
+        pool_options.startup_permits = &startup_permits;
+        pool_options.log = structured_log.get();
+        pool_options.metrics = metrics.get();
+        const std::uint32_t pool_size = pool_options.workers;
+        const auto capacity = std::make_shared<capsid::host::WorkerPoolCapacityLease>(
+            &ledger, application, pool_size);
+        pool_options.capacity_lease = capacity;
+        // Links this drain hook to the pool created from the same
+        // prepare call (filled right after create_adopted). WEAK by
+        // design: create_adopted requires no self-held strong
+        // reference (see the pump-thread note there) — an aborted
+        // activation must be able to destroy its never-published
+        // pool through plain refcount, and a pool already under
+        // destruction must not re-arm itself.
+        const auto pool_box = std::make_shared<std::weak_ptr<capsid::host::GenerationPool>>();
+        capsid::host::ManagedHostOptions* target = nullptr;
+        for (auto* options : app_options) {
+            if (options->application == application) {
+                target = options;
+                break;
             }
-            const std::weak_ptr<capsid::host::RoutingTable> observed_routes = routing;
-            const auto quarantine = std::make_shared<capsid::host::QuarantineRequest>(
-                target, generation_digest, [observed_routes, pool_box, application, &pools_mutex, capacity] {
-                    bool current_instance = false;
-                    {
-                        std::lock_guard<std::mutex> lock(pools_mutex);
-                        const auto table = observed_routes.lock();
-                        const auto snapshot = table ? table->load() : nullptr;
-                        const auto current = snapshot ? snapshot->find(application) : nullptr;
-                        // Ownership comparison does not pin an obsolete
-                        // pool whose destructor could join a waiting pump.
-                        current_instance = current && !pool_box->owner_before(current) &&
-                                           !current.owner_before(*pool_box);
-                    }
-                    // Still inside the App operation lock, before the
-                    // barrier releases quarantine shutdowns. Never hold
-                    // pools_mutex while settling capacity.
-                    if (current_instance) capacity->begin_drain();
-                    return current_instance;
-                });
-            pool_options.quarantine_completion =
-                std::shared_ptr<const std::atomic<bool>>(quarantine, &quarantine->completed);
-            pool_options.on_quarantine = [&quarantine_dispatcher, quarantine] {
-                (void)quarantine_dispatcher.enqueue(quarantine);
-            };
-            // §9.4: the reaper-finished instant releases the pool's
-            // capacity count and (P1, review §12.2) hands the Host's
-            // parked reference from draining_pools to the reclaimer.
-            // Locking FIRST: if the weak box is gone the pool is under
-            // destruction on the abort path, where abort_reserve already
-            // settled the ledger — no release, no parking. The hook
-            // touches the ledger and pools_mutex only, never the pool
-            // itself (its destructor joins this very thread).
-            pool_options.on_drain_complete =
-                [&draining_pools,
-                 &generation_reclaimer, &pools_mutex, pool_box] {
-                    std::shared_ptr<capsid::host::GenerationPool> pool;
-                    {
-                        std::lock_guard<std::mutex> lock(pools_mutex);
-                        pool = pool_box->lock();
-                    }
-                    if (pool == nullptr) {
-                        return;
-                    }
+        }
+        const std::weak_ptr<capsid::host::RoutingTable> observed_routes = routing;
+        const auto quarantine = std::make_shared<capsid::host::QuarantineRequest>(
+            target, generation_digest,
+            [observed_routes, pool_box, application, &pools_mutex, capacity] {
+                bool current_instance = false;
+                {
                     std::lock_guard<std::mutex> lock(pools_mutex);
-                    for (auto it = draining_pools.begin();
-                         it != draining_pools.end();) {
-                        if (*it == pool) {
-                            it = draining_pools.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
-                    generation_reclaimer.enqueue(pool);
-                };
-            std::string pool_error;
-            std::shared_ptr<capsid::host::GenerationPool> pool =
-                capsid::host::GenerationPool::create_adopted(
-                    std::move(pool_options), workers, &pool_error);
+                    const auto table = observed_routes.lock();
+                    const auto snapshot = table ? table->load() : nullptr;
+                    const auto current = snapshot ? snapshot->find(application) : nullptr;
+                    // Ownership comparison does not pin an obsolete
+                    // pool whose destructor could join a waiting pump.
+                    current_instance = current && !pool_box->owner_before(current) &&
+                                       !current.owner_before(*pool_box);
+                }
+                // Still inside the App operation lock, before the
+                // barrier releases quarantine shutdowns. Never hold
+                // pools_mutex while settling capacity.
+                if (current_instance)
+                    capacity->begin_drain();
+                return current_instance;
+            });
+        pool_options.quarantine_completion =
+            std::shared_ptr<const std::atomic<bool>>(quarantine, &quarantine->completed);
+        pool_options.on_quarantine = [&quarantine_dispatcher, quarantine] {
+            (void)quarantine_dispatcher.enqueue(quarantine);
+        };
+        // §9.4: the reaper-finished instant releases the pool's
+        // capacity count and (P1, review §12.2) hands the Host's
+        // parked reference from draining_pools to the reclaimer.
+        // Locking FIRST: if the weak box is gone the pool is under
+        // destruction on the abort path, where abort_reserve already
+        // settled the ledger — no release, no parking. The hook
+        // touches the ledger and pools_mutex only, never the pool
+        // itself (its destructor joins this very thread).
+        pool_options.on_drain_complete = [&draining_pools, &generation_reclaimer, &pools_mutex,
+                                          pool_box] {
+            std::shared_ptr<capsid::host::GenerationPool> pool;
             {
                 std::lock_guard<std::mutex> lock(pools_mutex);
-                *pool_box = pool;
+                pool = pool_box->lock();
             }
             if (pool == nullptr) {
-                return nullptr;
+                return;
             }
-            // The sink must be installed before the pool starts serving:
-            // a request pinned before wiring would lose its response
-            // events (wire_pool precondition: no in-flight requests).
-            if (data_plane != nullptr) {
-                data_plane->wire_pool(pool);
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            for (auto it = draining_pools.begin(); it != draining_pools.end();) {
+                if (*it == pool) {
+                    it = draining_pools.erase(it);
+                } else {
+                    ++it;
+                }
             }
-            return pool;
+            generation_reclaimer.enqueue(pool);
         };
+        std::string pool_error;
+        std::shared_ptr<capsid::host::GenerationPool> pool =
+            capsid::host::GenerationPool::create_adopted(std::move(pool_options), workers,
+                                                         &pool_error);
+        {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            *pool_box = pool;
+        }
+        if (pool == nullptr) {
+            return nullptr;
+        }
+        // The sink must be installed before the pool starts serving:
+        // a request pinned before wiring would lose its response
+        // events (wire_pool precondition: no in-flight requests).
+        if (data_plane != nullptr) {
+            data_plane->wire_pool(pool);
+        }
+        return pool;
+    };
     // ---- §9.3 activation transaction callbacks ----
     // The coordinator runs these around the durable active.json write
     // (persist). prepare builds the ENTIRE new world (pool + view +
@@ -782,50 +748,45 @@ std::string read_host_config(const std::string& path) {
     // worker is single-threaded, so a whole transaction is never observed
     // mid-flight by another transaction.
     const auto prepare_activation =
-        [&](const std::string& application,
-            const capsid::host::DeployOutcome& prepared,
+        [&](const std::string& application, const capsid::host::DeployOutcome& prepared,
             std::string* error) -> std::unique_ptr<capsid::host::ActivationPlan> {
-            std::unique_ptr<capsid::host::ActivationPlan> plan(
-                new capsid::host::ActivationPlan());
-            plan->application = application;
-            plan->version = prepared.version;
-            plan->generation_digest = prepared.generation_digest;
-            plan->new_workers = prepared.workers.size();
-            std::shared_ptr<capsid::host::GenerationPool> pool =
-                adopt_generation(application, prepared.workers,
-                                 prepared.generation_factory,
-                                 prepared.version,
-                                 prepared.generation_digest);
-            if (pool == nullptr) {
-                *error = "cannot activate the new generation";
-                return nullptr;
+        std::unique_ptr<capsid::host::ActivationPlan> plan(new capsid::host::ActivationPlan());
+        plan->application = application;
+        plan->version = prepared.version;
+        plan->generation_digest = prepared.generation_digest;
+        plan->new_workers = prepared.workers.size();
+        std::shared_ptr<capsid::host::GenerationPool> pool =
+            adopt_generation(application, prepared.workers, prepared.generation_factory,
+                             prepared.version, prepared.generation_digest);
+        if (pool == nullptr) {
+            *error = "cannot activate the new generation";
+            return nullptr;
+        }
+        plan->new_pool = pool;
+        {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            const auto existing = active_pools.find(application);
+            if (existing != active_pools.end()) {
+                plan->old_pool = existing->second;
+                plan->old_workers = existing->second->configured_workers();
+                // The replaced generation stops serving only at
+                // COMMIT; the reference is parked here so commit
+                // needs no allocation.
+                draining_pools.push_back(existing->second);
             }
-            plan->new_pool = pool;
-            {
-                std::lock_guard<std::mutex> lock(pools_mutex);
-                const auto existing = active_pools.find(application);
-                if (existing != active_pools.end()) {
-                    plan->old_pool = existing->second;
-                    plan->old_workers =
-                        existing->second->configured_workers();
-                    // The replaced generation stops serving only at
-                    // COMMIT; the reference is parked here so commit
-                    // needs no allocation.
-                    draining_pools.push_back(existing->second);
-                }
-                // View pre-insert: commit's find+assign never allocates,
-                // and the snapshot below already reflects the new
-                // generation. A redeploy revives a retired App: the live
-                // route wins over the tombstone, so the publish must not
-                // emit both.
-                active_pools[application] = pool;
-                retired_apps.erase(application);
-                // The COMPLETE new route map is built at prepare time so
-                // commit is a single atomic snapshot swap.
-                plan->new_snapshot = build_snapshot();
-            }
-            return plan;
-        };
+            // View pre-insert: commit's find+assign never allocates,
+            // and the snapshot below already reflects the new
+            // generation. A redeploy revives a retired App: the live
+            // route wins over the tombstone, so the publish must not
+            // emit both.
+            active_pools[application] = pool;
+            retired_apps.erase(application);
+            // The COMPLETE new route map is built at prepare time so
+            // commit is a single atomic snapshot swap.
+            plan->new_snapshot = build_snapshot();
+        }
+        return plan;
+    };
     const auto commit_activation = [&](capsid::host::ActivationPlan* plan) {
         std::lock_guard<std::mutex> lock(pools_mutex);
         // The new pool is already in the view (prepared): commit only
@@ -850,8 +811,7 @@ std::string read_host_config(const std::string& path) {
         // single-threaded Async worker guarantees no other transaction
         // touched the view since prepare.
         const auto entry = active_pools.find(plan->application);
-        if (entry != active_pools.end() &&
-            entry->second == plan->new_pool) {
+        if (entry != active_pools.end() && entry->second == plan->new_pool) {
             if (plan->old_pool != nullptr) {
                 entry->second = plan->old_pool;
             } else {
@@ -862,8 +822,7 @@ std::string read_host_config(const std::string& path) {
         // the commit that never came: undo that reference or repeated
         // failed activations accumulate parked copies (review §2).
         if (plan->old_pool != nullptr) {
-            for (auto it = draining_pools.begin();
-                 it != draining_pools.end();) {
+            for (auto it = draining_pools.begin(); it != draining_pools.end();) {
                 if (*it == plan->old_pool) {
                     it = draining_pools.erase(it);
                 } else {
@@ -883,37 +842,34 @@ std::string read_host_config(const std::string& path) {
     const auto prepare_retire =
         [&](const std::string& application,
             std::string* error) -> std::unique_ptr<capsid::host::RetirePlan> {
-            (void) error;
-            std::unique_ptr<capsid::host::RetirePlan> plan(
-                new capsid::host::RetirePlan());
-            plan->application = application;
-            {
-                std::lock_guard<std::mutex> lock(pools_mutex);
-                const auto existing = active_pools.find(application);
-                if (existing != active_pools.end()) {
-                    plan->pool = existing->second;
-                    plan->workers =
-                        existing->second->configured_workers();
-                    // The route becomes a TOMBSTONE at prepare; commit
-                    // only publishes. New requests get 404 (§9.6-6) while
-                    // old in-flight requests finish on their pinned pool.
-                    active_pools.erase(existing);
-                    retired_apps.insert(application);
-                    draining_pools.push_back(plan->pool);
-                    plan->view_mutated = true;
-                } else if (retired_apps.find(application) ==
-                           retired_apps.end()) {
-                    // Idempotent retire of a never-deployed App: the
-                    // durable tombstone is (re)persisted; the route keeps
-                    // its current shape (tombstone pre-inserted so commit
-                    // has nothing to allocate).
-                    retired_apps.insert(application);
-                    plan->view_mutated = true;
-                }
-                plan->new_snapshot = build_snapshot();
+        (void)error;
+        std::unique_ptr<capsid::host::RetirePlan> plan(new capsid::host::RetirePlan());
+        plan->application = application;
+        {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            const auto existing = active_pools.find(application);
+            if (existing != active_pools.end()) {
+                plan->pool = existing->second;
+                plan->workers = existing->second->configured_workers();
+                // The route becomes a TOMBSTONE at prepare; commit
+                // only publishes. New requests get 404 (§9.6-6) while
+                // old in-flight requests finish on their pinned pool.
+                active_pools.erase(existing);
+                retired_apps.insert(application);
+                draining_pools.push_back(plan->pool);
+                plan->view_mutated = true;
+            } else if (retired_apps.find(application) == retired_apps.end()) {
+                // Idempotent retire of a never-deployed App: the
+                // durable tombstone is (re)persisted; the route keeps
+                // its current shape (tombstone pre-inserted so commit
+                // has nothing to allocate).
+                retired_apps.insert(application);
+                plan->view_mutated = true;
             }
-            return plan;
-        };
+            plan->new_snapshot = build_snapshot();
+        }
+        return plan;
+    };
     const auto commit_retire = [&](capsid::host::RetirePlan* plan) {
         std::lock_guard<std::mutex> lock(pools_mutex);
         if (plan->pool != nullptr) {
@@ -940,8 +896,7 @@ std::string read_host_config(const std::string& path) {
             retired_apps.erase(plan->application);
             // And undo prepare's parking reference for the same reason
             // as the activation abort.
-            for (auto it = draining_pools.begin();
-                 it != draining_pools.end();) {
+            for (auto it = draining_pools.begin(); it != draining_pools.end();) {
                 if (*it == plan->pool) {
                     it = draining_pools.erase(it);
                 } else {
@@ -960,8 +915,7 @@ std::string read_host_config(const std::string& path) {
                 all.push_back(entry.second);
             }
             active_pools.clear();
-            all.insert(all.end(), draining_pools.begin(),
-                       draining_pools.end());
+            all.insert(all.end(), draining_pools.begin(), draining_pools.end());
             draining_pools.clear();
         }
         for (const auto& pool : all) {
@@ -1003,14 +957,11 @@ std::string read_host_config(const std::string& path) {
             // The reserve was committed inside run_recover_operation
             // (reserve_fresh before any spawn); a fresh adoption has
             // nothing further to settle.
-            const std::shared_ptr<capsid::host::GenerationPool> pool =
-                adopt_generation(options->application, recovered.workers,
-                                 recovered.generation_factory,
-                                 recovered.version,
-                                 recovered.generation_digest);
+            const std::shared_ptr<capsid::host::GenerationPool> pool = adopt_generation(
+                options->application, recovered.workers, recovered.generation_factory,
+                recovered.version, recovered.generation_digest);
             if (pool == nullptr) {
-                fail("cannot activate the recovered pool for application " +
-                     options->application);
+                fail("cannot activate the recovered pool for application " + options->application);
             }
             pool->capacity_lease()->activate_fresh();
             {
@@ -1048,8 +999,7 @@ std::string read_host_config(const std::string& path) {
         listener_options.log = structured_log.get();
         listener_options.metrics = metrics.get();
         listener_options.channel_service_budget = channel_budget;
-        data_plane = std::make_unique<capsid::host::ManagedListener>(
-            std::move(listener_options));
+        data_plane = std::make_unique<capsid::host::ManagedListener>(std::move(listener_options));
         std::string listener_error;
         if (!data_plane->start(&listener_error)) {
             fail("cannot bind the data plane listener: " + listener_error);
@@ -1067,13 +1017,12 @@ std::string read_host_config(const std::string& path) {
         supervisor_options.managed_options = options;
         supervisor_options.policy = recovery_resolved.policy;
         supervisor_options.current_pool =
-            [&, application = options->application]()
-            -> std::shared_ptr<capsid::host::GenerationPool> {
-                std::lock_guard<std::mutex> lock(pools_mutex);
-                const auto existing = active_pools.find(application);
-                return existing != active_pools.end() ? existing->second
-                                                      : nullptr;
-            };
+            [&, application =
+                    options->application]() -> std::shared_ptr<capsid::host::GenerationPool> {
+            std::lock_guard<std::mutex> lock(pools_mutex);
+            const auto existing = active_pools.find(application);
+            return existing != active_pools.end() ? existing->second : nullptr;
+        };
         supervisor_options.stop_requested = &g_stop;
         // M2 item 7: the process-wide log/metrics (probe events are
         // app-lane; the recycle verdicts feed §12.1).
@@ -1082,13 +1031,10 @@ std::string read_host_config(const std::string& path) {
         // M2 item 6 (design §7.4): the active health probe schedule.
         // Individual Apps opt in with capsid.json healthCheck; the host
         // interval/failures apply to every configured App.
-        supervisor_options.active_health_interval_ms =
-            config.recovery.active_health_interval_ms;
-        supervisor_options.active_health_failures =
-            config.recovery.active_health_failures;
+        supervisor_options.active_health_interval_ms = config.recovery.active_health_interval_ms;
+        supervisor_options.active_health_failures = config.recovery.active_health_failures;
         supervisors.push_back(
-            std::make_unique<capsid::host::WorkerSupervisor>(
-                std::move(supervisor_options)));
+            std::make_unique<capsid::host::WorkerSupervisor>(std::move(supervisor_options)));
     }
     capsid::host::ManagedAdminBackend managed(app_options);
     // M2 item 5b: the shared fair startup-permit queue. Capacity itself is
@@ -1100,13 +1046,11 @@ std::string read_host_config(const std::string& path) {
     // Fixed bounded queue; startupsConcurrent is not the Admin ceiling.
     async_options.max_pending_operations = 8;
     async_options.external_stop = &g_stop;
-    auto async = std::make_unique<capsid::host::AsyncAdminBackend>(
-        &managed, async_options);
+    auto async = std::make_unique<capsid::host::AsyncAdminBackend>(&managed, async_options);
     capsid::host::AdminServiceOptions service_options;
     service_options.socket.path = config.admin_unix_path;
     service_options.socket.mode = config.admin_mode;
-    service_options.http.api.authorization.allowed_uid =
-        static_cast<std::uint64_t>(geteuid());
+    service_options.http.api.authorization.allowed_uid = static_cast<std::uint64_t>(geteuid());
     service_options.http.api.max_header_bytes = 64U * 1024U;
     service_options.http.api.max_body_bytes = 64U * 1024U;
     // M2 item 7: the Admin API renders /metrics from the process-wide
@@ -1162,35 +1106,33 @@ std::string read_host_config(const std::string& path) {
     structured_log->flush();
     return 0;
 }
-#endif  // !defined(_WIN32) managed mode
+#endif // !defined(_WIN32) managed mode
 
 // Keep the watcher inside this call so it is joined before the caller's
 // server is destroyed, including when startup or run() throws.
 template <typename Server>
-int run_with_parent_stop(
-    Server& server, const std::vector<std::uint8_t>& bundle,
-    std::unique_ptr<capsid::host::ParentStopMonitor> monitor,
-    capsid::host::StructuredLog* log) {
+int run_with_parent_stop(Server& server, const std::vector<std::uint8_t>& bundle,
+                         std::unique_ptr<capsid::host::ParentStopMonitor> monitor,
+                         capsid::host::StructuredLog* log) {
     std::string error;
     if (monitor && !monitor->start([&server] { server.request_stop(); }, &error)) {
         log->log(capsid::host::LogLane::kControl,
-                 {.event = capsid::host::log_events::kStartup,
-                  .result = "fail", .message = error});
+                 {.event = capsid::host::log_events::kStartup, .result = "fail", .message = error});
         return 1;
     }
     int result = server.run(bundle);
     if (monitor) {
         monitor->cancel();
         if (!monitor->error().empty()) {
-            log->log(capsid::host::LogLane::kControl,
-                     {.event = capsid::host::log_events::kShutdown,
-                      .result = "fail", .message = monitor->error()});
+            log->log(capsid::host::LogLane::kControl, {.event = capsid::host::log_events::kShutdown,
+                                                       .result = "fail",
+                                                       .message = monitor->error()});
             result = 1;
         }
     }
     return result;
 }
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
 #if defined(__GLIBC__)
@@ -1232,10 +1174,8 @@ int main(int argc, char** argv) {
 #if defined(__linux__)
     if (mode == "managed") {
         // Strict managed CLI: only --host-config and --worker are allowed.
-        for (const std::pair<const std::string, std::string>& entry :
-             values) {
-            if (entry.first != "mode" && entry.first != "host-config" &&
-                entry.first != "worker") {
+        for (const std::pair<const std::string, std::string>& entry : values) {
+            if (entry.first != "mode" && entry.first != "host-config" && entry.first != "worker") {
                 fail("--mode managed accepts only --host-config and "
                      "--worker");
             }
@@ -1259,42 +1199,75 @@ int main(int argc, char** argv) {
     // Reject typos before source/config I/O, worker creation or listener bind.
     // Managed mode above retains its own stricter three-key grammar.
     static constexpr std::string_view known_arguments[] = {
-        "mode", "worker", "source-bundle",
-        "source-name", "application", "listen",
-        "routing", "routing-suffix", "routing-trusted",
-        "public-scheme", "public-authority", "request-timeout-ms",
-        "initial-stream-window", "strict-sandbox", "ready-fd",
-        "stop-fd", "workers", "max-inflight-per-worker",
-        "queue-requests", "queue-header-bytes", "queue-timeout",
-        "max-streaming-inflight", "stream-idle-timeout", "write-timeout",
-        "capsid-json", "secrets-root", "bindings-root",
-        "channels-total", "pending-dials-total", "channel-queue-bytes-total",
-        "listener-channels", "listener-channel-queue-bytes", "cors-origins",
-        "cors-methods", "cors-headers", "cors-max-age",
+        "mode",
+        "worker",
+        "source-bundle",
+        "source-name",
+        "application",
+        "listen",
+        "routing",
+        "routing-suffix",
+        "routing-trusted",
+        "public-scheme",
+        "public-authority",
+        "request-timeout-ms",
+        "initial-stream-window",
+        "strict-sandbox",
+        "ready-fd",
+        "stop-fd",
+        "workers",
+        "max-inflight-per-worker",
+        "queue-requests",
+        "queue-header-bytes",
+        "queue-timeout",
+        "max-streaming-inflight",
+        "stream-idle-timeout",
+        "write-timeout",
+        "capsid-json",
+        "secrets-root",
+        "bindings-root",
+        "channels-total",
+        "pending-dials-total",
+        "channel-queue-bytes-total",
+        "listener-channels",
+        "listener-channel-queue-bytes",
+        "cors-origins",
+        "cors-methods",
+        "cors-headers",
+        "cors-max-age",
     };
     for (const auto& argument : values) {
         bool known = false;
         for (const auto name : known_arguments) {
-            if (argument.first == name) { known = true; break; }
+            if (argument.first == name) {
+                known = true;
+                break;
+            }
         }
-        if (!known) fail("unknown argument: --" + argument.first);
+        if (!known)
+            fail("unknown argument: --" + argument.first);
     }
     capsid::host::SingleWorkerServerOptions options;
-    const auto channel_count = [&](const char *name, uint64_t fallback) {
-        const auto found=values.find(name);
-        return found==values.end() ? fallback : parse_positive_integer(found->second,name);
+    const auto channel_count = [&](const char* name, uint64_t fallback) {
+        const auto found = values.find(name);
+        return found == values.end() ? fallback : parse_positive_integer(found->second, name);
     };
-    const auto channel_bytes = [&](const char *name, uint64_t fallback) {
-        const auto found=values.find(name); uint64_t parsed=0;
-        if(found==values.end()) return fallback;
-        if(!capsid::host::parse_size_bytes(found->second,&parsed) || !parsed) fail(std::string("invalid --")+name);
+    const auto channel_bytes = [&](const char* name, uint64_t fallback) {
+        const auto found = values.find(name);
+        uint64_t parsed = 0;
+        if (found == values.end())
+            return fallback;
+        if (!capsid::host::parse_size_bytes(found->second, &parsed) || !parsed)
+            fail(std::string("invalid --") + name);
         return parsed;
     };
-    options.channel_service_limits.channels=channel_count("channels-total",1024);
-    options.channel_service_limits.pending_dials=channel_count("pending-dials-total",128);
-    options.channel_service_limits.queue_bytes=channel_bytes("channel-queue-bytes-total",16u*1024u*1024u);
-    options.channel_listener_limits.channels=channel_count("listener-channels",128);
-    options.channel_listener_limits.queue_bytes=channel_bytes("listener-channel-queue-bytes",16u*1024u*1024u);
+    options.channel_service_limits.channels = channel_count("channels-total", 1024);
+    options.channel_service_limits.pending_dials = channel_count("pending-dials-total", 128);
+    options.channel_service_limits.queue_bytes =
+        channel_bytes("channel-queue-bytes-total", 16u * 1024u * 1024u);
+    options.channel_listener_limits.channels = channel_count("listener-channels", 128);
+    options.channel_listener_limits.queue_bytes =
+        channel_bytes("listener-channel-queue-bytes", 16u * 1024u * 1024u);
     options.worker_path = require("worker");
     // The source bundle is either the explicit --source-bundle (with its
     // --source-name URL) or the capsid.json entry resolved after the local
@@ -1322,11 +1295,9 @@ int main(int argc, char** argv) {
     {
         boost::system::error_code address_error;
         const boost::asio::ip::address address =
-            boost::asio::ip::make_address(options.listen_address,
-                                          address_error);
+            boost::asio::ip::make_address(options.listen_address, address_error);
         if (address_error) {
-            fail("--listen requires an IP address: " +
-                 options.listen_address);
+            fail("--listen requires an IP address: " + options.listen_address);
         }
         (void)address;
     }
@@ -1368,8 +1339,7 @@ int main(int argc, char** argv) {
         fail("--public-scheme must be http or https");
     }
     options.public_authority = require("public-authority");
-    if (!capsid::host::is_valid_public_authority(
-            options.public_authority)) {
+    if (!capsid::host::is_valid_public_authority(options.public_authority)) {
         fail("--public-authority must be host[:port]");
     }
     // The routing policy itself is validated before anything is spawned —
@@ -1383,8 +1353,7 @@ int main(int argc, char** argv) {
         routing_policy.subdomain_suffix = options.routing_suffix;
         routing_policy.trusted_header_routing = options.routing_trusted;
         capsid::host::RequestNormalizationError routing_error;
-        if (!capsid::host::is_valid_routing_policy(routing_policy,
-                                                   &routing_error)) {
+        if (!capsid::host::is_valid_routing_policy(routing_policy, &routing_error)) {
             fail(routing_error.message);
         }
     }
@@ -1394,18 +1363,15 @@ int main(int argc, char** argv) {
     const auto request_timeout_it = values.find("request-timeout-ms");
     if (request_timeout_it != values.end()) {
         options.request_timeout_ms =
-            parse_positive_integer(request_timeout_it->second,
-                                   "request-timeout-ms");
+            parse_positive_integer(request_timeout_it->second, "request-timeout-ms");
     }
     // Default 64 KiB: the four-stack matrix (2026-08-13, 64K vs 16K) showed
     // the response window must cover a full 64 KiB response without a
     // mid-stream credit round trip; larger windows show no further gain
     // (E14 scan) and only widen the per-connection buffering bound.
     const auto window_it = values.find("initial-stream-window");
-    const std::uint64_t window =
-        parse_positive_integer(
-            window_it == values.end() ? "65536" : window_it->second,
-            "initial-stream-window");
+    const std::uint64_t window = parse_positive_integer(
+        window_it == values.end() ? "65536" : window_it->second, "initial-stream-window");
     if (window > std::numeric_limits<std::uint32_t>::max()) {
         fail("--initial-stream-window exceeds uint32");
     }
@@ -1427,10 +1393,8 @@ int main(int argc, char** argv) {
              "docs/platform-support.md)");
     }
 #endif
-    const std::uint64_t ready_fd =
-        parse_positive_integer(require("ready-fd"), "ready-fd");
-    if (ready_fd > static_cast<std::uint64_t>(
-                       std::numeric_limits<short>::max())) {
+    const std::uint64_t ready_fd = parse_positive_integer(require("ready-fd"), "ready-fd");
+    if (ready_fd > static_cast<std::uint64_t>(std::numeric_limits<short>::max())) {
         fail("--ready-fd must be a positive descriptor number");
     }
 
@@ -1444,10 +1408,8 @@ int main(int argc, char** argv) {
     const auto cors_methods_it = values.find("cors-methods");
     const auto cors_headers_it = values.find("cors-headers");
     const auto cors_max_age_it = values.find("cors-max-age");
-    if (cors_origins_it != values.end() ||
-        cors_methods_it != values.end() ||
-        cors_headers_it != values.end() ||
-        cors_max_age_it != values.end()) {
+    if (cors_origins_it != values.end() || cors_methods_it != values.end() ||
+        cors_headers_it != values.end() || cors_max_age_it != values.end()) {
         if (cors_origins_it == values.end()) {
             fail("--cors-origins is required when any --cors-* flag "
                  "is given");
@@ -1455,22 +1417,17 @@ int main(int argc, char** argv) {
         if (cors_methods_it == values.end()) {
             fail("--cors-methods is required with --cors-origins");
         }
-        const auto split_list = [](const std::string& text,
-                                   const char* flag) {
+        const auto split_list = [](const std::string& text, const char* flag) {
             std::vector<std::string> items;
             std::size_t start = 0;
             while (start <= text.size()) {
                 const std::size_t comma = text.find(',', start);
-                const std::size_t end = comma == std::string::npos
-                                            ? text.size()
-                                            : comma;
+                const std::size_t end = comma == std::string::npos ? text.size() : comma;
                 std::string item = text.substr(start, end - start);
-                item.erase(0, item.find_first_not_of(" \t") ==
-                                      std::string::npos
+                item.erase(0, item.find_first_not_of(" \t") == std::string::npos
                                   ? item.size()
                                   : item.find_first_not_of(" \t"));
-                item.erase(item.find_last_not_of(" \t") ==
-                                   std::string::npos
+                item.erase(item.find_last_not_of(" \t") == std::string::npos
                                ? 0
                                : item.find_last_not_of(" \t") + 1);
                 if (item.empty()) {
@@ -1485,26 +1442,23 @@ int main(int argc, char** argv) {
             return items;
         };
         options.cors.configured = true;
-        options.cors.allowed_origins =
-            split_list(cors_origins_it->second, "--cors-origins");
+        options.cors.allowed_origins = split_list(cors_origins_it->second, "--cors-origins");
         if (options.cors.allowed_origins.size() > 1 &&
-            std::find(options.cors.allowed_origins.begin(),
-                      options.cors.allowed_origins.end(),
+            std::find(options.cors.allowed_origins.begin(), options.cors.allowed_origins.end(),
                       "*") != options.cors.allowed_origins.end()) {
             fail("--cors-origins cannot combine * with exact origins");
         }
         for (const std::string& origin : options.cors.allowed_origins) {
             if (!capsid::host::valid_cors_origin(origin)) {
                 fail("--cors-origins entry is not \"*\" or an http(s):// "
-                     "origin: " + origin);
+                     "origin: " +
+                     origin);
             }
         }
-        options.cors.allowed_methods =
-            split_list(cors_methods_it->second, "--cors-methods");
+        options.cors.allowed_methods = split_list(cors_methods_it->second, "--cors-methods");
         for (std::string& method : options.cors.allowed_methods) {
             if (!capsid::host::valid_cors_method_token(method)) {
-                fail("--cors-methods entry is not an HTTP method token: " +
-                     method);
+                fail("--cors-methods entry is not an HTTP method token: " + method);
             }
             for (char& c : method) {
                 if (c >= 'a' && c <= 'z') {
@@ -1513,12 +1467,10 @@ int main(int argc, char** argv) {
             }
         }
         if (cors_headers_it != values.end()) {
-            options.cors.allowed_headers =
-                split_list(cors_headers_it->second, "--cors-headers");
+            options.cors.allowed_headers = split_list(cors_headers_it->second, "--cors-headers");
             for (std::string& header : options.cors.allowed_headers) {
                 if (!capsid::host::valid_cors_header_token(header)) {
-                    fail("--cors-headers entry is not an HTTP field name: " +
-                         header);
+                    fail("--cors-headers entry is not an HTTP field name: " + header);
                 }
                 for (char& c : header) {
                     if (c >= 'A' && c <= 'Z') {
@@ -1528,10 +1480,9 @@ int main(int argc, char** argv) {
             }
         }
         if (cors_max_age_it != values.end()) {
-            const std::uint64_t seconds = parse_positive_integer(
-                cors_max_age_it->second, "cors-max-age");
-            if (seconds >
-                std::numeric_limits<std::uint64_t>::max() / 1000) {
+            const std::uint64_t seconds =
+                parse_positive_integer(cors_max_age_it->second, "cors-max-age");
+            if (seconds > std::numeric_limits<std::uint64_t>::max() / 1000) {
                 fail("--cors-max-age exceeds the millisecond range");
             }
             options.cors.max_age_ms = seconds * 1000;
@@ -1546,8 +1497,7 @@ int main(int argc, char** argv) {
     std::uint32_t workers = 1;
     if (mode == "static-pool") {
         const std::string workers_text = require("workers");
-        const std::uint64_t parsed_workers =
-            parse_positive_integer(workers_text, "workers");
+        const std::uint64_t parsed_workers = parse_positive_integer(workers_text, "workers");
         if (parsed_workers > capsid::host::kMaxStaticPoolWorkers) {
             fail("--workers exceeds the static-pool worker limit (" +
                  std::to_string(capsid::host::kMaxStaticPoolWorkers) + ")");
@@ -1561,20 +1511,18 @@ int main(int argc, char** argv) {
     // Every field is optional; a missing value keeps the data plane
     // default. There is no main.cc hardcoding — the values flow into
     // StaticPoolServerOptions / SingleWorkerServerOptions below.
-    const auto optional_value = [&values](const std::string& name)
-        -> const std::string* {
+    const auto optional_value = [&values](const std::string& name) -> const std::string* {
         const auto it = values.find(name);
         return it == values.end() ? nullptr : &it->second;
     };
     const std::string* inflight_text = optional_value("max-inflight-per-worker");
     if (inflight_text != nullptr) {
-        options.max_inflight_per_worker = parse_positive_integer(
-            *inflight_text, "max-inflight-per-worker");
+        options.max_inflight_per_worker =
+            parse_positive_integer(*inflight_text, "max-inflight-per-worker");
     }
     const std::string* queue_text = optional_value("queue-requests");
     if (queue_text != nullptr) {
-        options.queue_requests =
-            parse_nonnegative_integer(*queue_text, "queue-requests");
+        options.queue_requests = parse_nonnegative_integer(*queue_text, "queue-requests");
     }
     const std::string* queue_bytes_text = optional_value("queue-header-bytes");
     if (queue_bytes_text != nullptr) {
@@ -1584,8 +1532,7 @@ int main(int argc, char** argv) {
     }
     const std::string* queue_timeout_text = optional_value("queue-timeout");
     if (queue_timeout_text != nullptr) {
-        options.queue_timeout_ms = parse_duration_ms(
-            *queue_timeout_text, "queue-timeout");
+        options.queue_timeout_ms = parse_duration_ms(*queue_timeout_text, "queue-timeout");
     }
     // M2 E-2 SSE permit (§9.3): the benchmark CLI mirrors the effective
     // config's request fields. Unlike the JSON route (where 0 = field not
@@ -1593,20 +1540,19 @@ int main(int argc, char** argv) {
     // as --max-inflight-per-worker 0.
     const std::string* streaming_text = optional_value("max-streaming-inflight");
     if (streaming_text != nullptr) {
-        options.max_streaming_inflight_per_worker = parse_nonnegative_integer(
-            *streaming_text, "max-streaming-inflight");
+        options.max_streaming_inflight_per_worker =
+            parse_nonnegative_integer(*streaming_text, "max-streaming-inflight");
     }
     const std::string* idle_text = optional_value("stream-idle-timeout");
     if (idle_text != nullptr) {
-        options.stream_idle_timeout_ms = parse_nonnegative_integer(
-            *idle_text, "stream-idle-timeout");
+        options.stream_idle_timeout_ms =
+            parse_nonnegative_integer(*idle_text, "stream-idle-timeout");
     }
     // M2 E-3 slow-client write deadline (§9.2): CLI 0 = unlimited, the same
     // data-plane semantics as the other CLI fields above.
     const std::string* write_timeout_text = optional_value("write-timeout");
     if (write_timeout_text != nullptr) {
-        options.write_timeout_ms = parse_nonnegative_integer(
-            *write_timeout_text, "write-timeout");
+        options.write_timeout_ms = parse_nonnegative_integer(*write_timeout_text, "write-timeout");
     }
     // v0.1.3 local capsid.json permissions. The default ./capsid.json is
     // tried whenever it exists; an explicit --capsid-json must exist. The
@@ -1629,18 +1575,15 @@ int main(int argc, char** argv) {
     // never required and the worker remains on its baseline Runtime path.
     const std::string* bindings_root_text = optional_value("bindings-root");
     if (bindings_root_text != nullptr) {
-        auto registry =
-            std::make_shared<capsid::host::BindingRegistrySnapshot>();
+        auto registry = std::make_shared<capsid::host::BindingRegistrySnapshot>();
         std::string scan_error;
 #if defined(_WIN32)
         const std::vector<capsid::host::BindingOwnerId> allowed_owners = {0};
 #else
-        const std::vector<capsid::host::BindingOwnerId> allowed_owners = {
-            0, geteuid()};
+        const std::vector<capsid::host::BindingOwnerId> allowed_owners = {0, geteuid()};
 #endif
-        if (!capsid::host::scan_bindings_root(
-                *bindings_root_text, allowed_owners, registry.get(),
-                &scan_error)) {
+        if (!capsid::host::scan_bindings_root(*bindings_root_text, allowed_owners, registry.get(),
+                                              &scan_error)) {
             fail("--bindings-root rejected: " + scan_error);
         }
         options.binding_registry = std::move(registry);
@@ -1650,12 +1593,11 @@ int main(int argc, char** argv) {
         std::string policy_error;
         if (!capsid::host::load_local_capsid_policy(
                 options.capsid_json_path, options.capsid_json_required,
-                options.binding_registry.get(), options.secrets_root,
-                local_policy.get(), &policy_error)) {
+                options.binding_registry.get(), options.secrets_root, local_policy.get(),
+                &policy_error)) {
             fail(policy_error);
         }
-        const capsid::host::LocalCapsidPolicy::RuntimeSettings& settings =
-            local_policy->settings;
+        const capsid::host::LocalCapsidPolicy::RuntimeSettings& settings = local_policy->settings;
         if (!explicit_source_bundle) {
             if (!local_policy->present || !settings.has_entry) {
                 fail("--source-bundle is required unless capsid.json "
@@ -1664,23 +1606,18 @@ int main(int argc, char** argv) {
             // The capsid.json directory is the app version directory; the
             // entry names the bundle file inside it (the managed layout).
             std::string directory = options.capsid_json_path;
-            const std::string::size_type slash = directory.find_last_of(
-                "/\\");
-            directory = slash == std::string::npos
-                            ? std::string()
-                            : directory.substr(0, slash);
+            const std::string::size_type slash = directory.find_last_of("/\\");
+            directory = slash == std::string::npos ? std::string() : directory.substr(0, slash);
             std::string bundle_path =
-                directory.empty() ? settings.entry
-                                  : directory + "/" + settings.entry;
+                directory.empty() ? settings.entry : directory + "/" + settings.entry;
             char cwd_buffer[4096];
             if (getcwd(cwd_buffer, sizeof(cwd_buffer)) == nullptr) {
                 fail("cannot resolve the working directory");
             }
             const std::string cwd(cwd_buffer);
-            const std::string absolute =
-                std::filesystem::path(bundle_path).is_absolute()
-                    ? bundle_path
-                    : cwd + "/" + bundle_path;
+            const std::string absolute = std::filesystem::path(bundle_path).is_absolute()
+                                             ? bundle_path
+                                             : cwd + "/" + bundle_path;
             options.source_bundle_path = absolute;
             // file:// URL identity: forward slashes, RFC 8089 local form.
             std::string url_path = absolute;
@@ -1689,34 +1626,26 @@ int main(int argc, char** argv) {
                     ch = '/';
                 }
             }
-            options.source_name = std::string("file://") +
-                                  (url_path.rfind('/', 0) == 0 ? "" : "/") +
-                                  url_path;
+            options.source_name =
+                std::string("file://") + (url_path.rfind('/', 0) == 0 ? "" : "/") + url_path;
         }
         // The document fills the knobs the CLI left unset; an explicit CLI
         // flag always wins over the document (the CLI is the override).
-        if (!values.count("request-timeout-ms") &&
-            settings.has_request_timeout_ms) {
+        if (!values.count("request-timeout-ms") && settings.has_request_timeout_ms) {
             options.request_timeout_ms = settings.request_timeout_ms;
         }
         if (options.request_timeout_ms == 0) {
             fail("--request-timeout-ms is required unless capsid.json "
                  "provides request.timeout");
         }
-        if (!values.count("max-inflight-per-worker") &&
-            settings.has_max_inflight) {
-            options.max_inflight_per_worker =
-                settings.max_inflight_per_worker;
+        if (!values.count("max-inflight-per-worker") && settings.has_max_inflight) {
+            options.max_inflight_per_worker = settings.max_inflight_per_worker;
         }
-        if (!values.count("max-streaming-inflight") &&
-            settings.has_max_streaming_inflight) {
-            options.max_streaming_inflight_per_worker =
-                settings.max_streaming_inflight_per_worker;
+        if (!values.count("max-streaming-inflight") && settings.has_max_streaming_inflight) {
+            options.max_streaming_inflight_per_worker = settings.max_streaming_inflight_per_worker;
         }
-        if (!values.count("stream-idle-timeout") &&
-            settings.has_stream_idle_timeout_ms) {
-            options.stream_idle_timeout_ms =
-                settings.stream_idle_timeout_ms;
+        if (!values.count("stream-idle-timeout") && settings.has_stream_idle_timeout_ms) {
+            options.stream_idle_timeout_ms = settings.stream_idle_timeout_ms;
         }
         if (!values.count("write-timeout") && settings.has_write_timeout_ms) {
             options.write_timeout_ms = settings.write_timeout_ms;
@@ -1724,8 +1653,7 @@ int main(int argc, char** argv) {
         if (!values.count("queue-requests") && settings.has_queue_requests) {
             options.queue_requests = settings.queue_requests;
         }
-        if (!values.count("queue-header-bytes") &&
-            settings.has_queue_header_bytes) {
+        if (!values.count("queue-header-bytes") && settings.has_queue_header_bytes) {
             options.queue_header_bytes = settings.queue_header_bytes;
         }
         if (!values.count("queue-timeout") && settings.has_queue_timeout_ms) {
@@ -1753,34 +1681,31 @@ int main(int argc, char** argv) {
     std::unique_ptr<capsid::host::ParentStopMonitor> parent_stop;
     if (const auto it = values.find("stop-fd"); it != values.end()) {
         const std::uint64_t stop_fd = parse_positive_integer(it->second, "stop-fd");
-        if (stop_fd < 3 || stop_fd > static_cast<std::uint64_t>(
-                std::numeric_limits<short>::max()) || stop_fd == ready_fd) {
+        if (stop_fd < 3 ||
+            stop_fd > static_cast<std::uint64_t>(std::numeric_limits<short>::max()) ||
+            stop_fd == ready_fd) {
             fail("--stop-fd must be a descriptor above 2, distinct from --ready-fd");
         }
         std::string error;
-        parent_stop = capsid::host::ParentStopMonitor::create(
-            static_cast<int>(stop_fd), &error);
-        if (!parent_stop) fail("--stop-fd: " + error);
+        parent_stop = capsid::host::ParentStopMonitor::create(static_cast<int>(stop_fd), &error);
+        if (!parent_stop)
+            fail("--stop-fd: " + error);
     }
 
-    const std::vector<std::uint8_t> bundle =
-        read_bundle(options.source_bundle_path);
+    const std::vector<std::uint8_t> bundle = read_bundle(options.source_bundle_path);
 
     // M2 item 7 (design §12): the process-wide structured log and metrics
     // registry for the data-plane modes. The render-time snapshot follows
     // the single active worker, which these modes publish at spawn.
-    auto structured_log = std::make_unique<capsid::host::StructuredLog>(
-        [](const std::string& line) {
+    auto structured_log =
+        std::make_unique<capsid::host::StructuredLog>([](const std::string& line) {
 #if defined(_WIN32)
             // MSVC write() takes an unsigned int count; structured log
             // lines are single small JSON objects.
-            const ssize_t written = ::write(
-                STDERR_FILENO,
-                line.data(),
-                static_cast<unsigned int>(line.size()));
+            const ssize_t written =
+                ::write(STDERR_FILENO, line.data(), static_cast<unsigned int>(line.size()));
 #else
-            const ssize_t written = ::write(STDERR_FILENO, line.data(),
-                                            line.size());
+            const ssize_t written = ::write(STDERR_FILENO, line.data(), line.size());
 #endif
             (void)written;
         });
@@ -1804,16 +1729,16 @@ int main(int argc, char** argv) {
         // managed-pool batch) and override the template when set.
         pool_options.worker_options = std::move(options);
         capsid::host::StaticPoolServer pool(std::move(pool_options));
-        const int exit_code = run_with_parent_stop(
-            pool, bundle, std::move(parent_stop), structured_log.get());
+        const int exit_code =
+            run_with_parent_stop(pool, bundle, std::move(parent_stop), structured_log.get());
         structured_log->log(capsid::host::LogLane::kControl,
                             {.event = capsid::host::log_events::kShutdown});
         structured_log->flush();
         return exit_code;
     }
     capsid::host::SingleWorkerServer server(std::move(options));
-    const int exit_code = run_with_parent_stop(
-        server, bundle, std::move(parent_stop), structured_log.get());
+    const int exit_code =
+        run_with_parent_stop(server, bundle, std::move(parent_stop), structured_log.get());
     structured_log->log(capsid::host::LogLane::kControl,
                         {.event = capsid::host::log_events::kShutdown});
     structured_log->flush();

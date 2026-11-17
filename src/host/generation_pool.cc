@@ -32,8 +32,7 @@ constexpr std::uint64_t kNoDue = 0;
 
 std::uint64_t steady_ms() {
     return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            SteadyClock::now().time_since_epoch())
+        std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now().time_since_epoch())
             .count());
 }
 
@@ -45,16 +44,14 @@ void emit_log(StructuredLog* log, LogLane lane, LogFields fields) {
     }
 }
 
-void count_event(MetricsRegistry* metrics,
-                 const std::string& event,
-                 const std::string& app,
+void count_event(MetricsRegistry* metrics, const std::string& event, const std::string& app,
                  const std::string& generation) {
     if (metrics != nullptr) {
         metrics->count_worker_event(event, app, generation);
     }
 }
 
-}  // namespace
+} // namespace
 
 GenerationPool::GenerationPool(GenerationPoolOptions options)
     : options_(std::move(options)), policy_(options_.recovery) {
@@ -77,8 +74,8 @@ GenerationPool::~GenerationPool() {
     wait(&error);
 }
 
-std::shared_ptr<GenerationPool> GenerationPool::create(
-    GenerationPoolOptions options, std::string* error) {
+std::shared_ptr<GenerationPool> GenerationPool::create(GenerationPoolOptions options,
+                                                       std::string* error) {
     if (options.workers == 0) {
         if (error != nullptr) {
             *error = "generation pool requires at least one worker";
@@ -97,13 +94,10 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
     // contract (worker_recovery.cc valid_policy) so a misconfigured pool
     // fails here with a clear message instead of silently serving N-1
     // forever (a zero field would make every decision an error).
-    if (options.recovery.max_events == 0U ||
-        options.recovery.window_ms == 0U ||
+    if (options.recovery.max_events == 0U || options.recovery.window_ms == 0U ||
         options.recovery.backoff_initial_ms == 0U ||
-        options.recovery.backoff_maximum_ms <
-            options.recovery.backoff_initial_ms ||
-        options.recovery.jitter_basis_points > 10000U ||
-        options.recovery.stable_reset_ms == 0U ||
+        options.recovery.backoff_maximum_ms < options.recovery.backoff_initial_ms ||
+        options.recovery.jitter_basis_points > 10000U || options.recovery.stable_reset_ms == 0U ||
         options.recovery.replacements_concurrent_per_app == 0U) {
         if (error != nullptr) {
             *error = "invalid recovery policy (mirrors the controller's "
@@ -130,18 +124,14 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
     for (std::uint32_t index = 0; index < pool->options_.workers; ++index) {
         std::shared_ptr<WorkerExecutor> executor(new WorkerExecutor());
         executor->set_channel_budget(pool->options_.channel_budget);
-        executor->set_log_identity(pool->options_.application_id,
-                                   pool->options_.generation_digest);
+        executor->set_log_identity(pool->options_.application_id, pool->options_.generation_digest);
         // A temporary weak.lock() can become the last owner and invoke
         // the pool destructor on this executor thread, which then waits
         // for its own exit. The pool owns and joins the executor instead.
-        executor->set_event_notifier([owner = pool.get()] {
-            owner->notify_executor_event();
-        });
+        executor->set_event_notifier([owner = pool.get()] { owner->notify_executor_event(); });
         if (!executor->start(pool->options_.factory, &spawn_error)) {
             if (error != nullptr) {
-                *error = "generation pool worker " +
-                         std::to_string(index + 1) + "/" +
+                *error = "generation pool worker " + std::to_string(index + 1) + "/" +
                          std::to_string(pool->options_.workers) +
                          " failed to start: " + spawn_error;
             }
@@ -161,8 +151,7 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
         slot.ready = true;
         pool->slots_.push_back(std::move(slot));
         if (pool->options_.on_worker_started) {
-            pool->options_.on_worker_started(
-                pool->slots_.back().executor.get());
+            pool->options_.on_worker_started(pool->slots_.back().executor.get());
         }
     }
     pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
@@ -174,15 +163,13 @@ std::shared_ptr<GenerationPool> GenerationPool::create(
     // destroyed — its drain would never run and every worker would leak.
     // Lifetime is safe: wait() joins the pump before the pool is freed,
     // and every pump exit runs inside finalize_drain.
-    pool->pump_thread_ = std::thread([target = pool.get()] {
-        target->pump_loop();
-    });
+    pool->pump_thread_ = std::thread([target = pool.get()] { target->pump_loop(); });
     return pool;
 }
 
-std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
-    GenerationPoolOptions options, std::vector<capsid_worker*> warmed,
-    std::string* error) {
+std::shared_ptr<GenerationPool> GenerationPool::create_adopted(GenerationPoolOptions options,
+                                                               std::vector<capsid_worker*> warmed,
+                                                               std::string* error) {
     if (options.workers == 0 || warmed.size() != options.workers) {
         if (error != nullptr) {
             *error = "adopted generation pool requires exactly "
@@ -206,13 +193,10 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
         return nullptr;
     }
     // Same recovery-policy gate as create() (worker_recovery.cc valid_policy).
-    if (options.recovery.max_events == 0U ||
-        options.recovery.window_ms == 0U ||
+    if (options.recovery.max_events == 0U || options.recovery.window_ms == 0U ||
         options.recovery.backoff_initial_ms == 0U ||
-        options.recovery.backoff_maximum_ms <
-            options.recovery.backoff_initial_ms ||
-        options.recovery.jitter_basis_points > 10000U ||
-        options.recovery.stable_reset_ms == 0U ||
+        options.recovery.backoff_maximum_ms < options.recovery.backoff_initial_ms ||
+        options.recovery.jitter_basis_points > 10000U || options.recovery.stable_reset_ms == 0U ||
         options.recovery.replacements_concurrent_per_app == 0U) {
         if (error != nullptr) {
             *error = "invalid recovery policy (mirrors the controller's "
@@ -244,11 +228,8 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
     for (std::uint32_t index = 0; index < pool->options_.workers; ++index) {
         std::shared_ptr<WorkerExecutor> executor(new WorkerExecutor());
         executor->set_channel_budget(pool->options_.channel_budget);
-        executor->set_log_identity(pool->options_.application_id,
-                                   pool->options_.generation_digest);
-        executor->set_event_notifier([owner = pool.get()] {
-            owner->notify_executor_event();
-        });
+        executor->set_log_identity(pool->options_.application_id, pool->options_.generation_digest);
+        executor->set_event_notifier([owner = pool.get()] { owner->notify_executor_event(); });
         if (!executor->adopt(warmed[index], error)) {
             // Ownership of the entire warmed fleet transferred at entry.
             // adopt() did not take this worker or the unvisited suffix;
@@ -259,7 +240,7 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
             for (const Slot& slot : pool->slots_) {
                 slot.executor->stop_and_join();
             }
-            pool->state_ = State::kDead;  // the pump never started
+            pool->state_ = State::kDead; // the pump never started
             return nullptr;
         }
         Slot slot;
@@ -267,8 +248,7 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
         slot.ready = true;
         pool->slots_.push_back(std::move(slot));
         if (pool->options_.on_worker_started) {
-            pool->options_.on_worker_started(
-                pool->slots_.back().executor.get());
+            pool->options_.on_worker_started(pool->slots_.back().executor.get());
         }
     }
     pool->replacement_due_ms_.assign(pool->slots_.size(), kNoDue);
@@ -276,18 +256,15 @@ std::shared_ptr<GenerationPool> GenerationPool::create_adopted(
     pool->stable_since_ms_ = steady_ms();
     // Bare pointer, same lifetime contract as create() (see above): never
     // self-hold the pool, or an aborted §9.3 activation leaks every worker.
-    pool->pump_thread_ = std::thread([target = pool.get()] {
-        target->pump_loop();
-    });
+    pool->pump_thread_ = std::thread([target = pool.get()] { target->pump_loop(); });
     return pool;
 }
 
 void GenerationPool::request_drain() {
     {
         std::unique_lock<std::mutex> lock(mutex_);
-        if (state_ == State::kDead ||
-            (state_ == State::kDraining && !quarantine_waiting_)) {
-            return;  // idempotent
+        if (state_ == State::kDead || (state_ == State::kDraining && !quarantine_waiting_)) {
+            return; // idempotent
         }
         quarantine_waiting_ = false;
         state_ = State::kDraining;
@@ -313,7 +290,7 @@ void GenerationPool::stop_and_join() {
 }
 
 bool GenerationPool::wait(std::string* error) {
-    request_drain();  // wait() implies the drain request (idempotent)
+    request_drain(); // wait() implies the drain request (idempotent)
     {
         std::unique_lock<std::mutex> lock(mutex_);
         cv_.wait(lock, [this] { return state_ == State::kDead; });
@@ -340,7 +317,8 @@ bool GenerationPool::wait(std::string* error) {
 
 std::int64_t GenerationPool::worker_process_id() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (state_ != State::kActive) return 0;
+    if (state_ != State::kActive)
+        return 0;
     for (const Slot& slot : slots_) {
         if (slot.ready && slot.executor->available()) {
             return slot.executor->process_id();
@@ -352,7 +330,7 @@ std::int64_t GenerationPool::worker_process_id() const {
 WorkerExecutor* GenerationPool::pick_worker() {
     std::unique_lock<std::mutex> lock(mutex_);
     if (state_ != State::kActive) {
-        return nullptr;  // draining/dead: the caller answers 503
+        return nullptr; // draining/dead: the caller answers 503
     }
     WorkerExecutor* best = nullptr;
     std::uint64_t best_load = std::numeric_limits<std::uint64_t>::max();
@@ -384,9 +362,7 @@ WorkerExecutor* GenerationPool::pick_worker() {
     return best;
 }
 
-WorkerExecutor* GenerationPool::current_worker() {
-    return current_worker_snapshot().get();
-}
+WorkerExecutor* GenerationPool::current_worker() { return current_worker_snapshot().get(); }
 
 std::shared_ptr<WorkerExecutor> GenerationPool::current_worker_snapshot() {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -414,7 +390,7 @@ bool GenerationPool::recycle_worker(WorkerExecutor* target) {
         }
     }
     if (slot == slots_.size()) {
-        return false;  // stale target: already removed or replaced
+        return false; // stale target: already removed or replaced
     }
     Slot& s = slots_[slot];
     // The worker is still ALIVE: the recycle must retire it. The
@@ -441,32 +417,30 @@ bool GenerationPool::recycle_worker(WorkerExecutor* target) {
     observation.target_ready_workers = options_.workers;
     observation.replacements_in_flight_for_app =
         static_cast<std::uint32_t>(replacements_scheduled_);
-    observation.chosen_jitter_basis_points = 0;  // deterministic v1
-    count_event(options_.metrics, "unhealthy", options_.application_id,
-                options_.generation_digest);
+    observation.chosen_jitter_basis_points = 0; // deterministic v1
+    count_event(options_.metrics, "unhealthy", options_.application_id, options_.generation_digest);
     record_instability(slot, observation, "unhealthy");
     // record_instability armed the replacement (or began quarantine,
     // which requests every slot's shutdown); the target's shutdown is
     // issued regardless so the alive-but-unhealthy worker exits to the
     // reaper (the executor's worker thread owns the destroy).
-    if (!quarantine_waiting_) s.executor->request_shutdown();
+    if (!quarantine_waiting_)
+        s.executor->request_shutdown();
     return true;
 }
 
-void GenerationPool::record_instability(
-    std::size_t slot, WorkerInstabilityObservation observation,
-    const char* reason) {
+void GenerationPool::record_instability(std::size_t slot, WorkerInstabilityObservation observation,
+                                        const char* reason) {
     // Under the pool mutex.
-    const WorkerRecoveryDecision decision = record_worker_instability(
-        recovery_state_, policy_, lifecycle_, observation);
+    const WorkerRecoveryDecision decision =
+        record_worker_instability(recovery_state_, policy_, lifecycle_, observation);
     if (!decision.ok) {
         // A malformed decision is an operator-facing failure, not a silent
         // one: keep serving at N-1 (or 0) without a replacement.
         std::fprintf(stderr,
                      "capsid-host: generation pool %s: recovery controller "
                      "rejected the instability record (%s)\n",
-                     options_.application_id.c_str(),
-                     decision.error.message.c_str());
+                     options_.application_id.c_str(), decision.error.message.c_str());
         return;
     }
     recovery_state_ = decision.state;
@@ -476,12 +450,11 @@ void GenerationPool::record_instability(
         const std::uint64_t remaining =
             decision.events_in_window >= policy_.max_events
                 ? 0
-                : static_cast<std::uint64_t>(
-                      policy_.max_events - decision.events_in_window);
-        options_.metrics->set_recovery_instability_budget_remaining(
-            options_.application_id, remaining);
-        options_.metrics->set_recovery_backoff_ms(
-            options_.application_id, decision.replacement_delay_ms);
+                : static_cast<std::uint64_t>(policy_.max_events - decision.events_in_window);
+        options_.metrics->set_recovery_instability_budget_remaining(options_.application_id,
+                                                                    remaining);
+        options_.metrics->set_recovery_backoff_ms(options_.application_id,
+                                                  decision.replacement_delay_ms);
     }
     if (decision.begin_quarantine) {
         begin_quarantine();
@@ -492,15 +465,15 @@ void GenerationPool::record_instability(
         s.replacement_in_flight = true;
         ++replacements_scheduled_;
         s.replacement_reason = reason;
-        replacement_due_ms_[slot] =
-            observation.now_ms + decision.replacement_delay_ms;
-        cv_.notify_all();  // the pump re-evaluates its deadline wait
+        replacement_due_ms_[slot] = observation.now_ms + decision.replacement_delay_ms;
+        cv_.notify_all(); // the pump re-evaluates its deadline wait
     }
 }
 
 void GenerationPool::begin_quarantine() {
     // Under the pool mutex.
-    if (state_ != State::kActive) return;
+    if (state_ != State::kActive)
+        return;
     LogFields fields;
     fields.level = "error";
     fields.event = log_events::kQuarantine;
@@ -532,8 +505,7 @@ void GenerationPool::finish_quarantine_locked() {
     cv_.notify_all();
 }
 
-void GenerationPool::set_event_sink(
-    std::function<void(const WorkerExecutor*, WorkerEvent)> sink) {
+void GenerationPool::set_event_sink(std::function<void(const WorkerExecutor*, WorkerEvent)> sink) {
     // The pump reads options_.event_sink under the same mutex, so the swap
     // is atomic with respect to every drain sweep.
     std::lock_guard<std::mutex> lock(mutex_);
@@ -572,20 +544,15 @@ GenerationPool::State GenerationPool::state() const {
     return state_;
 }
 
-std::string_view GenerationPool::application_id() const {
-    return options_.application_id;
-}
+std::string_view GenerationPool::application_id() const { return options_.application_id; }
 
-std::string_view GenerationPool::version() const {
-    return options_.version;
-}
+std::string_view GenerationPool::version() const { return options_.version; }
 
-std::string_view GenerationPool::generation_digest() const {
-    return options_.generation_digest;
-}
+std::string_view GenerationPool::generation_digest() const { return options_.generation_digest; }
 
 void GenerationPool::notify_executor_event() {
-    if (options_.on_executor_notify) options_.on_executor_notify();
+    if (options_.on_executor_notify)
+        options_.on_executor_notify();
     std::lock_guard<std::mutex> lock(mutex_);
     events_pending_ = true;
     cv_.notify_all();
@@ -597,7 +564,8 @@ void GenerationPool::pump_loop() {
         if (quarantine_notification_pending_) {
             quarantine_notification_pending_ = false;
             lock.unlock();
-            if (options_.on_quarantine) options_.on_quarantine();
+            if (options_.on_quarantine)
+                options_.on_quarantine();
             lock.lock();
         }
         if (quarantine_waiting_ &&
@@ -610,8 +578,8 @@ void GenerationPool::pump_loop() {
         if (state_ == State::kDraining && !quarantine_waiting_) {
             for (Slot& slot : slots_) {
                 if (!slot.executor->exited() &&
-                    ((slot.executor->inflight()==0 && slot.executor->connection_owners()==0) ||
-                     (drain_until_ && SteadyClock::now()>=*drain_until_))) {
+                    ((slot.executor->inflight() == 0 && slot.executor->connection_owners() == 0) ||
+                     (drain_until_ && SteadyClock::now() >= *drain_until_))) {
                     slot.executor->request_shutdown();
                 }
             }
@@ -627,8 +595,8 @@ void GenerationPool::pump_loop() {
         if (stable_since_ms_ != 0 && policy_.stable_reset_ms != 0) {
             const std::uint64_t now = steady_ms();
             if (now - stable_since_ms_ >= policy_.stable_reset_ms) {
-                const WorkerStabilityResult stability = observe_worker_stability(
-                    recovery_state_, policy_, stable_since_ms_, now);
+                const WorkerStabilityResult stability =
+                    observe_worker_stability(recovery_state_, policy_, stable_since_ms_, now);
                 if (stability.ok) {
                     recovery_state_ = stability.state;
                 }
@@ -641,17 +609,15 @@ void GenerationPool::pump_loop() {
         if (state_ == State::kActive) {
             const std::uint64_t now = steady_ms();
             for (std::size_t index = 0; index < slots_.size(); ++index) {
-                if (replacement_due_ms_[index] != kNoDue &&
-                    replacement_due_ms_[index] <= now) {
+                if (replacement_due_ms_[index] != kNoDue && replacement_due_ms_[index] <= now) {
                     replacement_due_ms_[index] = kNoDue;
                     ++replacements_in_flight_;
-                    replacement_threads_.emplace_back(
-                        [owner = this, index] {
-                            // wait() joins replacement producers too;
-                            // they must not release the last pool owner
-                            // on a thread that its destructor would join.
-                            owner->run_replacement(index);
-                        });
+                    replacement_threads_.emplace_back([owner = this, index] {
+                        // wait() joins replacement producers too;
+                        // they must not release the last pool owner
+                        // on a thread that its destructor would join.
+                        owner->run_replacement(index);
+                    });
                 }
             }
         }
@@ -663,9 +629,8 @@ void GenerationPool::pump_loop() {
                 next_due = due;
             }
         }
-        if (!events_pending_ &&
-            !(state_ == State::kDraining && !quarantine_waiting_ && fleet_exited() &&
-              replacements_in_flight_ == 0)) {
+        if (!events_pending_ && !(state_ == State::kDraining && !quarantine_waiting_ &&
+                                  fleet_exited() && replacements_in_flight_ == 0)) {
             // request_drain changes state without adding an event. Wake
             // an ACTIVE wait on that transition even when live channels
             // still pin the fleet, so the next iteration can enforce the
@@ -683,9 +648,7 @@ void GenerationPool::pump_loop() {
             // wait returns, the loop recomputes next_due, and the
             // deadline wait below sleeps until the replacement is due.
             const auto wake = [this] {
-                return events_pending_ ||
-                       due_pending_locked() ||
-                       state_ == State::kDraining;
+                return events_pending_ || due_pending_locked() || state_ == State::kDraining;
             };
             if (state_ == State::kDraining) {
                 // A host ACK can return the final channel slot without a
@@ -700,13 +663,9 @@ void GenerationPool::pump_loop() {
                 // would busy-loop the wait_until).
                 cv_.wait_until(
                     lock,
-                    SteadyClock::time_point(
-                        std::chrono::duration_cast<SteadyClock::duration>(
-                            std::chrono::milliseconds(next_due))),
-                    [this] {
-                        return events_pending_ ||
-                               state_ == State::kDraining;
-                    });
+                    SteadyClock::time_point(std::chrono::duration_cast<SteadyClock::duration>(
+                        std::chrono::milliseconds(next_due))),
+                    [this] { return events_pending_ || state_ == State::kDraining; });
             }
         }
         events_pending_ = false;
@@ -718,8 +677,7 @@ void GenerationPool::pump_loop() {
         // executor emits no per-request failure for a worker exit).
         std::vector<std::size_t> exited;
         for (std::size_t index = 0; index < slots_.size(); ++index) {
-            std::deque<WorkerEvent> batch =
-                slots_[index].executor->drain_events();
+            std::deque<WorkerEvent> batch = slots_[index].executor->drain_events();
             for (const WorkerEvent& event : batch) {
                 if (event.type == WorkerEvent::Type::kExit) {
                     exited.push_back(index);
@@ -755,7 +713,8 @@ bool GenerationPool::fleet_exited() const {
         }
     }
     for (const auto& executor : retired_) {
-        if (!executor->exited()) return false;
+        if (!executor->exited())
+            return false;
     }
     return true;
 }
@@ -782,7 +741,7 @@ void GenerationPool::handle_executor_exit(std::size_t slot) {
         // twice.
         return;
     }
-    s.ready = false;  // §8.3: EXIT removes the slot from the READY set now
+    s.ready = false; // §8.3: EXIT removes the slot from the READY set now
     stable_since_ms_ = 0;
     if (options_.on_worker_exited) {
         options_.on_worker_exited(s.executor.get());
@@ -809,9 +768,8 @@ void GenerationPool::handle_executor_exit(std::size_t slot) {
     observation.target_ready_workers = options_.workers;
     observation.replacements_in_flight_for_app =
         static_cast<std::uint32_t>(replacements_scheduled_);
-    observation.chosen_jitter_basis_points = 0;  // deterministic v1
-    count_event(options_.metrics, "crash", options_.application_id,
-                options_.generation_digest);
+    observation.chosen_jitter_basis_points = 0; // deterministic v1
+    count_event(options_.metrics, "crash", options_.application_id, options_.generation_digest);
     record_instability(slot, observation, "crashed");
 }
 
@@ -849,9 +807,7 @@ void GenerationPool::run_replacement(std::size_t slot) {
         request.application = options_.application_id;
         request.generation = options_.generation_digest;
         request.lane = StartupPermitLane::kReplacement;
-        const auto aborted = [this] {
-            return !active_flag_.load(std::memory_order_relaxed);
-        };
+        const auto aborted = [this] { return !active_flag_.load(std::memory_order_relaxed); };
         if (!options_.startup_permits->enqueue_and_wait(request, aborted)) {
             // Queue full, singleflight, stop, or the drain aborted the
             // wait: nothing was granted; the pool-side bookkeeping
@@ -863,8 +819,7 @@ void GenerationPool::run_replacement(std::size_t slot) {
         }
         grant_held = true;
         if (options_.metrics != nullptr) {
-            options_.metrics->count_recovery_startup_permit_grant(
-                options_.application_id);
+            options_.metrics->count_recovery_startup_permit_grant(options_.application_id);
         }
     }
 
@@ -872,8 +827,7 @@ void GenerationPool::run_replacement(std::size_t slot) {
     // effective config — §8.3) into a fresh executor.
     std::shared_ptr<WorkerExecutor> replacement(new WorkerExecutor());
     replacement->set_channel_budget(options_.channel_budget);
-    replacement->set_log_identity(options_.application_id,
-                                  options_.generation_digest);
+    replacement->set_log_identity(options_.application_id, options_.generation_digest);
     replacement->set_event_notifier([this] { notify_executor_event(); });
     std::string spawn_error;
     const bool ready = replacement->start(options_.factory, &spawn_error);
@@ -906,8 +860,7 @@ void GenerationPool::run_replacement(std::size_t slot) {
         observation.replacements_in_flight_for_app =
             static_cast<std::uint32_t>(replacements_scheduled_);
         observation.chosen_jitter_basis_points = 0;
-        count_event(options_.metrics, "crash", options_.application_id,
-                    options_.generation_digest);
+        count_event(options_.metrics, "crash", options_.application_id, options_.generation_digest);
         // A failed spawn is never installed, so the reason string is
         // meaningless here; it only names a later install.
         record_instability(slot, observation, "crashed");
@@ -918,8 +871,8 @@ void GenerationPool::run_replacement(std::size_t slot) {
     install_replacement(slot, std::move(replacement));
 }
 
-void GenerationPool::install_replacement(
-    std::size_t slot, std::shared_ptr<WorkerExecutor> replacement) {
+void GenerationPool::install_replacement(std::size_t slot,
+                                         std::shared_ptr<WorkerExecutor> replacement) {
     WorkerExecutor* installed = replacement.get();
     std::string reason;
     {
@@ -932,7 +885,7 @@ void GenerationPool::install_replacement(
         // cannot deadlock against the event notifier.
         retired_.push_back(std::move(s.executor));
         s.executor = std::move(replacement);
-        s.ready = true;  // the fleet is N again (§8.3)
+        s.ready = true; // the fleet is N again (§8.3)
         // A replacement installed into a draining pool is shut down right
         // here. The pump's drain sweep would issue the shutdown — but
         // nothing will wake the pump for it: this executor's READY events
@@ -950,7 +903,7 @@ void GenerationPool::install_replacement(
         reason = std::move(s.replacement_reason);
         s.replacement_reason.clear();
         if (ready_workers_locked() == options_.workers) {
-            stable_since_ms_ = steady_ms();  // full-READY epoch base
+            stable_since_ms_ = steady_ms(); // full-READY epoch base
         }
         // Singleflight gap: another slot may have died while this
         // replacement was in flight, its exit decision suppressed by the
@@ -978,9 +931,8 @@ void GenerationPool::install_replacement(
     fields.app = options_.application_id;
     fields.generation = options_.generation_digest;
     fields.result = "replaced";
-    fields.message = (reason == "unhealthy")
-                         ? "replaced unhealthy worker"
-                         : "replaced crashed worker";
+    fields.message =
+        (reason == "unhealthy") ? "replaced unhealthy worker" : "replaced crashed worker";
     emit_log(options_.log, LogLane::kControl, std::move(fields));
     count_event(options_.metrics, "replacement", options_.application_id,
                 options_.generation_digest);
@@ -1024,7 +976,8 @@ void GenerationPool::finalize_drain() {
     // §9.4: the reaper finished — the drained generation's capacity count
     // releases now. Outside the pool mutex (the callback must be able to
     // take its own locks), after every executor thread has joined.
-    if (options_.capacity_lease) options_.capacity_lease->reaped();
+    if (options_.capacity_lease)
+        options_.capacity_lease->reaped();
     // A child disappearing from /proc can precede this point: the sole
     // reaper still has executor bookkeeping to publish. Expose the actual
     // generation completion after its capacity category has been released.
@@ -1037,4 +990,4 @@ void GenerationPool::finalize_drain() {
     // snapshots may outlive these, but no executor producer remains live.
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

@@ -22,14 +22,13 @@ namespace {
 
 int ipc_fd = -1;
 std::string log_path;
-FILE *log_file = nullptr;
+FILE* log_file = nullptr;
 
-void log_frame(const capsid::protocol::Frame &frame) {
+void log_frame(const capsid::protocol::Frame& frame) {
     if (log_file == nullptr) {
         return;
     }
-    std::fprintf(log_file, "type=%u flags=%u rid=%llu payload=",
-                 frame.type, frame.flags,
+    std::fprintf(log_file, "type=%u flags=%u rid=%llu payload=", frame.type, frame.flags,
                  static_cast<unsigned long long>(frame.request_id));
     for (size_t i = 0; i < frame.payload.size(); ++i) {
         std::fprintf(log_file, "%02x", frame.payload[i]);
@@ -39,7 +38,7 @@ void log_frame(const capsid::protocol::Frame &frame) {
 }
 
 void send_frame(uint16_t type, uint32_t flags, uint64_t request_id,
-                const std::vector<uint8_t> &payload) {
+                const std::vector<uint8_t>& payload) {
     capsid::protocol::Frame frame;
     frame.type = type;
     frame.flags = flags;
@@ -52,8 +51,7 @@ void send_frame(uint16_t type, uint32_t flags, uint64_t request_id,
     }
     size_t written = 0;
     while (written < wire.size()) {
-        const ssize_t n = write(ipc_fd, wire.data() + written,
-                                wire.size() - written);
+        const ssize_t n = write(ipc_fd, wire.data() + written, wire.size() - written);
         if (n <= 0) {
             _exit(4);
         }
@@ -70,12 +68,11 @@ void send_ready(uint32_t caps) {
     send_frame(capsid::protocol::kReady, 0, 0, payload);
 }
 
-bool read_exact(size_t count, std::vector<uint8_t> *out) {
+bool read_exact(size_t count, std::vector<uint8_t>* out) {
     out->resize(count);
     size_t got = 0;
     while (got < count) {
-        const ssize_t n = read(ipc_fd, out->data() + got,
-                               count - got);
+        const ssize_t n = read(ipc_fd, out->data() + got, count - got);
         if (n <= 0) {
             return false;
         }
@@ -85,30 +82,27 @@ bool read_exact(size_t count, std::vector<uint8_t> *out) {
 }
 
 // Reads one frame (blocking). Returns false on EOF/error.
-bool read_frame(capsid::protocol::Frame *frame) {
+bool read_frame(capsid::protocol::Frame* frame) {
     std::vector<uint8_t> header;
     if (!read_exact(capsid::protocol::kHeaderSize, &header)) {
         return false;
     }
-    const uint32_t payload_size =
-        capsid::protocol::load_u32_at(header.data() + 20);
+    const uint32_t payload_size = capsid::protocol::load_u32_at(header.data() + 20);
     std::vector<uint8_t> payload;
     if (payload_size > 0 && !read_exact(payload_size, &payload)) {
         return false;
     }
     frame->type = capsid::protocol::load_u16_at(header.data() + 6);
     frame->flags = capsid::protocol::load_u32_at(header.data() + 8);
-    frame->request_id =
-        capsid::protocol::load_u32_at(header.data() + 12) |
-        static_cast<uint64_t>(
-            capsid::protocol::load_u32_at(header.data() + 16))
-            << 32;
+    frame->request_id = capsid::protocol::load_u32_at(header.data() + 12) |
+                        static_cast<uint64_t>(capsid::protocol::load_u32_at(header.data() + 16))
+                            << 32;
     frame->version = capsid::protocol::load_u16_at(header.data() + 4);
     frame->payload = payload;
     return true;
 }
 
-void send_dial(uint64_t dial_id, const char *url) {
+void send_dial(uint64_t dial_id, const char* url) {
     capsid::protocol::ChannelOpenPayload open;
     open.channel_id = 0;
     open.dial_id = dial_id;
@@ -124,37 +118,40 @@ void send_dial(uint64_t dial_id, const char *url) {
     send_frame(capsid::protocol::kChannelOpen, 0, 0, payload);
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     // The test's private launcher supplies fixture configuration explicitly.
     // The real spawn still supplies --ipc-fd and clears the parent environment.
     std::string early_mode;
     for (int i = 1; i + 1 < argc; ++i) {
-        if (strcmp(argv[i], "--ipc-fd") == 0) ipc_fd = std::atoi(argv[++i]);
-        else if (strcmp(argv[i], "--test-scenario") == 0) early_mode = argv[++i];
-        else if (strcmp(argv[i], "--test-log") == 0) log_path = argv[++i];
+        if (strcmp(argv[i], "--ipc-fd") == 0)
+            ipc_fd = std::atoi(argv[++i]);
+        else if (strcmp(argv[i], "--test-scenario") == 0)
+            early_mode = argv[++i];
+        else if (strcmp(argv[i], "--test-log") == 0)
+            log_path = argv[++i];
     }
-    if (ipc_fd < 0 || early_mode.empty() || log_path.empty()) return 2;
+    if (ipc_fd < 0 || early_mode.empty() || log_path.empty())
+        return 2;
     if (std::getenv("CAPSID_FAKE_PEER_SCENARIO") || std::getenv("CAPSID_FAKE_PEER_LOG"))
         return 3;
     log_file = std::fopen(log_path.c_str(), "w");
-    if (!log_file) return 4;
+    if (!log_file)
+        return 4;
 
     capsid::protocol::Frame frame;
-    const bool hello_ok =
-        read_frame(&frame) && frame.type == capsid::protocol::kHello &&
-        (frame.version == capsid::protocol::kVersionV4 ||
-         (early_mode == "v3" &&
-          frame.version == capsid::protocol::kVersion));
+    const bool hello_ok = read_frame(&frame) && frame.type == capsid::protocol::kHello &&
+                          (frame.version == capsid::protocol::kVersionV4 ||
+                           (early_mode == "v3" && frame.version == capsid::protocol::kVersion));
     if (!hello_ok) {
         _exit(6);
     }
     log_frame(frame);
     // HELLO payload: [startup][A2 ext when announced][tail]; the tail
     // carries the negotiated host capabilities.
-    const uint32_t caps = capsid::protocol::load_u32_at(
-        frame.payload.data() + frame.payload.size() - 8);
+    const uint32_t caps =
+        capsid::protocol::load_u32_at(frame.payload.data() + frame.payload.size() - 8);
 
     const std::string mode = early_mode;
     if (mode == "v3") {
@@ -170,8 +167,7 @@ int main(int argc, char **argv) {
         }
         size_t written = 0;
         while (written < wire.size()) {
-            const ssize_t n = write(ipc_fd, wire.data() + written,
-                                    wire.size() - written);
+            const ssize_t n = write(ipc_fd, wire.data() + written, wire.size() - written);
             if (n <= 0) {
                 _exit(4);
             }
@@ -183,7 +179,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (mode == "ready-bad-caps") {
-        send_ready(1u << 9);   // unknown bit -> client protocol error
+        send_ready(1u << 9); // unknown bit -> client protocol error
         pause();
         return 0;
     }
@@ -201,8 +197,7 @@ int main(int argc, char **argv) {
     }
 
     const uint32_t full = capsid::protocol::kCapChannelLayoutA2 |
-                          capsid::protocol::kCapDuplexChannel |
-                          capsid::protocol::kCapUpgrade |
+                          capsid::protocol::kCapDuplexChannel | capsid::protocol::kCapUpgrade |
                           capsid::protocol::kCapHalfClose;
     const bool confirm = mode == "confirm-pending" || mode == "confirm-crossed";
     send_ready(full | (confirm ? capsid::protocol::kCapChannelConfirm : 0));
@@ -217,7 +212,8 @@ int main(int argc, char **argv) {
         capsid::protocol::ChannelCancelPayload cancel;
         cancel.dial_id = 41;
         std::vector<uint8_t> payload;
-        if (!capsid::protocol::encode_channel_cancel(cancel, &payload)) _exit(11);
+        if (!capsid::protocol::encode_channel_cancel(cancel, &payload))
+            _exit(11);
         send_frame(capsid::protocol::kChannelCancel, 0, 0, payload);
     }
 
@@ -228,7 +224,8 @@ int main(int argc, char **argv) {
             ack.channel_id = 1;
             ack.dial_id = 41;
             std::vector<uint8_t> payload;
-            if (!capsid::protocol::encode_channel_ack(ack, &payload)) _exit(11);
+            if (!capsid::protocol::encode_channel_ack(ack, &payload))
+                _exit(11);
             send_frame(capsid::protocol::kChannelAck, 0, 0, payload);
             payload.clear();
             capsid::protocol::append_u32(&payload, 1);
@@ -236,7 +233,8 @@ int main(int argc, char **argv) {
             send_frame(capsid::protocol::kChannelData, 3, 0, payload);
             capsid::protocol::ChannelCancelPayload cancel;
             cancel.channel_id = 1;
-            if (!capsid::protocol::encode_channel_cancel(cancel, &payload)) _exit(11);
+            if (!capsid::protocol::encode_channel_cancel(cancel, &payload))
+                _exit(11);
             send_frame(capsid::protocol::kChannelCancel, 0, 0, payload);
         }
         if (mode == "confirm-crossed" && frame.type == capsid::protocol::kChannelCancel) {
@@ -244,28 +242,33 @@ int main(int argc, char **argv) {
             ack.channel_id = 1;
             ack.kind = capsid::protocol::kAckCancel;
             std::vector<uint8_t> payload;
-            if (!capsid::protocol::encode_channel_ack(ack, &payload)) _exit(11);
+            if (!capsid::protocol::encode_channel_ack(ack, &payload))
+                _exit(11);
             send_frame(capsid::protocol::kChannelAck, 0, 0, payload);
         }
         if (confirm && frame.type == capsid::protocol::kChannelAck) {
             capsid::protocol::ChannelAckPayload ack;
             std::string error;
-            if (!capsid::protocol::decode_channel_ack(frame.payload.data(), frame.payload.size(), &ack, &error) ||
-                    ack.kind != capsid::protocol::kAckCancel) _exit(11);
+            if (!capsid::protocol::decode_channel_ack(frame.payload.data(), frame.payload.size(),
+                                                      &ack, &error) ||
+                ack.kind != capsid::protocol::kAckCancel)
+                _exit(11);
             send_dial(42, "wss://peer.test/next");
         }
         if (confirm && frame.type == capsid::protocol::kChannelReject) {
             capsid::protocol::ChannelAckPayload ack;
             ack.dial_id = 42;
             std::vector<uint8_t> payload;
-            if (!capsid::protocol::encode_channel_ack(ack, &payload)) _exit(11);
+            if (!capsid::protocol::encode_channel_ack(ack, &payload))
+                _exit(11);
             send_frame(capsid::protocol::kChannelAck, 0, 0, payload);
         }
         if ((mode == "upgrade-flow" || mode == "upgrade-reject") &&
-                frame.type == capsid::protocol::kRequestHead) {
+            frame.type == capsid::protocol::kRequestHead) {
             capsid::protocol::UpgradeTail tail;
             std::string error;
-            if (!capsid::protocol::decode_upgrade_head(frame, &tail, &error)) _exit(10);
+            if (!capsid::protocol::decode_upgrade_head(frame, &tail, &error))
+                _exit(10);
             std::vector<uint8_t> response;
             capsid::protocol::append_u16(&response, mode == "upgrade-flow" ? 101 : 403);
             capsid::protocol::append_u16(&response, 0); // statusText length
@@ -275,20 +278,21 @@ int main(int argc, char **argv) {
             response.insert(response.end(), name.begin(), name.end());
             capsid::protocol::append_u32(&response, value.size());
             response.insert(response.end(), value.begin(), value.end());
-            if (mode == "upgrade-flow") capsid::protocol::encode_upgrade_tail(tail, &response);
+            if (mode == "upgrade-flow")
+                capsid::protocol::encode_upgrade_tail(tail, &response);
             send_frame(capsid::protocol::kResponseHead,
                        mode == "upgrade-flow" ? capsid::protocol::kFlagResponseUpgrade : 0,
                        frame.request_id, response);
-            if (mode == "upgrade-reject") send_frame(capsid::protocol::kResponseEnd, 0, frame.request_id, {});
+            if (mode == "upgrade-reject")
+                send_frame(capsid::protocol::kResponseEnd, 0, frame.request_id, {});
         }
         if (mode == "upgrade-flow" && frame.type == capsid::protocol::kChannelData) {
             send_frame(capsid::protocol::kChannelData, frame.flags, 0, frame.payload);
         }
         if ((mode == "dial-flow" || mode == "queue-flow") &&
-                frame.type == capsid::protocol::kChannelData) {
+            frame.type == capsid::protocol::kChannelData) {
             // echo the fragment back on the same channel
-            send_frame(capsid::protocol::kChannelData, frame.flags, 0,
-                       frame.payload);
+            send_frame(capsid::protocol::kChannelData, frame.flags, 0, frame.payload);
         }
     }
     if (log_file != nullptr) {

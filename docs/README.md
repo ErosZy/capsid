@@ -38,6 +38,8 @@ Native development support is not a production isolation guarantee. The local
 
 ## Build and Verify
 
+- [Source formatting](formatting.md): pinned C/C++, JavaScript/Python tools,
+  shared write/check commands and preserved exact-byte inputs.
 - [Building from source](building.md): toolchains, dependencies, clean Release
   inputs, development builds and SDK installation.
 - [Windows](windows.md): native MSVC/static-CRT requirements and platform limits.

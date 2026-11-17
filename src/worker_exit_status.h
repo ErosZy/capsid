@@ -17,8 +17,7 @@ struct WorkerExitStatus {
     std::uint32_t wait_error = 0;
 
     bool clean() const {
-        return observed && !destroy_forced && wait_error == 0 &&
-               signal == 0 && exit_code == 0;
+        return observed && !destroy_forced && wait_error == 0 && signal == 0 && exit_code == 0;
     }
 };
 
@@ -28,6 +27,6 @@ struct WorkerExitStatus {
 // reap, without a competing waiter or second PID lookup. No C ABI changes.
 WorkerExitStatus destroy_worker_with_status(capsid_worker* worker) noexcept;
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

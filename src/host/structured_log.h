@@ -41,8 +41,8 @@ struct LogFields {
     // ({.event = ..., .app = ...}) remain complete under
     // -Wmissing-field-initializers; the field-default rule (non-empty
     // strings appear, empty ones are omitted) is applied at encode time.
-    std::string level = "info";  // debug | info | warn | error
-    std::string event = {};      // one of the fixed names below
+    std::string level = "info"; // debug | info | warn | error
+    std::string event = {};     // one of the fixed names below
     std::string app = {};
     std::string version = {};
     std::string generation = {};
@@ -52,14 +52,14 @@ struct LogFields {
     std::string operation_id = {};
     std::string stage = {};
     std::string result = {};
-    std::string fields = {};  // empty, or a validated JSON object
+    std::string fields = {}; // empty, or a validated JSON object
     std::uint64_t duration_ms = 0;
-    std::string message = {};  // static or sanitized text only
+    std::string message = {}; // static or sanitized text only
 };
 
 enum class LogLane {
-    kApp,      // runtime LOG/AUDIT forwarding: bounded, droppable, counted
-    kControl,  // deploy/security/process lifecycle: bounded, never dropped
+    kApp,     // runtime LOG/AUDIT forwarding: bounded, droppable, counted
+    kControl, // deploy/security/process lifecycle: bounded, never dropped
 };
 
 // Fixed event vocabulary (controlled — the "event" field only ever holds
@@ -85,18 +85,16 @@ inline constexpr char kAppLog[] = "app_log";
 inline constexpr char kAppAudit[] = "app_audit";
 inline constexpr char kLogDrop[] = "log_drop";
 inline constexpr char kWorkerCommandError[] = "worker_command_error";
-}  // namespace log_events
+} // namespace log_events
 
 // Single-writer structured log. log() is thread-safe; one writer thread
 // drains both FIFO lanes in order (control lane first when both non-empty,
 // so a control event never waits behind a backlog of app events).
 class StructuredLog {
-public:
+  public:
     using Sink = std::function<void(const std::string& line)>;
 
-    StructuredLog(Sink sink,
-                  std::size_t app_capacity = 1024,
-                  std::size_t control_capacity = 256);
+    StructuredLog(Sink sink, std::size_t app_capacity = 1024, std::size_t control_capacity = 256);
     ~StructuredLog();
 
     StructuredLog(const StructuredLog&) = delete;
@@ -116,7 +114,7 @@ public:
     // Events accepted (enqueued or written through) since construction.
     std::uint64_t accepted_events() const;
 
-private:
+  private:
     void writer_run();
     void write_through(LogFields fields);
 
@@ -136,9 +134,8 @@ private:
 
 // Encodes one fixed-field JSON line (exported for tests). timestamp_ms is
 // the epoch-millisecond value placed in "timestamp".
-std::string encode_log_line(const LogFields& fields,
-                            std::uint64_t timestamp_ms);
+std::string encode_log_line(const LogFields& fields, std::uint64_t timestamp_ms);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

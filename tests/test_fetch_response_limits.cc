@@ -63,43 +63,54 @@ struct Case {
 // Node's separate zlib decoder verifies every full wire vector before use.
 std::vector<std::vector<uint8_t>> gzip_segments(size_t length, bool fragmented) {
     std::vector<size_t> sizes;
-    if (!length) sizes = {0};
-    else if (fragmented) sizes = {2, 3, length - 5};
-    else sizes = {length};
+    if (!length)
+        sizes = {0};
+    else if (fragmented)
+        sizes = {2, 3, length - 5};
+    else
+        sizes = {length};
     std::vector<std::vector<uint8_t>> segments;
     uint32_t crc = 0xffffffffu;
     size_t position = 0;
     for (size_t part = 0; part < sizes.size(); ++part) {
         std::vector<uint8_t> bytes;
-        if (!part) bytes = {31, 139, 8, 0, 0, 0, 0, 0, 0, 3};
+        if (!part)
+            bytes = {31, 139, 8, 0, 0, 0, 0, 0, 0, 3};
         const auto count = static_cast<uint16_t>(sizes[part]);
         if (count) {
             const auto complement = static_cast<uint16_t>(count ^ 0xffffu);
-            bytes.insert(bytes.end(), {0, static_cast<uint8_t>(count), static_cast<uint8_t>(count >> 8),
-                static_cast<uint8_t>(complement), static_cast<uint8_t>(complement >> 8)});
+            bytes.insert(bytes.end(),
+                         {0, static_cast<uint8_t>(count), static_cast<uint8_t>(count >> 8),
+                          static_cast<uint8_t>(complement), static_cast<uint8_t>(complement >> 8)});
             for (size_t index = 0; index < count; ++index) {
                 const auto byte = static_cast<uint8_t>(++position);
-                bytes.push_back(byte); crc ^= byte;
-                for (unsigned bit = 0; bit < 8; ++bit) crc = (crc >> 1) ^ ((crc & 1u) ? 0xedb88320u : 0);
+                bytes.push_back(byte);
+                crc ^= byte;
+                for (unsigned bit = 0; bit < 8; ++bit)
+                    crc = (crc >> 1) ^ ((crc & 1u) ? 0xedb88320u : 0);
             }
         }
         if (part + 1 == sizes.size()) {
             bytes.insert(bytes.end(), {1, 0, 0, 255, 255});
             const auto checksum = crc ^ 0xffffffffu;
-            for (unsigned shift = 0; shift < 32; shift += 8) bytes.push_back(static_cast<uint8_t>(checksum >> shift));
-            for (unsigned shift = 0; shift < 32; shift += 8) bytes.push_back(static_cast<uint8_t>(length >> shift));
+            for (unsigned shift = 0; shift < 32; shift += 8)
+                bytes.push_back(static_cast<uint8_t>(checksum >> shift));
+            for (unsigned shift = 0; shift < 32; shift += 8)
+                bytes.push_back(static_cast<uint8_t>(length >> shift));
         }
         segments.push_back(std::move(bytes));
     }
     return segments;
 }
 
-void exercise(const char* path, uint64_t limit, const std::string& bundle, bool encoded_headers, bool small_window) {
+void exercise(const char* path, uint64_t limit, const std::string& bundle, bool encoded_headers,
+              bool small_window) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = path;
     config.max_fetch_response_body_bytes = limit;
-    if (small_window) config.initial_stream_window = 256;
+    if (small_window)
+        config.initial_stream_window = 256;
     capsid_egress_rule rule;
     capsid_egress_rule_init(&rule);
     rule.action = CAPSID_EGRESS_ALLOW;
@@ -155,25 +166,32 @@ void exercise(const char* path, uint64_t limit, const std::string& bundle, bool 
         const bool encoded = encoded_headers && scenario.known;
         const bool full = std::strcmp(scenario.action, "full") == 0;
         std::vector<std::vector<uint8_t>> fragments;
-        if (encoded) fragments = gzip_segments(scenario.length, scenario.fragmented);
+        if (encoded)
+            fragments = gzip_segments(scenario.length, scenario.fragmented);
         else {
             std::vector<uint8_t> plain(full ? scenario.length : 5);
-            for (size_t index = 0; index < plain.size(); ++index) plain[index] = static_cast<uint8_t>(index + 1);
-            if (!scenario.fragmented || plain.empty()) fragments.push_back(plain);
+            for (size_t index = 0; index < plain.size(); ++index)
+                plain[index] = static_cast<uint8_t>(index + 1);
+            if (!scenario.fragmented || plain.empty())
+                fragments.push_back(plain);
             else {
                 fragments.emplace_back(plain.begin(), plain.begin() + 2);
                 fragments.emplace_back(plain.begin() + 2, plain.begin() + 5);
-                if (plain.size() > 5) fragments.emplace_back(plain.begin() + 5, plain.end());
+                if (plain.size() > 5)
+                    fragments.emplace_back(plain.begin() + 5, plain.end());
             }
         }
         size_t wire_length = 0;
-        for (const auto& fragment : fragments) wire_length += fragment.size();
-        const std::string size = std::to_string(encoded ? wire_length : scenario.length), name = "Content-Length",
-                          status = "OK", target = "https://example.test/body";
+        for (const auto& fragment : fragments)
+            wire_length += fragment.size();
+        const std::string size = std::to_string(encoded ? wire_length : scenario.length),
+                          name = "Content-Length", status = "OK",
+                          target = "https://example.test/body";
         capsid_header header{{reinterpret_cast<const uint8_t*>(name.data()), name.size()},
                              {reinterpret_cast<const uint8_t*>(size.data()), size.size()}};
         const std::string encoding_name = "Content-Encoding", encoding_value = "gzip";
-        capsid_header headers[2] = {header,
+        capsid_header headers[2] = {
+            header,
             {{reinterpret_cast<const uint8_t*>(encoding_name.data()), encoding_name.size()},
              {reinterpret_cast<const uint8_t*>(encoding_value.data()), encoding_value.size()}}};
         capsid_fetch_upgrade_response response{};
@@ -201,18 +219,23 @@ void exercise(const char* path, uint64_t limit, const std::string& bundle, bool 
             if (encoded && full && scenario.fragmented && index) {
                 while (credits < sent) {
                     event = peer.next();
-                    check(event.type == CAPSID_EVENT_CHANNEL_CREDIT, "encoded fragment waits for actual native input credit");
+                    check(event.type == CAPSID_EVENT_CHANNEL_CREDIT,
+                          "encoded fragment waits for actual native input credit");
                     capsid_channel_event marker;
                     capsid_channel_event_init(&marker);
-                    ok(capsid_channel_event_decode(&event, &marker, sizeof(marker)), "gzip source gate typed credit");
-                    check(marker.channel_id == channel && marker.credit <= sent - credits, "gzip gate has exact channel and byte authority");
+                    ok(capsid_channel_event_decode(&event, &marker, sizeof(marker)),
+                       "gzip source gate typed credit");
+                    check(marker.channel_id == channel && marker.credit <= sent - credits,
+                          "gzip gate has exact channel and byte authority");
                     credits += marker.credit;
                 }
             }
             const auto& fragment = fragments[index];
-            if (fragment.empty()) continue;
+            if (fragment.empty())
+                continue;
             sent += fragment.size();
-            ok(capsid_worker_channel_send(peer.worker, channel, fragment.data(), fragment.size(), 3),
+            ok(capsid_worker_channel_send(peer.worker, channel, fragment.data(), fragment.size(),
+                                          3),
                "real raw or gzip transport fragment");
         }
         if (full)
@@ -297,24 +320,31 @@ void exercise(const char* path, uint64_t limit, const std::string& bundle, bool 
 int main(int argc, char** argv) {
     try {
         if (argc == 2 && std::strcmp(argv[1], "--gzip-source-vectors") == 0) {
-            for (const size_t length : {0u, 7u, 8u, 9u}) for (const bool fragmented : {false, true}) {
-                const auto parts = gzip_segments(length, fragmented);
-                std::printf("{\"length\":%zu,\"fragmented\":%s,\"parts\":[", length, fragmented ? "true" : "false");
-                for (size_t part = 0; part < parts.size(); ++part) {
-                    std::printf("%s[", part ? "," : "");
-                    for (size_t index = 0; index < parts[part].size(); ++index) std::printf("%s%u", index ? "," : "", unsigned(parts[part][index]));
-                    std::printf("]");
+            for (const size_t length : {0u, 7u, 8u, 9u})
+                for (const bool fragmented : {false, true}) {
+                    const auto parts = gzip_segments(length, fragmented);
+                    std::printf("{\"length\":%zu,\"fragmented\":%s,\"parts\":[", length,
+                                fragmented ? "true" : "false");
+                    for (size_t part = 0; part < parts.size(); ++part) {
+                        std::printf("%s[", part ? "," : "");
+                        for (size_t index = 0; index < parts[part].size(); ++index)
+                            std::printf("%s%u", index ? "," : "", unsigned(parts[part][index]));
+                        std::printf("]");
+                    }
+                    std::printf("]}\n");
                 }
-                std::printf("]}\n");
-            }
             return 0;
         }
-        check(argc >= 3 && argc <= 5, "worker, fixture, optional encoded-header/small-window controls");
+        check(argc >= 3 && argc <= 5,
+              "worker, fixture, optional encoded-header/small-window controls");
         bool encoded_headers = false, small_window = false;
         for (int i = 3; i < argc; ++i) {
-            if (std::strcmp(argv[i], "--encoded-headers") == 0 && !encoded_headers) encoded_headers = true;
-            else if (std::strcmp(argv[i], "--small-response-window") == 0 && !small_window) small_window = true;
-            else check(false, "known unique response-limit option");
+            if (std::strcmp(argv[i], "--encoded-headers") == 0 && !encoded_headers)
+                encoded_headers = true;
+            else if (std::strcmp(argv[i], "--small-response-window") == 0 && !small_window)
+                small_window = true;
+            else
+                check(false, "known unique response-limit option");
         }
         std::ifstream file(argv[2], std::ios::binary);
         check(file.is_open(), "fixture opened");

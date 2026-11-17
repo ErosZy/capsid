@@ -1,3 +1,28 @@
+# Maintained code uses LF on every platform, regardless of core.autocrlf.
+*.c text eol=lf
+*.cc text eol=lf
+*.cpp text eol=lf
+*.cxx text eol=lf
+*.h text eol=lf
+*.hh text eol=lf
+*.hpp text eol=lf
+*.hxx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Existing/generated/captured data is not an automatic normalization target.
+/vendor/** -text
+/licenses/** -text
+/docs/** -text
+/perf-site/** -text
+/bench/results/** -text
+/tests/wpt/** -text
+
 # Patch payload whitespace is semantic and is covered by application/audit
 # tests rather than Git's generic whitespace checker. The stack is also
 # forced to LF: GNU patch treats CR as content, so a CRLF checkout of the
@@ -37,3 +62,38 @@
 
 # Retained benchmark CSV files use the csv module's RFC-style CRLF records.
 /bench/results/**/*.csv -whitespace
+
+# Byte-locked first-party source inputs listed in tools/format-policy.json.
+/tests/compat/runtime_v7.h -text
+/tests/helpers/workerd_listener_control.mjs -text
+/tests/helpers/ws_fetch_arguments_peer.mjs -text
+/tests/helpers/ws_fetch_boundary_peer.mjs -text
+/tests/helpers/ws_fetch_byob_peer.mjs -text
+/tests/helpers/ws_fetch_proxy_client.mjs -text
+/tests/helpers/ws_fetch_proxy_peer.mjs -text
+/tests/helpers/ws_fetch_reader_peer.mjs -text
+/tests/helpers/ws_fetch_transition_peer.mjs -text
+/tests/helpers/ws_fetch_upgrade_lifetime_peer.mjs -text
+/tests/helpers/ws_fetch_upgrade_peer.mjs -text
+/tests/helpers/ws_interop_node.mjs -text
+/tests/helpers/ws_interop_node_peer.mjs -text
+/tests/helpers/ws_interop_node_sdk.mjs -text
+/tests/helpers/ws_native_reader_lifecycle_peer.mjs -text
+/tests/helpers/ws_response_client.mjs -text
+/tests/test_websocket_async_callbacks.mjs -text
+/tests/test_websocket_cross_context.mjs -text
+/tests/test_websocket_crypto.mjs -text
+/tests/test_websocket_fetch_arguments.mjs -text
+/tests/test_websocket_fetch_boundaries.mjs -text
+/tests/test_websocket_fetch_proxy.mjs -text
+/tests/test_websocket_fetch_readers.mjs -text
+/tests/test_websocket_fetch_transitions.mjs -text
+/tests/test_websocket_fetch_upgrade.mjs -text
+/tests/test_websocket_fetch_upgrade_lifetime.mjs -text
+/tests/test_websocket_frame_boundaries.mjs -text
+/tests/test_websocket_native_reader_lifecycle.mjs -text
+/tests/test_websocket_owner_lifecycle.mjs -text
+/tests/test_websocket_reader_intrinsics.mjs -text
+/tests/test_websocket_reader_scope.mjs -text
+/tests/test_websocket_standard_readers.mjs -text
+/tests/test_workerd_ws_fixtures.mjs -text

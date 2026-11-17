@@ -34,18 +34,16 @@ SafeReadResult fail_result(SafeReadErrorCode code, const char* message) {
 // syntax check keeps error semantics uniform and rejects hostile paths
 // before any descriptor work.
 bool valid_relative_path(std::string_view path) {
-    if (path.empty() || path.front() == '/' ||
-        path.find('\0') != std::string_view::npos) {
+    if (path.empty() || path.front() == '/' || path.find('\0') != std::string_view::npos) {
         return false;
     }
     std::size_t begin = 0;
     while (begin <= path.size()) {
         const std::size_t end = path.find('/', begin);
-        const std::size_t component_end =
-            end == std::string_view::npos ? path.size() : end;
+        const std::size_t component_end = end == std::string_view::npos ? path.size() : end;
         const std::size_t length = component_end - begin;
         if (length == 0) {
-            return false;  // empty component (double slash or trailing)
+            return false; // empty component (double slash or trailing)
         }
         if (length == 1 && path[begin] == '.') {
             return false;
@@ -81,8 +79,7 @@ bool valid_relative_path(std::string_view path) {
 #define CAPSID_STAT_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
 #endif
 
-template <typename Stat>
-void snapshot_identity(const Stat& st, FileIdentity* identity) {
+template <typename Stat> void snapshot_identity(const Stat& st, FileIdentity* identity) {
     identity->dev = static_cast<std::uint64_t>(st.st_dev);
     identity->inode = static_cast<std::uint64_t>(st.st_ino);
     identity->size = static_cast<std::uint64_t>(st.st_size);
@@ -97,10 +94,8 @@ void snapshot_identity(const Stat& st, FileIdentity* identity) {
 int open_beneath(int root_fd, const char* path) {
     struct open_how how = {};
     how.flags = O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK;
-    how.resolve =
-        RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS;
-    const int fd = static_cast<int>(
-        syscall(SYS_openat2, root_fd, path, &how, sizeof(how)));
+    how.resolve = RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS;
+    const int fd = static_cast<int>(syscall(SYS_openat2, root_fd, path, &how, sizeof(how)));
     if (fd < 0 && errno == ENOSYS) {
         // Linux requires openat2 for deployment reads; an old kernel fails
         // closed rather than falling back to a less strict open.
@@ -119,14 +114,11 @@ int open_beneath(int root_fd, const char* path) {
     while (begin < relative.size()) {
         const std::size_t end = relative.find('/', begin);
         const std::string component =
-            relative.substr(begin, end == std::string::npos
-                                       ? std::string::npos
-                                       : end - begin);
+            relative.substr(begin, end == std::string::npos ? std::string::npos : end - begin);
         const bool last = end == std::string::npos;
-        const int next = openat(
-            dir_fd, component.c_str(),
-            (last ? O_RDONLY : O_RDONLY | O_DIRECTORY) | O_CLOEXEC |
-                O_NOFOLLOW | O_NONBLOCK);
+        const int next = openat(dir_fd, component.c_str(),
+                                (last ? O_RDONLY : O_RDONLY | O_DIRECTORY) | O_CLOEXEC |
+                                    O_NOFOLLOW | O_NONBLOCK);
         if (next < 0) {
             if (dir_fd != root_fd) {
                 close(dir_fd);
@@ -155,36 +147,30 @@ int open_beneath(int root_fd, const char* path) {
 // symlinked file is rejected too. Deployment reads never traverse out of
 // the verified root.
 int open_beneath(int root_fd, const char* path) {
-    const HANDLE root_handle =
-        reinterpret_cast<HANDLE>(_get_osfhandle(root_fd));
+    const HANDLE root_handle = reinterpret_cast<HANDLE>(_get_osfhandle(root_fd));
     if (root_handle == INVALID_HANDLE_VALUE) {
         errno = EBADF;
         return -1;
     }
-    DWORD needed = GetFinalPathNameByHandleW(
-        root_handle, nullptr, 0, FILE_NAME_NORMALIZED);
+    DWORD needed = GetFinalPathNameByHandleW(root_handle, nullptr, 0, FILE_NAME_NORMALIZED);
     if (needed == 0) {
         errno = EIO;
         return -1;
     }
     std::wstring root_path(needed, L'\0');
-    if (GetFinalPathNameByHandleW(
-            root_handle, &root_path[0], needed,
-            FILE_NAME_NORMALIZED) == 0) {
+    if (GetFinalPathNameByHandleW(root_handle, &root_path[0], needed, FILE_NAME_NORMALIZED) == 0) {
         errno = EIO;
         return -1;
     }
     // The relative path is validated UTF-8 text (valid_relative_path
     // rejects NULs and traversals); convert it to wide for the Win32 APIs.
-    const int wide_size = MultiByteToWideChar(
-        CP_UTF8, 0, path, -1, nullptr, 0);
+    const int wide_size = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
     if (wide_size <= 0) {
         errno = EINVAL;
         return -1;
     }
     std::wstring wide_path(static_cast<std::size_t>(wide_size - 1), L'\0');
-    if (MultiByteToWideChar(
-            CP_UTF8, 0, path, -1, &wide_path[0], wide_size) <= 0) {
+    if (MultiByteToWideChar(CP_UTF8, 0, path, -1, &wide_path[0], wide_size) <= 0) {
         errno = EINVAL;
         return -1;
     }
@@ -201,36 +187,29 @@ int open_beneath(int root_fd, const char* path) {
     HANDLE final_handle = INVALID_HANDLE_VALUE;
     while (begin < wide_path.size()) {
         const std::size_t end = wide_path.find(L'\\', begin);
-        const std::wstring component = wide_path.substr(
-            begin, end == std::wstring::npos ? std::wstring::npos
-                                             : end - begin);
+        const std::wstring component =
+            wide_path.substr(begin, end == std::wstring::npos ? std::wstring::npos : end - begin);
         const bool last = end == std::wstring::npos;
         if (!current.empty() && current.back() != L'\\') {
             current.push_back(L'\\');
         }
         current += component;
         const HANDLE handle = CreateFileW(
-            current.c_str(),
-            last ? GENERIC_READ : FILE_LIST_DIRECTORY,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            nullptr,
-            OPEN_EXISTING,
+            current.c_str(), last ? GENERIC_READ : FILE_LIST_DIRECTORY,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
             (last ? FILE_ATTRIBUTE_NORMAL : FILE_FLAG_BACKUP_SEMANTICS) |
                 FILE_FLAG_OPEN_REPARSE_POINT,
             nullptr);
         if (handle == INVALID_HANDLE_VALUE) {
-            errno = GetLastError() == ERROR_FILE_NOT_FOUND ||
-                            GetLastError() == ERROR_PATH_NOT_FOUND
+            errno = GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND
                         ? ENOENT
                         : EIO;
             return -1;
         }
         FILE_ATTRIBUTE_TAG_INFO attributes = {};
-        const bool reparse =
-            GetFileInformationByHandleEx(
-                handle, FileAttributeTagInfo, &attributes,
-                sizeof(attributes)) != 0 &&
-            (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+        const bool reparse = GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes,
+                                                          sizeof(attributes)) != 0 &&
+                             (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
         if (reparse) {
             CloseHandle(handle);
             errno = ELOOP;
@@ -247,8 +226,7 @@ int open_beneath(int root_fd, const char* path) {
         errno = ENOENT;
         return -1;
     }
-    const int fd = _open_osfhandle(
-        reinterpret_cast<intptr_t>(final_handle), _O_RDONLY | _O_BINARY);
+    const int fd = _open_osfhandle(reinterpret_cast<intptr_t>(final_handle), _O_RDONLY | _O_BINARY);
     if (fd < 0) {
         CloseHandle(final_handle);
     }
@@ -270,8 +248,7 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
     const bool regular = S_ISREG(before.st_mode);
 #endif
     if (!stat_ok) {
-        return fail_result(SafeReadErrorCode::kIoError,
-                           "cannot stat deployment file");
+        return fail_result(SafeReadErrorCode::kIoError, "cannot stat deployment file");
     }
     if (!regular) {
         return fail_result(SafeReadErrorCode::kNotRegularFile,
@@ -279,8 +256,7 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
     }
     const std::uint64_t size = static_cast<std::uint64_t>(before.st_size);
     if (size > max_bytes) {
-        return fail_result(SafeReadErrorCode::kOverLimit,
-                           "deployment file exceeds the size limit");
+        return fail_result(SafeReadErrorCode::kOverLimit, "deployment file exceeds the size limit");
     }
 
     SafeFile file;
@@ -293,24 +269,20 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
         // re-check below still catches concurrent replacement. MSVC read()
         // takes an unsigned int count; every caller bounds the file size
         // well below UINT_MAX before reaching this loop.
-        const ssize_t count = read(
-            fd,
-            file.bytes.data() + offset,
-            static_cast<unsigned int>(file.bytes.size() - offset));
+        const ssize_t count = read(fd, file.bytes.data() + offset,
+                                   static_cast<unsigned int>(file.bytes.size() - offset));
 #else
-        const ssize_t count = pread(
-            fd, file.bytes.data() + offset, file.bytes.size() - offset,
-            static_cast<off_t>(offset));
+        const ssize_t count = pread(fd, file.bytes.data() + offset, file.bytes.size() - offset,
+                                    static_cast<off_t>(offset));
 #endif
         if (count < 0) {
             if (errno == EINTR) {
                 continue;
             }
-            return fail_result(SafeReadErrorCode::kIoError,
-                               "deployment file read failed");
+            return fail_result(SafeReadErrorCode::kIoError, "deployment file read failed");
         }
         if (count == 0) {
-            break;  // truncated mid-read; identity check below catches it
+            break; // truncated mid-read; identity check below catches it
         }
         offset += static_cast<std::size_t>(count);
     }
@@ -327,8 +299,7 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
     const bool recheck_ok = fstat(fd, &after) == 0;
 #endif
     if (!recheck_ok) {
-        return fail_result(SafeReadErrorCode::kIoError,
-                           "cannot re-stat deployment file");
+        return fail_result(SafeReadErrorCode::kIoError, "cannot re-stat deployment file");
     }
     FileIdentity identity;
     snapshot_identity(after, &identity);
@@ -345,18 +316,16 @@ SafeReadResult read_regular_file_at(int fd, std::size_t max_bytes) {
     return result;
 }
 
-}  // namespace
+} // namespace
 
-bool valid_app_version_id(std::string_view value,
-                          std::size_t max_length) {
+bool valid_app_version_id(std::string_view value, std::size_t max_length) {
     if (value.empty() || value.size() > max_length) {
         return false;
     }
     for (std::size_t index = 0; index < value.size(); ++index) {
         const char c = value[index];
         const bool alnum =
-            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9');
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
         const bool extra = c == '.' || c == '_' || c == '-';
         if (!alnum && !extra) {
             return false;
@@ -366,31 +335,26 @@ bool valid_app_version_id(std::string_view value,
         if (index == 0 && (c == '.' || c == '_' || c == '-')) {
             return false;
         }
-        if (c == '.' && index + 1 < value.size() &&
-            value[index + 1] == '.') {
+        if (c == '.' && index + 1 < value.size() && value[index + 1] == '.') {
             return false;
         }
     }
     return true;
 }
 
-SafeReadResult safe_read_regular_file(int root_fd,
-                                      std::string_view relative_path,
+SafeReadResult safe_read_regular_file(int root_fd, std::string_view relative_path,
                                       std::size_t max_bytes) {
     if (root_fd < 0 || !valid_relative_path(relative_path)) {
-        return fail_result(SafeReadErrorCode::kInvalidPath,
-                           "invalid deployment relative path");
+        return fail_result(SafeReadErrorCode::kInvalidPath, "invalid deployment relative path");
     }
     const std::string path(relative_path);
     const int fd = open_beneath(root_fd, path.c_str());
     if (fd < 0) {
         if (errno == ENOSYS) {
-            return fail_result(SafeReadErrorCode::kIoError,
-                               "openat2 is required on Linux");
+            return fail_result(SafeReadErrorCode::kIoError, "openat2 is required on Linux");
         }
         if (errno == ENOENT || errno == ENOTDIR) {
-            return fail_result(SafeReadErrorCode::kMissingFile,
-                               "deployment file does not exist");
+            return fail_result(SafeReadErrorCode::kMissingFile, "deployment file does not exist");
         }
         if (errno == ELOOP) {
             return fail_result(SafeReadErrorCode::kNotRegularFile,
@@ -411,22 +375,17 @@ SafeReadResult safe_read_regular_file(int root_fd,
                                "deployment path is not a regular file");
         }
 #endif
-        return fail_result(SafeReadErrorCode::kIoError,
-                           "cannot open deployment file");
+        return fail_result(SafeReadErrorCode::kIoError, "cannot open deployment file");
     }
     SafeReadResult result = read_regular_file_at(fd, max_bytes);
     close(fd);
     return result;
 }
 
-SafeReadResult safe_read_version_artifacts(int root_fd,
-                                           std::string_view app,
-                                           std::string_view version,
-                                           std::size_t max_total_bytes) {
-    if (!valid_app_version_id(app, 64) ||
-        !valid_app_version_id(version, 128)) {
-        return fail_result(SafeReadErrorCode::kInvalidPath,
-                           "invalid app or version identifier");
+SafeReadResult safe_read_version_artifacts(int root_fd, std::string_view app,
+                                           std::string_view version, std::size_t max_total_bytes) {
+    if (!valid_app_version_id(app, 64) || !valid_app_version_id(version, 128)) {
+        return fail_result(SafeReadErrorCode::kInvalidPath, "invalid app or version identifier");
     }
     const std::string prefix = std::string(app) + "/" + std::string(version) + "/";
 
@@ -437,10 +396,8 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
     SafeFile bytecode;
     SafeFile attestation;
     SafeFile signature;
-    const auto collect = [&](const char* name, SafeFile* target,
-                             std::size_t limit) -> bool {
-        SafeReadResult one =
-            safe_read_regular_file(root_fd, prefix + name, limit);
+    const auto collect = [&](const char* name, SafeFile* target, std::size_t limit) -> bool {
+        SafeReadResult one = safe_read_regular_file(root_fd, prefix + name, limit);
         if (one.code != SafeReadErrorCode::kNone) {
             result = std::move(one);
             return false;
@@ -465,26 +422,26 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
     // independently; a partial set (any one or two present) is an
     // all-or-none violation, not a source-only version.
     const char* const bytecode_names[] = {
-        "bundle.qjsb", "bytecode.json", "bytecode.sig",
+        "bundle.qjsb",
+        "bytecode.json",
+        "bytecode.sig",
     };
     const std::size_t bytecode_limits[] = {
-        kMaxBundleFileBytes, kMaxAttestationFileBytes,
+        kMaxBundleFileBytes,
+        kMaxAttestationFileBytes,
         kBytecodeSignatureBytes,
     };
     SafeReadResult probes[3];
     bool present[3] = {};
     for (std::size_t index = 0; index < 3; ++index) {
         probes[index] =
-            safe_read_regular_file(root_fd, prefix + bytecode_names[index],
-                                   bytecode_limits[index]);
-        present[index] =
-            probes[index].code != SafeReadErrorCode::kMissingFile;
+            safe_read_regular_file(root_fd, prefix + bytecode_names[index], bytecode_limits[index]);
+        present[index] = probes[index].code != SafeReadErrorCode::kMissingFile;
         if (present[index] && probes[index].code != SafeReadErrorCode::kNone) {
             return probes[index];
         }
     }
-    const int present_count =
-        (present[0] ? 1 : 0) + (present[1] ? 1 : 0) + (present[2] ? 1 : 0);
+    const int present_count = (present[0] ? 1 : 0) + (present[1] ? 1 : 0) + (present[2] ? 1 : 0);
     if (present_count != 0 && present_count != 3) {
         // Partial set: any one or two of the three files is an
         // all-or-none violation, not a source-only version.
@@ -496,8 +453,7 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
         bytecode = std::move(probes[0].file);
         attestation = std::move(probes[1].file);
         signature = std::move(probes[2].file);
-        total += bytecode.bytes.size() + attestation.bytes.size() +
-                 signature.bytes.size();
+        total += bytecode.bytes.size() + attestation.bytes.size() + signature.bytes.size();
         if (total > max_total_bytes) {
             return fail_result(SafeReadErrorCode::kOverLimit,
                                "version artifacts exceed the total limit");
@@ -522,4 +478,4 @@ SafeReadResult safe_read_version_artifacts(int root_fd,
     return snapshot;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

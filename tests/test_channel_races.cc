@@ -10,7 +10,7 @@ namespace {
 namespace p = capsid::protocol;
 using Side = capsid::ChannelSide;
 
-void require(bool ok, const char *what) {
+void require(bool ok, const char* what) {
     if (!ok) {
         std::fprintf(stderr, "FAIL: %s\n", what);
         std::exit(1);
@@ -34,7 +34,8 @@ struct Peers {
         hello.type = p::kHello;
         hello.payload.resize(p::kHelloFixedPayloadSize);
         if (caps & p::kCapChannelLayoutA2)
-            require(p::append_hello_a2_extension(&hello.payload, p::ChannelLimits()), "limits encode");
+            require(p::append_hello_a2_extension(&hello.payload, p::ChannelLimits()),
+                    "limits encode");
         p::append_u32(&hello.payload, caps);
         p::append_u32(&hello.payload, 0);
         send(Side::Host, hello);
@@ -47,7 +48,7 @@ struct Peers {
         send(Side::Worker, ready);
         receive(Side::Host);
     }
-    capsid::ChannelRegistry::ApplyResult send(Side from, const p::Frame &frame) {
+    capsid::ChannelRegistry::ApplyResult send(Side from, const p::Frame& frame) {
         std::vector<uint8_t> bytes;
         require(p::encode_versioned(p::kVersionV4, frame, &bytes), "wire encode");
         p::Parser parser(p::kVersionV4);
@@ -55,7 +56,8 @@ struct Peers {
         p::Frame decoded;
         require(parser.next(&decoded) == p::kParseFrame, "wire parse");
         const auto result = registry[static_cast<int>(from)].apply(from, decoded);
-        if (!result.accepted) std::fprintf(stderr, "send type %u: %s\n", frame.type, result.error.c_str());
+        if (!result.accepted)
+            std::fprintf(stderr, "send type %u: %s\n", frame.type, result.error.c_str());
         require(result.accepted, "sender accepts its write");
         outgoing[static_cast<int>(from)].push_back(decoded);
         return result;
@@ -63,8 +65,11 @@ struct Peers {
     capsid::ChannelRegistry::ApplyResult receive(Side to) {
         const int from = 1 - static_cast<int>(to);
         require(!outgoing[from].empty(), "read has queued frame");
-        const auto result = registry[static_cast<int>(to)].apply(static_cast<Side>(from), outgoing[from].front());
-        if (!result.accepted) std::fprintf(stderr, "receive type %u: %s\n", outgoing[from].front().type, result.error.c_str());
+        const auto result =
+            registry[static_cast<int>(to)].apply(static_cast<Side>(from), outgoing[from].front());
+        if (!result.accepted)
+            std::fprintf(stderr, "receive type %u: %s\n", outgoing[from].front().type,
+                         result.error.c_str());
         require(result.accepted, "receiver accepts peer's ordered write");
         outgoing[from].pop_front();
         return result;
@@ -109,9 +114,10 @@ struct Peers {
             receive(Side::Host);
         }
     }
-    void error(Side from, const p::Frame &f, const char *expected) {
+    void error(Side from, const p::Frame& f, const char* expected) {
         const auto result = registry[static_cast<int>(from)].apply(from, f);
-        require(!result.accepted && result.error == expected, "illegal write fails with exact error");
+        require(!result.accepted && result.error == expected,
+                "illegal write fails with exact error");
     }
     void empty() {
         for (int side = 0; side < 2; ++side) {
@@ -196,15 +202,22 @@ void pending_cancel_crosses_result(bool accepted, bool cancel_first, bool read_r
     // Use a u64 id outside the channel-id space in every cancellation.
     const uint64_t dial_id = (uint64_t(1) << 32) + 7;
     peers.dial(dial_id);
-    if (cancel_first) peers.send(Side::Worker, cancel(dial_id));
-    if (accepted) peers.accept(dial_id);
-    else peers.send(Side::Host, reject(dial_id));
-    if (!cancel_first) peers.send(Side::Worker, cancel(dial_id));
-    if (accepted) peers.error(Side::Host, data(true, true), "channel sequence");
-    if (read_result_first) require(peers.receive(Side::Worker).discard, "cancelled result never opens JS socket");
+    if (cancel_first)
+        peers.send(Side::Worker, cancel(dial_id));
+    if (accepted)
+        peers.accept(dial_id);
+    else
+        peers.send(Side::Host, reject(dial_id));
+    if (!cancel_first)
+        peers.send(Side::Worker, cancel(dial_id));
+    if (accepted)
+        peers.error(Side::Host, data(true, true), "channel sequence");
+    if (read_result_first)
+        require(peers.receive(Side::Worker).discard, "cancelled result never opens JS socket");
     peers.receive(Side::Host);
     peers.send(Side::Host, ack(p::kAckCancel, dial_id, 0));
-    if (!read_result_first) require(peers.receive(Side::Worker).discard, "queued result is drained without delivery");
+    if (!read_result_first)
+        require(peers.receive(Side::Worker).discard, "queued result is drained without delivery");
     peers.receive(Side::Worker);
     peers.empty();
     peers.error(Side::Worker, ack(p::kAckDialResult, dial_id, accepted ? 1 : 0), "unknown channel");
@@ -315,33 +328,42 @@ void final_close_is_atomic(Side initiator, bool peer_close_first) {
     payload.flags = p::kCloseFlagCodePresent;
     payload.code = 1000;
     payload.reason = "done";
-    p::Frame final; final.version = 4; final.type = p::kChannelClose;
+    p::Frame final;
+    final.version = 4;
+    final.type = p::kChannelClose;
     require(p::encode_channel_close(payload, &final.payload), "atomic final Close encodes");
     p::ChannelClosePayload decoded;
     std::string error;
     require(p::decode_channel_close(final.payload.data(), final.payload.size(), &decoded, &error) &&
-            decoded.close_kind == 3 && decoded.code == 1000 && decoded.reason == "done",
+                decoded.close_kind == 3 && decoded.code == 1000 && decoded.reason == "done",
             "atomic final Close preserves sendable code and reason");
-    Peers peers(63); peers.open();
+    Peers peers(63);
+    peers.open();
     const Side other = initiator == Side::Host ? Side::Worker : Side::Host;
-    if (peer_close_first) peers.send(other, close());
+    if (peer_close_first)
+        peers.send(other, close());
     peers.send(initiator, final);
     peers.error(initiator, final, "channel sequence");
     peers.error(initiator, data(true, true), "channel sequence");
     peers.receive(other);
     peers.error(other, close(), "channel sequence");
     peers.send(other, ack(p::kAckTransportClose));
-    if (peer_close_first) peers.receive(initiator);
+    if (peer_close_first)
+        peers.receive(initiator);
     peers.receive(initiator);
     peers.empty();
-    Peers legacy(31); legacy.open();
+    Peers legacy(31);
+    legacy.open();
     legacy.error(initiator, final, "channel frame without capability");
-    Peers already_closed(63); already_closed.open();
+    Peers already_closed(63);
+    already_closed.open();
     already_closed.send(initiator, close());
     already_closed.error(initiator, final, "channel sequence");
     payload.code = 1006;
-    require(!p::encode_channel_close(payload, &final.payload), "final Close cannot put 1006 on the network");
-    require(!p::capabilities_satisfy_closure(32 | 8 | 1), "final Close requires confirmation capability");
+    require(!p::encode_channel_close(payload, &final.payload),
+            "final Close cannot put 1006 on the network");
+    require(!p::capabilities_satisfy_closure(32 | 8 | 1),
+            "final Close requires confirmation capability");
 }
 
 void half_close_keeps_control_stream() {
@@ -376,15 +398,21 @@ void half_close_keeps_control_stream() {
 }
 
 void simultaneous_final_close() {
-    Peers peers(63); peers.open();
-    auto final = close(); final.payload[4] = 3;
-    peers.send(Side::Host, final); peers.send(Side::Worker, final);
-    peers.receive(Side::Host); peers.receive(Side::Worker);
+    Peers peers(63);
+    peers.open();
+    auto final = close();
+    final.payload[4] = 3;
+    peers.send(Side::Host, final);
+    peers.send(Side::Worker, final);
+    peers.receive(Side::Host);
+    peers.receive(Side::Worker);
     peers.send(Side::Host, ack(p::kAckTransportClose));
     peers.send(Side::Worker, ack(p::kAckTransportClose));
     require(peers.registry[0].live_count() == 1 && peers.registry[1].live_count() == 1,
             "simultaneous final Closes retain both outstanding terminal barriers");
-    peers.receive(Side::Host); peers.receive(Side::Worker); peers.empty();
+    peers.receive(Side::Host);
+    peers.receive(Side::Worker);
+    peers.empty();
 }
 
 void deadline_and_unknown_guards() {
@@ -424,11 +452,15 @@ void crossed_result_cannot_extend_cancel_deadline() {
         Peers peers(31);
         peers.dial();
         peers.send(Side::Worker, cancel(1));
-        if (accepted) peers.accept();
-        else peers.send(Side::Host, reject(1));
-        require(peers.registry[1].advance_time(4999), "pending cancel approaches its original deadline");
+        if (accepted)
+            peers.accept();
+        else
+            peers.send(Side::Host, reject(1));
+        require(peers.registry[1].advance_time(4999),
+                "pending cancel approaches its original deadline");
         require(peers.receive(Side::Worker).discard, "late result remains suppressed");
-        require(!peers.registry[1].advance_time(1), "crossed result cannot restart cancellation's bounded deadline");
+        require(!peers.registry[1].advance_time(1),
+                "crossed result cannot restart cancellation's bounded deadline");
         require(peers.registry[1].live_count() == 0 && peers.registry[1].pending_dial_count() == 0,
                 "expired provisional result and correlation reclaimed together");
     }

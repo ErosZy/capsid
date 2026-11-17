@@ -22,7 +22,8 @@ void fail(const char* message) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) fail("one supervisor lifecycle case is required");
+    if (argc != 2)
+        fail("one supervisor lifecycle case is required");
     const std::string mode = argv[1];
     const bool no_external = mode == "local-no-external";
     const bool destructor = mode == "destructor";
@@ -51,11 +52,13 @@ int main(int argc, char** argv) {
         external_stop.store(true);
     } else if (!destructor) {
         supervisor->request_stop();
-        supervisor->request_stop();  // Public local stop is idempotent.
+        supervisor->request_stop(); // Public local stop is idempotent.
     }
     std::thread waiter([&] {
-        if (destructor) supervisor.reset();
-        else supervisor->join();
+        if (destructor)
+            supervisor.reset();
+        else
+            supervisor->join();
         std::lock_guard<std::mutex> lock(mutex);
         joined = true;
         changed.notify_all();
@@ -66,16 +69,20 @@ int main(int argc, char** argv) {
         stopped_in_time = changed.wait_for(lock, std::chrono::seconds(2), [&] { return joined; });
     }
     if (!stopped_in_time) {
-        if (no_external) fail("local stop without an external signal must join");
+        if (no_external)
+            fail("local stop without an external signal must join");
         // Clean up the old failing thread before reporting its failed local
         // stop/destructor contract; this external change cannot count as PASS.
         external_stop.store(true);
     }
     waiter.join();
-    if (!stopped_in_time) fail("local stop/destructor required an external cleanup signal");
+    if (!stopped_in_time)
+        fail("local stop/destructor required an external cleanup signal");
     if (mode != "external" && external_stop.load())
         fail("local stop/destructor must leave the external signal false");
-    if (!destructor) supervisor->join();  // A completed join is idempotent.
-    std::printf("PASS: supervisor %s stops its entered thread with the expected signal\n", mode.c_str());
+    if (!destructor)
+        supervisor->join(); // A completed join is idempotent.
+    std::printf("PASS: supervisor %s stops its entered thread with the expected signal\n",
+                mode.c_str());
     return 0;
 }

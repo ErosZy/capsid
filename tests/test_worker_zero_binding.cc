@@ -33,39 +33,36 @@
 #include <string>
 #include <vector>
 
-extern char **environ;
+extern char** environ;
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require(bool condition, const std::string &message) {
+void require(bool condition, const std::string& message) {
     if (!condition) {
         fail(message);
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail("cannot open fixture");
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-void write_all(int fd, const std::vector<uint8_t> &data) {
+void write_all(int fd, const std::vector<uint8_t>& data) {
     size_t offset = 0;
     while (offset < data.size()) {
 #ifdef MSG_NOSIGNAL
-        const ssize_t count =
-            send(fd, &data[offset], data.size() - offset, MSG_NOSIGNAL);
+        const ssize_t count = send(fd, &data[offset], data.size() - offset, MSG_NOSIGNAL);
 #else
-        const ssize_t count =
-            send(fd, &data[offset], data.size() - offset, 0);
+        const ssize_t count = send(fd, &data[offset], data.size() - offset, 0);
 #endif
         if (count <= 0) {
             fail("could not write protocol frame");
@@ -74,7 +71,7 @@ void write_all(int fd, const std::vector<uint8_t> &data) {
     }
 }
 
-void send_frame(int fd, const capsid::protocol::Frame &frame) {
+void send_frame(int fd, const capsid::protocol::Frame& frame) {
     std::vector<uint8_t> wire;
     require(capsid::protocol::encode(frame, &wire), "frame encodes");
     write_all(fd, wire);
@@ -82,13 +79,10 @@ void send_frame(int fd, const capsid::protocol::Frame &frame) {
 
 enum class ReadResult { kFrame, kEof };
 
-ReadResult read_frame(int fd,
-                      capsid::protocol::Parser *parser,
-                      capsid::protocol::Frame *frame,
+ReadResult read_frame(int fd, capsid::protocol::Parser* parser, capsid::protocol::Frame* frame,
                       int timeout_ms) {
     const std::chrono::steady_clock::time_point deadline =
-        std::chrono::steady_clock::now() +
-        std::chrono::milliseconds(timeout_ms);
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
         const capsid::protocol::ParseResult result = parser->next(frame);
         if (result == capsid::protocol::kParseFrame) {
@@ -97,8 +91,7 @@ ReadResult read_frame(int fd,
         if (result == capsid::protocol::kParseError) {
             fail("worker response protocol error");
         }
-        const std::chrono::steady_clock::time_point now =
-            std::chrono::steady_clock::now();
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
         if (now >= deadline) {
             fail("timed out waiting for a worker frame");
         }
@@ -106,23 +99,19 @@ ReadResult read_frame(int fd,
         descriptor.fd = fd;
         descriptor.events = POLLIN;
         const int remaining = static_cast<int>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                deadline - now)
-                .count());
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
         // Sub-millisecond remainder truncates to zero; clamp so poll waits
         // instead of reporting an instant timeout. The deadline check above
         // is the real timeout authority.
-        const int poll_result =
-            poll(&descriptor, 1, remaining > 0 ? remaining : 1);
+        const int poll_result = poll(&descriptor, 1, remaining > 0 ? remaining : 1);
         if (poll_result < 0 && errno == EINTR) {
-            continue;  // SIGCHLD while the worker exited
+            continue; // SIGCHLD while the worker exited
         }
         if (poll_result < 0) {
-            fail("poll failed waiting for a worker frame (errno=" +
-                 std::to_string(errno) + ")");
+            fail("poll failed waiting for a worker frame (errno=" + std::to_string(errno) + ")");
         }
         if (poll_result == 0) {
-            continue;  // spurious wake; the deadline check decides
+            continue; // spurious wake; the deadline check decides
         }
         uint8_t buffer[4096];
         const ssize_t count = read(fd, buffer, sizeof(buffer));
@@ -132,13 +121,11 @@ ReadResult read_frame(int fd,
         if (count < 0) {
             fail("read failed on the worker channel");
         }
-        require(
-            parser->append(buffer, static_cast<size_t>(count)),
-            "worker response buffered");
+        require(parser->append(buffer, static_cast<size_t>(count)), "worker response buffered");
     }
 }
 
-pid_t spawn_worker(const char *path, int *parent_fd) {
+pid_t spawn_worker(const char* path, int* parent_fd) {
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
         fail("socketpair failed");
@@ -153,9 +140,9 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
 
     char fd_text[16];
     std::snprintf(fd_text, sizeof(fd_text), "%d", 3);
-    char *arguments[] = {
-        const_cast<char *>(path),
-        const_cast<char *>("--ipc-fd"),
+    char* arguments[] = {
+        const_cast<char*>(path),
+        const_cast<char*>("--ipc-fd"),
         fd_text,
         NULL,
     };
@@ -169,17 +156,13 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
     return pid;
 }
 
-void append_string16(std::vector<uint8_t> *output,
-                     const std::string &value) {
-    capsid::protocol::append_u16(
-        output, static_cast<uint16_t>(value.size()));
+void append_string16(std::vector<uint8_t>* output, const std::string& value) {
+    capsid::protocol::append_u16(output, static_cast<uint16_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
-void append_string32(std::vector<uint8_t> *output,
-                     const std::string &value) {
-    capsid::protocol::append_u32(
-        output, static_cast<uint32_t>(value.size()));
+void append_string32(std::vector<uint8_t>* output, const std::string& value) {
+    capsid::protocol::append_u32(output, static_cast<uint32_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
@@ -218,11 +201,10 @@ capsid::protocol::Frame minimal_hello() {
 
 void send_hello(int fd) { send_frame(fd, minimal_hello()); }
 
-void send_bundle(int fd, const std::string &bundle) {
+void send_bundle(int fd, const std::string& bundle) {
     capsid::protocol::Frame load;
     load.type = capsid::protocol::kLoadBundle;
-    load.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    load.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     load.request_id = 0;
     load.payload.assign(bundle.begin(), bundle.end());
     send_frame(fd, load);
@@ -236,8 +218,7 @@ void finish_worker(int fd, pid_t pid, bool expect_clean_readiness) {
     waitpid(pid, &status, 0);
 }
 
-void test_zero_binding_ready_baseline(const char *worker_path,
-                                      const char *p0_path) {
+void test_zero_binding_ready_baseline(const char* worker_path, const char* p0_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
@@ -245,26 +226,19 @@ void test_zero_binding_ready_baseline(const char *worker_path,
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
-    require(
-        read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-        "READY never arrived for a zero-binding worker");
-    require(frame.type == capsid::protocol::kReady,
-            "zero-binding worker did not report READY");
-    require(
-        (frame.flags & ~capsid::protocol::kReadySandboxFeatureMask) == 0,
-        "READY carries non-sandbox flags");
+    require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+            "READY never arrived for a zero-binding worker");
+    require(frame.type == capsid::protocol::kReady, "zero-binding worker did not report READY");
+    require((frame.flags & ~capsid::protocol::kReadySandboxFeatureMask) == 0,
+            "READY carries non-sandbox flags");
     const std::string expected(CAPSID_BUILD_COMPATIBILITY_ID);
-    require(
-        expected.size() == 71 &&
-            frame.payload.size() == expected.size() &&
-            std::memcmp(frame.payload.data(), expected.data(),
-                        expected.size()) == 0,
-        "zero-binding READY payload diverged from the baseline identity");
+    require(expected.size() == 71 && frame.payload.size() == expected.size() &&
+                std::memcmp(frame.payload.data(), expected.data(), expected.size()) == 0,
+            "zero-binding READY payload diverged from the baseline identity");
     finish_worker(fd, pid, true);
 }
 
-void test_undeclared_binding_import_fails(const char *worker_path,
-                                          const char *import_path) {
+void test_undeclared_binding_import_fails(const char* worker_path, const char* import_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
@@ -275,9 +249,8 @@ void test_undeclared_binding_import_fails(const char *worker_path,
     // The module-deny audit frame may arrive before the startup error.
     bool failed = false;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived for the undeclared binding import");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived for the undeclared binding import");
         if (frame.type == capsid::protocol::kError) {
             failed = true;
             break;
@@ -288,24 +261,20 @@ void test_undeclared_binding_import_fails(const char *worker_path,
     }
     require(failed && frame.request_id == 0,
             "undeclared binding import did not fail the worker startup");
-    const std::string message(
-        reinterpret_cast<const char *>(frame.payload.data()),
-        frame.payload.size());
-    require(
-        message.find("capsid:binding") != std::string::npos,
-        "startup error does not name the undeclared binding import");
+    const std::string message(reinterpret_cast<const char*>(frame.payload.data()),
+                              frame.payload.size());
+    require(message.find("capsid:binding") != std::string::npos,
+            "startup error does not name the undeclared binding import");
     // No READY may follow: the worker never built a Binding Runtime.
-    require(
-        read_frame(fd, &parser, &frame, 3000) == ReadResult::kEof,
-        "worker stayed alive after the failed binding import");
+    require(read_frame(fd, &parser, &frame, 3000) == ReadResult::kEof,
+            "worker stayed alive after the failed binding import");
     int status = 0;
     close(fd);
     kill(pid, SIGKILL);
     waitpid(pid, &status, 0);
 }
 
-void test_load_binding_after_bundle_is_rejected(const char *worker_path,
-                                                const char *p0_path) {
+void test_load_binding_after_bundle_is_rejected(const char* worker_path, const char* p0_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
@@ -313,17 +282,15 @@ void test_load_binding_after_bundle_is_rejected(const char *worker_path,
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
-    require(
-        read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame &&
-            frame.type == capsid::protocol::kReady,
-        "bundle READY did not arrive before the sealed LOAD_BINDING");
+    require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame &&
+                frame.type == capsid::protocol::kReady,
+            "bundle READY did not arrive before the sealed LOAD_BINDING");
     // Only now send the LOAD_BINDING: startup reads buffer anything sent
     // earlier, so the seal violation must arrive after READY to be seen by
     // the post-startup frame handler.
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     capsid::protocol::append_u32(&binding.payload, 0);
     send_frame(fd, binding);
@@ -336,128 +303,108 @@ void test_load_binding_after_bundle_is_rejected(const char *worker_path,
         if (result == ReadResult::kEof) {
             break;
         }
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == 0) {
+        if (frame.type == capsid::protocol::kError && frame.request_id == 0) {
             rejected = true;
             break;
         }
     }
-    require(rejected,
-            "worker accepted a LOAD_BINDING after the bundle seal");
+    require(rejected, "worker accepted a LOAD_BINDING after the bundle seal");
     int status = 0;
     close(fd);
     waitpid(pid, &status, 0);
     // The violation path is a reported IPC error followed by an orderly
     // shutdown (the same terminal sequence as a kShutdown frame), not a
     // crash: the worker must simply terminate.
-    require(WIFEXITED(status),
-            "sealed LOAD_BINDING worker did not terminate");
+    require(WIFEXITED(status), "sealed LOAD_BINDING worker did not terminate");
 }
 
 std::vector<uint8_t> binding_blob(
-    const std::string &binding_name,
-    const std::string &source = "export default () => ({});",
-    const std::vector<std::string> &fs_read = {},
-    const std::vector<std::string> &profiles = {"network-client"},
-    const std::vector<std::string> &modules = {"capsid:internal/core"},
-    const std::vector<std::string> &fs_write = {},
-    const std::vector<std::string> &stdio = {},
-    const std::vector<std::string> &net_rules = {},
-    const std::string &config_json = "{}",
-    const std::vector<std::pair<std::string, std::string>> &secrets = {}) {
+    const std::string& binding_name, const std::string& source = "export default () => ({});",
+    const std::vector<std::string>& fs_read = {},
+    const std::vector<std::string>& profiles = {"network-client"},
+    const std::vector<std::string>& modules = {"capsid:internal/core"},
+    const std::vector<std::string>& fs_write = {}, const std::vector<std::string>& stdio = {},
+    const std::vector<std::string>& net_rules = {}, const std::string& config_json = "{}",
+    const std::vector<std::pair<std::string, std::string>>& secrets = {}) {
     // A minimal valid descriptor with the selected sandbox profiles,
     // capsid:internal/core granted, and a configurable factory source.
     std::vector<uint8_t> descriptor;
     append_string16(&descriptor, binding_name);
     append_string32(&descriptor, config_json);
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(secrets.size()));
-    for (const auto &secret : secrets) {
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(secrets.size()));
+    for (const auto& secret : secrets) {
         append_string16(&descriptor, secret.first);
-        capsid::protocol::append_u32(
-            &descriptor, static_cast<uint32_t>(secret.second.size()));
-        descriptor.insert(descriptor.end(), secret.second.begin(),
-                          secret.second.end());
+        capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(secret.second.size()));
+        descriptor.insert(descriptor.end(), secret.second.begin(), secret.second.end());
     }
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(profiles.size()));
-    for (const std::string &profile : profiles) {
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(profiles.size()));
+    for (const std::string& profile : profiles) {
         append_string16(&descriptor, profile);
     }
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(modules.size()));
-    for (const std::string &module : modules) {
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(modules.size()));
+    for (const std::string& module : modules) {
         append_string16(&descriptor, module);
     }
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(net_rules.size()));
-    for (const std::string &rule : net_rules) {
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(net_rules.size()));
+    for (const std::string& rule : net_rules) {
         append_string16(&descriptor, rule);
     }
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(fs_read.size()));
-    for (const std::string &path : fs_read) {
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(fs_read.size()));
+    for (const std::string& path : fs_read) {
         append_string16(&descriptor, path);
     }
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(fs_write.size()));
-    for (const std::string &path : fs_write) {
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(fs_write.size()));
+    for (const std::string& path : fs_write) {
         append_string16(&descriptor, path);
     }
-    capsid::protocol::append_u32(&descriptor, 0);  // env
-    capsid::protocol::append_u32(
-        &descriptor, static_cast<uint32_t>(stdio.size()));
-    for (const std::string &stream : stdio) {
+    capsid::protocol::append_u32(&descriptor, 0); // env
+    capsid::protocol::append_u32(&descriptor, static_cast<uint32_t>(stdio.size()));
+    for (const std::string& stream : stdio) {
         append_string16(&descriptor, stream);
     }
     std::vector<uint8_t> blob;
-    capsid::protocol::append_u32(
-        &blob, static_cast<uint32_t>(descriptor.size()));
+    capsid::protocol::append_u32(&blob, static_cast<uint32_t>(descriptor.size()));
     blob.insert(blob.end(), descriptor.begin(), descriptor.end());
     blob.insert(blob.end(), source.begin(), source.end());
     return blob;
 }
 
 std::vector<uint8_t> mongo_binding_blob(
-    const std::string &source = "export default () => ({});",
-    const std::vector<std::string> &fs_read = {},
-    const std::vector<std::string> &profiles = {"network-client"},
-    const std::vector<std::string> &modules = {"capsid:internal/core"},
-    const std::vector<std::string> &fs_write = {},
-    const std::vector<std::string> &stdio = {},
-    const std::vector<std::string> &net_rules = {},
-    const std::string &config_json = "{}",
-    const std::vector<std::pair<std::string, std::string>> &secrets = {}) {
-    return binding_blob("mongo", source, fs_read, profiles, modules,
-                        fs_write, stdio, net_rules, config_json, secrets);
+    const std::string& source = "export default () => ({});",
+    const std::vector<std::string>& fs_read = {},
+    const std::vector<std::string>& profiles = {"network-client"},
+    const std::vector<std::string>& modules = {"capsid:internal/core"},
+    const std::vector<std::string>& fs_write = {}, const std::vector<std::string>& stdio = {},
+    const std::vector<std::string>& net_rules = {}, const std::string& config_json = "{}",
+    const std::vector<std::pair<std::string, std::string>>& secrets = {}) {
+    return binding_blob("mongo", source, fs_read, profiles, modules, fs_write, stdio, net_rules,
+                        config_json, secrets);
 }
 
-int loopback_tcp_listener(uint16_t *port);
+int loopback_tcp_listener(uint16_t* port);
 pid_t spawn_websocket_responder(int listener);
 void finish_websocket_responder(pid_t child, int listener);
 
 // Binding v1 §7.4: a worker with one binding reports the v4 READY proof —
 // the compat id prefix plus the canonical profile digest; the zero-binding
 // baseline (tested above) stays untouched.
-void test_binding_ready_proof(const char *worker_path,
-                              const char *p0_path) {
+void test_binding_ready_proof(const char* worker_path, const char* p0_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
 
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     // A real factory: the worker must evaluate the Binding module, call
     // the factory with (config, secrets, log) and freeze the method table
     // before READY.
-    binding.payload = mongo_binding_blob(
-        "export default ({ config, secrets, log }) => {"
-        "  log.info('binding warmed');"
-        "  return { find(input) { return 'find:' + input.collection; } };"
-        "};");
+    binding.payload =
+        mongo_binding_blob("export default ({ config, secrets, log }) => {"
+                           "  log.info('binding warmed');"
+                           "  return { find(input) { return 'find:' + input.collection; } };"
+                           "};");
     send_frame(fd, binding);
     send_bundle(fd, read_file(p0_path));
 
@@ -466,13 +413,11 @@ void test_binding_ready_proof(const char *worker_path,
     // The factory's log.info emits a LOG frame before READY.
     bool saw_binding_log = false;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "binding worker produced no startup frame");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "binding worker produced no startup frame");
         if (frame.type == capsid::protocol::kLog) {
-            const std::string log_message(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            const std::string log_message(reinterpret_cast<const char*>(frame.payload.data()),
+                                          frame.payload.size());
             if (log_message.find("binding warmed") != std::string::npos) {
                 saw_binding_log = true;
             }
@@ -481,56 +426,46 @@ void test_binding_ready_proof(const char *worker_path,
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
-        fail("binding worker did not report READY; frame type=" +
-             std::to_string(frame.type) + " payload=" +
-             std::string(reinterpret_cast<const char *>(frame.payload.data()),
-                         frame.payload.size()));
+        fail(
+            "binding worker did not report READY; frame type=" + std::to_string(frame.type) +
+            " payload=" +
+            std::string(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size()));
     }
-    require(frame.type == capsid::protocol::kReady &&
-                saw_binding_log,
+    require(frame.type == capsid::protocol::kReady && saw_binding_log,
             "binding worker did not report READY after the factory log");
     capsid::WorkerReadyProof proof;
     std::string compat_id;
     std::string error;
-    require(
-        capsid::parse_ready_proof(
-            frame.payload, &compat_id, &proof, &error),
-        "binding READY proof was rejected: " + error);
-    require(compat_id == CAPSID_BUILD_COMPATIBILITY_ID &&
-                proof.extended,
+    require(capsid::parse_ready_proof(frame.payload, &compat_id, &proof, &error),
+            "binding READY proof was rejected: " + error);
+    require(compat_id == CAPSID_BUILD_COMPATIBILITY_ID && proof.extended,
             "binding READY did not extend the baseline identity");
     capsid::WorkerBindingDescriptor expected;
     expected.name = "mongo";
     expected.profiles.push_back("network-client");
-    require(
-        proof.sandbox_profile_digest ==
-            capsid::compute_binding_profile_digest(
-                std::vector<capsid::WorkerBindingDescriptor>{expected}),
-        "binding READY profile digest diverged from the worker's union");
+    require(proof.sandbox_profile_digest ==
+                capsid::compute_binding_profile_digest(
+                    std::vector<capsid::WorkerBindingDescriptor>{expected}),
+            "binding READY profile digest diverged from the worker's union");
     finish_worker(fd, pid, true);
 }
 
 // Binding v1 §7.5: a Binding factory or method-export violation fails the
 // worker startup (generation warmup) before READY, with a diagnostic that
 // names the failure.
-void expect_binding_startup_failure(const char *worker_path,
-                                    const char *p0_path,
-                                    const std::string &source,
-                                    const char *needle,
-                                    const std::string &config_json = "{}",
-                                    const std::vector<std::pair<
-                                        std::string, std::string>> &secrets = {}) {
+void expect_binding_startup_failure(
+    const char* worker_path, const char* p0_path, const std::string& source, const char* needle,
+    const std::string& config_json = "{}",
+    const std::vector<std::pair<std::string, std::string>>& secrets = {}) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        source, {}, {"network-client"}, {"capsid:internal/core"}, {}, {}, {},
-        config_json, secrets);
+    binding.payload = mongo_binding_blob(source, {}, {"network-client"}, {"capsid:internal/core"},
+                                         {}, {}, {}, config_json, secrets);
     send_frame(fd, binding);
     send_bundle(fd, read_file(p0_path));
 
@@ -546,133 +481,105 @@ void expect_binding_startup_failure(const char *worker_path,
             break;
         }
     }
-    require(failed && frame.request_id == 0,
-            "binding startup violation did not fail the worker");
-    const std::string message(
-        reinterpret_cast<const char *>(frame.payload.data()),
-        frame.payload.size());
+    require(failed && frame.request_id == 0, "binding startup violation did not fail the worker");
+    const std::string message(reinterpret_cast<const char*>(frame.payload.data()),
+                              frame.payload.size());
     require(message.find(needle) != std::string::npos,
-            "startup error '" + message + "' does not mention '" +
-                needle + "'");
+            "startup error '" + message + "' does not mention '" + needle + "'");
     int status = 0;
     close(fd);
     kill(pid, SIGKILL);
     waitpid(pid, &status, 0);
 }
 
-void test_binding_factory_failures(const char *worker_path,
-                                   const char *p0_path) {
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => { throw new Error('boom'); };",
-        "boom");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => ({ constructor() {} });",
-        "invalid method name");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => 42;",
-        "factory must return an object");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => ({ find: 7 });",
-        "method is not a function");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => ({});",
-        "between 1 and 128 methods");
+void test_binding_factory_failures(const char* worker_path, const char* p0_path) {
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "export default () => { throw new Error('boom'); };", "boom");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "export default () => ({ constructor() {} });",
+                                   "invalid method name");
+    expect_binding_startup_failure(worker_path, p0_path, "export default () => 42;",
+                                   "factory must return an object");
+    expect_binding_startup_failure(worker_path, p0_path, "export default () => ({ find: 7 });",
+                                   "method is not a function");
+    expect_binding_startup_failure(worker_path, p0_path, "export default () => ({});",
+                                   "between 1 and 128 methods");
     std::string excessive = "export default () => ({";
     for (int index = 0; index < 129; ++index) {
         excessive += "m" + std::to_string(index) + "(){},";
     }
     excessive += "});";
-    expect_binding_startup_failure(
-        worker_path, p0_path, excessive,
-        "between 1 and 128 methods");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => new Proxy({ find() {} }, {"
-        " ownKeys() { throw new Error('PROXY_TRAP_RAN'); }"
-        "});",
-        "Proxy method table");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => { const result = {};"
-        " Object.defineProperty(result, 'find', { enumerable: true,"
-        "   get() { throw new Error('ACCESSOR_RAN'); } });"
-        " return result; };",
-        "accessor");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => { const result = { find() {} };"
-        " result[Symbol('hidden')] = () => {}; return result; };",
-        "symbol");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import core from 'capsid:internal/core';"
-        "const socket = new core.TCP();"
-        "export default () => ({ find() { return socket; } });",
-        "CAPSID_BINDING_OWNER_UNAVAILABLE");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "setTimeout(() => {}, 0);"
-        "export default () => ({ find() {} });",
-        "CAPSID_BINDING_OWNER_UNAVAILABLE");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import core from 'capsid:internal/core';"
-        "export default () => { new core.TCP();"
-        " return { find() { return 'unreachable'; } }; };",
-        "CAPSID_BINDING_OWNER_UNAVAILABLE");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "export default () => { setTimeout(() => {}, 0);"
-        " return { find() {} }; };",
-        "CAPSID_BINDING_OWNER_UNAVAILABLE");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import * as utils from 'tjs:utils';"
-        "export default () => ({ find() { return utils; } });",
-        "module is not authorized for this binding: tjs:utils");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import * as utils from 'capsid:utils';"
-        "export default () => ({ find() { return utils; } });",
-        "module is not authorized for this binding: capsid:utils");
+    expect_binding_startup_failure(worker_path, p0_path, excessive, "between 1 and 128 methods");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "export default () => new Proxy({ find() {} }, {"
+                                   " ownKeys() { throw new Error('PROXY_TRAP_RAN'); }"
+                                   "});",
+                                   "Proxy method table");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "export default () => { const result = {};"
+                                   " Object.defineProperty(result, 'find', { enumerable: true,"
+                                   "   get() { throw new Error('ACCESSOR_RAN'); } });"
+                                   " return result; };",
+                                   "accessor");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "export default () => { const result = { find() {} };"
+                                   " result[Symbol('hidden')] = () => {}; return result; };",
+                                   "symbol");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import core from 'capsid:internal/core';"
+                                   "const socket = new core.TCP();"
+                                   "export default () => ({ find() { return socket; } });",
+                                   "CAPSID_BINDING_OWNER_UNAVAILABLE");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "setTimeout(() => {}, 0);"
+                                   "export default () => ({ find() {} });",
+                                   "CAPSID_BINDING_OWNER_UNAVAILABLE");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import core from 'capsid:internal/core';"
+                                   "export default () => { new core.TCP();"
+                                   " return { find() { return 'unreachable'; } }; };",
+                                   "CAPSID_BINDING_OWNER_UNAVAILABLE");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "export default () => { setTimeout(() => {}, 0);"
+                                   " return { find() {} }; };",
+                                   "CAPSID_BINDING_OWNER_UNAVAILABLE");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import * as utils from 'tjs:utils';"
+                                   "export default () => ({ find() { return utils; } });",
+                                   "module is not authorized for this binding: tjs:utils");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import * as utils from 'capsid:utils';"
+                                   "export default () => ({ find() { return utils; } });",
+                                   "module is not authorized for this binding: capsid:utils");
 }
 
 // Binding v1 §7.6 end-to-end: the App's fetch calls mongo.find through
 // the facade; the response body must carry the Binding's return value.
-void test_binding_end_to_end_call(const char *worker_path,
-                                  const char *call_path) {
+void test_binding_end_to_end_call(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        "export default ({ config, secrets, log }) => {"
-        "  return { find(input) { return 'find:' + input.collection; } };"
-        "};");
+    binding.payload =
+        mongo_binding_blob("export default ({ config, secrets, log }) => {"
+                           "  return { find(input) { return 'find:' + input.collection; } };"
+                           "};");
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived before READY");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived before READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
     }
-    require(frame.type == capsid::protocol::kReady,
-            "binding call worker did not report READY");
+    require(frame.type == capsid::protocol::kReady, "binding call worker did not report READY");
 
     capsid::protocol::Frame head;
     head.type = capsid::protocol::kRequestHead;
@@ -686,13 +593,10 @@ void test_binding_end_to_end_call(const char *worker_path,
     std::string body;
     bool ended = false;
     for (int i = 0; i < 64; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "response frames stopped before ResponseEnd");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "response frames stopped before ResponseEnd");
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -700,33 +604,26 @@ void test_binding_end_to_end_call(const char *worker_path,
         }
     }
     require(ended, "binding call response never ended");
-    require(body == "result:find:users",
-            "binding call response body is wrong: " + body);
+    require(body == "result:find:users", "binding call response body is wrong: " + body);
     finish_worker(fd, pid, true);
 }
 
-std::string read_response_body(int fd,
-                               capsid::protocol::Parser *parser,
-                               uint64_t request_id) {
+std::string read_response_body(int fd, capsid::protocol::Parser* parser, uint64_t request_id) {
     capsid::protocol::Frame frame;
     std::string body;
     for (int index = 0; index < 128; ++index) {
-        require(read_frame(fd, parser, &frame, 5000) ==
-                    ReadResult::kFrame,
+        require(read_frame(fd, parser, &frame, 5000) == ReadResult::kFrame,
                 "Binding lifecycle response stopped before terminal frame");
         if (frame.request_id != request_id) {
             continue;
         }
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kError) {
             return std::string("protocol-error:") +
-                   std::string(
-                       reinterpret_cast<const char *>(frame.payload.data()),
-                       frame.payload.size());
+                   std::string(reinterpret_cast<const char*>(frame.payload.data()),
+                               frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             return body;
@@ -736,9 +633,7 @@ std::string read_response_body(int fd,
     return std::string();
 }
 
-void send_bodyless_get(int fd,
-                       uint64_t request_id,
-                       const std::string &path) {
+void send_bodyless_get(int fd, uint64_t request_id, const std::string& path) {
     capsid::protocol::Frame head;
     head.type = capsid::protocol::kRequestHead;
     head.flags = capsid::protocol::kFlagRequestEnd;
@@ -752,47 +647,43 @@ void send_bodyless_get(int fd,
 // Binding v1 §5.2: metadata is full-width and deadline-based, synchronous
 // throws cross with their real message, and calls detached by a completed
 // response cannot retain worker/request quota forever.
-void test_binding_rpc_lifecycle(const char *worker_path,
-                                const char *lifecycle_path) {
+void test_binding_rpc_lifecycle(const char* worker_path, const char* lifecycle_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        "import core from 'capsid:internal/core';"
-        "let dispatchCount = 0; let abortStatus = 'not-aborted';"
-        "export default () => ({"
-        " inspect(_input, call) {"
-        "  return [typeof call.requestId, String(call.requestId),"
-        "    typeof call.deadline, call.deadline > 4000000000n]"
-        "    .join(':');"
-        " },"
-        " throwSync() { throw new Error('binding-sync-boom'); },"
-        " hang(_input, call) { dispatchCount++;"
-        "  return new Promise(() => {"
-        "   call.signal.addEventListener('abort', () => {"
-        "    try { const tcp = new core.TCP(); tcp.close();"
-        "      abortStatus = 'owner-ok'; }"
-        "    catch (error) { abortStatus = error.message; }"
-        "   });"
-        "  });"
-        " },"
-        " dispatchCount() { return dispatchCount; },"
-        " abortStatus() { return abortStatus; },"
-        " ping() { return 'pong'; }"
-        "});");
+    binding.payload = mongo_binding_blob("import core from 'capsid:internal/core';"
+                                         "let dispatchCount = 0; let abortStatus = 'not-aborted';"
+                                         "export default () => ({"
+                                         " inspect(_input, call) {"
+                                         "  return [typeof call.requestId, String(call.requestId),"
+                                         "    typeof call.deadline, call.deadline > 4000000000n]"
+                                         "    .join(':');"
+                                         " },"
+                                         " throwSync() { throw new Error('binding-sync-boom'); },"
+                                         " hang(_input, call) { dispatchCount++;"
+                                         "  return new Promise(() => {"
+                                         "   call.signal.addEventListener('abort', () => {"
+                                         "    try { const tcp = new core.TCP(); tcp.close();"
+                                         "      abortStatus = 'owner-ok'; }"
+                                         "    catch (error) { abortStatus = error.message; }"
+                                         "   });"
+                                         "  });"
+                                         " },"
+                                         " dispatchCount() { return dispatchCount; },"
+                                         " abortStatus() { return abortStatus; },"
+                                         " ping() { return 'pong'; }"
+                                         "});");
     send_frame(fd, binding);
     send_bundle(fd, read_file(lifecycle_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int index = 0; index < 8; ++index) {
-        require(read_frame(fd, &parser, &frame, 5000) ==
-                    ReadResult::kFrame,
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
                 "no frame arrived before lifecycle READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
@@ -807,8 +698,7 @@ void test_binding_rpc_lifecycle(const char *worker_path,
             "Binding call metadata lost width or absolute deadline");
 
     send_bodyless_get(fd, 1, "/throw");
-    require(read_response_body(fd, &parser, 1) ==
-                "error:Error: binding-sync-boom",
+    require(read_response_body(fd, &parser, 1) == "error:Error: binding-sync-boom",
             "synchronous Binding throw lost its message");
 
     // 17 * 64 exceeds the worker-wide quota if response-terminal calls are
@@ -850,29 +740,25 @@ void test_binding_rpc_lifecycle(const char *worker_path,
 // interruptible. The Binding Runtime handler observes the call deadline,
 // QuickJS aborts JS_Call, the call settles as an error, and the worker
 // enters poison/EXIT instead of hanging forever.
-void test_binding_sync_loop_interrupts(const char *worker_path,
-                                       const char *call_path) {
+void test_binding_sync_loop_interrupts(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        "export default () => ({"
-        "  find() { while (true) {} }"
-        "});",
-        {}, {}, {"capsid:utils"}, {}, {}, {}, "{}", {});
+    binding.payload = mongo_binding_blob("export default () => ({"
+                                         "  find() { while (true) {} }"
+                                         "});",
+                                         {}, {}, {"capsid:utils"}, {}, {}, {}, "{}", {});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int index = 0; index < 8; ++index) {
-        require(read_frame(fd, &parser, &frame, 5000) ==
-                    ReadResult::kFrame,
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
                 "no frame arrived before interrupt-test READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
@@ -887,57 +773,44 @@ void test_binding_sync_loop_interrupts(const char *worker_path,
     for (int index = 0; index < 8; ++index) {
         // The interrupt fires at the request deadline (5s); afterwards the
         // worker must drain its 100ms poison window and close the channel.
-        const ReadResult read = read_frame(
-            fd, &parser, &frame, saw_error ? 3000 : 10000);
+        const ReadResult read = read_frame(fd, &parser, &frame, saw_error ? 3000 : 10000);
         if (read == ReadResult::kEof) {
             saw_exit = true;
             break;
         }
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == 1) {
+        if (frame.type == capsid::protocol::kError && frame.request_id == 1) {
             saw_error = true;
         }
     }
-    require(saw_error,
-            "Binding CPU loop was not interrupted with a call error");
-    require(saw_exit,
-            "Binding CPU loop settled an error but the worker did not exit");
+    require(saw_error, "Binding CPU loop was not interrupted with a call error");
+    require(saw_exit, "Binding CPU loop settled an error but the worker did not exit");
     finish_worker(fd, pid, saw_error);
 }
 
 std::string invoke_binding_method(
-    const char *worker_path,
-    const char *call_path,
-    const std::string &source,
-    const std::vector<std::string> &fs_read,
-    const std::vector<std::string> &profiles,
-    const std::vector<std::string> &modules,
-    uint64_t request_id,
-    const std::vector<std::string> &fs_write = {},
-    const std::vector<std::string> &stdio = {},
-    const std::vector<std::string> &net_rules = {},
-    const std::string &config_json = "{}",
-    const std::vector<std::pair<std::string, std::string>> &secrets = {},
-    std::vector<capsid::protocol::Frame> *observed_logs = nullptr) {
+    const char* worker_path, const char* call_path, const std::string& source,
+    const std::vector<std::string>& fs_read, const std::vector<std::string>& profiles,
+    const std::vector<std::string>& modules, uint64_t request_id,
+    const std::vector<std::string>& fs_write = {}, const std::vector<std::string>& stdio = {},
+    const std::vector<std::string>& net_rules = {}, const std::string& config_json = "{}",
+    const std::vector<std::pair<std::string, std::string>>& secrets = {},
+    std::vector<capsid::protocol::Frame>* observed_logs = nullptr) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        source, fs_read, profiles, modules, fs_write, stdio, net_rules,
-        config_json, secrets);
+    binding.payload = mongo_binding_blob(source, fs_read, profiles, modules, fs_write, stdio,
+                                         net_rules, config_json, secrets);
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(read_frame(fd, &parser, &frame, 5000) ==
-                    ReadResult::kFrame,
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
                 "no frame arrived before Binding READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
@@ -966,14 +839,11 @@ std::string invoke_binding_method(
             int status = 0;
             waitpid(pid, &status, 0);
             fail("Binding invocation worker exited before terminal frame "
-                 "for request " + std::to_string(request_id) +
-                 " with status " + std::to_string(status));
+                 "for request " +
+                 std::to_string(request_id) + " with status " + std::to_string(status));
         }
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == request_id) {
-            body.assign(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+        if (frame.type == capsid::protocol::kError && frame.request_id == request_id) {
+            body.assign(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
             ended = true;
             break;
         }
@@ -984,9 +854,7 @@ std::string invoke_binding_method(
             continue;
         }
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -998,69 +866,61 @@ std::string invoke_binding_method(
     return body;
 }
 
-void test_binding_init_object_contract(const char *worker_path,
-                                       const char *call_path) {
-    const std::string source =
-        "export default init => {"
-        " const { config, secrets, log } = init;"
-        " const plain = value => Object.getPrototypeOf(value) === null &&"
-        "   Object.isFrozen(value);"
-        " if (!plain(init) || !plain(config) || !plain(config.nested) ||"
-        "     !Object.isFrozen(config.items) || !plain(config.items[0]) ||"
-        "     !plain(secrets) || !Object.isFrozen(log))"
-        "   throw new Error('INIT_OBJECT_CONTRACT');"
-        " return { find() { return config.nested.value + ':' +"
-        "   config.items[0].name + ':' + secrets.password; } };"
-        "};";
+void test_binding_init_object_contract(const char* worker_path, const char* call_path) {
+    const std::string source = "export default init => {"
+                               " const { config, secrets, log } = init;"
+                               " const plain = value => Object.getPrototypeOf(value) === null &&"
+                               "   Object.isFrozen(value);"
+                               " if (!plain(init) || !plain(config) || !plain(config.nested) ||"
+                               "     !Object.isFrozen(config.items) || !plain(config.items[0]) ||"
+                               "     !plain(secrets) || !Object.isFrozen(log))"
+                               "   throw new Error('INIT_OBJECT_CONTRACT');"
+                               " return { find() { return config.nested.value + ':' +"
+                               "   config.items[0].name + ':' + secrets.password; } };"
+                               "};";
     const std::string body = invoke_binding_method(
-        worker_path, call_path, source, {}, {"network-client"},
-        {"capsid:internal/core"}, 106, {}, {}, {},
-        R"json({"items":[{"name":"item"}],"nested":{"value":"ok"}})json",
+        worker_path, call_path, source, {}, {"network-client"}, {"capsid:internal/core"}, 106, {},
+        {}, {}, R"json({"items":[{"name":"item"}],"nested":{"value":"ok"}})json",
         {{"password", "secret-value"}});
     require(body == "result:ok:item:secret-value",
             "Binding init object contract is wrong: " + body);
 }
 
-void test_binding_method_table_is_frozen(const char *worker_path,
-                                         const char *call_path) {
-    const std::string body = invoke_binding_method(
-        worker_path, call_path,
-        "export default () => {"
-        " const table = { find() { return 'original'; } };"
-        " Promise.resolve().then(() => {"
-        "   try { table.find = () => 'mutated'; } catch (_) {}"
-        " });"
-        " return table;"
-        "};",
-        {}, {"network-client"}, {"capsid:internal/core"}, 107);
-    require(body == "result:original",
-            "Binding method table was mutable after discovery: " + body);
+void test_binding_method_table_is_frozen(const char* worker_path, const char* call_path) {
+    const std::string body =
+        invoke_binding_method(worker_path, call_path,
+                              "export default () => {"
+                              " const table = { find() { return 'original'; } };"
+                              " Promise.resolve().then(() => {"
+                              "   try { table.find = () => 'mutated'; } catch (_) {}"
+                              " });"
+                              " return table;"
+                              "};",
+                              {}, {"network-client"}, {"capsid:internal/core"}, 107);
+    require(body == "result:original", "Binding method table was mutable after discovery: " + body);
 }
 
-void test_binding_log_envelope_and_redaction(const char *worker_path,
-                                             const char *call_path) {
+void test_binding_log_envelope_and_redaction(const char* worker_path, const char* call_path) {
     std::vector<capsid::protocol::Frame> logs;
-    const std::string body = invoke_binding_method(
-        worker_path, call_path,
-        "export default ({ secrets, log }) => ({ find() {"
-        " let rejected = false;"
-        " try { log.info('invalid', []); }"
-        " catch (error) { rejected = error instanceof TypeError; }"
-        " if (!rejected) throw new Error('LOG_FIELDS_NOT_REJECTED');"
-        " log.warn('password=' + secrets.password,"
-        "   { password: secrets.password, safe: 'visible' });"
-        " return 'logged';"
-        "} });",
-        {}, {"network-client"}, {"capsid:internal/core"}, 108,
-        {}, {}, {}, "{}", {{"password", "SECRET_CANARY_108"}}, &logs);
+    const std::string body =
+        invoke_binding_method(worker_path, call_path,
+                              "export default ({ secrets, log }) => ({ find() {"
+                              " let rejected = false;"
+                              " try { log.info('invalid', []); }"
+                              " catch (error) { rejected = error instanceof TypeError; }"
+                              " if (!rejected) throw new Error('LOG_FIELDS_NOT_REJECTED');"
+                              " log.warn('password=' + secrets.password,"
+                              "   { password: secrets.password, safe: 'visible' });"
+                              " return 'logged';"
+                              "} });",
+                              {}, {"network-client"}, {"capsid:internal/core"}, 108, {}, {}, {},
+                              "{}", {{"password", "SECRET_CANARY_108"}}, &logs);
     require(body == "result:logged", "Binding log call failed: " + body);
     require(logs.size() == 1, "Binding log call did not emit exactly one log");
-    const capsid::protocol::Frame &log = logs[0];
-    const std::string payload(
-        reinterpret_cast<const char *>(log.payload.data()),
-        log.payload.size());
-    require(log.flags == capsid::protocol::kFlagBindingLog &&
-                log.request_id == 108 &&
+    const capsid::protocol::Frame& log = logs[0];
+    const std::string payload(reinterpret_cast<const char*>(log.payload.data()),
+                              log.payload.size());
+    require(log.flags == capsid::protocol::kFlagBindingLog && log.request_id == 108 &&
                 payload.find("mongo") != std::string::npos &&
                 payload.find("warn") != std::string::npos &&
                 payload.find("visible") != std::string::npos &&
@@ -1077,21 +937,17 @@ void test_binding_log_envelope_and_redaction(const char *worker_path,
 // allocation (an allocation smoke proving the limits are independent). The
 // owner Binding must keep its own global and module-cache state untouched
 // and be able to reuse and close its resources afterwards.
-void test_binding_isolation_globals_modules_and_handles(
-    const char *worker_path,
-    const char *owner_path) {
+void test_binding_isolation_globals_modules_and_handles(const char* worker_path,
+                                                        const char* owner_path) {
     char file_path[] = "/tmp/capsid-binding-owner-XXXXXX";
     const int fixture = mkstemp(file_path);
     require(fixture >= 0, "could not create Binding owner fixture");
     close(fixture);
 
     uint16_t websocket_port = 0;
-    const int websocket_listener =
-        loopback_tcp_listener(&websocket_port);
-    const pid_t websocket_server =
-        spawn_websocket_responder(websocket_listener);
-    const std::string websocket_target =
-        "127.0.0.1:" + std::to_string(websocket_port);
+    const int websocket_listener = loopback_tcp_listener(&websocket_port);
+    const pid_t websocket_server = spawn_websocket_responder(websocket_listener);
+    const std::string websocket_target = "127.0.0.1:" + std::to_string(websocket_port);
 
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
@@ -1099,22 +955,17 @@ void test_binding_isolation_globals_modules_and_handles(
 
     capsid::protocol::Frame mongo;
     mongo.type = capsid::protocol::kLoadBinding;
-    mongo.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    mongo.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     mongo.request_id = 0;
     mongo.payload = binding_blob(
         "mongo",
         std::string("import core from 'capsid:internal/core';") +
-            "import { Database } from 'capsid:sqlite';" +
-            "import getopts from 'capsid:getopts';" +
-            "const wasmBytes = new Uint8Array([" +
-            "0,97,115,109,1,0,0,0,1,4,1,96,0,0," +
+            "import { Database } from 'capsid:sqlite';" + "import getopts from 'capsid:getopts';" +
+            "const wasmBytes = new Uint8Array([" + "0,97,115,109,1,0,0,0,1,4,1,96,0,0," +
             "3,2,1,0,7,8,1,4,110,111,111,112,0,0,10,4,1,2,0,11]);" +
-            "let owned; export default ({ log }) => ({" +
-            " async store() {" +
+            "let owned; export default ({ log }) => ({" + " async store() {" +
             "  const file = await core.fs.open('" + file_path + "','r');" +
-            "  const tcp = new core.TCP();" +
-            "  const udp = new core.UDP();" +
+            "  const tcp = new core.TCP();" + "  const udp = new core.UDP();" +
             "  const tls = new core.TLSTcp({isServer:false,verifyPeer:false});" +
             "  const database = new Database(':memory:');" +
             "  database.exec('CREATE TABLE owned(value INTEGER)');" +
@@ -1122,54 +973,39 @@ void test_binding_isolation_globals_modules_and_handles(
             "  const module = new WebAssembly.Module(wasmBytes);" +
             "  const instance = new WebAssembly.Instance(module);" +
             "  const http = new core.HttpClient(); http.timeout = 17;" +
-            "  const ws = new core.WebSocket('ws://" + websocket_target +
-            "/', null, [], []);" +
+            "  const ws = new core.WebSocket('ws://" + websocket_target + "/', null, [], []);" +
             "  const watcher = core.watch('" + file_path + "', () => {});" +
             "  const timer = setTimeout(() => {}, 60000);" +
             "  owned = {file,tcp,udp,tls,database,statement,module,instance," +
             "           http,ws,watcher,timer};" +
             "  getopts.__capsidModuleMarker = 'mongo-module';" +
             "  const chunk = new Uint8Array(32 * 1024 * 1024); chunk[0] = 1;" +
-            "  globalThis.__capsidOwned = owned;" +
-            "  globalThis.__capsidLog = log;" +
-            "  globalThis.__capsidProbe = 'mongo-global';" +
-            "  globalThis.__capsidChunk = chunk;" +
+            "  globalThis.__capsidOwned = owned;" + "  globalThis.__capsidLog = log;" +
+            "  globalThis.__capsidProbe = 'mongo-global';" + "  globalThis.__capsidChunk = chunk;" +
             "  return 'stored:' + globalThis.__capsidProbe + ':' +" +
-            "    getopts.__capsidModuleMarker + ':' + chunk.length;" +
-            " }," +
-            " async cleanup() {" +
-            "  const probe = globalThis.__capsidProbe;" +
+            "    getopts.__capsidModuleMarker + ':' + chunk.length;" + " }," +
+            " async cleanup() {" + "  const probe = globalThis.__capsidProbe;" +
             "  const moduleMarker = getopts.__capsidModuleMarker;" +
             "  const chunkBytes = globalThis.__capsidChunk" +
-            "    ? globalThis.__capsidChunk.length : 0;" +
-            "  await owned.file.close();" +
+            "    ? globalThis.__capsidChunk.length : 0;" + "  await owned.file.close();" +
             "  owned.tcp.close(); owned.udp.close(); owned.tls.close();" +
             "  owned.statement.all(); owned.statement.finalize();" +
             "  owned.database.exec('SELECT 1'); owned.database.close();" +
             "  WebAssembly.Module.exports(owned.module);" +
             "  void owned.instance.exports; void owned.http.timeout;" +
-            "  owned.ws.close(1000, '');" +
-            "  void owned.watcher.path; owned.watcher.close();" +
-            "  clearTimeout(owned.timer);" +
-            "  delete globalThis.__capsidOwned;" +
-            "  delete globalThis.__capsidLog;" +
-            "  delete globalThis.__capsidProbe;" +
-            "  delete globalThis.__capsidChunk;" +
-            "  delete getopts.__capsidModuleMarker;" +
-            "  return 'closed:' + probe + ':' + moduleMarker + ':' +" +
-            "    chunkBytes;" +
-            " }" +
+            "  owned.ws.close(1000, '');" + "  void owned.watcher.path; owned.watcher.close();" +
+            "  clearTimeout(owned.timer);" + "  delete globalThis.__capsidOwned;" +
+            "  delete globalThis.__capsidLog;" + "  delete globalThis.__capsidProbe;" +
+            "  delete globalThis.__capsidChunk;" + "  delete getopts.__capsidModuleMarker;" +
+            "  return 'closed:' + probe + ':' + moduleMarker + ':' +" + "    chunkBytes;" + " }" +
             "});",
-        {file_path},
-        {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
-        {"capsid:internal/core", "capsid:sqlite", "capsid:getopts"},
-        {}, {}, {websocket_target});
+        {file_path}, {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
+        {"capsid:internal/core", "capsid:sqlite", "capsid:getopts"}, {}, {}, {websocket_target});
     send_frame(fd, mongo);
 
     capsid::protocol::Frame redis;
     redis.type = capsid::protocol::kLoadBinding;
-    redis.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    redis.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     redis.request_id = 0;
     redis.payload = binding_blob(
         "redis",
@@ -1199,10 +1035,8 @@ void test_binding_isolation_globals_modules_and_handles(
         "   logResult"
         " ].join(':');"
         "} });",
-        {file_path},
-        {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
-        {"capsid:internal/core", "capsid:sqlite", "capsid:getopts"},
-        {}, {}, {websocket_target});
+        {file_path}, {"filesystem-read", "filesystem-watch", "network-client", "sqlite"},
+        {"capsid:internal/core", "capsid:sqlite", "capsid:getopts"}, {}, {}, {websocket_target});
     send_frame(fd, redis);
     send_bundle(fd, read_file(owner_path));
 
@@ -1216,17 +1050,15 @@ void test_binding_isolation_globals_modules_and_handles(
                  std::to_string(worker_status));
         }
         if (frame.type == capsid::protocol::kError) {
-            const std::string message(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            const std::string message(reinterpret_cast<const char*>(frame.payload.data()),
+                                      frame.payload.size());
             fail("owner-test worker startup failed: " + message);
         }
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
     }
-    require(frame.type == capsid::protocol::kReady,
-            "owner-test worker did not report READY");
+    require(frame.type == capsid::protocol::kReady, "owner-test worker did not report READY");
 
     capsid::protocol::Frame head;
     head.type = capsid::protocol::kRequestHead;
@@ -1240,20 +1072,15 @@ void test_binding_isolation_globals_modules_and_handles(
     std::string body;
     bool ended = false;
     for (int i = 0; i < 64; ++i) {
-        require(read_frame(fd, &parser, &frame, 5000) ==
-                    ReadResult::kFrame,
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
                 "owner-test response stopped before terminal frame");
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == head.request_id) {
-            const std::string message(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+        if (frame.type == capsid::protocol::kError && frame.request_id == head.request_id) {
+            const std::string message(reinterpret_cast<const char*>(frame.payload.data()),
+                                      frame.payload.size());
             fail("owner-test Binding call failed: " + message);
         }
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -1262,13 +1089,10 @@ void test_binding_isolation_globals_modules_and_handles(
     }
     unlink(file_path);
     require(ended, "owner-test response never ended");
-    require(
-        body ==
-            "result:stored:mongo-global:mongo-module:33554432:"
-            "isolated:true:true:true:true:true:true:type-error:"
-            "closed:mongo-global:mongo-module:33554432",
-        "a Binding value crossed the per-Binding isolation boundary: " +
-            body);
+    require(body == "result:stored:mongo-global:mongo-module:33554432:"
+                    "isolated:true:true:true:true:true:true:type-error:"
+                    "closed:mongo-global:mongo-module:33554432",
+            "a Binding value crossed the per-Binding isolation boundary: " + body);
     finish_worker(fd, pid, true);
     finish_websocket_responder(websocket_server, websocket_listener);
 }
@@ -1276,39 +1100,34 @@ void test_binding_isolation_globals_modules_and_handles(
 // Binding v1 §3.3: granting the controlled core must not expose a server,
 // fd-adoption, local pipe, or listener surface. This is a JavaScript reachability
 // check and therefore holds even when seccomp is disabled (for example Darwin).
-void test_binding_core_is_client_only(const char *worker_path,
-                                      const char *call_path) {
-    const std::string body = invoke_binding_method(
-        worker_path,
-        call_path,
-        "import core from 'capsid:internal/core';"
-        "const has = (value, name) => !!value &&"
-        "  typeof value[name] === 'function';"
-        "export default () => ({ find() {"
-        "  let tcp, tls, udp;"
-        "  try { tcp = new core.TCP(); }"
-        "  catch (error) { return 'tcp-constructor:' + error.message; }"
-        "  try { tls = new core.TLSTcp({isServer:false,verifyPeer:false}); }"
-        "  catch (error) { return 'tls-constructor:' + error.message; }"
-        "  try { udp = new core.UDP(); }"
-        "  catch (error) { return 'udp-constructor:' + error.message; }"
-        "  return ["
-        "    has(tcp, 'bind'), has(tcp, 'listen'),"
-        "    has(tcp, 'fileno'), !!core.Pipe, !!core.TTY,"
-        "    has(tls, 'bind'), has(tls, 'listen'),"
-        "    has(udp, 'bind'), has(udp, 'fileno'),"
-        "    !!globalThis.tjs, !!core.fs.File,"
-        "    !!core.fs.fileno, !!core.stdoutPrint,"
-        "    !!core.stderrPrint, !!core.guessHandle,"
-        "    !!core.STDIN_FILENO, !!core.STDOUT_FILENO,"
-        "    !!core.STDERR_FILENO,"
-        "    typeof (function () {}).bind !== 'function'"
-        "  ].map(Number).join('');"
-        "} });",
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        83);
+void test_binding_core_is_client_only(const char* worker_path, const char* call_path) {
+    const std::string body =
+        invoke_binding_method(worker_path, call_path,
+                              "import core from 'capsid:internal/core';"
+                              "const has = (value, name) => !!value &&"
+                              "  typeof value[name] === 'function';"
+                              "export default () => ({ find() {"
+                              "  let tcp, tls, udp;"
+                              "  try { tcp = new core.TCP(); }"
+                              "  catch (error) { return 'tcp-constructor:' + error.message; }"
+                              "  try { tls = new core.TLSTcp({isServer:false,verifyPeer:false}); }"
+                              "  catch (error) { return 'tls-constructor:' + error.message; }"
+                              "  try { udp = new core.UDP(); }"
+                              "  catch (error) { return 'udp-constructor:' + error.message; }"
+                              "  return ["
+                              "    has(tcp, 'bind'), has(tcp, 'listen'),"
+                              "    has(tcp, 'fileno'), !!core.Pipe, !!core.TTY,"
+                              "    has(tls, 'bind'), has(tls, 'listen'),"
+                              "    has(udp, 'bind'), has(udp, 'fileno'),"
+                              "    !!globalThis.tjs, !!core.fs.File,"
+                              "    !!core.fs.fileno, !!core.stdoutPrint,"
+                              "    !!core.stderrPrint, !!core.guessHandle,"
+                              "    !!core.STDIN_FILENO, !!core.STDOUT_FILENO,"
+                              "    !!core.STDERR_FILENO,"
+                              "    typeof (function () {}).bind !== 'function'"
+                              "  ].map(Number).join('');"
+                              "} });",
+                              {}, {"network-client"}, {"capsid:internal/core"}, 83);
     require(body == "result:0000000000000000000",
             "Binding core exposes a server/fd surface: " + body);
 }
@@ -1316,11 +1135,9 @@ void test_binding_core_is_client_only(const char *worker_path,
 // capsid:readline is grantable only as a pure transformer over caller-provided
 // Web Streams. It must not gain ambient stdin/stdout through a hidden tjs
 // global, while a memory-backed line read remains usable.
-void test_binding_readline_has_no_ambient_stdio(const char *worker_path,
-                                                const char *call_path) {
+void test_binding_readline_has_no_ambient_stdio(const char* worker_path, const char* call_path) {
     const std::string body = invoke_binding_method(
-        worker_path,
-        call_path,
+        worker_path, call_path,
         "import { createInterface, isColorSupported } from 'capsid:readline';"
         "export default () => ({ async find() {"
         "  if (globalThis.tjs !== undefined || isColorSupported())"
@@ -1339,39 +1156,32 @@ void test_binding_readline_has_no_ambient_stdio(const char *worker_path,
         "  lines.close();"
         "  return line + ':' + written;"
         "} });",
-        {},
-        {"network-client"},
-        {"capsid:internal/core", "capsid:readline"},
-        91);
+        {}, {"network-client"}, {"capsid:internal/core", "capsid:readline"}, 91);
     require(body == "result:hello:",
-            "readline acquired ambient stdio or failed pure streams: " +
-                body);
+            "readline acquired ambient stdio or failed pure streams: " + body);
 }
 
-int loopback_tcp_listener(uint16_t *port) {
+int loopback_tcp_listener(uint16_t* port) {
     const int fd = socket(AF_INET, SOCK_STREAM, 0);
     require(fd >= 0, "could not create TCP listener");
     int reuse = 1;
-    require(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
-                       sizeof(reuse)) == 0,
+    require(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == 0,
             "could not configure TCP listener");
     sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    require(bind(fd, reinterpret_cast<const sockaddr *>(&address),
-                 sizeof(address)) == 0,
+    require(bind(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
             "could not bind TCP listener");
     require(listen(fd, 4) == 0, "could not listen on TCP socket");
     socklen_t size = sizeof(address);
-    require(getsockname(fd, reinterpret_cast<sockaddr *>(&address), &size) ==
-                0,
+    require(getsockname(fd, reinterpret_cast<sockaddr*>(&address), &size) == 0,
             "could not inspect TCP listener");
     *port = ntohs(address.sin_port);
     return fd;
 }
 
-pid_t spawn_http_responder(int listener, const std::string &response) {
+pid_t spawn_http_responder(int listener, const std::string& response) {
     const pid_t child = fork();
     require(child >= 0, "could not fork HTTP responder");
     if (child == 0) {
@@ -1384,9 +1194,8 @@ pid_t spawn_http_responder(int listener, const std::string &response) {
         (void)read(client, request, sizeof(request));
         size_t offset = 0;
         while (offset < response.size()) {
-            const ssize_t written = write(
-                client, response.data() + offset,
-                response.size() - offset);
+            const ssize_t written =
+                write(client, response.data() + offset, response.size() - offset);
             if (written <= 0) {
                 close(client);
                 _exit(3);
@@ -1400,9 +1209,7 @@ pid_t spawn_http_responder(int listener, const std::string &response) {
     return child;
 }
 
-void finish_http_responder(pid_t child,
-                           int listener,
-                           bool expect_request) {
+void finish_http_responder(pid_t child, int listener, bool expect_request) {
     close(listener);
     if (!expect_request) {
         kill(child, SIGKILL);
@@ -1419,7 +1226,7 @@ uint32_t rotate_left(uint32_t value, unsigned count) {
     return (value << count) | (value >> (32u - count));
 }
 
-std::array<uint8_t, 20> sha1(const std::string &input) {
+std::array<uint8_t, 20> sha1(const std::string& input) {
     std::vector<uint8_t> data(input.begin(), input.end());
     const uint64_t bit_length = static_cast<uint64_t>(data.size()) * 8u;
     data.push_back(0x80);
@@ -1445,9 +1252,7 @@ std::array<uint8_t, 20> sha1(const std::string &input) {
                        static_cast<uint32_t>(data[at + 3]);
         }
         for (size_t i = 16; i < 80; ++i) {
-            words[i] = rotate_left(words[i - 3] ^ words[i - 8] ^
-                                       words[i - 14] ^ words[i - 16],
-                                   1);
+            words[i] = rotate_left(words[i - 3] ^ words[i - 8] ^ words[i - 14] ^ words[i - 16], 1);
         }
         uint32_t a = h0;
         uint32_t b = h1;
@@ -1495,17 +1300,16 @@ std::array<uint8_t, 20> sha1(const std::string &input) {
     return digest;
 }
 
-std::string base64(const std::array<uint8_t, 20> &data) {
+std::string base64(const std::array<uint8_t, 20>& data) {
     static const char alphabet[] =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string output;
     output.reserve(28);
     for (size_t i = 0; i < data.size(); i += 3) {
         const size_t remaining = data.size() - i;
-        const uint32_t value =
-            (static_cast<uint32_t>(data[i]) << 16u) |
-            (remaining > 1 ? static_cast<uint32_t>(data[i + 1]) << 8u : 0) |
-            (remaining > 2 ? static_cast<uint32_t>(data[i + 2]) : 0);
+        const uint32_t value = (static_cast<uint32_t>(data[i]) << 16u) |
+                               (remaining > 1 ? static_cast<uint32_t>(data[i + 1]) << 8u : 0) |
+                               (remaining > 2 ? static_cast<uint32_t>(data[i + 2]) : 0);
         output.push_back(alphabet[(value >> 18u) & 63u]);
         output.push_back(alphabet[(value >> 12u) & 63u]);
         output.push_back(remaining > 1 ? alphabet[(value >> 6u) & 63u] : '=');
@@ -1514,7 +1318,7 @@ std::string base64(const std::array<uint8_t, 20> &data) {
     return output;
 }
 
-bool ascii_prefix_equal(const std::string &line, const char *prefix) {
+bool ascii_prefix_equal(const std::string& line, const char* prefix) {
     const size_t prefix_size = std::strlen(prefix);
     if (line.size() < prefix_size) {
         return false;
@@ -1540,8 +1344,7 @@ pid_t spawn_websocket_responder(int listener) {
         }
         std::string request;
         char chunk[1024];
-        while (request.find("\r\n\r\n") == std::string::npos &&
-               request.size() <= 16u * 1024u) {
+        while (request.find("\r\n\r\n") == std::string::npos && request.size() <= 16u * 1024u) {
             const ssize_t count = read(client, chunk, sizeof(chunk));
             if (count <= 0) {
                 close(client);
@@ -1557,8 +1360,7 @@ pid_t spawn_websocket_responder(int listener) {
             if (line_end == std::string::npos) {
                 break;
             }
-            const std::string line =
-                request.substr(line_start, line_end - line_start);
+            const std::string line = request.substr(line_start, line_end - line_start);
             if (ascii_prefix_equal(line, key_header)) {
                 size_t value_start = std::strlen(key_header);
                 while (value_start < line.size() &&
@@ -1574,17 +1376,15 @@ pid_t spawn_websocket_responder(int listener) {
             close(client);
             _exit(4);
         }
-        const std::string accept = base64(sha1(
-            key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"));
-        const std::string response =
-            "HTTP/1.1 101 Switching Protocols\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Accept: " + accept + "\r\n\r\n";
+        const std::string accept = base64(sha1(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"));
+        const std::string response = "HTTP/1.1 101 Switching Protocols\r\n"
+                                     "Upgrade: websocket\r\n"
+                                     "Connection: Upgrade\r\n"
+                                     "Sec-WebSocket-Accept: " +
+                                     accept + "\r\n\r\n";
         size_t sent = 0;
         while (sent < response.size()) {
-            const ssize_t count =
-                write(client, response.data() + sent, response.size() - sent);
+            const ssize_t count = write(client, response.data() + sent, response.size() - sent);
             if (count <= 0) {
                 close(client);
                 _exit(5);
@@ -1609,186 +1409,127 @@ void finish_websocket_responder(pid_t child, int listener) {
             "WebSocket responder did not complete a valid handshake");
 }
 
-int loopback_udp_receiver(uint16_t *port) {
+int loopback_udp_receiver(uint16_t* port) {
     const int fd = socket(AF_INET, SOCK_DGRAM, 0);
     require(fd >= 0, "could not create UDP receiver");
     sockaddr_in address = {};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    require(bind(fd, reinterpret_cast<const sockaddr *>(&address),
-                 sizeof(address)) == 0,
+    require(bind(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0,
             "could not bind UDP receiver");
     socklen_t size = sizeof(address);
-    require(getsockname(fd, reinterpret_cast<sockaddr *>(&address), &size) ==
-                0,
+    require(getsockname(fd, reinterpret_cast<sockaddr*>(&address), &size) == 0,
             "could not inspect UDP receiver");
     *port = ntohs(address.sin_port);
     return fd;
 }
 
-void test_binding_open_file_has_no_descriptor_surface(
-    const char *worker_path,
-    const char *call_path) {
+void test_binding_open_file_has_no_descriptor_surface(const char* worker_path,
+                                                      const char* call_path) {
     char file_path[] = "/tmp/capsid-binding-file-handle-XXXXXX";
     const int file = mkstemp(file_path);
     require(file >= 0, "could not create file-handle fixture");
     close(file);
     const std::string body = invoke_binding_method(
-        worker_path,
-        call_path,
+        worker_path, call_path,
         std::string("import core from 'capsid:internal/core';") +
-            "export default () => ({ async find() {" +
-            "  const file = await core.fs.open('" + file_path + "','r');" +
-            "  const result = typeof file.fileno;" +
-            "  await file.close(); return 'fileno:' + result;" +
-            "} });",
-        {file_path},
-        {"filesystem-read"},
-        {"capsid:internal/core"},
-        94);
+            "export default () => ({ async find() {" + "  const file = await core.fs.open('" +
+            file_path + "','r');" + "  const result = typeof file.fileno;" +
+            "  await file.close(); return 'fileno:' + result;" + "} });",
+        {file_path}, {"filesystem-read"}, {"capsid:internal/core"}, 94);
     unlink(file_path);
     require(body == "result:fileno:undefined",
             "an opened File leaked its host descriptor: " + body);
 }
 
-void test_binding_dns_egress_gate(const char *worker_path,
-                                  const char *call_path) {
-    const std::string source =
-        "import core from 'capsid:internal/core';"
-        "export default () => ({ async find() {"
-        "  try {"
-        "    const result = await core.getaddrinfo('localhost',{family:0});"
-        "    return 'dns-allowed:' + (result.length > 0);"
-        "  } catch (error) { return 'dns-denied:' + error.message; }"
-        "} });";
+void test_binding_dns_egress_gate(const char* worker_path, const char* call_path) {
+    const std::string source = "import core from 'capsid:internal/core';"
+                               "export default () => ({ async find() {"
+                               "  try {"
+                               "    const result = await core.getaddrinfo('localhost',{family:0});"
+                               "    return 'dns-allowed:' + (result.length > 0);"
+                               "  } catch (error) { return 'dns-denied:' + error.message; }"
+                               "} });";
     const std::string denied = invoke_binding_method(
-        worker_path,
-        call_path,
-        source,
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        95);
-    require(denied.find(
-                "result:dns-denied:CAPSID_DNS_EGRESS_DENIED:") == 0,
+        worker_path, call_path, source, {}, {"network-client"}, {"capsid:internal/core"}, 95);
+    require(denied.find("result:dns-denied:CAPSID_DNS_EGRESS_DENIED:") == 0,
             "DNS resolution bypassed the Binding net policy: " + denied);
 
-    const std::string allowed = invoke_binding_method(
-        worker_path,
-        call_path,
-        source,
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        96,
-        {},
-        {},
-        {"localhost:443"});
+    const std::string allowed =
+        invoke_binding_method(worker_path, call_path, source, {}, {"network-client"},
+                              {"capsid:internal/core"}, 96, {}, {}, {"localhost:443"});
     require(allowed == "result:dns-allowed:true",
-            "DNS rejected a host covered by a Binding net grant: " +
-                allowed);
+            "DNS rejected a host covered by a Binding net grant: " + allowed);
 }
 
-std::string wasi_fd_close_binding_source(const std::string &options,
-                                         bool run_start = true) {
+std::string wasi_fd_close_binding_source(const std::string& options, bool run_start = true) {
     // The module imports fd_close, exports one page of memory (required by
     // WAMR WASI), and exports _start. Its preopen is guest fd 3.
-    return
-        "import WASI from 'capsid:wasi';"
-        "const bytes = new Uint8Array(["
-        "0,97,115,109,1,0,0,0,"
-        "1,9,2,96,1,127,1,127,96,0,0,"
-        "2,35,1,22,119,97,115,105,95,115,110,97,112,115,104,111,116,95,112,114,101,118,105,101,119,49,"
-        "8,102,100,95,99,108,111,115,101,0,0,"
-        "3,2,1,1,5,3,1,0,1,"
-        "7,19,2,6,95,115,116,97,114,116,0,1,"
-        "6,109,101,109,111,114,121,2,0,"
-        "10,9,1,7,0,65,3,16,0,26,11]);"
-        "export default () => ({ find() {"
-        "  try {"
-        "    const wasi = new WASI(" + options + ");"
-        "    const module = new WebAssembly.Module(bytes);"
-        "    const instance = new WebAssembly.Instance("
-        "      module, wasi.getImportObject());" +
-        (run_start ? "wasi.start(instance);" : "") +
-        "    return 'wasi-allowed';"
-        "  } catch (error) {"
-        "    return 'wasi-denied:' + error.message;"
-        "  }"
-        "} });";
+    return "import WASI from 'capsid:wasi';"
+           "const bytes = new Uint8Array(["
+           "0,97,115,109,1,0,0,0,"
+           "1,9,2,96,1,127,1,127,96,0,0,"
+           "2,35,1,22,119,97,115,105,95,115,110,97,112,115,104,111,116,95,112,114,101,118,105,101,119,49,"
+           "8,102,100,95,99,108,111,115,101,0,0,"
+           "3,2,1,1,5,3,1,0,1,"
+           "7,19,2,6,95,115,116,97,114,116,0,1,"
+           "6,109,101,109,111,114,121,2,0,"
+           "10,9,1,7,0,65,3,16,0,26,11]);"
+           "export default () => ({ find() {"
+           "  try {"
+           "    const wasi = new WASI(" +
+           options +
+           ");"
+           "    const module = new WebAssembly.Module(bytes);"
+           "    const instance = new WebAssembly.Instance("
+           "      module, wasi.getImportObject());" +
+           (run_start ? "wasi.start(instance);" : "") +
+           "    return 'wasi-allowed';"
+           "  } catch (error) {"
+           "    return 'wasi-denied:' + error.message;"
+           "  }"
+           "} });";
 }
 
-void test_binding_wasi_preopen_is_policy_gated(const char *worker_path,
-                                               const char *call_path) {
-    const std::string body = invoke_binding_method(
-        worker_path,
-        call_path,
-        wasi_fd_close_binding_source(
-            "{version:'wasi_snapshot_preview1',"
-            "preopens:{'/guest':'/tmp'}}"),
-        {},
-        {"wasi"},
-        {"capsid:internal/core", "capsid:wasi"},
-        84);
-    require(body.find(
-                "result:wasi-denied:CAPSID_WASI_FS_DENIED:") == 0,
+void test_binding_wasi_preopen_is_policy_gated(const char* worker_path, const char* call_path) {
+    const std::string body =
+        invoke_binding_method(worker_path, call_path,
+                              wasi_fd_close_binding_source("{version:'wasi_snapshot_preview1',"
+                                                           "preopens:{'/guest':'/tmp'}}"),
+                              {}, {"wasi"}, {"capsid:internal/core", "capsid:wasi"}, 84);
+    require(body.find("result:wasi-denied:CAPSID_WASI_FS_DENIED:") == 0,
             "WASI opened an undeclared host path: " + body);
 }
 
-void test_binding_wasi_allowed_preopen_runs(const char *worker_path,
-                                            const char *call_path) {
+void test_binding_wasi_allowed_preopen_runs(const char* worker_path, const char* call_path) {
     const std::string body = invoke_binding_method(
-        worker_path,
-        call_path,
-        wasi_fd_close_binding_source(
-            "{version:'wasi_snapshot_preview1',"
-            "preopens:{'/guest':'/tmp'}}"),
-        {},
-        {"filesystem-write", "wasi"},
-        {"capsid:internal/core", "capsid:wasi"},
-        85,
-        {"/tmp"});
-    require(body == "result:wasi-allowed",
-            "WASI rejected a declared writable preopen: " + body);
+        worker_path, call_path,
+        wasi_fd_close_binding_source("{version:'wasi_snapshot_preview1',"
+                                     "preopens:{'/guest':'/tmp'}}"),
+        {}, {"filesystem-write", "wasi"}, {"capsid:internal/core", "capsid:wasi"}, 85, {"/tmp"});
+    require(body == "result:wasi-allowed", "WASI rejected a declared writable preopen: " + body);
 }
 
-void test_binding_wasi_stdio_is_policy_gated(const char *worker_path,
-                                             const char *call_path) {
+void test_binding_wasi_stdio_is_policy_gated(const char* worker_path, const char* call_path) {
     const std::string denied = invoke_binding_method(
-        worker_path,
-        call_path,
-        wasi_fd_close_binding_source(
-            "{version:'wasi_snapshot_preview1',stdin:0}", false),
-        {},
-        {"wasi"},
-        {"capsid:internal/core", "capsid:wasi"},
-        86);
-    require(denied.find(
-                "result:wasi-denied:CAPSID_WASI_STDIO_DENIED:") == 0,
+        worker_path, call_path,
+        wasi_fd_close_binding_source("{version:'wasi_snapshot_preview1',stdin:0}", false), {},
+        {"wasi"}, {"capsid:internal/core", "capsid:wasi"}, 86);
+    require(denied.find("result:wasi-denied:CAPSID_WASI_STDIO_DENIED:") == 0,
             "WASI attached undeclared stdin: " + denied);
 
     const std::string allowed = invoke_binding_method(
-        worker_path,
-        call_path,
-        wasi_fd_close_binding_source(
-            "{version:'wasi_snapshot_preview1',stdout:1}", false),
-        {},
-        {"wasi"},
-        {"capsid:internal/core", "capsid:wasi"},
-        87,
-        {},
-        {"stdout"});
-    require(allowed == "result:wasi-allowed",
-            "WASI rejected declared stdout: " + allowed);
+        worker_path, call_path,
+        wasi_fd_close_binding_source("{version:'wasi_snapshot_preview1',stdout:1}", false), {},
+        {"wasi"}, {"capsid:internal/core", "capsid:wasi"}, 87, {}, {"stdout"});
+    require(allowed == "result:wasi-allowed", "WASI rejected declared stdout: " + allowed);
 }
 
-void test_binding_sqlite_paths_and_extensions_are_gated(
-    const char *worker_path,
-    const char *call_path) {
+void test_binding_sqlite_paths_and_extensions_are_gated(const char* worker_path,
+                                                        const char* call_path) {
     const std::string memory = invoke_binding_method(
-        worker_path,
-        call_path,
+        worker_path, call_path,
         "import { Database } from 'capsid:sqlite';"
         "export default () => ({ find() {"
         "  try {"
@@ -1799,27 +1540,19 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
         "    db.close(); return 'extension-loaded';"
         "  } catch (error) { return 'open:' + error.message; }"
         "} });",
-        {},
-        {"sqlite"},
-        {"capsid:internal/core", "capsid:sqlite"},
-        88);
-    require(memory.find(
-                "result:extension:CAPSID_SQLITE_EXTENSION_DENIED") == 0,
+        {}, {"sqlite"}, {"capsid:internal/core", "capsid:sqlite"}, 88);
+    require(memory.find("result:extension:CAPSID_SQLITE_EXTENSION_DENIED") == 0,
             "SQLite memory/extension boundary is wrong: " + memory);
 
     const std::string denied = invoke_binding_method(
-        worker_path,
-        call_path,
+        worker_path, call_path,
         "import { Database } from 'capsid:sqlite';"
         "export default () => ({ find() {"
         "  try { new Database('/tmp/capsid-sqlite-denied.db').close();"
         "    return 'opened'; }"
         "  catch (error) { return 'denied:' + error.message; }"
         "} });",
-        {},
-        {"filesystem-write", "sqlite"},
-        {"capsid:internal/core", "capsid:sqlite"},
-        89);
+        {}, {"filesystem-write", "sqlite"}, {"capsid:internal/core", "capsid:sqlite"}, 89);
     require(denied.find("result:denied:fs denied") == 0,
             "SQLite opened an undeclared database path: " + denied);
 
@@ -1829,19 +1562,12 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
     close(temporary_fd);
     unlink(path);
     const std::string allowed = invoke_binding_method(
-        worker_path,
-        call_path,
+        worker_path, call_path,
         std::string("import { Database } from 'capsid:sqlite';") +
-            "export default () => ({ find() {" +
-            "  const db = new Database('" + path + "');" +
+            "export default () => ({ find() {" + "  const db = new Database('" + path + "');" +
             "  db.exec('CREATE TABLE ok(value INTEGER)');" +
-            "  db.close(); return 'sqlite-allowed';" +
-            "} });",
-        {},
-        {"filesystem-write", "sqlite"},
-        {"capsid:internal/core", "capsid:sqlite"},
-        90,
-        {path});
+            "  db.close(); return 'sqlite-allowed';" + "} });",
+        {}, {"filesystem-write", "sqlite"}, {"capsid:internal/core", "capsid:sqlite"}, 90, {path});
     unlink(path);
     unlink((std::string(path) + "-journal").c_str());
     unlink((std::string(path) + "-wal").c_str());
@@ -1852,37 +1578,33 @@ void test_binding_sqlite_paths_and_extensions_are_gated(
 
 // Binding v1 §7.7: a Binding fetch to a target outside its net policy
 // fails closed before any connection — the App sees the egress denial.
-void test_binding_egress_denial(const char *worker_path,
-                                const char *call_path) {
+void test_binding_egress_denial(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        "export default ({ config, secrets, log }) => {"
-        "  return { find() {"
-        "    return fetch('http://127.0.0.1:9999/').then((r) => r.text());"
-        "  } };"
-        "};");
+    binding.payload =
+        mongo_binding_blob("export default ({ config, secrets, log }) => {"
+                           "  return { find() {"
+                           "    return fetch('http://127.0.0.1:9999/').then((r) => r.text());"
+                           "  } };"
+                           "};");
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived before READY");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived before READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
     }
-    require(frame.type == capsid::protocol::kReady,
-            "egress binding worker did not report READY");
+    require(frame.type == capsid::protocol::kReady, "egress binding worker did not report READY");
 
     capsid::protocol::Frame head;
     head.type = capsid::protocol::kRequestHead;
@@ -1896,23 +1618,17 @@ void test_binding_egress_denial(const char *worker_path,
     std::string body;
     bool ended = false;
     for (int i = 0; i < 64; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "egress response frames stopped before the terminal");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "egress response frames stopped before the terminal");
         // The app handler rejection terminates the request as a kError
         // carrying the egress denial text.
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == 78) {
-            body.assign(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+        if (frame.type == capsid::protocol::kError && frame.request_id == 78) {
+            body.assign(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
             ended = true;
             break;
         }
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -1929,8 +1645,7 @@ void test_binding_egress_denial(const char *worker_path,
 // entry point. A deny must be the native policy error (not an unrelated
 // missing-constructor TypeError), while an explicitly allowed loopback target
 // completes the TCP handshake.
-void test_binding_raw_tcp_egress_gate(const char *worker_path,
-                                      const char *call_path) {
+void test_binding_raw_tcp_egress_gate(const char* worker_path, const char* call_path) {
     const std::string source_prefix =
         "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
@@ -1953,31 +1668,17 @@ void test_binding_raw_tcp_egress_gate(const char *worker_path,
 
     const uint16_t denied_port = 9;
     const std::string denied = invoke_binding_method(
-        worker_path,
-        call_path,
-        source_prefix + std::to_string(denied_port) + source_suffix,
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        92);
+        worker_path, call_path, source_prefix + std::to_string(denied_port) + source_suffix, {},
+        {"network-client"}, {"capsid:internal/core"}, 92);
     require(denied.find("result:tcp-denied:egress denied") == 0,
             "raw TCP denial did not come from the native gate: " + denied);
 
     uint16_t allowed_port = 0;
     const int listener = loopback_tcp_listener(&allowed_port);
-    const std::string target =
-        "127.0.0.1:" + std::to_string(allowed_port);
+    const std::string target = "127.0.0.1:" + std::to_string(allowed_port);
     const std::string allowed = invoke_binding_method(
-        worker_path,
-        call_path,
-        source_prefix + std::to_string(allowed_port) + source_suffix,
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        93,
-        {},
-        {},
-        {target});
+        worker_path, call_path, source_prefix + std::to_string(allowed_port) + source_suffix, {},
+        {"network-client"}, {"capsid:internal/core"}, 93, {}, {}, {target});
     close(listener);
     require(allowed == "result:tcp-allowed",
             "raw TCP rejected an explicitly allowed target: " + allowed);
@@ -1986,8 +1687,7 @@ void test_binding_raw_tcp_egress_gate(const char *worker_path,
 // TLS has a separate uv_tcp_connect entry point from core.TCP. It must run
 // the same resolved-address gate before the kernel connect; an allowed rule
 // is distinguished by reaching the asynchronous socket/TLS callback.
-void test_binding_raw_tls_egress_gate(const char *worker_path,
-                                      const char *call_path) {
+void test_binding_raw_tls_egress_gate(const char* worker_path, const char* call_path) {
     const std::string source =
         "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
@@ -2003,49 +1703,41 @@ void test_binding_raw_tls_egress_gate(const char *worker_path,
         "} });";
 
     const std::string denied = invoke_binding_method(
-        worker_path, call_path, source, {}, {"network-client"},
-        {"capsid:internal/core"}, 201);
+        worker_path, call_path, source, {}, {"network-client"}, {"capsid:internal/core"}, 201);
     require(denied.find("result:tls-denied:egress denied") == 0,
             "raw TLS denial did not come from the native gate: " + denied);
 
-    const std::string allowed = invoke_binding_method(
-        worker_path, call_path, source, {}, {"network-client"},
-        {"capsid:internal/core"}, 202, {}, {}, {"127.0.0.1:9"});
-    require(allowed.find("result:tls-reached:") == 0 ||
-                allowed == "result:tls-allowed",
+    const std::string allowed =
+        invoke_binding_method(worker_path, call_path, source, {}, {"network-client"},
+                              {"capsid:internal/core"}, 202, {}, {}, {"127.0.0.1:9"});
+    require(allowed.find("result:tls-reached:") == 0 || allowed == "result:tls-allowed",
             "raw TLS did not reach an explicitly allowed target: " + allowed);
 }
 
 // HttpClient callbacks must restore the Binding identity, and a redirect is a
 // new egress decision rather than authority inherited from the first hop.
-void test_binding_http_async_owner_and_redirect_gate(
-    const char *worker_path,
-    const char *call_path) {
-    const std::string ok_response =
-        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n"
-        "Connection: close\r\n\r\nok";
+void test_binding_http_async_owner_and_redirect_gate(const char* worker_path,
+                                                     const char* call_path) {
+    const std::string ok_response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n"
+                                    "Connection: close\r\n\r\nok";
 
     uint16_t owner_port = 0;
     const int owner_listener = loopback_tcp_listener(&owner_port);
-    const pid_t owner_server =
-        spawn_http_responder(owner_listener, ok_response);
-    const std::string owner_source =
-        "import core from 'capsid:internal/core';"
-        "export default () => ({ async find() {"
-        " const response = await fetch('http://127.0.0.1:" +
-        std::to_string(owner_port) +
-        "/'); const body = await response.text();"
-        " try { await core.fs.open("
-        "'/tmp/capsid-binding-http-owner-missing','r');"
-        "  return 'unexpected-file'; }"
-        " catch (error) { return error.message.includes('fs denied')"
-        "  ? 'owner-lost' : 'http-owner-ok:' + body; }"
-        "} });";
+    const pid_t owner_server = spawn_http_responder(owner_listener, ok_response);
+    const std::string owner_source = "import core from 'capsid:internal/core';"
+                                     "export default () => ({ async find() {"
+                                     " const response = await fetch('http://127.0.0.1:" +
+                                     std::to_string(owner_port) +
+                                     "/'); const body = await response.text();"
+                                     " try { await core.fs.open("
+                                     "'/tmp/capsid-binding-http-owner-missing','r');"
+                                     "  return 'unexpected-file'; }"
+                                     " catch (error) { return error.message.includes('fs denied')"
+                                     "  ? 'owner-lost' : 'http-owner-ok:' + body; }"
+                                     "} });";
     const std::string owner_result = invoke_binding_method(
-        worker_path, call_path, owner_source,
-        {"/tmp/capsid-binding-http-owner-missing"},
-        {"network-client", "filesystem-read"},
-        {"capsid:internal/core"}, 203, {}, {},
+        worker_path, call_path, owner_source, {"/tmp/capsid-binding-http-owner-missing"},
+        {"network-client", "filesystem-read"}, {"capsid:internal/core"}, 203, {}, {},
         {"127.0.0.1:" + std::to_string(owner_port)});
     finish_http_responder(owner_server, owner_listener, true);
     require(owner_result == "result:http-owner-ok:ok",
@@ -2053,16 +1745,13 @@ void test_binding_http_async_owner_and_redirect_gate(
 
     uint16_t target_port = 0;
     const int target_listener = loopback_tcp_listener(&target_port);
-    const pid_t target_server =
-        spawn_http_responder(target_listener, ok_response);
+    const pid_t target_server = spawn_http_responder(target_listener, ok_response);
     uint16_t redirect_port = 0;
     const int redirect_listener = loopback_tcp_listener(&redirect_port);
     const std::string redirect_response =
-        "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:" +
-        std::to_string(target_port) +
+        "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:" + std::to_string(target_port) +
         "/next\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-    const pid_t redirect_server =
-        spawn_http_responder(redirect_listener, redirect_response);
+    const pid_t redirect_server = spawn_http_responder(redirect_listener, redirect_response);
     const std::string redirect_source =
         "export default () => ({ async find() {"
         " try { const response = await fetch('http://127.0.0.1:" +
@@ -2071,9 +1760,8 @@ void test_binding_http_async_owner_and_redirect_gate(
         " catch (error) { return 'redirect-denied:' + error.message; }"
         "} });";
     const std::string denied = invoke_binding_method(
-        worker_path, call_path, redirect_source, {}, {"network-client"},
-        {"capsid:internal/core"}, 204, {}, {},
-        {"127.0.0.1:" + std::to_string(redirect_port)});
+        worker_path, call_path, redirect_source, {}, {"network-client"}, {"capsid:internal/core"},
+        204, {}, {}, {"127.0.0.1:" + std::to_string(redirect_port)});
     finish_http_responder(redirect_server, redirect_listener, true);
     finish_http_responder(target_server, target_listener, false);
     require(denied.find("result:redirect-denied:") == 0 &&
@@ -2081,46 +1769,36 @@ void test_binding_http_async_owner_and_redirect_gate(
             "HTTP redirect escaped its second-hop egress gate: " + denied);
 
     uint16_t allowed_target_port = 0;
-    const int allowed_target_listener =
-        loopback_tcp_listener(&allowed_target_port);
-    const pid_t allowed_target_server =
-        spawn_http_responder(allowed_target_listener, ok_response);
+    const int allowed_target_listener = loopback_tcp_listener(&allowed_target_port);
+    const pid_t allowed_target_server = spawn_http_responder(allowed_target_listener, ok_response);
     uint16_t allowed_redirect_port = 0;
-    const int allowed_redirect_listener =
-        loopback_tcp_listener(&allowed_redirect_port);
+    const int allowed_redirect_listener = loopback_tcp_listener(&allowed_redirect_port);
     const std::string allowed_redirect_response =
-        "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:" +
-        std::to_string(allowed_target_port) +
+        "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:" + std::to_string(allowed_target_port) +
         "/next\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     const pid_t allowed_redirect_server =
-        spawn_http_responder(
-            allowed_redirect_listener, allowed_redirect_response);
+        spawn_http_responder(allowed_redirect_listener, allowed_redirect_response);
     const std::string allowed_redirect_source =
         "export default () => ({ async find() {"
         " const response = await fetch('http://127.0.0.1:" +
         std::to_string(allowed_redirect_port) +
         "/'); return 'redirect-allowed:' + await response.text();"
         "} });";
-    const std::string allowed = invoke_binding_method(
-        worker_path, call_path, allowed_redirect_source, {},
-        {"network-client"}, {"capsid:internal/core"}, 205, {}, {},
-        {"127.0.0.1:" + std::to_string(allowed_redirect_port),
-         "127.0.0.1:" + std::to_string(allowed_target_port)});
-    finish_http_responder(
-        allowed_redirect_server, allowed_redirect_listener, true);
-    finish_http_responder(
-        allowed_target_server, allowed_target_listener, true);
+    const std::string allowed =
+        invoke_binding_method(worker_path, call_path, allowed_redirect_source, {},
+                              {"network-client"}, {"capsid:internal/core"}, 205, {}, {},
+                              {"127.0.0.1:" + std::to_string(allowed_redirect_port),
+                               "127.0.0.1:" + std::to_string(allowed_target_port)});
+    finish_http_responder(allowed_redirect_server, allowed_redirect_listener, true);
+    finish_http_responder(allowed_target_server, allowed_target_listener, true);
     require(allowed == "result:redirect-allowed:ok",
-            "HTTP redirect rejected its explicitly allowed second hop: " +
-                allowed);
+            "HTTP redirect rejected its explicitly allowed second hop: " + allowed);
 }
 
 // WebSocket is part of the grantable client surface. Its initial host and
 // resolved address must both pass the egress gate, and callbacks must restore
 // the immutable Binding owner before user JavaScript can operate the handle.
-void test_binding_websocket_egress_and_async_owner(
-    const char *worker_path,
-    const char *call_path) {
+void test_binding_websocket_egress_and_async_owner(const char* worker_path, const char* call_path) {
     const std::string denied_source =
         "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
@@ -2138,22 +1816,22 @@ void test_binding_websocket_egress_and_async_owner(
         "  return 'ws-unexpected'; }"
         " catch (error) { return 'ws-denied:' + error.message; }"
         "} });";
-    const std::string denied = invoke_binding_method(
-        worker_path, call_path, denied_source, {}, {"network-client"},
-        {"capsid:internal/core"}, 206);
+    const std::string denied =
+        invoke_binding_method(worker_path, call_path, denied_source, {}, {"network-client"},
+                              {"capsid:internal/core"}, 206);
     require(denied.find("result:ws-denied:egress denied") == 0,
             "WebSocket denial did not come from the native gate: " + denied);
 
     uint16_t allowed_port = 0;
     const int listener = loopback_tcp_listener(&allowed_port);
     const pid_t server = spawn_websocket_responder(listener);
-    const std::string target =
-        "127.0.0.1:" + std::to_string(allowed_port);
+    const std::string target = "127.0.0.1:" + std::to_string(allowed_port);
     const std::string allowed_source =
         "import core from 'capsid:internal/core';"
         "export default () => ({ find() {"
         " return new Promise(resolve => {"
-        "  const ws = new core.WebSocket('ws://" + target +
+        "  const ws = new core.WebSocket('ws://" +
+        target +
         "/', null, [], []);"
         "  ws.onerror = error => resolve('ws-error:' + String(error));"
         "  ws.onopen = () => {"
@@ -2163,54 +1841,36 @@ void test_binding_websocket_egress_and_async_owner(
         "  };"
         " });"
         "} });";
-    const std::string allowed = invoke_binding_method(
-        worker_path, call_path, allowed_source, {}, {"network-client"},
-        {"capsid:internal/core"}, 207, {}, {}, {target});
+    const std::string allowed =
+        invoke_binding_method(worker_path, call_path, allowed_source, {}, {"network-client"},
+                              {"capsid:internal/core"}, 207, {}, {}, {target});
     finish_websocket_responder(server, listener);
     require(allowed == "result:ws-allowed",
-            "WebSocket rejected an allowed target or lost its async owner: " +
-                allowed);
+            "WebSocket rejected an allowed target or lost its async owner: " + allowed);
 }
 
-void test_binding_raw_udp_egress_gate(const char *worker_path,
-                                      const char *call_path) {
-    const std::string source_prefix =
-        "import core from 'capsid:internal/core';"
-        "export default () => ({ find() {"
-        "  const socket = new core.UDP();"
-        "  try { socket.send(new Uint8Array([7]),"
-        "    {ip:'127.0.0.1',port:";
-    const std::string source_suffix =
-        "}); socket.close(); return 'udp-allowed'; }"
-        "  catch (error) { socket.close();"
-        "    return 'udp-denied:' + error.message; }"
-        "} });";
-    const std::string denied = invoke_binding_method(
-        worker_path,
-        call_path,
-        source_prefix + "9" + source_suffix,
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        97);
+void test_binding_raw_udp_egress_gate(const char* worker_path, const char* call_path) {
+    const std::string source_prefix = "import core from 'capsid:internal/core';"
+                                      "export default () => ({ find() {"
+                                      "  const socket = new core.UDP();"
+                                      "  try { socket.send(new Uint8Array([7]),"
+                                      "    {ip:'127.0.0.1',port:";
+    const std::string source_suffix = "}); socket.close(); return 'udp-allowed'; }"
+                                      "  catch (error) { socket.close();"
+                                      "    return 'udp-denied:' + error.message; }"
+                                      "} });";
+    const std::string denied =
+        invoke_binding_method(worker_path, call_path, source_prefix + "9" + source_suffix, {},
+                              {"network-client"}, {"capsid:internal/core"}, 97);
     require(denied.find("result:udp-denied:egress denied") == 0,
             "raw UDP denial did not come from the native gate: " + denied);
 
     uint16_t allowed_port = 0;
     const int receiver = loopback_udp_receiver(&allowed_port);
-    const std::string target =
-        "127.0.0.1:" + std::to_string(allowed_port);
+    const std::string target = "127.0.0.1:" + std::to_string(allowed_port);
     const std::string allowed = invoke_binding_method(
-        worker_path,
-        call_path,
-        source_prefix + std::to_string(allowed_port) + source_suffix,
-        {},
-        {"network-client"},
-        {"capsid:internal/core"},
-        98,
-        {},
-        {},
-        {target});
+        worker_path, call_path, source_prefix + std::to_string(allowed_port) + source_suffix, {},
+        {"network-client"}, {"capsid:internal/core"}, 98, {}, {}, {target});
     close(receiver);
     require(allowed == "result:udp-allowed",
             "raw UDP rejected an explicitly allowed target: " + allowed);
@@ -2219,38 +1879,34 @@ void test_binding_raw_udp_egress_gate(const char *worker_path,
 // Binding v1 P0-6: the per-origin Native Gate — a Binding writing a file
 // outside its fs policy fails before the syscall, on the raw core.fs
 // path (not only through a capsid facade).
-void test_binding_fs_native_gate(const char *worker_path,
-                                 const char *call_path) {
+void test_binding_fs_native_gate(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        "import core from 'capsid:internal/core';"
-        "export default ({ config, secrets, log }) => {"
-        "  return { find() {"
-        "    return core.fs.open('/tmp/capsid-binding-fs-probe', 'w');"
-        "  } };"
-        "};");
+    binding.payload =
+        mongo_binding_blob("import core from 'capsid:internal/core';"
+                           "export default ({ config, secrets, log }) => {"
+                           "  return { find() {"
+                           "    return core.fs.open('/tmp/capsid-binding-fs-probe', 'w');"
+                           "  } };"
+                           "};");
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived before READY");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived before READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
     }
-    require(frame.type == capsid::protocol::kReady,
-            "fs-gate binding worker did not report READY");
+    require(frame.type == capsid::protocol::kReady, "fs-gate binding worker did not report READY");
 
     capsid::protocol::Frame head;
     head.type = capsid::protocol::kRequestHead;
@@ -2264,21 +1920,15 @@ void test_binding_fs_native_gate(const char *worker_path,
     std::string body;
     bool ended = false;
     for (int i = 0; i < 64; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "fs-gate response frames stopped before the terminal");
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == 80) {
-            body.assign(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "fs-gate response frames stopped before the terminal");
+        if (frame.type == capsid::protocol::kError && frame.request_id == 80) {
+            body.assign(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
             ended = true;
             break;
         }
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -2295,53 +1945,31 @@ void test_binding_fs_native_gate(const char *worker_path,
 // FSWatch is a separately declared syscall profile and a path-bearing read
 // operation. Because the OS sandbox is a process-wide union, both checks must
 // also happen in the active Binding policy before uv_fs_event_start.
-void test_binding_fswatch_profile_and_path_gate(const char *worker_path,
-                                                const char *call_path) {
+void test_binding_fswatch_profile_and_path_gate(const char* worker_path, const char* call_path) {
     char path[] = "/tmp/capsid-binding-fswatch-XXXXXX";
     const int fixture = mkstemp(path);
     require(fixture >= 0, "could not create FSWatch fixture");
     close(fixture);
     const std::string source =
         std::string("import core from 'capsid:internal/core';") +
-        "export default () => ({ find() { try {" +
-        " const watcher = core.watch('" + path + "', () => {});" +
-        " watcher.close(); return 'watch-allowed';" +
-        " } catch (error) { return 'watch-denied:' + error.message; }" +
-        "} });";
+        "export default () => ({ find() { try {" + " const watcher = core.watch('" + path +
+        "', () => {});" + " watcher.close(); return 'watch-allowed';" +
+        " } catch (error) { return 'watch-denied:' + error.message; }" + "} });";
 
     const std::string no_profile = invoke_binding_method(
-        worker_path,
-        call_path,
-        source,
-        {path},
-        {"filesystem-read"},
-        {"capsid:internal/core"},
-        101);
-    require(
-        no_profile ==
-            "result:watch-denied:CAPSID_FSWATCH_PROFILE_DENIED",
-        "FSWatch escaped its sandbox profile gate: " + no_profile);
+        worker_path, call_path, source, {path}, {"filesystem-read"}, {"capsid:internal/core"}, 101);
+    require(no_profile == "result:watch-denied:CAPSID_FSWATCH_PROFILE_DENIED",
+            "FSWatch escaped its sandbox profile gate: " + no_profile);
 
-    const std::string no_path = invoke_binding_method(
-        worker_path,
-        call_path,
-        source,
-        {},
-        {"filesystem-read", "filesystem-watch"},
-        {"capsid:internal/core"},
-        102);
-    require(no_path.find(
-                "result:watch-denied:fs denied by binding policy:") == 0,
+    const std::string no_path = invoke_binding_method(worker_path, call_path, source, {},
+                                                      {"filesystem-read", "filesystem-watch"},
+                                                      {"capsid:internal/core"}, 102);
+    require(no_path.find("result:watch-denied:fs denied by binding policy:") == 0,
             "FSWatch escaped its path gate: " + no_path);
 
-    const std::string allowed = invoke_binding_method(
-        worker_path,
-        call_path,
-        source,
-        {path},
-        {"filesystem-read", "filesystem-watch"},
-        {"capsid:internal/core"},
-        103);
+    const std::string allowed = invoke_binding_method(worker_path, call_path, source, {path},
+                                                      {"filesystem-read", "filesystem-watch"},
+                                                      {"capsid:internal/core"}, 103);
     unlink(path);
     require(allowed == "result:watch-allowed",
             "FSWatch rejected an exact profile/path grant: " + allowed);
@@ -2350,41 +1978,37 @@ void test_binding_fswatch_profile_and_path_gate(const char *worker_path,
 // Binding v1 §5.1: async continuations propagate the Binding identity —
 // a timer callback performing an authorized fs read still passes the
 // Native gate (the dispatch window alone would have closed).
-void test_binding_async_identity(const char *worker_path,
-                                 const char *call_path) {
+void test_binding_async_identity(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
-    binding.payload = mongo_binding_blob(
-        "import core from 'capsid:internal/core';"
-        "export default ({ config, secrets, log }) => {"
-        "  return { find() {"
-        "    return new Promise((resolve, reject) => {"
-        "      setTimeout(() => {"
-        "        core.fs.open('/etc/capsid/mongo/ca.pem', 'r').then("
-        "          () => resolve('unexpected-open'),"
-        "          (e) => reject(e)"
-        "        );"
-        "      }, 0);"
-        "    });"
-        "  } };"
-        "};",
-        {"/etc/capsid/mongo"},
-        {"network-client", "filesystem-read"});
+    binding.payload =
+        mongo_binding_blob("import core from 'capsid:internal/core';"
+                           "export default ({ config, secrets, log }) => {"
+                           "  return { find() {"
+                           "    return new Promise((resolve, reject) => {"
+                           "      setTimeout(() => {"
+                           "        core.fs.open('/etc/capsid/mongo/ca.pem', 'r').then("
+                           "          () => resolve('unexpected-open'),"
+                           "          (e) => reject(e)"
+                           "        );"
+                           "      }, 0);"
+                           "    });"
+                           "  } };"
+                           "};",
+                           {"/etc/capsid/mongo"}, {"network-client", "filesystem-read"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived before READY");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived before READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
@@ -2404,21 +2028,15 @@ void test_binding_async_identity(const char *worker_path,
     std::string body;
     bool ended = false;
     for (int i = 0; i < 64; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "async-identity response frames stopped before the terminal");
-        if (frame.type == capsid::protocol::kError &&
-            frame.request_id == 81) {
-            body.assign(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "async-identity response frames stopped before the terminal");
+        if (frame.type == capsid::protocol::kError && frame.request_id == 81) {
+            body.assign(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
             ended = true;
             break;
         }
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -2437,39 +2055,31 @@ void test_binding_async_identity(const char *worker_path,
 // Binding v1 §7.9: the wasi profile runs a real WebAssembly workload
 // inside the Binding Runtime — the positive counterpart to the
 // not-implemented gate of earlier iterations.
-void test_binding_wasi_workload(const char *worker_path,
-                                const char *call_path) {
+void test_binding_wasi_workload(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
-        wasi_fd_close_binding_source(
-            "{version:'wasi_snapshot_preview1',"
-            "preopens:{'/guest':'/tmp'}}"),
-        {},
-        {"filesystem-write", "wasi"},
-        {"capsid:internal/core", "capsid:wasi"},
-        {"/tmp"});
+        wasi_fd_close_binding_source("{version:'wasi_snapshot_preview1',"
+                                     "preopens:{'/guest':'/tmp'}}"),
+        {}, {"filesystem-write", "wasi"}, {"capsid:internal/core", "capsid:wasi"}, {"/tmp"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived before READY");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived before READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
     }
-    require(frame.type == capsid::protocol::kReady,
-            "wasi binding worker did not report READY");
+    require(frame.type == capsid::protocol::kReady, "wasi binding worker did not report READY");
 
     capsid::protocol::Frame head;
     head.type = capsid::protocol::kRequestHead;
@@ -2483,13 +2093,10 @@ void test_binding_wasi_workload(const char *worker_path,
     std::string body;
     bool ended = false;
     for (int i = 0; i < 64; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "wasi response frames stopped before ResponseEnd");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "wasi response frames stopped before ResponseEnd");
         if (frame.type == capsid::protocol::kResponseBody) {
-            body.append(
-                reinterpret_cast<const char *>(frame.payload.data()),
-                frame.payload.size());
+            body.append(reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
         }
         if (frame.type == capsid::protocol::kResponseEnd) {
             ended = true;
@@ -2497,23 +2104,20 @@ void test_binding_wasi_workload(const char *worker_path,
         }
     }
     require(ended, "wasi binding response never ended");
-    require(body == "result:wasi-allowed",
-            "wasi workload returned the wrong body: " + body);
+    require(body == "result:wasi-allowed", "wasi workload returned the wrong body: " + body);
     finish_worker(fd, pid, true);
 }
 
 // Binding v1 §3.3: every module the manifest schema can grant must
 // actually exist in this restricted build — the grantable set and the
 // build must not drift.
-void test_binding_grantable_modules_exist(const char *worker_path,
-                                          const char *call_path) {
+void test_binding_grantable_modules_exist(const char* worker_path, const char* call_path) {
     int fd = -1;
     const pid_t pid = spawn_worker(worker_path, &fd);
     send_hello(fd);
     capsid::protocol::Frame binding;
     binding.type = capsid::protocol::kLoadBinding;
-    binding.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    binding.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     binding.request_id = 0;
     binding.payload = mongo_binding_blob(
         "import assert_mod from 'capsid:assert';"
@@ -2534,21 +2138,18 @@ void test_binding_grantable_modules_exist(const char *worker_path,
         "export default ({ config, secrets, log }) => {"
         "  return { find() { return 'modules:' + seen.length; } };"
         "};",
-        {},
-        {"network-client", "sqlite", "wasi"},
-        {"capsid:assert", "capsid:getopts", "capsid:hashing",
-         "capsid:internal/core", "capsid:internal/path", "capsid:ipaddr",
-         "capsid:path", "capsid:readline",
-         "capsid:sqlite", "capsid:utils", "capsid:uuid", "capsid:wasi"});
+        {}, {"network-client", "sqlite", "wasi"},
+        {"capsid:assert", "capsid:getopts", "capsid:hashing", "capsid:internal/core",
+         "capsid:internal/path", "capsid:ipaddr", "capsid:path", "capsid:readline", "capsid:sqlite",
+         "capsid:utils", "capsid:uuid", "capsid:wasi"});
     send_frame(fd, binding);
     send_bundle(fd, read_file(call_path));
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame frame;
     for (int i = 0; i < 8; ++i) {
-        require(
-            read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
-            "no frame arrived before READY");
+        require(read_frame(fd, &parser, &frame, 5000) == ReadResult::kFrame,
+                "no frame arrived before READY");
         if (frame.type == capsid::protocol::kReady) {
             break;
         }
@@ -2563,83 +2164,67 @@ void test_binding_grantable_modules_exist(const char *worker_path,
 // though several of them are present in the worker for other Binding
 // grants. Static imports make warm-up fail before READY with the loader's
 // authorization diagnostic.
-void test_binding_forbidden_imports_fail(const char *worker_path,
-                                         const char *p0_path) {
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import fs from 'tjs:fs';"
-        "export default () => ({ find() { return fs; } });",
-        "module is not authorized for this binding: tjs:fs");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import sqlite from 'tjs:sqlite';"
-        "export default () => ({ find() { return sqlite; } });",
-        "module is not authorized for this binding: tjs:sqlite");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import core from 'tjs:internal/core';"
-        "export default () => ({ find() { return core; } });",
-        "module is not authorized for this binding: tjs:internal/core");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import ffi from 'capsid:ffi';"
-        "export default () => ({ find() { return ffi; } });",
-        "module is not authorized for this binding: capsid:ffi");
+void test_binding_forbidden_imports_fail(const char* worker_path, const char* p0_path) {
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import fs from 'tjs:fs';"
+                                   "export default () => ({ find() { return fs; } });",
+                                   "module is not authorized for this binding: tjs:fs");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import sqlite from 'tjs:sqlite';"
+                                   "export default () => ({ find() { return sqlite; } });",
+                                   "module is not authorized for this binding: tjs:sqlite");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import core from 'tjs:internal/core';"
+                                   "export default () => ({ find() { return core; } });",
+                                   "module is not authorized for this binding: tjs:internal/core");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import ffi from 'capsid:ffi';"
+                                   "export default () => ({ find() { return ffi; } });",
+                                   "module is not authorized for this binding: capsid:ffi");
     expect_binding_startup_failure(
         worker_path, p0_path,
         "import socket from 'capsid:posix-socket';"
         "export default () => ({ find() { return socket; } });",
         "module is not authorized for this binding: capsid:posix-socket");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import process from 'capsid:process';"
-        "export default () => ({ find() { return process; } });",
-        "module is not authorized for this binding: capsid:process");
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import server from 'capsid:http-server';"
-        "export default () => ({ find() { return server; } });",
-        "module is not authorized for this binding: capsid:http-server");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import process from 'capsid:process';"
+                                   "export default () => ({ find() { return process; } });",
+                                   "module is not authorized for this binding: capsid:process");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import server from 'capsid:http-server';"
+                                   "export default () => ({ find() { return server; } });",
+                                   "module is not authorized for this binding: capsid:http-server");
     // Known and grantable, but not listed in this Binding's manifest:
     // listing one module never implicitly authorizes another.
-    expect_binding_startup_failure(
-        worker_path, p0_path,
-        "import sqlite from 'capsid:sqlite';"
-        "export default () => ({ find() { return sqlite; } });",
-        "module is not authorized for this binding: capsid:sqlite");
+    expect_binding_startup_failure(worker_path, p0_path,
+                                   "import sqlite from 'capsid:sqlite';"
+                                   "export default () => ({ find() { return sqlite; } });",
+                                   "module is not authorized for this binding: capsid:sqlite");
 }
 
 void test_load_binding_abi_validation() {
-    capsid_worker *worker = NULL;
-    require(
-        capsid_worker_load_binding(worker, NULL) ==
-            CAPSID_INVALID_ARGUMENT,
-        "null worker/null descriptor accepted");
+    capsid_worker* worker = NULL;
+    require(capsid_worker_load_binding(worker, NULL) == CAPSID_INVALID_ARGUMENT,
+            "null worker/null descriptor accepted");
 
     capsid_binding_descriptor descriptor;
     std::memset(&descriptor, 0, sizeof(descriptor));
     descriptor.struct_size = sizeof(descriptor);
     descriptor.version = 99;
-    require(
-        capsid_worker_load_binding(worker, &descriptor) ==
-            CAPSID_INVALID_ARGUMENT,
-        "unknown descriptor version accepted");
+    require(capsid_worker_load_binding(worker, &descriptor) == CAPSID_INVALID_ARGUMENT,
+            "unknown descriptor version accepted");
     descriptor.version = CAPSID_BINDING_DESCRIPTOR_VERSION;
     descriptor.binding_name = "Mongo";
-    require(
-        capsid_worker_load_binding(worker, &descriptor) ==
-            CAPSID_INVALID_ARGUMENT,
-        "invalid binding name accepted");
+    require(capsid_worker_load_binding(worker, &descriptor) == CAPSID_INVALID_ARGUMENT,
+            "invalid binding name accepted");
     descriptor.binding_name = "mongo";
-    require(
-        capsid_worker_load_binding(worker, &descriptor) ==
-            CAPSID_INVALID_ARGUMENT,
-        "null worker with a valid descriptor accepted");
+    require(capsid_worker_load_binding(worker, &descriptor) == CAPSID_INVALID_ARGUMENT,
+            "null worker with a valid descriptor accepted");
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 7) {
         fail("expected worker path, p0 fixture, binding-import fixture "
              "binding-call fixture, binding-owner fixture and "

@@ -42,15 +42,13 @@ void require(bool condition, const std::string& message) {
     }
 }
 
-const char* kBundle =
-    "export default { async fetch(request) {"
-    " return new Response('hello-snapshot'); } };\n";
+const char* kBundle = "export default { async fetch(request) {"
+                      " return new Response('hello-snapshot'); } };\n";
 
 // Spawn/load/flush the worker (NOT yet READY) — the executor's factory
 // contract.
 WorkerExecutor::WorkerFactory spawn_factory(const std::string& worker_path) {
-    return [worker_path](capsid_worker** out,
-                         std::string* factory_error) -> bool {
+    return [worker_path](capsid_worker** out, std::string* factory_error) -> bool {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = worker_path.c_str();
@@ -60,9 +58,8 @@ WorkerExecutor::WorkerFactory spawn_factory(const std::string& worker_path) {
             *factory_error = "worker spawn failed";
             return false;
         }
-        if (capsid_worker_load_bundle(
-                worker, reinterpret_cast<const std::uint8_t*>(kBundle),
-                std::char_traits<char>::length(kBundle)) != CAPSID_OK) {
+        if (capsid_worker_load_bundle(worker, reinterpret_cast<const std::uint8_t*>(kBundle),
+                                      std::char_traits<char>::length(kBundle)) != CAPSID_OK) {
             capsid_worker_destroy(worker);
             *factory_error = "bundle load failed";
             return false;
@@ -85,12 +82,10 @@ WorkerExecutor::WorkerFactory spawn_factory(const std::string& worker_path) {
 capsid_worker* warm_worker(const std::string& worker_path) {
     std::string error;
     capsid_worker* worker = nullptr;
-    require(spawn_factory(worker_path)(&worker, &error),
-            "warm worker spawn failed: " + error);
+    require(spawn_factory(worker_path)(&worker, &error), "warm worker spawn failed: " + error);
     capsid::host::WorkerEventSource event_source;
     event_source.set_worker(worker);
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     capsid_event event = {};
     event.struct_size = sizeof(event);
     for (;;) {
@@ -105,12 +100,10 @@ capsid_worker* warm_worker(const std::string& worker_path) {
                 break;
             }
             if (event.type == CAPSID_EVENT_ERROR) {
-                const std::string detail(
-                    reinterpret_cast<const char*>(event.payload.data),
-                    event.payload.size);
+                const std::string detail(reinterpret_cast<const char*>(event.payload.data),
+                                         event.payload.size);
                 capsid_worker_destroy(worker);
-                fail("warm worker error before READY: " +
-                     (detail.empty() ? "(empty)" : detail));
+                fail("warm worker error before READY: " + (detail.empty() ? "(empty)" : detail));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 capsid_worker_destroy(worker);
@@ -126,15 +119,14 @@ capsid_worker* warm_worker(const std::string& worker_path) {
             capsid_worker_destroy(worker);
             fail("warm worker READY timeout");
         }
-        event_source.wait(std::min(deadline, std::chrono::steady_clock::now() +
-                                                 std::chrono::milliseconds(100)));
+        event_source.wait(
+            std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(100)));
     }
-    const std::string payload(
-        reinterpret_cast<const char*>(event.payload.data), event.payload.size);
+    const std::string payload(reinterpret_cast<const char*>(event.payload.data),
+                              event.payload.size);
     capsid_build_info info;
     capsid_build_info_init(&info);
-    require(capsid_runtime_build_info(&info) == CAPSID_OK &&
-                info.compatibility_id != nullptr &&
+    require(capsid_runtime_build_info(&info) == CAPSID_OK && info.compatibility_id != nullptr &&
                 payload == info.compatibility_id,
             "warm worker compatibility ID mismatch");
     return worker;
@@ -152,22 +144,19 @@ WorkerRecoveryPolicy test_policy() {
     return policy;
 }
 
-GenerationPoolOptions pool_options(const std::string& worker_path,
-                                   const std::string& application,
+GenerationPoolOptions pool_options(const std::string& worker_path, const std::string& application,
                                    std::uint32_t workers) {
     GenerationPoolOptions options;
     options.application_id = application;
     options.version = "v1";
-    options.generation_digest =
-        "sha256:" + std::string(64, application[0]);
+    options.generation_digest = "sha256:" + std::string(64, application[0]);
     options.workers = workers;
     options.factory = spawn_factory(worker_path);
     options.recovery = test_policy();
     return options;
 }
 
-std::vector<capsid_worker*> warm_fleet(const std::string& worker_path,
-                                       std::uint32_t count) {
+std::vector<capsid_worker*> warm_fleet(const std::string& worker_path, std::uint32_t count) {
     std::vector<capsid_worker*> workers;
     workers.reserve(count);
     for (std::uint32_t i = 0; i < count; ++i) {
@@ -182,16 +171,14 @@ void test_adopt_create_serves(const std::string& worker_path) {
     std::shared_ptr<GenerationPool> pool = GenerationPool::create_adopted(
         pool_options(worker_path, "adoptapp", 2), std::move(warmed), &error);
     require(pool != nullptr, "adopt-create failed: " + error);
-    require(pool->state() == GenerationPool::State::kActive,
-            "adopted pool is not active");
+    require(pool->state() == GenerationPool::State::kActive, "adopted pool is not active");
     require(pool->ready_workers() == 2, "adopted fleet not fully READY");
     require(pool->application_id() == "adoptapp", "adopted identity");
     WorkerExecutor* executor = pool->pick_worker();
     require(executor != nullptr, "adopted pool cannot pick a worker");
     require(executor->available(), "picked worker not available");
     pool->stop_and_join();
-    require(pool->state() == GenerationPool::State::kDead,
-            "adopted pool did not drain");
+    require(pool->state() == GenerationPool::State::kDead, "adopted pool did not drain");
     std::cout << "PASS: adopt-create serves and drains" << std::endl;
 }
 
@@ -218,20 +205,16 @@ void test_adopt_create_rejects_mismatch(const std::string& worker_path) {
     std::cout << "PASS: adopt-create mismatches fail closed" << std::endl;
 }
 
-void test_snapshot_pins_old_pool_after_republish(
-    const std::string& worker_path) {
+void test_snapshot_pins_old_pool_after_republish(const std::string& worker_path) {
     std::string error;
     std::shared_ptr<GenerationPool> pool_a = GenerationPool::create_adopted(
-        pool_options(worker_path, "app-a", 1),
-        warm_fleet(worker_path, 1), &error);
+        pool_options(worker_path, "app-a", 1), warm_fleet(worker_path, 1), &error);
     std::shared_ptr<GenerationPool> pool_b = GenerationPool::create_adopted(
-        pool_options(worker_path, "app-b", 1),
-        warm_fleet(worker_path, 1), &error);
+        pool_options(worker_path, "app-b", 1), warm_fleet(worker_path, 1), &error);
     require(pool_a && pool_b, "adopt-create failed: " + error);
 
     RoutingTable table;
-    auto first = RoutingSnapshot::build({{"app-a", pool_a},
-                                         {"app-b", pool_b}});
+    auto first = RoutingSnapshot::build({{"app-a", pool_a}, {"app-b", pool_b}});
     table.publish(first);
     require(table.generation() == 1, "generation did not advance");
 
@@ -244,36 +227,31 @@ void test_snapshot_pins_old_pool_after_republish(
     // new pool; the request that pinned the old snapshot still holds the
     // OLD pool alive and serviceable.
     std::shared_ptr<GenerationPool> pool_a2 = GenerationPool::create_adopted(
-        pool_options(worker_path, "app-a", 1),
-        warm_fleet(worker_path, 1), &error);
+        pool_options(worker_path, "app-a", 1), warm_fleet(worker_path, 1), &error);
     table.publish(RoutingSnapshot::build({{"app-a", pool_a2}}));
     require(table.generation() == 2, "republish did not advance");
     std::shared_ptr<const RoutingSnapshot> latest = table.load();
-    require(latest->find("app-a") == pool_a2,
-            "latest snapshot did not see the new pool");
+    require(latest->find("app-a") == pool_a2, "latest snapshot did not see the new pool");
     require(pinned_a->pick_worker() != nullptr,
             "pinned old pool became unserveable after republish");
-    require(latest->find("app-b") == nullptr,
-            "republished snapshot leaked the removed app");
+    require(latest->find("app-b") == nullptr, "republished snapshot leaked the removed app");
 
     // A missing route is nullptr — the router's 503 point.
-    require(pinned->find("missing") == nullptr,
-            "missing route did not yield nullptr");
+    require(pinned->find("missing") == nullptr, "missing route did not yield nullptr");
 
     // A drained pool still ROUTES to the same pool; pick_worker returns
     // nullptr so the session layer synthesizes 503.
     pool_b->request_drain();
     std::shared_ptr<GenerationPool> routed_b = pinned->find("app-b");
     require(routed_b == pool_b, "drain changed the route");
-    require(routed_b->pick_worker() == nullptr,
-            "drained pool still picked a worker");
+    require(routed_b->pick_worker() == nullptr, "drained pool still picked a worker");
     pool_a->stop_and_join();
     pool_a2->stop_and_join();
     pool_b->stop_and_join();
     std::cout << "PASS: snapshot pins old pool across republish" << std::endl;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc != 2) {

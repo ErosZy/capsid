@@ -51,8 +51,8 @@ namespace {
 // Read a complete HTTP head before replying and never retain a request body.
 class UnavailableSession : public std::enable_shared_from_this<UnavailableSession> {
   public:
-    UnavailableSession(boost::asio::ip::tcp::socket peer, const SingleWorkerServerOptions &options,
-                       std::function<void(UnavailableSession *)> finished)
+    UnavailableSession(boost::asio::ip::tcp::socket peer, const SingleWorkerServerOptions& options,
+                       std::function<void(UnavailableSession*)> finished)
         : stream_(std::move(peer)), cors_config_(options.cors),
           read_timeout_(std::chrono::milliseconds(bounded_timeout(options.request_timeout_ms))),
           write_timeout_(std::chrono::milliseconds(bounded_timeout(options.write_timeout_ms))),
@@ -92,7 +92,7 @@ class UnavailableSession : public std::enable_shared_from_this<UnavailableSessio
 
     void reply() {
         namespace http = boost::beast::http;
-        const auto &request = parser_.get();
+        const auto& request = parser_.get();
         response_.version(request.version());
         response_.result(http::status::service_unavailable);
         response_.set(http::field::content_type, "text/plain");
@@ -133,13 +133,13 @@ class UnavailableSession : public std::enable_shared_from_this<UnavailableSessio
     ListenerCorsConfig cors_config_;
     std::chrono::milliseconds read_timeout_;
     std::chrono::milliseconds write_timeout_;
-    std::function<void(UnavailableSession *)> finished_;
+    std::function<void(UnavailableSession*)> finished_;
     bool closed_ = false;
 };
 
 // Moving a socket preserves its executor. Transfer native ownership before
 // starting IO whenever a pending accept's owner differs from its final owner.
-bool rehome_peer(boost::asio::ip::tcp::socket &peer, boost::asio::any_io_executor executor) {
+bool rehome_peer(boost::asio::ip::tcp::socket& peer, boost::asio::any_io_executor executor) {
     if (peer.get_executor() == executor)
         return true;
     boost::system::error_code ec;
@@ -173,7 +173,7 @@ BOOL WINAPI static_pool_console_handler(DWORD) {
     if (g_static_pool_term_event != nullptr) {
         SetEvent(g_static_pool_term_event);
     }
-    return TRUE;  // handled: the process stops on its own schedule
+    return TRUE; // handled: the process stops on its own schedule
 }
 #endif
 
@@ -185,16 +185,19 @@ void emit_log(StructuredLog* log, LogFields fields) {
     }
 }
 
-}  // namespace
+} // namespace
 
 class StaticPoolServerImpl : public std::enable_shared_from_this<StaticPoolServerImpl> {
-public:
+  public:
     explicit StaticPoolServerImpl(StaticPoolServerOptions options)
-        : options_(std::move(options)),
-          state_(options_.workers) {
-        auto &worker=options_.worker_options;
-        if(!worker.channel_service_budget) worker.channel_service_budget=std::make_shared<ServiceChannelBudget>(worker.channel_service_limits);
-        if(!worker.channel_listener_budget) worker.channel_listener_budget=std::make_shared<ServiceChannelBudget>(worker.channel_listener_limits,worker.channel_service_budget);
+        : options_(std::move(options)), state_(options_.workers) {
+        auto& worker = options_.worker_options;
+        if (!worker.channel_service_budget)
+            worker.channel_service_budget =
+                std::make_shared<ServiceChannelBudget>(worker.channel_service_limits);
+        if (!worker.channel_listener_budget)
+            worker.channel_listener_budget = std::make_shared<ServiceChannelBudget>(
+                worker.channel_listener_limits, worker.channel_service_budget);
     }
 
     StructuredLog* structured_log() const { return options_.log; }
@@ -246,12 +249,11 @@ public:
         if (!prepared_policy) {
             auto loaded_policy = std::make_shared<LocalCapsidPolicy>();
             std::string policy_error;
-            if (!load_local_capsid_policy(
-                    options_.worker_options.capsid_json_path,
-                    options_.worker_options.capsid_json_required,
-                    options_.worker_options.binding_registry.get(),
-                    options_.worker_options.secrets_root,
-                    loaded_policy.get(), &policy_error)) {
+            if (!load_local_capsid_policy(options_.worker_options.capsid_json_path,
+                                          options_.worker_options.capsid_json_required,
+                                          options_.worker_options.binding_registry.get(),
+                                          options_.worker_options.secrets_root, loaded_policy.get(),
+                                          &policy_error)) {
                 if (error != nullptr) {
                     *error = policy_error;
                 }
@@ -299,9 +301,9 @@ public:
             }
             SingleWorkerServerOptions shard_options = options_.worker_options;
             shard_options.prepared_local_policy = prepared_policy;
-            shard_options.ready_fd = -1;           // pool owns the READY record
-            shard_options.write_ready_record = false;  // pool-level READY
-            shard_options.install_process_signals = false;  // pool owns signals
+            shard_options.ready_fd = -1;                   // pool owns the READY record
+            shard_options.write_ready_record = false;      // pool-level READY
+            shard_options.install_process_signals = false; // pool owns signals
             // One pool-owned acceptor, no per-shard listener: every shard
             // receives connections through adopt_socket().
             shard_options.external_accept = true;
@@ -316,15 +318,13 @@ public:
             // require shared atomics and is deferred until the
             // queue/load-selection batch defines its cross-thread access).
             if (options_.max_inflight_per_worker != 0) {
-                shard_options.max_inflight_per_worker =
-                    options_.max_inflight_per_worker;
+                shard_options.max_inflight_per_worker = options_.max_inflight_per_worker;
             }
             if (options_.queue_requests != 0) {
                 shard_options.queue_requests = options_.queue_requests;
             }
             if (options_.queue_header_bytes != 0) {
-                shard_options.queue_header_bytes =
-                    options_.queue_header_bytes;
+                shard_options.queue_header_bytes = options_.queue_header_bytes;
             }
             if (options_.queue_timeout_ms != 0) {
                 shard_options.queue_timeout_ms = options_.queue_timeout_ms;
@@ -337,8 +337,7 @@ public:
                     options_.max_streaming_inflight_per_worker;
             }
             if (options_.stream_idle_timeout_ms != 0) {
-                shard_options.stream_idle_timeout_ms =
-                    options_.stream_idle_timeout_ms;
+                shard_options.stream_idle_timeout_ms = options_.stream_idle_timeout_ms;
             }
             // E-3 slow-client write deadline (§9.2): forwarded the same way;
             // 0 = not set keeps the shard template value.
@@ -372,9 +371,8 @@ public:
                 // Preserve the shard's own diagnostic; rollback only fills
                 // in a generic message when nothing was reported.
                 if (error != nullptr) {
-                    *error = shard_error.empty()
-                        ? "static pool shard failed to start"
-                        : shard_error;
+                    *error =
+                        shard_error.empty() ? "static pool shard failed to start" : shard_error;
                 }
                 rollback(shards_.size(), error);
                 return false;
@@ -407,20 +405,18 @@ public:
         // The probe runs through the now-accepting pool endpoint (shared
         // listener or pool acceptor), using the same routing-aware target an
         // external client would build.
-        const SingleWorkerServerOptions& worker_options =
-            options_.worker_options;
+        const SingleWorkerServerOptions& worker_options = options_.worker_options;
         if (worker_options.health_check.configured) {
             std::string probe_target = worker_options.health_check.path;
             std::string probe_host = worker_options.public_authority;
             std::string probe_capsid_app;
             switch (worker_options.routing_mode) {
             case RequestRoutingMode::kPath:
-                probe_target = "/@capsid/" + worker_options.application +
-                               worker_options.health_check.path;
+                probe_target =
+                    "/@capsid/" + worker_options.application + worker_options.health_check.path;
                 break;
             case RequestRoutingMode::kSubdomain:
-                probe_host = worker_options.application +
-                             worker_options.routing_suffix;
+                probe_host = worker_options.application + worker_options.routing_suffix;
                 break;
             case RequestRoutingMode::kHeader:
                 probe_capsid_app = worker_options.application;
@@ -428,10 +424,8 @@ public:
             }
             std::string probe_error;
             const bool probe_ok = probe_local_health(
-                worker_options.listen_address,
-                pool_port_,
-                probe_target, probe_host, probe_capsid_app,
-                worker_options.health_check.timeout_ms, &probe_error);
+                worker_options.listen_address, pool_port_, probe_target, probe_host,
+                probe_capsid_app, worker_options.health_check.timeout_ms, &probe_error);
             if (!probe_ok) {
                 if (error != nullptr) {
                     *error = "health check failed: " + probe_error;
@@ -456,7 +450,7 @@ public:
 
     void request_stop() {
         if (stop_requested_.exchange(true)) {
-            return;  // idempotent
+            return; // idempotent
         }
         close_pool_acceptor();
         // Stop every shard in one pass, then wait() joins them: the
@@ -471,9 +465,7 @@ public:
         }
     }
 
-    bool stop_requested() const {
-        return stop_requested_.load(std::memory_order_acquire);
-    }
+    bool stop_requested() const { return stop_requested_.load(std::memory_order_acquire); }
 
     bool wait(std::string* error) {
         // Concurrent-wait guard (TSan gate): wait() joins every shard's
@@ -548,14 +540,10 @@ public:
         metrics.draining = true;
         metrics.finished = true;
         for (const std::unique_ptr<SingleWorkerServer>& shard : shards_) {
-            const SingleWorkerServer::DrainMetrics shard_metrics =
-                shard->drain_metrics();
-            metrics.draining =
-                metrics.draining && shard_metrics.draining;
-            metrics.finished =
-                metrics.finished && shard_metrics.finished;
-            metrics.forced_cancellations +=
-                shard_metrics.forced_cancellations;
+            const SingleWorkerServer::DrainMetrics shard_metrics = shard->drain_metrics();
+            metrics.draining = metrics.draining && shard_metrics.draining;
+            metrics.finished = metrics.finished && shard_metrics.finished;
+            metrics.forced_cancellations += shard_metrics.forced_cancellations;
             if (shard_metrics.total_ms > metrics.total_ms) {
                 metrics.total_ms = shard_metrics.total_ms;
             }
@@ -567,7 +555,7 @@ public:
         return metrics;
     }
 
-private:
+  private:
     // Every platform keeps one public acceptor independent of Worker exit.
     bool bind_pool_acceptor(std::string* error);
     bool start_pool_accept_loop();
@@ -608,14 +596,12 @@ private:
 
     bool write_pool_ready_line() {
         if (options_.worker_options.ready_fd < 0) {
-            return true;  // no caller to notify (zero-worker fixture path)
+            return true; // no caller to notify (zero-worker fixture path)
         }
-        const std::string line =
-            "{\"schema\":\"capsid-host-ready-v1\",\"app\":\"" +
-            options_.worker_options.application + "\",\"address\":\"" +
-            options_.worker_options.listen_address + "\",\"port\":" +
-            std::to_string(pool_port_) +
-            "}\n";
+        const std::string line = "{\"schema\":\"capsid-host-ready-v1\",\"app\":\"" +
+                                 options_.worker_options.application + "\",\"address\":\"" +
+                                 options_.worker_options.listen_address +
+                                 "\",\"port\":" + std::to_string(pool_port_) + "}\n";
         std::size_t offset = 0;
         while (offset < line.size()) {
 #if defined(_WIN32)
@@ -623,12 +609,10 @@ private:
             // harnesses) or a stdio pipe (process harnesses); write_any_fd
             // covers both, unlike raw CRT write() on a socket fd.
             const ssize_t written = capsid::win32::write_any_fd(
-                options_.worker_options.ready_fd, line.data() + offset,
-                line.size() - offset);
+                options_.worker_options.ready_fd, line.data() + offset, line.size() - offset);
 #else
-            const ssize_t written = ::write(
-                options_.worker_options.ready_fd, line.data() + offset,
-                line.size() - offset);
+            const ssize_t written = ::write(options_.worker_options.ready_fd, line.data() + offset,
+                                            line.size() - offset);
 #endif
             if (written < 0 && errno == EINTR) {
                 continue;
@@ -667,7 +651,7 @@ private:
     std::unordered_map<UnavailableSession*, std::shared_ptr<UnavailableSession>> unavailable_;
 };
 
-bool StaticPoolServerImpl::bind_pool_acceptor(std::string *error) {
+bool StaticPoolServerImpl::bind_pool_acceptor(std::string* error) {
     std::lock_guard<std::mutex> lock(accept_lifecycle_mutex_);
     if (stop_requested_.load(std::memory_order_acquire) ||
         accept_closed_.load(std::memory_order_acquire)) {
@@ -783,13 +767,13 @@ void StaticPoolServerImpl::do_pool_accept() {
     // The facade keeps Impl alive through stop/wait, and shards are only
     // destroyed after the accept thread joins. The handler's weak capture
     // avoids a lifetime cycle; the raw shard outlives its armed operation.
-    SingleWorkerServer *target = nullptr;
+    SingleWorkerServer* target = nullptr;
     {
         std::lock_guard<std::mutex> lock(shards_mutex_);
         const std::size_t count = shards_.size();
         for (std::size_t probe = 0; probe < count; ++probe) {
             const std::size_t index = next_shard_++ % count;
-            SingleWorkerServer *candidate = shards_[index].get();
+            SingleWorkerServer* candidate = shards_[index].get();
             if (candidate->worker_available()) {
                 target = candidate;
                 break;
@@ -823,7 +807,7 @@ void StaticPoolServerImpl::do_pool_accept() {
         });
 }
 
-void StaticPoolServerImpl::dispatch_pool_peer(SingleWorkerServer *target,
+void StaticPoolServerImpl::dispatch_pool_peer(SingleWorkerServer* target,
                                               boost::asio::ip::tcp::socket peer) {
     // Availability can change after selection, including while the shard
     // prepares its adoption handler. Only a successful admission consumes
@@ -838,7 +822,7 @@ void StaticPoolServerImpl::dispatch_pool_peer(SingleWorkerServer *target,
             std::lock_guard<std::mutex> lock(shards_mutex_);
             const std::size_t count = shards_.size();
             for (std::size_t probe = 0; probe < count; ++probe) {
-                SingleWorkerServer *candidate = shards_[next_shard_++ % count].get();
+                SingleWorkerServer* candidate = shards_[next_shard_++ % count].get();
                 if (candidate->worker_available()) {
                     target = candidate;
                     break;
@@ -868,7 +852,7 @@ void StaticPoolServerImpl::reject_pool_peer(boost::asio::ip::tcp::socket peer) {
         return;
     auto session = std::make_shared<UnavailableSession>(
         std::move(peer), options_.worker_options,
-        [weak = weak_from_this()](UnavailableSession *finished) {
+        [weak = weak_from_this()](UnavailableSession* finished) {
             if (const auto self = weak.lock())
                 self->unavailable_.erase(finished);
         });
@@ -888,16 +872,13 @@ StaticPoolServer::~StaticPoolServer() {
     impl_.reset();
 }
 
-bool StaticPoolServer::start(const std::vector<std::uint8_t>& bundle,
-                             std::string* error) {
+bool StaticPoolServer::start(const std::vector<std::uint8_t>& bundle, std::string* error) {
     return impl_->start(bundle, error);
 }
 
 void StaticPoolServer::request_stop() { impl_->request_stop(); }
 
-void StaticPoolServer::begin_drain(std::uint64_t deadline_ms) {
-    impl_->begin_drain(deadline_ms);
-}
+void StaticPoolServer::begin_drain(std::uint64_t deadline_ms) { impl_->begin_drain(deadline_ms); }
 
 SingleWorkerServer::DrainMetrics StaticPoolServer::drain_metrics() const {
     return impl_->drain_metrics();
@@ -909,9 +890,7 @@ std::vector<capsid::WorkerExitStatus> StaticPoolServer::worker_exit_statuses() c
 
 bool StaticPoolServer::wait(std::string* error) { return impl_->wait(error); }
 
-std::size_t StaticPoolServer::active_workers() const {
-    return impl_->active_workers();
-}
+std::size_t StaticPoolServer::active_workers() const { return impl_->active_workers(); }
 
 int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     std::string error;
@@ -921,16 +900,15 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     boost::asio::io_context signal_io;
     boost::asio::signal_set signals(signal_io, SIGTERM, SIGINT);
     signals.async_wait([this](const boost::system::error_code& ec, int) {
-        if (!ec) impl_->request_stop();
+        if (!ec)
+            impl_->request_stop();
     });
 #endif
     if (!impl_->start(bundle, &error)) {
         // M2 item 7 (§12.2): a failed pool start is a structured startup
         // line; the error text is static and sanitized.
         emit_log(impl_->structured_log(),
-                 {.event = log_events::kStartup,
-                  .result = "fail",
-                  .message = error});
+                 {.event = log_events::kStartup, .result = "fail", .message = error});
         return 1;
     }
     // Both parent control and process signals can request a bounded stop.
@@ -938,12 +916,10 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
 #if defined(_WIN32)
     g_static_pool_term_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_static_pool_term_event == nullptr ||
-        SetConsoleCtrlHandler(
-            &static_pool_console_handler, TRUE) == 0) {
-        emit_log(impl_->structured_log(),
-                 {.event = log_events::kStartup,
-                  .result = "fail",
-                  .message = "cannot install stop handler"});
+        SetConsoleCtrlHandler(&static_pool_console_handler, TRUE) == 0) {
+        emit_log(impl_->structured_log(), {.event = log_events::kStartup,
+                                           .result = "fail",
+                                           .message = "cannot install stop handler"});
         impl_->request_stop();
         impl_->wait(&error);
         return 1;
@@ -951,8 +927,12 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     bool wait_failed = false;
     while (!impl_->stop_requested()) {
         const DWORD result = WaitForSingleObject(g_static_pool_term_event, 50);
-        if (result == WAIT_OBJECT_0) break;
-        if (result != WAIT_TIMEOUT) { wait_failed = true; break; }
+        if (result == WAIT_OBJECT_0)
+            break;
+        if (result != WAIT_TIMEOUT) {
+            wait_failed = true;
+            break;
+        }
     }
 #else
     while (!impl_->stop_requested())
@@ -963,13 +943,13 @@ int StaticPoolServer::run(const std::vector<std::uint8_t>& bundle) {
     impl_->wait(&error);
 #if defined(_WIN32)
     if (wait_failed) {
-        emit_log(impl_->structured_log(),
-                 {.event = log_events::kShutdown, .result = "fail",
-                  .message = "cannot wait for stop event"});
+        emit_log(impl_->structured_log(), {.event = log_events::kShutdown,
+                                           .result = "fail",
+                                           .message = "cannot wait for stop event"});
         return 1;
     }
 #endif
     return 0;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

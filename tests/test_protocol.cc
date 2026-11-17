@@ -7,7 +7,7 @@
 
 namespace {
 
-void require(bool condition, const char *message) {
+void require(bool condition, const char* message) {
     if (!condition) {
         std::cerr << "FAIL: " << message << std::endl;
         std::exit(1);
@@ -32,7 +32,8 @@ void test_default_frame_is_empty() {
     capsid::protocol::Parser parser;
     require(parser.append(wire.data(), wire.size()), "empty frame buffers");
     require(parser.next(&value_initialized) == capsid::protocol::kParseFrame &&
-            value_initialized.payload.empty(), "empty frame parses without a phantom byte");
+                value_initialized.payload.empty(),
+            "empty frame parses without a phantom byte");
 }
 
 void test_round_trip_one_byte_at_a_time() {
@@ -132,47 +133,27 @@ void test_accepts_multiple_coalesced_frames() {
 void test_append_encoded_preserves_prefix_and_rejects_transactionally() {
     const uint8_t payload[] = {0x10, 0x20, 0x30, 0x40};
     std::vector<uint8_t> wire(3, 0xa5);
-    require(
-        capsid::protocol::append_encoded(
-            capsid::protocol::kResponseBody,
-            0,
-            73,
-            payload,
-            sizeof(payload),
-            &wire),
-        "frame appends directly");
-    require(
-        wire.size() ==
-            3 + capsid::protocol::kHeaderSize + sizeof(payload),
-        "direct append size");
-    require(
-        wire[0] == 0xa5 && wire[1] == 0xa5 && wire[2] == 0xa5,
-        "direct append preserves prefix");
+    require(capsid::protocol::append_encoded(capsid::protocol::kResponseBody, 0, 73, payload,
+                                             sizeof(payload), &wire),
+            "frame appends directly");
+    require(wire.size() == 3 + capsid::protocol::kHeaderSize + sizeof(payload),
+            "direct append size");
+    require(wire[0] == 0xa5 && wire[1] == 0xa5 && wire[2] == 0xa5,
+            "direct append preserves prefix");
 
     capsid::protocol::Parser parser;
-    require(
-        parser.append(&wire[3], wire.size() - 3),
-        "directly appended frame buffered");
+    require(parser.append(&wire[3], wire.size() - 3), "directly appended frame buffered");
     capsid::protocol::Frame decoded;
-    require(
-        parser.next(&decoded) == capsid::protocol::kParseFrame,
-        "directly appended frame parses");
-    require(
-        decoded.request_id == 73 &&
-            decoded.payload ==
-                std::vector<uint8_t>(payload, payload + sizeof(payload)),
-        "directly appended frame is intact");
+    require(parser.next(&decoded) == capsid::protocol::kParseFrame,
+            "directly appended frame parses");
+    require(decoded.request_id == 73 &&
+                decoded.payload == std::vector<uint8_t>(payload, payload + sizeof(payload)),
+            "directly appended frame is intact");
 
     const size_t before = wire.size();
-    require(
-        !capsid::protocol::append_encoded(
-            capsid::protocol::kResponseBody,
-            1,
-            73,
-            payload,
-            sizeof(payload),
-            &wire),
-        "invalid direct append rejected");
+    require(!capsid::protocol::append_encoded(capsid::protocol::kResponseBody, 1, 73, payload,
+                                              sizeof(payload), &wire),
+            "invalid direct append rejected");
     require(wire.size() == before, "rejected append does not mutate output");
 }
 
@@ -191,9 +172,8 @@ void test_parser_can_decode_into_reusable_payload_storage() {
     std::vector<uint8_t> payload;
     payload.reserve(8192);
     const size_t capacity = payload.capacity();
-    require(
-        parser.next(&metadata, &payload) == capsid::protocol::kParseFrame,
-        "parser emits into reusable payload");
+    require(parser.next(&metadata, &payload) == capsid::protocol::kParseFrame,
+            "parser emits into reusable payload");
     require(metadata.payload.empty(), "metadata frame does not duplicate payload");
     require(payload == input.payload, "reusable payload is intact");
     require(payload.capacity() == capacity, "reusable payload capacity is retained");
@@ -205,8 +185,8 @@ void test_u64_wire_value_round_trips() {
     capsid::protocol::append_u64(&wire, expected);
     require(wire.size() == 8, "u64 wire size");
 
-    const uint8_t *cursor = &wire[0];
-    const uint8_t *end = cursor + wire.size();
+    const uint8_t* cursor = &wire[0];
+    const uint8_t* end = cursor + wire.size();
     uint64_t actual = 0;
     require(capsid::protocol::read_u64(&cursor, end, &actual), "u64 decodes");
     require(actual == expected && cursor == end, "u64 round trips");
@@ -231,13 +211,9 @@ void test_fixed_response_head_flag() {
     capsid::protocol::append_u32(&input.payload, 4096);
 
     std::vector<uint8_t> wire;
-    require(
-        capsid::protocol::encode(input, &wire),
-        "fixed response-head flag accepted");
+    require(capsid::protocol::encode(input, &wire), "fixed response-head flag accepted");
     input.flags |= 2u;
-    require(
-        !capsid::protocol::encode(input, &wire),
-        "unknown response-head flag rejected");
+    require(!capsid::protocol::encode(input, &wire), "unknown response-head flag rejected");
 }
 
 void test_ready_sandbox_feature_flags() {
@@ -247,13 +223,10 @@ void test_ready_sandbox_feature_flags() {
     ready.request_id = 0;
 
     std::vector<uint8_t> wire;
-    require(
-        capsid::protocol::encode(ready, &wire),
-        "known READY sandbox feature flags accepted");
+    require(capsid::protocol::encode(ready, &wire), "known READY sandbox feature flags accepted");
     ready.flags |= 1u << 10;
-    require(
-        !capsid::protocol::encode(ready, &wire),
-        "unknown READY sandbox feature flags rejected");
+    require(!capsid::protocol::encode(ready, &wire),
+            "unknown READY sandbox feature flags rejected");
 }
 
 void test_bundle_name_flag_requires_start() {
@@ -263,15 +236,9 @@ void test_bundle_name_flag_requires_start() {
     input.request_id = 0;
 
     std::vector<uint8_t> wire;
-    require(
-        !capsid::protocol::encode(input, &wire),
-        "bundle name flag without start rejected");
-    input.flags =
-        capsid::protocol::kFlagStart |
-        capsid::protocol::kFlagBundleName;
-    require(
-        capsid::protocol::encode(input, &wire),
-        "bundle name flag with start accepted");
+    require(!capsid::protocol::encode(input, &wire), "bundle name flag without start rejected");
+    input.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagBundleName;
+    require(capsid::protocol::encode(input, &wire), "bundle name flag with start accepted");
 }
 
 void test_trusted_bytecode_flag_requires_start() {
@@ -281,54 +248,41 @@ void test_trusted_bytecode_flag_requires_start() {
     input.request_id = 0;
 
     std::vector<uint8_t> wire;
-    require(
-        !capsid::protocol::encode(input, &wire),
-        "trusted bytecode flag without start rejected");
-    input.flags =
-        capsid::protocol::kFlagStart |
-        capsid::protocol::kFlagEnd |
-        capsid::protocol::kFlagTrustedBytecode;
-    require(
-        capsid::protocol::encode(input, &wire),
-        "trusted bytecode flag with start accepted");
+    require(!capsid::protocol::encode(input, &wire),
+            "trusted bytecode flag without start rejected");
+    input.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd |
+                  capsid::protocol::kFlagTrustedBytecode;
+    require(capsid::protocol::encode(input, &wire), "trusted bytecode flag with start accepted");
 }
 
 void test_load_binding_frame_type() {
     capsid::protocol::Frame input;
     input.type = capsid::protocol::kLoadBinding;
-    input.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    input.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     input.request_id = 0;
     input.payload.assign(100, 0x5a);
 
     std::vector<uint8_t> wire;
-    require(capsid::protocol::encode(input, &wire),
-            "LOAD_BINDING frame encodes");
+    require(capsid::protocol::encode(input, &wire), "LOAD_BINDING frame encodes");
 
     capsid::protocol::Parser parser;
     capsid::protocol::Frame output;
-    require(parser.append(wire.data(), wire.size()),
-            "parser accepts LOAD_BINDING wire");
-    require(parser.next(&output) == capsid::protocol::kParseFrame,
-            "LOAD_BINDING frame parses");
-    require(
-        output.type == capsid::protocol::kLoadBinding &&
-            output.flags == input.flags && output.request_id == 0 &&
-            output.payload == input.payload,
-        "LOAD_BINDING frame round-trips");
+    require(parser.append(wire.data(), wire.size()), "parser accepts LOAD_BINDING wire");
+    require(parser.next(&output) == capsid::protocol::kParseFrame, "LOAD_BINDING frame parses");
+    require(output.type == capsid::protocol::kLoadBinding && output.flags == input.flags &&
+                output.request_id == 0 && output.payload == input.payload,
+            "LOAD_BINDING frame round-trips");
 
     // LOAD_BINDING frames carry only the start/end chunk flags; the bundle
     // name and trusted-bytecode flags stay bundle-only.
     capsid::protocol::Frame bad = input;
     bad.flags = capsid::protocol::kFlagBundleName;
-    require(!capsid::protocol::encode(bad, &wire),
-            "LOAD_BINDING with a bundle name flag rejected");
+    require(!capsid::protocol::encode(bad, &wire), "LOAD_BINDING with a bundle name flag rejected");
     bad.flags = capsid::protocol::kFlagTrustedBytecode;
     require(!capsid::protocol::encode(bad, &wire),
             "LOAD_BINDING with a trusted-bytecode flag rejected");
     bad.flags = 0;
-    require(capsid::protocol::encode(bad, &wire),
-            "mid-sequence LOAD_BINDING frame encodes");
+    require(capsid::protocol::encode(bad, &wire), "mid-sequence LOAD_BINDING frame encodes");
 }
 
 void test_rejects_null_append() {
@@ -346,15 +300,13 @@ void test_rejects_unknown_type_and_version() {
 
     frame.type = capsid::protocol::kHello;
     require(capsid::protocol::encode(frame, &wire), "hello encodes");
-    const uint16_t unknown_version =
-        static_cast<uint16_t>(capsid::protocol::kVersion + 1);
+    const uint16_t unknown_version = static_cast<uint16_t>(capsid::protocol::kVersion + 1);
     wire[4] = static_cast<uint8_t>(unknown_version);
     wire[5] = static_cast<uint8_t>(unknown_version >> 8);
     capsid::protocol::Parser parser;
     require(parser.append(&wire[0], wire.size()), "bad version buffered");
-    require(
-        parser.next(&frame) == capsid::protocol::kParseError,
-        "unknown protocol version rejected");
+    require(parser.next(&frame) == capsid::protocol::kParseError,
+            "unknown protocol version rejected");
 }
 
 void test_memory_metrics_frame_types() {
@@ -363,56 +315,78 @@ void test_memory_metrics_frame_types() {
     frame.flags = 0;
     frame.request_id = 0;
     std::vector<uint8_t> wire;
-    require(
-        capsid::protocol::encode(frame, &wire),
-        "memory metrics request encodes");
+    require(capsid::protocol::encode(frame, &wire), "memory metrics request encodes");
     frame.type = capsid::protocol::kMemoryMetricsResponse;
-    capsid::protocol::append_u32(
-        &frame.payload, 1);
-    require(
-        capsid::protocol::encode(frame, &wire),
-        "memory metrics response encodes");
+    capsid::protocol::append_u32(&frame.payload, 1);
+    require(capsid::protocol::encode(frame, &wire), "memory metrics response encodes");
     frame.flags = 1;
-    require(
-        !capsid::protocol::encode(frame, &wire),
-        "memory metrics flags rejected");
+    require(!capsid::protocol::encode(frame, &wire), "memory metrics flags rejected");
 }
 
 void test_enforces_total_parser_buffer_limit() {
-    std::vector<uint8_t> oversized(
-        capsid::protocol::kMaxBufferedBytes + 1, 0);
+    std::vector<uint8_t> oversized(capsid::protocol::kMaxBufferedBytes + 1, 0);
     capsid::protocol::Parser parser;
-    require(
-        !parser.append(&oversized[0], oversized.size()),
-        "total parser buffer limit enforced");
+    require(!parser.append(&oversized[0], oversized.size()), "total parser buffer limit enforced");
 }
 
 void test_connection_lifetime_wire() {
-    namespace p=capsid::protocol;
-    require(p::capabilities_satisfy_closure(127),"previous capability closure remains valid");
-    require(p::capabilities_satisfy_closure(155) && p::capabilities_satisfy_closure(251),"lifetime capability closure");
+    namespace p = capsid::protocol;
+    require(p::capabilities_satisfy_closure(127), "previous capability closure remains valid");
+    require(p::capabilities_satisfy_closure(155) && p::capabilities_satisfy_closure(251),
+            "lifetime capability closure");
     require(!p::capabilities_satisfy_closure(128) && !p::capabilities_satisfy_closure(139) &&
-            !p::capabilities_satisfy_closure(153) && !p::capabilities_satisfy_closure(256),"lifetime dependencies and unknown bit rejected");
-    p::ConnectionLifetimePayload value;value.channel_id=0x04030201;value.retained=1;
-    std::vector<uint8_t> bytes;require(p::encode_connection_lifetime(value,&bytes),"lifetime payload encodes");
-    require(bytes==std::vector<uint8_t>({1,2,3,4,1,0,0,0}),"literal lifetime payload bytes");
-    p::ConnectionLifetimePayload decoded;std::string error;
-    require(p::decode_connection_lifetime(bytes.data(),bytes.size(),&decoded,&error) && decoded.channel_id==value.channel_id && decoded.retained==1,"lifetime payload decodes");
-    for(size_t size=0;size<8;++size)require(!p::decode_connection_lifetime(bytes.data(),size,&decoded,&error),"every truncated lifetime payload rejected");
-    bytes.push_back(0);require(!p::decode_connection_lifetime(bytes.data(),bytes.size(),&decoded,&error),"extra lifetime byte rejected");bytes.pop_back();
-    bytes[4]=2;require(!p::decode_connection_lifetime(bytes.data(),bytes.size(),&decoded,&error),"non-boolean lifetime state rejected");
-    value.channel_id=0;require(!p::encode_connection_lifetime(value,&bytes),"zero lifetime channel refused");
-    value.channel_id=1;value.retained=2;require(!p::encode_connection_lifetime(value,&bytes),"invalid lifetime state refused");
-    value.retained=0;require(p::encode_connection_lifetime(value,&bytes),"release payload encodes");
-    p::Frame frame;frame.version=4;frame.type=p::kConnectionLifetime;frame.payload=bytes;
-    std::vector<uint8_t> wire;require(p::encode_versioned(4,frame,&wire),"v4 lifetime frame encodes");
-    p::Parser v4(4);p::Frame output;require(v4.append(wire.data(),wire.size()) && v4.next(&output)==p::kParseFrame && output.type==28,"v4 lifetime frame parses");
-    require(!p::encode(frame,&wire),"legacy encoder never emits lifetime frames");
-    require(!p::encode_versioned(3,frame,&wire),"v3 never encodes lifetime frame");
-    frame.flags=1;require(!p::encode_versioned(4,frame,&wire),"lifetime flags rejected");frame.flags=0;
-    frame.request_id=1;require(!p::encode_versioned(4,frame,&wire),"lifetime cannot borrow request header identity");
+                !p::capabilities_satisfy_closure(153) && !p::capabilities_satisfy_closure(256),
+            "lifetime dependencies and unknown bit rejected");
+    p::ConnectionLifetimePayload value;
+    value.channel_id = 0x04030201;
+    value.retained = 1;
+    std::vector<uint8_t> bytes;
+    require(p::encode_connection_lifetime(value, &bytes), "lifetime payload encodes");
+    require(bytes == std::vector<uint8_t>({1, 2, 3, 4, 1, 0, 0, 0}),
+            "literal lifetime payload bytes");
+    p::ConnectionLifetimePayload decoded;
+    std::string error;
+    require(p::decode_connection_lifetime(bytes.data(), bytes.size(), &decoded, &error) &&
+                decoded.channel_id == value.channel_id && decoded.retained == 1,
+            "lifetime payload decodes");
+    for (size_t size = 0; size < 8; ++size)
+        require(!p::decode_connection_lifetime(bytes.data(), size, &decoded, &error),
+                "every truncated lifetime payload rejected");
+    bytes.push_back(0);
+    require(!p::decode_connection_lifetime(bytes.data(), bytes.size(), &decoded, &error),
+            "extra lifetime byte rejected");
+    bytes.pop_back();
+    bytes[4] = 2;
+    require(!p::decode_connection_lifetime(bytes.data(), bytes.size(), &decoded, &error),
+            "non-boolean lifetime state rejected");
+    value.channel_id = 0;
+    require(!p::encode_connection_lifetime(value, &bytes), "zero lifetime channel refused");
+    value.channel_id = 1;
+    value.retained = 2;
+    require(!p::encode_connection_lifetime(value, &bytes), "invalid lifetime state refused");
+    value.retained = 0;
+    require(p::encode_connection_lifetime(value, &bytes), "release payload encodes");
+    p::Frame frame;
+    frame.version = 4;
+    frame.type = p::kConnectionLifetime;
+    frame.payload = bytes;
+    std::vector<uint8_t> wire;
+    require(p::encode_versioned(4, frame, &wire), "v4 lifetime frame encodes");
+    p::Parser v4(4);
+    p::Frame output;
+    require(v4.append(wire.data(), wire.size()) && v4.next(&output) == p::kParseFrame &&
+                output.type == 28,
+            "v4 lifetime frame parses");
+    require(!p::encode(frame, &wire), "legacy encoder never emits lifetime frames");
+    require(!p::encode_versioned(3, frame, &wire), "v3 never encodes lifetime frame");
+    frame.flags = 1;
+    require(!p::encode_versioned(4, frame, &wire), "lifetime flags rejected");
+    frame.flags = 0;
+    frame.request_id = 1;
+    require(!p::encode_versioned(4, frame, &wire),
+            "lifetime cannot borrow request header identity");
 }
-}  // namespace
+} // namespace
 
 int main() {
     test_default_frame_is_empty();

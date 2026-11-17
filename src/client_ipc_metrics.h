@@ -40,15 +40,13 @@ struct ClientIpcMetrics {
     ClientIpcMetrics();
 };
 
-void client_ipc_metrics_enable(capsid_worker *worker, bool enabled);
-void client_ipc_metrics_reset(capsid_worker *worker);
-bool client_ipc_metrics_snapshot(capsid_worker *worker,
-                                 ClientIpcMetrics *metrics);
+void client_ipc_metrics_enable(capsid_worker* worker, bool enabled);
+void client_ipc_metrics_reset(capsid_worker* worker);
+bool client_ipc_metrics_snapshot(capsid_worker* worker, ClientIpcMetrics* metrics);
 // Transfers each interval counter exactly once, without requiring a live
 // worker handle. Source and destination must be distinct banks.
-bool client_ipc_metrics_drain(ClientIpcMetrics *source,
-                              ClientIpcMetrics *metrics);
+bool client_ipc_metrics_drain(ClientIpcMetrics* source, ClientIpcMetrics* metrics);
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

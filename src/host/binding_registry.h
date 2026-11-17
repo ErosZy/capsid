@@ -38,18 +38,17 @@ using BindingOwnerId = uid_t;
 // generation before JSON encoding; 160 MiB leaves room for JSON escaping,
 // manifests, configs, permission lists, and framing while still bounding a
 // recovery read before parsing.
-inline constexpr std::size_t kMaxBindingsSnapshotBytes =
-    160U * 1024U * 1024U;
+inline constexpr std::size_t kMaxBindingsSnapshotBytes = 160U * 1024U * 1024U;
 
 // One validated Binding package, fully copied at scan time. The strings
 // are private copies of the file bytes; later edits to bindingsRoot cannot
 // change a returned snapshot (v1 does not watch or reload).
 struct BindingPackageSnapshot {
-    std::string id;             // the package directory name
-    std::string manifest_json;  // validated manifest bytes
-    std::string source;         // index.js bytes (bounded)
-    std::string manifest_digest;  // canonical manifest digest
-    std::string source_digest;    // raw source digest
+    std::string id;              // the package directory name
+    std::string manifest_json;   // validated manifest bytes
+    std::string source;          // index.js bytes (bounded)
+    std::string manifest_digest; // canonical manifest digest
+    std::string source_digest;   // raw source digest
 };
 
 struct BindingRegistrySnapshot {
@@ -62,10 +61,8 @@ struct BindingRegistrySnapshot {
 // every package directory and every file must be owned by one of them and
 // must not be group- or world-writable. On failure `error` carries a static
 // operator-facing diagnostic that names the offending path, never content.
-bool scan_bindings_root(const std::string &root,
-                        const std::vector<BindingOwnerId> &allowed_uids,
-                        BindingRegistrySnapshot *out,
-                        std::string *error);
+bool scan_bindings_root(const std::string& root, const std::vector<BindingOwnerId>& allowed_uids,
+                        BindingRegistrySnapshot* out, std::string* error);
 
 // Deterministic race-injection seam used only by the registry regression
 // tests. Production callers use scan_bindings_root() and cannot install a
@@ -74,15 +71,13 @@ enum class BindingRegistryScanPhase {
     kRootEnumerated,
     kPackageEnumerated,
 };
-using BindingRegistryScanHook = std::function<void(
-    BindingRegistryScanPhase phase, std::string_view package_id)>;
-bool scan_bindings_root_with_test_hook(
-    const std::string &root,
-    const std::vector<BindingOwnerId> &allowed_uids,
-    const BindingRegistryScanHook &hook,
-    BindingRegistrySnapshot *out,
-    std::string *error);
+using BindingRegistryScanHook =
+    std::function<void(BindingRegistryScanPhase phase, std::string_view package_id)>;
+bool scan_bindings_root_with_test_hook(const std::string& root,
+                                       const std::vector<BindingOwnerId>& allowed_uids,
+                                       const BindingRegistryScanHook& hook,
+                                       BindingRegistrySnapshot* out, std::string* error);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

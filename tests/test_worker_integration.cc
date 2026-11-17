@@ -38,64 +38,60 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-void require_clean_exit(capsid_worker *worker) {
+void require_clean_exit(capsid_worker* worker) {
     const auto result = capsid_test::shutdown_and_wait(worker, 2500);
     capsid_worker_destroy(worker);
     std::cout << "WORKER_EXIT {\"clean\":" << (result.clean() ? "true" : "false")
               << ",\"observed\":" << (result.reaped ? "true" : "false")
               << ",\"channelClosed\":" << (result.channel_closed ? "true" : "false")
-              << ",\"status\":" << result.status
-              << ",\"waitError\":" << result.wait_error
+              << ",\"status\":" << result.status << ",\"waitError\":" << result.wait_error
               << ",\"eventResult\":" << result.event_result
               << ",\"errorEvents\":" << result.error_events << "}" << std::endl;
-    if (!result.clean()) fail("Worker did not complete a clean graceful exit");
+    if (!result.clean())
+        fail("Worker did not complete a clean graceful exit");
 }
 
-void require_retained_timer_exit(capsid_worker *worker, bool shutdown) {
+void require_retained_timer_exit(capsid_worker* worker, bool shutdown) {
     const auto result = capsid_test::wait_for_worker_exit(worker, 2500, shutdown);
     capsid_worker_destroy(worker);
-    std::cout << "WORKER_EXIT_RETAINED {\"shutdownRequested\":"
-              << (shutdown ? "true" : "false")
+    std::cout << "WORKER_EXIT_RETAINED {\"shutdownRequested\":" << (shutdown ? "true" : "false")
               << ",\"observed\":" << (result.reaped ? "true" : "false")
               << ",\"channelClosed\":" << (result.channel_closed ? "true" : "false")
-              << ",\"status\":" << result.status
-              << ",\"waitError\":" << result.wait_error
-              << ",\"clean\":" << (result.clean() ? "true" : "false")
-              << "}" << std::endl;
+              << ",\"status\":" << result.status << ",\"waitError\":" << result.wait_error
+              << ",\"clean\":" << (result.clean() ? "true" : "false") << "}" << std::endl;
     if (result.shutdown_result != CAPSID_OK || result.flush_result != CAPSID_OK ||
-        result.event_result != CAPSID_OK || !result.channel_closed ||
-        !result.reaped || result.wait_error != 0 ||
-        !WIFEXITED(result.status) || WEXITSTATUS(result.status) != 1 || result.clean()) {
+        result.event_result != CAPSID_OK || !result.channel_closed || !result.reaped ||
+        result.wait_error != 0 || !WIFEXITED(result.status) || WEXITSTATUS(result.status) != 1 ||
+        result.clean()) {
         fail("retained timer Worker did not report a failed process exit");
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot open fixture: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-bool contains(const std::string &text, const char *fragment) {
+bool contains(const std::string& text, const char* fragment) {
     return text.find(fragment) != std::string::npos;
 }
 
 class LocalHttpServer {
-public:
+  public:
     LocalHttpServer() : fd_(-1), port_(0), served_(false) {
         fd_ = capsid::win32::create_tcp_socket_fd();
         if (fd_ < 0) {
@@ -108,21 +104,17 @@ public:
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = 0;
-        if (capsid::win32::bind_fd(fd_,
-                 reinterpret_cast<const struct sockaddr *>(&address),
-                 sizeof(address)) != 0) {
-            fail(std::string("cannot bind local HTTP server: ") +
-                 std::strerror(errno));
+        if (capsid::win32::bind_fd(fd_, reinterpret_cast<const struct sockaddr*>(&address),
+                                   sizeof(address)) != 0) {
+            fail(std::string("cannot bind local HTTP server: ") + std::strerror(errno));
         }
         if (capsid::win32::listen_fd(fd_, 1) != 0) {
-            fail(std::string("cannot listen on local HTTP server: ") +
-                 std::strerror(errno));
+            fail(std::string("cannot listen on local HTTP server: ") + std::strerror(errno));
         }
 
         socklen_t address_size = sizeof(address);
-        if (capsid::win32::getsockname_fd(fd_,
-                        reinterpret_cast<struct sockaddr *>(&address),
-                        &address_size) != 0) {
+        if (capsid::win32::getsockname_fd(fd_, reinterpret_cast<struct sockaddr*>(&address),
+                                          &address_size) != 0) {
             fail("cannot resolve local HTTP server port");
         }
         port_ = ntohs(address.sin_port);
@@ -141,12 +133,10 @@ public:
 
     uint16_t port() const { return port_; }
 
-    std::string application_url(const char *target_host = "127.0.0.1") const {
-        return std::string(
-                   "https://example.test/fetch?"
-                   "target=http%3A%2F%2F") +
-               target_host + "%3A" +
-               std::to_string(port_) + "%2Fdata";
+    std::string application_url(const char* target_host = "127.0.0.1") const {
+        return std::string("https://example.test/fetch?"
+                           "target=http%3A%2F%2F") +
+               target_host + "%3A" + std::to_string(port_) + "%2Fdata";
     }
 
     void wait() {
@@ -158,7 +148,7 @@ public:
         }
     }
 
-private:
+  private:
     void serve() {
         capsid_pollfd descriptor = {};
         descriptor.fd = fd_;
@@ -173,22 +163,16 @@ private:
         }
 #ifdef SO_NOSIGPIPE
         const int no_sigpipe = 1;
-        setsockopt(client,
-                   SOL_SOCKET,
-                   SO_NOSIGPIPE,
-                   &no_sigpipe,
-                   sizeof(no_sigpipe));
+        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
 #endif
 
         std::string request;
         char buffer[2048];
-        while (request.find("\r\n\r\n") == std::string::npos &&
-               request.size() < 64u * 1024u) {
+        while (request.find("\r\n\r\n") == std::string::npos && request.size() < 64u * 1024u) {
 #if defined(_WIN32)
             // accept_fd returns a CRT fd; Winsock recv takes the raw
             // SOCKET handle.
-            const ssize_t count =
-                capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
+            const ssize_t count = capsid::win32::recv_fd(client, buffer, sizeof(buffer), 0);
 #else
             const ssize_t count = recv(client, buffer, sizeof(buffer), 0);
 #endif
@@ -199,28 +183,23 @@ private:
             request.append(buffer, static_cast<size_t>(count));
         }
 
-        static const char response[] =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/plain\r\n"
-            "X-Capsid-Upstream: direct-egress\r\n"
-            "Content-Length: 15\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "capsid-fetch-ok";
+        static const char response[] = "HTTP/1.1 200 OK\r\n"
+                                       "Content-Type: text/plain\r\n"
+                                       "X-Capsid-Upstream: direct-egress\r\n"
+                                       "Content-Length: 15\r\n"
+                                       "Connection: close\r\n"
+                                       "\r\n"
+                                       "capsid-fetch-ok";
         size_t offset = 0;
         while (offset < sizeof(response) - 1) {
 #if defined(_WIN32)
-            const ssize_t count = capsid::win32::send_fd(
-                client, response + offset, sizeof(response) - 1 - offset, 0);
-#elif defined(MSG_NOSIGNAL)
-            const ssize_t count = send(
-                client,
-                response + offset,
-                sizeof(response) - 1 - offset,
-                MSG_NOSIGNAL);
-#else
             const ssize_t count =
-                send(client, response + offset, sizeof(response) - 1 - offset, 0);
+                capsid::win32::send_fd(client, response + offset, sizeof(response) - 1 - offset, 0);
+#elif defined(MSG_NOSIGNAL)
+            const ssize_t count =
+                send(client, response + offset, sizeof(response) - 1 - offset, MSG_NOSIGNAL);
+#else
+            const ssize_t count = send(client, response + offset, sizeof(response) - 1 - offset, 0);
 #endif
             if (count <= 0) {
                 close(client);
@@ -238,7 +217,7 @@ private:
     std::thread thread_;
 };
 
-void wait_for_ready(capsid_worker *worker) {
+void wait_for_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
@@ -256,7 +235,7 @@ void wait_for_ready(capsid_worker *worker) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker startup error: ") +
-                     std::string(reinterpret_cast<const char *>(event.payload.data),
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
                                  event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
@@ -284,27 +263,24 @@ void wait_for_ready(capsid_worker *worker) {
 // must surface an error event; swallowing the exception leaves the request
 // hanging with no error (the pre-fix fused path returned the begin result
 // and dropped the end-bridge failure).
-void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
-    require_result(
-        capsid_worker_begin_bodyless_request(
-            worker, 1, "GET", "https://example.test/bodyless", NULL, 0),
-        "begin bodyless request");
+void bodyless_request_end_failure_fails_closed(capsid_worker* worker) {
+    require_result(capsid_worker_begin_bodyless_request(worker, 1, "GET",
+                                                        "https://example.test/bodyless", NULL, 0),
+                   "begin bodyless request");
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(10);
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
-            fail(std::string("bodyless flush: ") +
-                 capsid_result_string(flush));
+            fail(std::string("bodyless flush: ") + capsid_result_string(flush));
         }
 
         capsid_event event = {};
         event.struct_size = sizeof(event);
-        const capsid_result result =
-            capsid_worker_next_event(worker, &event);
+        const capsid_result result = capsid_worker_next_event(worker, &event);
         if (result == CAPSID_OK) {
             if (event.type == CAPSID_EVENT_ERROR) {
-                return;  // fail closed: the bridge failure surfaced
+                return; // fail closed: the bridge failure surfaced
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited without reporting the "
@@ -313,8 +289,7 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
             continue;
         }
         if (result != CAPSID_WOULD_BLOCK) {
-            fail(std::string("bodyless event: ") +
-                 capsid_result_string(result));
+            fail(std::string("bodyless event: ") + capsid_result_string(result));
         }
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("request-end bridge failure was swallowed: "
@@ -323,47 +298,34 @@ void bodyless_request_end_failure_fails_closed(capsid_worker *worker) {
 
         capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
-        descriptor.events =
-            POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
-void invalid_request_header_fails_closed(capsid_worker *worker,
-                                         const uint8_t *name,
-                                         size_t name_size,
-                                         const uint8_t *value,
+void invalid_request_header_fails_closed(capsid_worker* worker, const uint8_t* name,
+                                         size_t name_size, const uint8_t* value,
                                          size_t value_size) {
     capsid_header header = {};
     header.name.data = name;
     header.name.size = name_size;
     header.value.data = value;
     header.value.size = value_size;
-    require_result(
-        capsid_worker_begin_request(
-            worker,
-            1,
-            "GET",
-            "https://example.test/invalid-header",
-            &header,
-            1),
-        "begin invalid-header request");
-    require_result(
-        capsid_worker_end_request(worker, 1),
-        "end invalid-header request");
+    require_result(capsid_worker_begin_request(worker, 1, "GET",
+                                               "https://example.test/invalid-header", &header, 1),
+                   "begin invalid-header request");
+    require_result(capsid_worker_end_request(worker, 1), "end invalid-header request");
 
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(10);
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
-            fail(std::string("invalid-header flush: ") +
-                 capsid_result_string(flush));
+            fail(std::string("invalid-header flush: ") + capsid_result_string(flush));
         }
         capsid_event event = {};
         event.struct_size = sizeof(event);
-        const capsid_result result =
-            capsid_worker_next_event(worker, &event);
+        const capsid_result result = capsid_worker_next_event(worker, &event);
         if (result == CAPSID_OK) {
             if (event.type == CAPSID_EVENT_ERROR) {
                 return;
@@ -379,28 +341,22 @@ void invalid_request_header_fails_closed(capsid_worker *worker,
             continue;
         }
         if (result != CAPSID_WOULD_BLOCK) {
-            fail(std::string("invalid-header event: ") +
-                 capsid_result_string(result));
+            fail(std::string("invalid-header event: ") + capsid_result_string(result));
         }
         if (std::chrono::steady_clock::now() >= deadline) {
             fail("invalid incoming header did not fail closed");
         }
         capsid_pollfd descriptor = {};
         descriptor.fd = capsid_worker_fd(worker);
-        descriptor.events =
-            POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
+        descriptor.events = POLLIN | (flush == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
         capsid::win32::capsid_poll(&descriptor, 1, 50);
     }
 }
 
-std::string run_request(capsid_worker *worker,
-                        const char *url,
-                        const capsid_header *headers = NULL,
+std::string run_request(capsid_worker* worker, const char* url, const capsid_header* headers = NULL,
                         size_t header_count = 0) {
-    require_result(
-        capsid_worker_begin_request(
-            worker, 1, "GET", url, headers, header_count),
-        "begin request");
+    require_result(capsid_worker_begin_request(worker, 1, "GET", url, headers, header_count),
+                   "begin request");
     require_result(capsid_worker_end_request(worker, 1), "end request");
 
     bool received_head = false;
@@ -431,11 +387,10 @@ std::string run_request(capsid_worker *worker,
                 if (!received_head || event.request_id != 1) {
                     fail("response body arrived before its head");
                 }
-                body.append(reinterpret_cast<const char *>(event.payload.data),
-                            event.payload.size);
+                body.append(reinterpret_cast<const char*>(event.payload.data), event.payload.size);
                 require_result(
-                    capsid_worker_grant_response_credit(
-                        worker, event.request_id, static_cast<uint32_t>(event.payload.size)),
+                    capsid_worker_grant_response_credit(worker, event.request_id,
+                                                        static_cast<uint32_t>(event.payload.size)),
                     "replenish response credit");
                 continue;
             }
@@ -447,7 +402,7 @@ std::string run_request(capsid_worker *worker,
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker request error: ") +
-                     std::string(reinterpret_cast<const char *>(event.payload.data),
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
                                  event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
@@ -469,42 +424,33 @@ std::string run_request(capsid_worker *worker,
     }
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc < 3 || argc > 5) {
         fail("expected worker path, JavaScript fixture path, optional mode and source name");
     }
     const std::string mode = argc >= 4 ? argv[3] : "surface";
     const bool hostname_egress = mode == "fetch-hostname-egress";
-    const bool address_explicit_deny =
-        mode == "fetch-address-explicit-deny";
-    const bool exit_fixture = mode == "exit-cleared-timer" ||
-                              mode == "exit-retained-timer" ||
-                              mode == "exit-poisoned-timer" ||
-                              mode == "exit-gc-cycle" ||
-                              mode == "exit-denied-empty" ||
-                              mode == "exit-denied-known" ||
+    const bool address_explicit_deny = mode == "fetch-address-explicit-deny";
+    const bool exit_fixture = mode == "exit-cleared-timer" || mode == "exit-retained-timer" ||
+                              mode == "exit-poisoned-timer" || mode == "exit-gc-cycle" ||
+                              mode == "exit-denied-empty" || mode == "exit-denied-known" ||
                               mode == "exit-denied-stream";
-    LocalHttpServer *server =
-        mode == "fetch" || hostname_egress || address_explicit_deny
-            ? new LocalHttpServer()
-            : NULL;
+    LocalHttpServer* server =
+        mode == "fetch" || hostname_egress || address_explicit_deny ? new LocalHttpServer() : NULL;
     std::string request_url =
-        server ? server->application_url(
-                     hostname_egress || address_explicit_deny
-                         ? "localhost"
-                         : "127.0.0.1")
+        server ? server->application_url(hostname_egress || address_explicit_deny ? "localhost"
+                                                                                  : "127.0.0.1")
                : "https://example.test/integration";
-    if (exit_fixture) request_url = "https://example.test/" + mode;
+    if (exit_fixture)
+        request_url = "https://example.test/" + mode;
     if (mode == "fetch-host-denied") {
-        request_url =
-            "https://example.test/fetch?"
-            "target=http%3A%2F%2Fnot-authorized.invalid%3A80%2Fdata";
+        request_url = "https://example.test/fetch?"
+                      "target=http%3A%2F%2Fnot-authorized.invalid%3A80%2Fdata";
     } else if (mode == "fetch-protected-denied") {
-        request_url =
-            "https://example.test/fetch?"
-            "target=http%3A%2F%2F127.0.0.1%3A80%2Fdata";
+        request_url = "https://example.test/fetch?"
+                      "target=http%3A%2F%2F127.0.0.1%3A80%2Fdata";
     }
     const std::string bundle = read_file(argv[2]);
 
@@ -522,7 +468,7 @@ int main(int argc, char **argv) {
     capsid_env_entry fail_end_entry;
     capsid_permission_rule fail_end_rule;
     capsid_capability_policy fail_end_policy;
-    const char *const fail_end_modules[] = { "capsid:env" };
+    const char* const fail_end_modules[] = {"capsid:env"};
     if (mode == "bodyless-end-failure") {
         capsid_env_entry_init(&fail_end_entry);
         fail_end_entry.name = "CAPSID_TEST_FAIL_REQUEST_END_BRIDGE";
@@ -581,19 +527,14 @@ int main(int argc, char **argv) {
         config.egress_policy = &hostname_policy;
     }
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
     const capsid_result load_result =
         argc == 5
             ? capsid_worker_load_bundle_named(
-                  worker,
-                  reinterpret_cast<const uint8_t *>(bundle.data()),
-                  bundle.size(),
-                  argv[4])
-            : capsid_worker_load_bundle(
-                  worker,
-                  reinterpret_cast<const uint8_t *>(bundle.data()),
-                  bundle.size());
+                  worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size(), argv[4])
+            : capsid_worker_load_bundle(worker, reinterpret_cast<const uint8_t*>(bundle.data()),
+                                        bundle.size());
     require_result(load_result, "load bundle");
 
     wait_for_ready(worker);
@@ -624,12 +565,10 @@ int main(int argc, char **argv) {
         headers[2].name.size = sizeof(duplicate_name_b) - 1;
         headers[2].value.data = duplicate_value_b;
         headers[2].value.size = sizeof(duplicate_value_b) - 1;
-        const std::string body = run_request(
-            worker, request_url.c_str(), headers, 3);
-        if (body !=
-            "{\"probe\":\"trusted-input\","
-            "\"duplicate\":\"one, two\","
-            "\"cloneProbe\":\"trusted-input\"}") {
+        const std::string body = run_request(worker, request_url.c_str(), headers, 3);
+        if (body != "{\"probe\":\"trusted-input\","
+                    "\"duplicate\":\"one, two\","
+                    "\"cloneProbe\":\"trusted-input\"}") {
             fail("incoming Request lost its normalized header");
         }
         require_clean_exit(worker);
@@ -639,8 +578,8 @@ int main(int argc, char **argv) {
     if (mode == "invalid-request-header-name") {
         static const uint8_t name[] = "bad name";
         static const uint8_t value[] = "value";
-        invalid_request_header_fails_closed(
-            worker, name, sizeof(name) - 1, value, sizeof(value) - 1);
+        invalid_request_header_fails_closed(worker, name, sizeof(name) - 1, value,
+                                            sizeof(value) - 1);
         capsid_worker_destroy(worker);
         return 0;
     }
@@ -648,8 +587,8 @@ int main(int argc, char **argv) {
     if (mode == "invalid-request-header-value") {
         static const uint8_t name[] = "x-value";
         static const uint8_t value[] = "one\r\ntwo";
-        invalid_request_header_fails_closed(
-            worker, name, sizeof(name) - 1, value, sizeof(value) - 1);
+        invalid_request_header_fails_closed(worker, name, sizeof(name) - 1, value,
+                                            sizeof(value) - 1);
         capsid_worker_destroy(worker);
         return 0;
     }
@@ -657,23 +596,23 @@ int main(int argc, char **argv) {
     const std::string body = run_request(worker, request_url.c_str());
 
     if (exit_fixture) {
-        if (body != mode) fail("exit fixture did not complete the actual response");
+        if (body != mode)
+            fail("exit fixture did not complete the actual response");
         if (mode == "exit-retained-timer" || mode == "exit-poisoned-timer")
             require_retained_timer_exit(worker, mode == "exit-retained-timer");
-        else require_clean_exit(worker);
+        else
+            require_clean_exit(worker);
         return 0;
     }
 
     if (mode == "wasm") {
         if (!contains(body, "\"profile\":\"CAPSID-MIN-2025-subset-v0\"") ||
-            !contains(body, "\"passed\":true") ||
-            !contains(body, "\"failures\":[]")) {
+            !contains(body, "\"passed\":true") || !contains(body, "\"failures\":[]")) {
             fail(std::string("unexpected WebAssembly report: ") + body);
         }
     } else if (mode == "platform") {
         if (!contains(body, "\"profile\":\"CAPSID-MIN-2025-subset-v0\"") ||
-            !contains(body, "\"passed\":true") ||
-            !contains(body, "\"failures\":[]")) {
+            !contains(body, "\"passed\":true") || !contains(body, "\"failures\":[]")) {
             fail(std::string("unexpected platform contract report: ") + body);
         }
     } else if (mode == "wpt") {
@@ -685,27 +624,23 @@ int main(int argc, char **argv) {
          */
         std::string report_error;
         if (!capsid_test::validate_wpt_success_report(body, &report_error)) {
-            fail(std::string("invalid WPT execution evidence: ") +
-                 report_error + ": " + body);
+            fail(std::string("invalid WPT execution evidence: ") + report_error + ": " + body);
         }
         // Retain accepted deviations and their full diagnostics in LastTest.log
         // as well as failures. A green CTest status alone is not the WPT report.
         std::cout << "WPT_REPORT " << body << std::endl;
     } else if (mode == "fetch" || hostname_egress) {
-        if (!contains(body, "\"passed\":true") ||
-            !contains(body, "\"status\":200") ||
+        if (!contains(body, "\"passed\":true") || !contains(body, "\"status\":200") ||
             !contains(body, "\"upstreamHeader\":\"direct-egress\"") ||
             !contains(body, "\"body\":\"capsid-fetch-ok\"")) {
             fail(std::string("unexpected direct fetch report: ") + body);
         }
     } else if (mode == "fetch-host-denied") {
-        if (!contains(body, "not-authorized.invalid:80") ||
-            !contains(body, "is not authorized")) {
+        if (!contains(body, "not-authorized.invalid:80") || !contains(body, "is not authorized")) {
             fail(std::string("missing host-deny diagnostic: ") + body);
         }
     } else if (mode == "fetch-protected-denied") {
-        if (!contains(body, "127.0.0.1:80") ||
-            !contains(body, "protected range") ||
+        if (!contains(body, "127.0.0.1:80") || !contains(body, "protected range") ||
             !contains(body, "not explicitly authorized")) {
             fail(std::string("missing protected-address diagnostic: ") + body);
         }
@@ -715,8 +650,7 @@ int main(int argc, char **argv) {
         }
     } else if (mode == "surface") {
         if (!contains(body, "\"profile\":\"CAPSID-MIN-2025-subset-v0\"") ||
-            !contains(body, "\"matches\":true") ||
-            !contains(body, "\"missing\":[]") ||
+            !contains(body, "\"matches\":true") || !contains(body, "\"missing\":[]") ||
             !contains(body, "\"unexpected\":[]") ||
             !contains(body, "\"userAgent\":\"capsid-runtime\"") ||
             !contains(body, "\"fetch\":\"function\"") ||

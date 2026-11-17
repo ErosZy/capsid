@@ -202,28 +202,23 @@ struct WorkerEvent {
 // Strict decoder shared by WorkerExecutor and the managed warmup path.
 // Authenticated Binding envelopes are length-framed and exact; malformed
 // payloads fail closed. Ordinary User-runtime LOG payloads remain opaque.
-bool decode_worker_log_event(const capsid_event& event,
-                             WorkerEvent* output,
-                             std::string* error);
+bool decode_worker_log_event(const capsid_event& event, WorkerEvent* output, std::string* error);
 
 class WorkerExecutor {
-public:
+  public:
     // GLM T08: the negotiated protocol state after READY. Zero for a
     // v3 worker (channels never negotiated); listeners gate upgrade
     // and dial requests on this instead of pretending WebSocket is an
     // unfinished HTTP response.
-    std::uint32_t effective_channel_caps() const {
-        return effective_channel_caps_;
-    }
-    const capsid::protocol::ChannelLimits &channel_limits() const { return channel_limits_; }
+    std::uint32_t effective_channel_caps() const { return effective_channel_caps_; }
+    const capsid::protocol::ChannelLimits& channel_limits() const { return channel_limits_; }
     // Produces a prepared (spawned, bundle loaded and flushed, not yet
     // READY) worker. On failure the factory must destroy the worker it
     // created and return false with *error set: ownership transfers to the
     // executor only on success, and from that moment destroy() runs
     // exclusively on the executor's reaper thread.
     struct WorkerFactory {
-        using Callback =
-            std::function<bool(capsid_worker** worker, std::string* error)>;
+        using Callback = std::function<bool(capsid_worker** worker, std::string* error)>;
 
         WorkerFactory() = default;
         WorkerFactory(const WorkerFactory&) = default;
@@ -232,17 +227,13 @@ public:
         WorkerFactory& operator=(WorkerFactory&&) noexcept = default;
 
         template <typename F,
-                  typename = std::enable_if_t<!std::is_same_v<
-                      std::decay_t<F>, WorkerFactory>>>
-        WorkerFactory(F&& value)
-            : callback(std::forward<F>(value)) {}
+                  typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, WorkerFactory>>>
+        WorkerFactory(F&& value) : callback(std::forward<F>(value)) {}
 
         bool operator()(capsid_worker** worker, std::string* error) const {
             return callback && callback(worker, error);
         }
-        explicit operator bool() const {
-            return static_cast<bool>(callback);
-        }
+        explicit operator bool() const { return static_cast<bool>(callback); }
 
         Callback callback;
         // Baseline by default. A generation factory with Bindings must set
@@ -255,7 +246,7 @@ public:
     using EventNotifier = std::function<void()>;
 
     WorkerExecutor();
-    ~WorkerExecutor();  // stop_and_join(); the worker thread owns destroy()
+    ~WorkerExecutor(); // stop_and_join(); the worker thread owns destroy()
     WorkerExecutor(const WorkerExecutor&) = delete;
     WorkerExecutor& operator=(const WorkerExecutor&) = delete;
 
@@ -286,10 +277,14 @@ public:
     void submit(Command command);
     bool try_submit_channel(Command command);
     std::uint64_t channels() const { return channels_.load(std::memory_order_relaxed); }
-    std::uint64_t retained_contexts() const { return retained_contexts_.load(std::memory_order_relaxed); }
+    std::uint64_t retained_contexts() const {
+        return retained_contexts_.load(std::memory_order_relaxed);
+    }
     // Publish physical channels and retained local owners as one liveness
     // value, so a drain cannot observe a mixed snapshot across an ACK.
-    std::uint64_t connection_owners() const { return connection_owners_.load(std::memory_order_acquire); }
+    std::uint64_t connection_owners() const {
+        return connection_owners_.load(std::memory_order_acquire);
+    }
     // M2 item 6: fire one bodyless GET probe against the App's
     // healthCheck.path (the absolute data-plane URL shape). The command
     // carries the probe id; the worker thread executes the Runtime call
@@ -320,8 +315,7 @@ public:
     void set_event_notifier(EventNotifier notifier);
     // Must be called before start()/adopt(). These fields are Host-owned
     // metadata appended to decoded log events; the worker cannot forge them.
-    void set_log_identity(std::string application_id,
-                          std::string generation_digest);
+    void set_log_identity(std::string application_id, std::string generation_digest);
     // Swaps the event queue out under the mutex. The owner drains all
     // events in one call; the notifier fires on every empty→non-empty
     // transition and for the always-last kExit event.
@@ -341,7 +335,7 @@ public:
     // CAPSID_HOST_IPC_METRICS=1 only; zero overhead in headline runs.
     struct Metrics {
         std::atomic<std::uint64_t> commands_submitted = 0;
-        std::atomic<std::uint64_t> command_batches = 0;  // wake-pipe writes
+        std::atomic<std::uint64_t> command_batches = 0; // wake-pipe writes
         std::atomic<std::uint64_t> commands_executed = 0;
         std::atomic<std::uint64_t> flush_calls = 0;
         std::atomic<std::uint64_t> flush_eagain = 0;
@@ -367,7 +361,7 @@ public:
     // process identity never borrows the C handle from its sole owner.
     std::int64_t process_id() const noexcept { return process_id_.load(); }
 
-private:
+  private:
     std::uint32_t effective_channel_caps_ = 0;
     capsid::protocol::ChannelLimits channel_limits_;
 
@@ -378,8 +372,7 @@ private:
     bool handle_worker_protocol_event(const capsid_event& event);
     void queue_worker_event(WorkerEvent event);
     void queue_worker_exit_event();
-    bool report_runtime_failure(std::uint64_t request_id,
-                                capsid_result result,
+    bool report_runtime_failure(std::uint64_t request_id, capsid_result result,
                                 const char* operation);
 
     Metrics metrics_;
@@ -465,6 +458,6 @@ private:
     std::thread worker_thread_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

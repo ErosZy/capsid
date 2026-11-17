@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Parser/publication controls. Actual vendor application is verified separately."""
+
 from __future__ import annotations
 
 import argparse
@@ -37,23 +38,41 @@ class VendorContract(unittest.TestCase):
         (self.root / "vendor/txiki.js").mkdir(parents=True)
         (self.root / "patches/txiki").mkdir(parents=True)
         for index in range(1, 72):
-            (self.root / f"patches/txiki/{index:04d}-fixture.patch").write_text(f"fixture {index}\n")
+            (self.root / f"patches/txiki/{index:04d}-fixture.patch").write_text(
+                f"fixture {index}\n"
+            )
         (self.root / "cmake").mkdir()
-        for name in ["AuditTxikiVendor.cmake", "PrepareTxiki.cmake", "ComputeTxikiOverlayKey.cmake"]:
+        for name in [
+            "AuditTxikiVendor.cmake",
+            "PrepareTxiki.cmake",
+            "ComputeTxikiOverlayKey.cmake",
+        ]:
             (self.root / "cmake" / name).write_text("canonical audit command fixture\n")
         self.stamp = self.build / "vendor-overlay/txiki.js/.capsid-overlay-key"
         self.stamp.parent.mkdir(parents=True)
-        self.stamp.write_text("schema=capsid-txiki-overlay-stamp-v1\nkey=" + "1" * 64 + "\nmanifest=" + "2" * 64 + "\n")
+        self.stamp.write_text(
+            "schema=capsid-txiki-overlay-stamp-v1\nkey="
+            + "1" * 64
+            + "\nmanifest="
+            + "2" * 64
+            + "\n"
+        )
         self.commands = []
 
     def run_command(self, args, cwd=None):
         self.commands.append(args)
         if args[0] == "git":
-            return {"describe": "v0.fixture", "rev-parse": "a" * 40,
-                    "status": "", "submodule": "-bbbb deps/quickjs/test262"}[args[1]]
+            return {
+                "describe": "v0.fixture",
+                "rev-parse": "a" * 40,
+                "status": "",
+                "submodule": "-bbbb deps/quickjs/test262",
+            }[args[1]]
         self.assertEqual(args[0], "cmake")
         self.assertEqual(args[-2:], ["-P", str(self.root / "cmake/AuditTxikiVendor.cmake")])
-        self.assertIn(f"-DCAPSID_TXIKI_PREPARE_SCRIPT={self.root / 'cmake/PrepareTxiki.cmake'}", args)
+        self.assertIn(
+            f"-DCAPSID_TXIKI_PREPARE_SCRIPT={self.root / 'cmake/PrepareTxiki.cmake'}", args
+        )
         return "canonical CMake audit fixture completed"
 
     def evidence(self, command=None):
@@ -74,6 +93,7 @@ class VendorContract(unittest.TestCase):
             if args[0] == "cmake":
                 raise subprocess.CalledProcessError(1, args, output="canonical rejection")
             return self.run_command(args, cwd)
+
         with self.assertRaises(subprocess.CalledProcessError):
             self.evidence(run)
 
@@ -81,11 +101,13 @@ class VendorContract(unittest.TestCase):
         for path in [self.root / "patches/txiki/0071-fixture.patch", self.stamp]:
             with self.subTest(path=path):
                 before = path.read_bytes()
+
                 def run(args, cwd=None):
                     result = self.run_command(args, cwd)
                     if args[0] == "cmake":
                         path.write_text("changed during audit")
                     return result
+
                 with self.assertRaisesRegex(RuntimeError, "changed during audit"):
                     self.evidence(run)
                 path.write_bytes(before)
@@ -93,12 +115,14 @@ class VendorContract(unittest.TestCase):
     def test_bad_source_prerequisites_cannot_reach_the_apply_audit(self):
         for kind in ["dirty", "submodule", "stamp"]:
             with self.subTest(kind=kind):
+
                 def run(args, cwd=None):
                     if kind == "dirty" and args[:2] == ["git", "status"]:
                         return " M tracked.c"
                     if kind == "submodule" and args[:2] == ["git", "submodule"]:
                         return "+bbbb deps/quickjs"
                     return self.run_command(args, cwd)
+
                 before = self.stamp.read_bytes()
                 if kind == "stamp":
                     self.stamp.write_text("invalid stamp")
@@ -115,7 +139,11 @@ class CTestContract(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.build = Path(self.temp.name)
         self.junit = self.build / "full.junit.xml"
-        names = sorted(report.REQUIRED_AUDIT_TESTS) + [f"worker_wpt_fixture_{i}" for i in range(80)] + ["optional"]
+        names = (
+            sorted(report.REQUIRED_AUDIT_TESTS)
+            + [f"worker_wpt_fixture_{i}" for i in range(80)]
+            + ["optional"]
+        )
         self.catalog = {"tests": [{"name": name, "properties": []} for name in names]}
         self.xml = ET.Element("testsuite")
         for name in names:
@@ -124,8 +152,12 @@ class CTestContract(unittest.TestCase):
 
     def summary(self):
         cases = self.xml.findall("testcase")
-        self.xml.attrib.update(tests=str(len(cases)), failures=str(sum(c.find("failure") is not None for c in cases)),
-                               skipped=str(sum(c.find("skipped") is not None for c in cases)), disabled="0")
+        self.xml.attrib.update(
+            tests=str(len(cases)),
+            failures=str(sum(c.find("failure") is not None for c in cases)),
+            skipped=str(sum(c.find("skipped") is not None for c in cases)),
+            disabled="0",
+        )
 
     def evidence(self):
         ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
@@ -140,14 +172,28 @@ class CTestContract(unittest.TestCase):
 
     def test_reject_missing_duplicate_and_extra_evidence(self):
         original_xml, original_catalog = copy.deepcopy(self.xml), copy.deepcopy(self.catalog)
-        for kind in ["duplicate-catalog", "duplicate-junit", "missing", "extra", "empty", "unpinned"]:
+        for kind in [
+            "duplicate-catalog",
+            "duplicate-junit",
+            "missing",
+            "extra",
+            "empty",
+            "unpinned",
+        ]:
             with self.subTest(kind=kind):
-                self.xml, self.catalog = copy.deepcopy(original_xml), copy.deepcopy(original_catalog)
+                self.xml, self.catalog = (
+                    copy.deepcopy(original_xml),
+                    copy.deepcopy(original_catalog),
+                )
                 if kind == "duplicate-catalog":
                     self.catalog["tests"].append(self.catalog["tests"][0])
                 elif kind == "duplicate-junit":
-                    duplicate = ET.Element("testcase", name=self.xml[0].get("name"), status="fail", time="1")
-                    ET.SubElement(duplicate, "failure", message="earlier failure hidden by later passing copy")
+                    duplicate = ET.Element(
+                        "testcase", name=self.xml[0].get("name"), status="fail", time="1"
+                    )
+                    ET.SubElement(
+                        duplicate, "failure", message="earlier failure hidden by later passing copy"
+                    )
                     self.xml.insert(0, duplicate)
                 elif kind == "missing":
                     self.xml.remove(self.xml[-1])
@@ -171,8 +217,14 @@ class CTestContract(unittest.TestCase):
 
     def test_status_and_time_cannot_invent_execution(self):
         case = self.xml[-1]
-        for status, elapsed in [(None, "1"), ("notrun", "1"), ("run", None),
-                                ("run", "NaN"), ("run", "inf"), ("run", "-1")]:
+        for status, elapsed in [
+            (None, "1"),
+            ("notrun", "1"),
+            ("run", None),
+            ("run", "NaN"),
+            ("run", "inf"),
+            ("run", "-1"),
+        ]:
             with self.subTest(status=status, elapsed=elapsed):
                 case.attrib = {"name": "optional"}
                 if status is not None:
@@ -215,15 +267,29 @@ class CTestContract(unittest.TestCase):
         for case, name in zip(wpt, COMPAT_NAMES):
             old = case.get("name")
             next(t for t in self.catalog["tests"] if t["name"] == old)["name"] = name
-            case.set("name", name);case.set("status", "fail")
+            case.set("name", name)
+            case.set("status", "fail")
             ET.SubElement(case, "failure", message="synthetic retained standard failure")
-        self.summary();ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
-        return {"schema": "capsid-workerd-release-replay-v1", "complete": True,
-                "compatibilityQualified": True, "standardsConformanceClaimed": False,
-                "ordinarySuitePassed": False, "privilegedSandboxAndOtherHostedJobsStillMandatory": True,
-                "profile": "CAPSID-WORKERD-v1.20261010.1-default-v2", "registration": copy.deepcopy(self.catalog),
-                "build": str(self.build.resolve()), "junit": str(self.junit.resolve()), "junitSHA256": report.sha256(self.junit),
-                "ordinary": {"selected": len(self.catalog["tests"]), "failed": sorted(COMPAT_NAMES), "skipped": []}}
+        self.summary()
+        ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
+        return {
+            "schema": "capsid-workerd-release-replay-v1",
+            "complete": True,
+            "compatibilityQualified": True,
+            "standardsConformanceClaimed": False,
+            "ordinarySuitePassed": False,
+            "privilegedSandboxAndOtherHostedJobsStillMandatory": True,
+            "profile": "CAPSID-WORKERD-v1.20261010.1-default-v2",
+            "registration": copy.deepcopy(self.catalog),
+            "build": str(self.build.resolve()),
+            "junit": str(self.junit.resolve()),
+            "junitSHA256": report.sha256(self.junit),
+            "ordinary": {
+                "selected": len(self.catalog["tests"]),
+                "failed": sorted(COMPAT_NAMES),
+                "skipped": [],
+            },
+        }
 
     def test_explicit_compatible_report_preserves_five_failed_cases(self):
         compatible = self.compatible_fixture()
@@ -238,34 +304,46 @@ class CTestContract(unittest.TestCase):
     def test_compatible_report_rejects_missing_stale_and_false_claims(self):
         original = self.compatible_fixture()
         changes = [
-            ("complete", False), ("complete", 1), ("compatibilityQualified", False),
-            ("standardsConformanceClaimed", True), ("ordinarySuitePassed", True),
-            ("privilegedSandboxAndOtherHostedJobsStillMandatory", False), ("schema", "other"),
-            ("profile", "different-version"), ("registration", {"tests": []}),
-            ("junitSHA256", "0" * 64), ("junit", str(self.build / "other.xml")),
+            ("complete", False),
+            ("complete", 1),
+            ("compatibilityQualified", False),
+            ("standardsConformanceClaimed", True),
+            ("ordinarySuitePassed", True),
+            ("privilegedSandboxAndOtherHostedJobsStillMandatory", False),
+            ("schema", "other"),
+            ("profile", "different-version"),
+            ("registration", {"tests": []}),
+            ("junitSHA256", "0" * 64),
+            ("junit", str(self.build / "other.xml")),
             ("build", str(self.build / "other-build")),
             ("ordinary", {"selected": len(self.catalog["tests"]), "failed": [], "skipped": []}),
         ]
         for key, value in changes:
             with self.subTest(key=key, value=value):
-                compatible = copy.deepcopy(original);compatible[key] = value
+                compatible = copy.deepcopy(original)
+                compatible[key] = value
                 with patch.object(report, "run", return_value=json.dumps(self.catalog)):
                     with self.assertRaises(RuntimeError):
                         report.ctest_evidence(self.build, self.junit, compatible)
 
     def test_compatible_report_cannot_add_native_failures_or_omit_standard_failures(self):
-        compatible = self.compatible_fixture();original = copy.deepcopy(self.xml)
+        compatible = self.compatible_fixture()
+        original = copy.deepcopy(self.xml)
         for kind in ["additional-native", "missing-standard"]:
             with self.subTest(kind=kind):
                 self.xml = copy.deepcopy(original)
                 if kind == "additional-native":
                     case = next(c for c in self.xml if c.get("name") == "optional")
-                    case.set("status", "fail");ET.SubElement(case, "failure")
+                    case.set("status", "fail")
+                    ET.SubElement(case, "failure")
                 else:
                     case = next(c for c in self.xml if c.get("name") == COMPAT_NAMES[0])
-                    case.remove(case.find("failure"));case.set("status", "run")
-                self.summary();ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
-                changed = copy.deepcopy(compatible);changed["junitSHA256"] = report.sha256(self.junit)
+                    case.remove(case.find("failure"))
+                    case.set("status", "run")
+                self.summary()
+                ET.ElementTree(self.xml).write(self.junit, encoding="utf-8", xml_declaration=True)
+                changed = copy.deepcopy(compatible)
+                changed["junitSHA256"] = report.sha256(self.junit)
                 with patch.object(report, "run", return_value=json.dumps(self.catalog)):
                     with self.assertRaisesRegex(RuntimeError, "exactly the five"):
                         report.ctest_evidence(self.build, self.junit, changed)
@@ -276,20 +354,35 @@ class PublicationContract(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         directory = Path(self.temp.name)
-        self.args = argparse.Namespace(source_root=directory, build_dir=directory / "build",
-            junit=directory / "full.xml", baseline=directory / "baseline.json",
-            output_json=directory / "report.json", output_md=directory / "report.md")
+        self.args = argparse.Namespace(
+            source_root=directory,
+            build_dir=directory / "build",
+            junit=directory / "full.xml",
+            baseline=directory / "baseline.json",
+            output_json=directory / "report.json",
+            output_md=directory / "report.md",
+        )
         self.args.output_json.write_text('{"state":"complete","old":true}')
         self.args.output_md.write_text("old successful report")
         self.args.baseline.write_text("original input")
 
     def test_failure_and_interruption_cannot_leave_an_old_complete_report(self):
-        for error, state in [(RuntimeError("proof rejected"), "failed"), (KeyboardInterrupt(), "incomplete")]:
+        for error, state in [
+            (RuntimeError("proof rejected"), "failed"),
+            (KeyboardInterrupt(), "incomplete"),
+        ]:
             with self.subTest(state=state):
+
                 def fail(args):
-                    self.assertEqual(json.loads(args.output_json.read_text())["state"], "incomplete")
+                    self.assertEqual(
+                        json.loads(args.output_json.read_text())["state"], "incomplete"
+                    )
                     raise error
-                with patch.object(report, "parse_args", return_value=self.args), patch.object(report, "collect_report", side_effect=fail):
+
+                with (
+                    patch.object(report, "parse_args", return_value=self.args),
+                    patch.object(report, "collect_report", side_effect=fail),
+                ):
                     with self.assertRaises(type(error)):
                         report.main()
                 self.assertEqual(json.loads(self.args.output_json.read_text())["state"], state)
@@ -310,19 +403,26 @@ class PublicationContract(unittest.TestCase):
 
     def test_complete_is_written_only_after_collection_returns(self):
         value = {"schema_version": 1, "state": "complete", "parser_fixture": True}
-        with patch.object(report, "parse_args", return_value=self.args), patch.object(report, "collect_report", return_value=value), \
-                patch.object(report, "render_report", return_value="complete parser fixture report"):
+        with (
+            patch.object(report, "parse_args", return_value=self.args),
+            patch.object(report, "collect_report", return_value=value),
+            patch.object(report, "render_report", return_value="complete parser fixture report"),
+        ):
             report.main()
         self.assertEqual(json.loads(self.args.output_json.read_text()), value)
 
     def test_compatible_outputs_cannot_replace_evidence_or_write_inside_gate(self):
-        gate = self.args.source_root / "gate";gate.mkdir()
-        original = gate / "raw.json";original.write_text("preserved raw capture")
+        gate = self.args.source_root / "gate"
+        gate.mkdir()
+        original = gate / "raw.json"
+        original.write_text("preserved raw capture")
         for kind in ["acceptance", "inside-gate"]:
             with self.subTest(kind=kind):
-                args = copy.copy(self.args);args.workerd_gate = gate
+                args = copy.copy(self.args)
+                args.workerd_gate = gate
                 if kind == "acceptance":
-                    args.workerd_acceptance = original;args.output_json = original
+                    args.workerd_acceptance = original
+                    args.output_json = original
                 else:
                     args.output_md = original
                 with patch.object(report, "parse_args", return_value=args):
@@ -342,7 +442,9 @@ class PublicationContract(unittest.TestCase):
                     message = "every original workerd evidence input"
                 with patch.object(report, "run") as execute:
                     with self.assertRaisesRegex(RuntimeError, message):
-                        report.compatible_release_evidence(args, args.source_root, args.build_dir, {})
+                        report.compatible_release_evidence(
+                            args, args.source_root, args.build_dir, {}
+                        )
                     execute.assert_not_called()
 
 

@@ -14,8 +14,7 @@ inline constexpr std::size_t kMaxBytecodeAttestationBytes = 64U * 1024U;
 inline constexpr std::size_t kMaxBytecodeAttestationClaimBytes = 1024U;
 inline constexpr std::size_t kEd25519PublicKeyBytes = 32U;
 inline constexpr std::size_t kEd25519SignatureBytes = 64U;
-inline constexpr std::string_view kBytecodeAttestationSchema =
-    "capsid-bytecode-v1";
+inline constexpr std::string_view kBytecodeAttestationSchema = "capsid-bytecode-v1";
 
 enum class BytecodeArtifactSelection {
     kReject,
@@ -86,9 +85,8 @@ struct BytecodeAttestationResult {
 // kMaxBytecodeAttestationClaimBytes, and SHA-256 claims that are not exactly
 // "sha256:" plus 64 lowercase hexadecimal digits. A present empty bytecode
 // artifact is invalid. JSON-member paths are RFC 6901 escaped.
-BytecodeAttestationResult verify_bytecode_attestation(
-    const BytecodeAttestationInput& input);
+BytecodeAttestationResult verify_bytecode_attestation(const BytecodeAttestationInput& input);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

@@ -1,4 +1,5 @@
 """Transport controls only; a successful unpack is never performance acceptance."""
+
 import gzip
 import hashlib
 import importlib.util
@@ -44,12 +45,20 @@ class PackedArchiveTests(unittest.TestCase):
         for number, content in enumerate(chunks):
             name = f"perf-site/archives/test-{number}.tar.gz"
             (self.root / name).write_bytes(content)
-            parts.append({"path": name, "sha256": hashlib.sha256(content).hexdigest(),
-                          "bytes": len(content)})
-        bundle = {"lane": "cold-start", "prefix": PREFIX, "files": files,
-                  "uncompressedBytes": total if total is not None else
-                  sum(len(body) for _, body, kind in members if kind == tarfile.REGTYPE) or 1,
-                  "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "parts": parts}
+            parts.append(
+                {"path": name, "sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)}
+            )
+        bundle = {
+            "lane": "cold-start",
+            "prefix": PREFIX,
+            "files": files,
+            "uncompressedBytes": total
+            if total is not None
+            else sum(len(body) for _, body, kind in members if kind == tarfile.REGTYPE) or 1,
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "parts": parts,
+        }
         index = {"schema": 1, "contract": "capsid-perf-packed-archives-v1", "bundles": [bundle]}
         self.write_index(index)
         return index
@@ -63,9 +72,12 @@ class PackedArchiveTests(unittest.TestCase):
         target = self.root / "restored"
         report = packed.materialize(self.root, target, [PREFIX])
         self.assertEqual((target / PREFIX / "sample.json").read_bytes(), BODY)
-        self.assertEqual(report["files"], {PREFIX + "/sample.json": hashlib.sha256(BODY).hexdigest()})
-        self.assertEqual(source, [(self.root / p["path"]).read_bytes()
-                                  for p in index["bundles"][0]["parts"]])
+        self.assertEqual(
+            report["files"], {PREFIX + "/sample.json": hashlib.sha256(BODY).hexdigest()}
+        )
+        self.assertEqual(
+            source, [(self.root / p["path"]).read_bytes() for p in index["bundles"][0]["parts"]]
+        )
         with self.assertRaisesRegex(EvidenceError, "must be new"):
             packed.materialize(self.root, target)
 
@@ -77,7 +89,7 @@ class PackedArchiveTests(unittest.TestCase):
         self.assertEqual((target / name).read_bytes(), BODY)
 
     def test_rejects_metadata_allocations_before_processing(self):
-        for number, size in enumerate([8193, 2 ** 30]):
+        for number, size in enumerate([8193, 2**30]):
             index = self.fixture()
             header = tarfile.TarInfo("pax-metadata")
             header.type, header.size = tarfile.XHDTYPE, size
@@ -121,14 +133,22 @@ class PackedArchiveTests(unittest.TestCase):
     def test_rejects_changed_transport_before_unpacking(self):
         index = self.fixture()
         path = self.root / index["bundles"][0]["parts"][0]["path"]
-        data = bytearray(path.read_bytes()); data[12] ^= 1; path.write_bytes(data)
+        data = bytearray(path.read_bytes())
+        data[12] ^= 1
+        path.write_bytes(data)
         with self.assertRaisesRegex(EvidenceError, "part digest mismatch"):
             packed.materialize(self.root, self.root / "bad")
         self.assertFalse((self.root / "bad" / PREFIX).exists())
 
     def test_rejects_unsafe_members_and_links(self):
-        members = [PREFIX + "/../../escape", "/absolute", "C:/drive", PREFIX + "/name:ads",
-                   PREFIX + "/../escape", PREFIX + "/back\\slash"]
+        members = [
+            PREFIX + "/../../escape",
+            "/absolute",
+            "C:/drive",
+            PREFIX + "/name:ads",
+            PREFIX + "/../escape",
+            PREFIX + "/back\\slash",
+        ]
         for number, name in enumerate(members):
             self.fixture([(name, BODY, tarfile.REGTYPE)])
             with self.subTest(name=name), self.assertRaises(EvidenceError):
@@ -140,23 +160,30 @@ class PackedArchiveTests(unittest.TestCase):
         self.assertFalse((self.root / "escape").exists())
 
     def test_rejects_duplicate_case_alias_and_wrong_prefix(self):
-        for number, names in enumerate([(PREFIX + "/one", PREFIX + "/one"),
-                                        (PREFIX + "/one", PREFIX + "/ONE"),
-                                        (PREFIX + "/one", "bench/results/other/two")]):
+        for number, names in enumerate(
+            [
+                (PREFIX + "/one", PREFIX + "/one"),
+                (PREFIX + "/one", PREFIX + "/ONE"),
+                (PREFIX + "/one", "bench/results/other/two"),
+            ]
+        ):
             self.fixture([(n, BODY, tarfile.REGTYPE) for n in names], files=2)
             with self.subTest(names=names), self.assertRaises(EvidenceError):
                 packed.materialize(self.root, self.root / ("alias-" + str(number)))
 
     def test_rejects_declared_file_and_byte_count_lies(self):
-        for number, (files, total) in enumerate([(2, len(BODY)), (1, len(BODY) + 1),
-                                               (1, len(BODY) - 1)]):
+        for number, (files, total) in enumerate(
+            [(2, len(BODY)), (1, len(BODY) + 1), (1, len(BODY) - 1)]
+        ):
             self.fixture(files=files, total=total)
             with self.subTest(files=files, total=total), self.assertRaises(EvidenceError):
                 packed.materialize(self.root, self.root / ("bounds-" + str(number)))
 
     def test_rejects_extra_files_and_decompression_bomb_padding(self):
-        self.fixture([(PREFIX + "/one", BODY, tarfile.REGTYPE),
-                      (PREFIX + "/two", BODY, tarfile.REGTYPE)], files=1)
+        self.fixture(
+            [(PREFIX + "/one", BODY, tarfile.REGTYPE), (PREFIX + "/two", BODY, tarfile.REGTYPE)],
+            files=1,
+        )
         with self.assertRaisesRegex(EvidenceError, "declared bounds"):
             packed.materialize(self.root, self.root / "extra")
         self.fixture(trailer=b"\0" * (2 * 1024 * 1024))
@@ -172,7 +199,9 @@ class PackedArchiveTests(unittest.TestCase):
         self.write_index(index)
         with self.assertRaisesRegex(EvidenceError, "misplaced"):
             packed.materialize(self.root, self.root / "misplaced")
-        (self.root / "perf-site/archive-index.json").write_text('{"schema":1,"schema":1}', encoding="utf-8")
+        (self.root / "perf-site/archive-index.json").write_text(
+            '{"schema":1,"schema":1}', encoding="utf-8"
+        )
         with self.assertRaises(EvidenceError):
             packed.materialize(self.root, self.root / "duplicate-json")
 

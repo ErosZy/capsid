@@ -56,8 +56,7 @@ void require(bool condition, const std::string& message) {
 
 std::string read_ready_line(int fd) {
     std::string line;
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     while (line.find('\n') == std::string::npos) {
         require(std::chrono::steady_clock::now() < deadline,
                 "server did not publish READY after start returned");
@@ -71,8 +70,7 @@ std::string read_ready_line(int fd) {
         }
         char bytes[512];
 #if defined(_WIN32)
-        const ssize_t count =
-            capsid::win32::read_fd(fd, bytes, sizeof(bytes));
+        const ssize_t count = capsid::win32::read_fd(fd, bytes, sizeof(bytes));
 #else
         const ssize_t count = read(fd, bytes, sizeof(bytes));
 #endif
@@ -89,8 +87,7 @@ std::uint16_t ready_port(const std::string& line) {
     const char* digits = line.c_str() + begin + marker.size();
     char* end = nullptr;
     const unsigned long port = std::strtoul(digits, &end, 10);
-    require(end != digits && port > 0 && port <= 65535,
-            "READY record has an invalid port");
+    require(end != digits && port > 0 && port <= 65535, "READY record has an invalid port");
     return static_cast<std::uint16_t>(port);
 }
 
@@ -106,26 +103,24 @@ std::string get_body(std::uint16_t port, const std::string& path) {
     address.sin_port = htons(port);
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode loopback address");
-    require(capsid::win32::connect_fd(
-                fd, reinterpret_cast<struct sockaddr*>(&address),
-                sizeof(address)) == 0,
+    require(capsid::win32::connect_fd(fd, reinterpret_cast<struct sockaddr*>(&address),
+                                      sizeof(address)) == 0,
             "cannot connect after server start");
-    const std::string request =
-        "GET " + path + " HTTP/1.1\r\n"
-        "Host: public.example\r\n"
-        "Connection: close\r\n\r\n";
+    const std::string request = "GET " + path +
+                                " HTTP/1.1\r\n"
+                                "Host: public.example\r\n"
+                                "Connection: close\r\n\r\n";
     std::size_t sent = 0;
     while (sent < request.size()) {
-        const ssize_t count = capsid::win32::send_fd(
-            fd, request.data() + sent, request.size() - sent, 0);
+        const ssize_t count =
+            capsid::win32::send_fd(fd, request.data() + sent, request.size() - sent, 0);
         require(count > 0, "cannot write local-policy HTTP request");
         sent += static_cast<std::size_t>(count);
     }
     std::string response;
     char bytes[2048];
     for (;;) {
-        const ssize_t count =
-            capsid::win32::recv_fd(fd, bytes, sizeof(bytes), 0);
+        const ssize_t count = capsid::win32::recv_fd(fd, bytes, sizeof(bytes), 0);
         if (count == 0) {
             break;
         }
@@ -149,8 +144,7 @@ void write_json_file(const std::string& path, const std::string& text) {
     require(static_cast<bool>(output), "cannot flush capsid.json fixture");
 }
 
-capsid::host::SingleWorkerServerOptions make_options(const char* worker_path,
-                                                     int ready_fd) {
+capsid::host::SingleWorkerServerOptions make_options(const char* worker_path, int ready_fd) {
     capsid::host::SingleWorkerServerOptions options;
     options.worker_path = worker_path;
     options.source_bundle_path = "local-policy-inline";
@@ -167,24 +161,18 @@ capsid::host::SingleWorkerServerOptions make_options(const char* worker_path,
     return options;
 }
 
-std::shared_ptr<const capsid::host::BindingRegistrySnapshot>
-make_echo_binding_registry() {
-    auto registry =
-        std::make_shared<capsid::host::BindingRegistrySnapshot>();
+std::shared_ptr<const capsid::host::BindingRegistrySnapshot> make_echo_binding_registry() {
+    auto registry = std::make_shared<capsid::host::BindingRegistrySnapshot>();
     capsid::host::BindingPackageSnapshot package;
     package.id = "echo";
     package.manifest_json =
         R"json({"apiVersion":"capsid/binding-v1","permissions":{"modules":[]}})json";
-    package.source =
-        "export default ({ config }) => ({"
-        "  echo(input) { return config.prefix + input; }"
-        "});";
-    package.manifest_digest = capsid::host::compute_binding_manifest_digest(
-        package.manifest_json);
-    package.source_digest = capsid::host::sha256_hex(
-        std::span<const std::uint8_t>(
-            reinterpret_cast<const std::uint8_t*>(package.source.data()),
-            package.source.size()));
+    package.source = "export default ({ config }) => ({"
+                     "  echo(input) { return config.prefix + input; }"
+                     "});";
+    package.manifest_digest = capsid::host::compute_binding_manifest_digest(package.manifest_json);
+    package.source_digest = capsid::host::sha256_hex(std::span<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(package.source.data()), package.source.size()));
     registry->packages.push_back(std::move(package));
     return registry;
 }
@@ -220,8 +208,7 @@ const std::string kEnvWorkerSource =
 
 // A worker with no module imports: the only one that can run under the
 // absent-default deny-all baseline (any import would be unauthorized).
-const std::string kPlainWorkerSource =
-    "export default { fetch: () => new Response('plain-ok') };";
+const std::string kPlainWorkerSource = "export default { fetch: () => new Response('plain-ok') };";
 
 // Binds a loopback listener on a kernel-assigned port, then answers the
 // first connection with a fixed body. One-shot: the accept happens on the
@@ -240,16 +227,13 @@ LoopbackFixture start_loopback_fixture(const std::string& body) {
     address.sin_port = 0;
     require(inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1,
             "cannot encode loopback fixture address");
-    require(capsid::win32::bind_fd(listener,
-                reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) ==
-                0,
+    require(capsid::win32::bind_fd(listener, reinterpret_cast<struct sockaddr*>(&address),
+                                   sizeof(address)) == 0,
             "cannot bind loopback fixture");
-    require(capsid::win32::listen_fd(listener, 1) == 0,
-            "cannot listen on loopback fixture");
+    require(capsid::win32::listen_fd(listener, 1) == 0, "cannot listen on loopback fixture");
     socklen_t length = sizeof(address);
-    require(capsid::win32::getsockname_fd(listener,
-                        reinterpret_cast<struct sockaddr*>(&address), &length) ==
-                0,
+    require(capsid::win32::getsockname_fd(listener, reinterpret_cast<struct sockaddr*>(&address),
+                                          &length) == 0,
             "cannot inspect loopback fixture port");
     fixture.port = ntohs(address.sin_port);
     fixture.thread = std::thread([listener, body]() {
@@ -259,21 +243,18 @@ LoopbackFixture start_loopback_fixture(const std::string& body) {
             return;
         }
         char bytes[1024];
-        const ssize_t count = capsid::win32::recv_fd(
-            client, bytes, sizeof(bytes), 0);
+        const ssize_t count = capsid::win32::recv_fd(client, bytes, sizeof(bytes), 0);
         if (count > 0) {
-            const std::string response =
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Length: " +
-                std::to_string(body.size()) +
-                "\r\n"
-                "Connection: close\r\n\r\n" +
-                body;
+            const std::string response = "HTTP/1.1 200 OK\r\n"
+                                         "Content-Length: " +
+                                         std::to_string(body.size()) +
+                                         "\r\n"
+                                         "Connection: close\r\n\r\n" +
+                                         body;
             std::size_t sent = 0;
             while (sent < response.size()) {
-                const ssize_t written = capsid::win32::send_fd(
-                    client, response.data() + sent,
-                    response.size() - sent, 0);
+                const ssize_t written = capsid::win32::send_fd(client, response.data() + sent,
+                                                               response.size() - sent, 0);
                 if (written <= 0) {
                     break;
                 }
@@ -289,16 +270,11 @@ LoopbackFixture start_loopback_fixture(const std::string& body) {
 // Success scenario: writes the local document (when non-empty), starts the
 // server with it, issues one request and expects the body fragment.
 // loopback_port != 0 splices the /fetch target into the env worker source.
-void run_success_scenario(const char* worker_path,
-                          const std::string& name,
-                          const std::string& capsid_json,
-                          const std::string& worker_source,
-                          std::uint16_t loopback_port,
-                          const std::string& request_path,
-                          const std::string& expected_body,
-                          std::shared_ptr<const
-                              capsid::host::BindingRegistrySnapshot>
-                              binding_registry = {}) {
+void run_success_scenario(
+    const char* worker_path, const std::string& name, const std::string& capsid_json,
+    const std::string& worker_source, std::uint16_t loopback_port, const std::string& request_path,
+    const std::string& expected_body,
+    std::shared_ptr<const capsid::host::BindingRegistrySnapshot> binding_registry = {}) {
     const std::string json_path = "capsid-test-" + name + ".json";
     if (!capsid_json.empty()) {
         write_json_file(json_path, capsid_json);
@@ -307,17 +283,14 @@ void run_success_scenario(const char* worker_path,
     if (loopback_port != 0) {
         const std::string marker = "__CAPSID_LOOPBACK_PORT__";
         const std::string::size_type marker_at = source.find(marker);
-        require(marker_at != std::string::npos,
-                "fetch scenario lost its port marker");
-        source.replace(marker_at, marker.size(),
-                       std::to_string(loopback_port));
+        require(marker_at != std::string::npos, "fetch scenario lost its port marker");
+        source.replace(marker_at, marker.size(), std::to_string(loopback_port));
     }
     const std::vector<std::uint8_t> bundle(source.begin(), source.end());
 
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create READY pipe");
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.capsid_json_path = json_path;
     options.binding_registry = std::move(binding_registry);
     capsid::host::SingleWorkerServer server(options);
@@ -341,33 +314,26 @@ void run_success_scenario(const char* worker_path,
 // Failure scenario: startup must fail closed with the expected error
 // fragment. An empty capsid_json means the referenced file does not exist
 // (explicit --capsid-json semantics via capsid_json_required below).
-void run_failure_scenario(const char* worker_path,
-                          const std::string& name,
-                          const std::string& capsid_json,
-                          bool required,
-                          const std::string& expected_error,
-                          std::shared_ptr<const
-                              capsid::host::BindingRegistrySnapshot>
-                              binding_registry = {}) {
+void run_failure_scenario(
+    const char* worker_path, const std::string& name, const std::string& capsid_json, bool required,
+    const std::string& expected_error,
+    std::shared_ptr<const capsid::host::BindingRegistrySnapshot> binding_registry = {}) {
     const std::string json_path = "capsid-test-" + name + ".json";
     if (!capsid_json.empty()) {
         write_json_file(json_path, capsid_json);
     }
     int ready[2];
     require(capsid::win32::create_socket_pair(ready), "cannot create READY pipe");
-    const std::string source =
-        "export default { fetch: () => new Response('unused') };";
+    const std::string source = "export default { fetch: () => new Response('unused') };";
     const std::vector<std::uint8_t> bundle(source.begin(), source.end());
 
-    capsid::host::SingleWorkerServerOptions options =
-        make_options(worker_path, ready[1]);
+    capsid::host::SingleWorkerServerOptions options = make_options(worker_path, ready[1]);
     options.capsid_json_path = json_path;
     options.capsid_json_required = required;
     options.binding_registry = std::move(binding_registry);
     capsid::host::SingleWorkerServer server(options);
     std::string error;
-    require(!server.start(bundle, &error),
-            name + ": startup did not fail closed");
+    require(!server.start(bundle, &error), name + ": startup did not fail closed");
     require(error.find(expected_error) != std::string::npos,
             name + ": error \"" + error + "\" misses \"" + expected_error + "\"");
     server.request_stop();
@@ -380,7 +346,7 @@ void run_failure_scenario(const char* worker_path,
     std::cout << "ok " << name << std::endl;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     require(argc == 2, "expected capsid-worker path");
@@ -390,98 +356,89 @@ int main(int argc, char** argv) {
     // 1. An env grant in the local document reaches the worker: the module
     //    and the exact env name are both authorized through the permissive
     //    host mirror, and the literal value arrives through capsid:env.
-    run_success_scenario(
-        argv[1], "env-grant",
-        "{\"apiVersion\":\"capsid/app-v1\","
-        "\"permissions\":{\"modules\":[\"capsid:env\"],"
-        "\"env\":{\"CAPSID_TEST_VAR\":{\"value\":\"granted-value\"}}},"
-        + pool + "}",
-        kEnvWorkerSource, 0, "/@capsid/orders/env", "granted-value");
+    run_success_scenario(argv[1], "env-grant",
+                         "{\"apiVersion\":\"capsid/app-v1\","
+                         "\"permissions\":{\"modules\":[\"capsid:env\"],"
+                         "\"env\":{\"CAPSID_TEST_VAR\":{\"value\":\"granted-value\"}}}," +
+                             pool + "}",
+                         kEnvWorkerSource, 0, "/@capsid/orders/env", "granted-value");
 
     // 2. A document that grants no env entries keeps the deny-all default:
     //    the module is usable, but reading the variable is denied (the
     //    runtime throws "environment access denied").
-    run_success_scenario(
-        argv[1], "env-denied",
-        "{\"apiVersion\":\"capsid/app-v1\","
-        "\"permissions\":{\"modules\":[\"capsid:env\"]},"
-        + pool + "}",
-        kEnvWorkerSource, 0, "/@capsid/orders/env", "denied");
+    run_success_scenario(argv[1], "env-denied",
+                         "{\"apiVersion\":\"capsid/app-v1\","
+                         "\"permissions\":{\"modules\":[\"capsid:env\"]}," +
+                             pool + "}",
+                         kEnvWorkerSource, 0, "/@capsid/orders/env", "denied");
 
     // 3. An absent default file (no capsid.json next to the server) is the
     //    pre-v0.1.3 no-policy case: startup succeeds and the server serves
     //    (a plain worker without module imports runs; any import would be
     //    unauthorized under the deny-all baseline).
-    run_success_scenario(argv[1], "absent-default-noop", "",
-                         kPlainWorkerSource, 0, "/@capsid/orders/env",
-                         "plain-ok");
+    run_success_scenario(argv[1], "absent-default-noop", "", kPlainWorkerSource, 0,
+                         "/@capsid/orders/env", "plain-ok");
 
     // 4. A fetch egress grant is honored end-to-end against a loopback
     //    listener (permissive host mirror -> egress descriptors -> worker).
     {
         LoopbackFixture fixture = start_loopback_fixture("fetch-ok");
-        const std::string capsid_json =
-            "{\"apiVersion\":\"capsid/app-v1\","
-            "\"permissions\":{\"modules\":[\"capsid:env\"],"
-            "\"fetch\":{\"allow\":[\"127.0.0.1:" +
-            std::to_string(fixture.port) + "\"]}},"
-            + pool + "}";
-        run_success_scenario(argv[1], "fetch-egress-grant", capsid_json,
-                             kEnvWorkerSource, fixture.port,
-                             "/@capsid/orders/fetch", "fetch-ok");
+        const std::string capsid_json = "{\"apiVersion\":\"capsid/app-v1\","
+                                        "\"permissions\":{\"modules\":[\"capsid:env\"],"
+                                        "\"fetch\":{\"allow\":[\"127.0.0.1:" +
+                                        std::to_string(fixture.port) + "\"]}}," + pool + "}";
+        run_success_scenario(argv[1], "fetch-egress-grant", capsid_json, kEnvWorkerSource,
+                             fixture.port, "/@capsid/orders/fetch", "fetch-ok");
         fixture.thread.join();
     }
 
     // 5. worker.* is CLI-owned on this path and must fail loudly instead of
     //    silently skipping the capacity the operator asked for.
-    run_failure_scenario(
-        argv[1], "worker-section-rejected",
-        "{\"apiVersion\":\"capsid/app-v1\","
-        "\"permissions\":{},"
-        "\"worker\":{\"memoryMax\":\"64MiB\"}," + pool + "}",
-        false, "not applicable in local mode");
+    run_failure_scenario(argv[1], "worker-section-rejected",
+                         "{\"apiVersion\":\"capsid/app-v1\","
+                         "\"permissions\":{},"
+                         "\"worker\":{\"memoryMax\":\"64MiB\"}," +
+                             pool + "}",
+                         false, "not applicable in local mode");
 
     // 6. env valueFrom has no secret store on this path: reject, never
     //    degrade to an empty value.
-    run_failure_scenario(
-        argv[1], "value-from-rejected",
-        "{\"apiVersion\":\"capsid/app-v1\","
-        "\"permissions\":{\"modules\":[\"capsid:env\"],"
-        "\"env\":{\"CAPSID_TEST_VAR\":{\"valueFrom\":\"capsid-test-secret\"}}},"
-        + pool + "}",
-        false, "valueFrom is unavailable in local mode");
+    run_failure_scenario(argv[1], "value-from-rejected",
+                         "{\"apiVersion\":\"capsid/app-v1\","
+                         "\"permissions\":{\"modules\":[\"capsid:env\"],"
+                         "\"env\":{\"CAPSID_TEST_VAR\":{\"valueFrom\":\"capsid-test-secret\"}}}," +
+                             pool + "}",
+                         false, "valueFrom is unavailable in local mode");
 
     // 7. An explicit --capsid-json that is missing is an operator error.
-    run_failure_scenario(argv[1], "explicit-missing-required", "", true,
-                         "cannot find");
+    run_failure_scenario(argv[1], "explicit-missing-required", "", true, "cannot find");
 
     // 8. The frozen schema still runs first: an unknown field fails closed.
-    run_failure_scenario(
-        argv[1], "unknown-field-rejected",
-        "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
-        "\"notAField\":true," + pool + "}",
-        false, "rejected at");
+    run_failure_scenario(argv[1], "unknown-field-rejected",
+                         "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
+                         "\"notAField\":true," +
+                             pool + "}",
+                         false, "rejected at");
 
     // 9. `entry` is honored locally (v0.2.x) when no explicit source is
     //    given; with an explicit bundle the CLI wins over the document
     //    (entry-derivation itself is covered by the host_single_worker
     //    integration fixture, which runs without --source-bundle).
-    run_success_scenario(
-        argv[1], "entry-overridden-by-explicit-bundle",
-        "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
-        "\"permissions\":{}," + pool + "}",
-        kPlainWorkerSource, 0, "/@capsid/orders/env", "plain-ok");
+    run_success_scenario(argv[1], "entry-overridden-by-explicit-bundle",
+                         "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
+                         "\"permissions\":{}," +
+                             pool + "}",
+                         kPlainWorkerSource, 0, "/@capsid/orders/env", "plain-ok");
 
     // 10. pool.queue* arms the bounded admission queue locally (v0.2.x);
     //     document presence decides, 0 means queueing disabled.  The
     //     admission behavior itself is covered by the host_single_worker
     //     integration fixture.
-    run_success_scenario(
-        argv[1], "pool-queue-armed",
-        "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
-        "\"pool\":{\"minReady\":1,\"maxWorkers\":1,"
-        "\"queueRequests\":8}}",
-        kPlainWorkerSource, 0, "/@capsid/orders/env", "plain-ok");
+    run_success_scenario(argv[1], "pool-queue-armed",
+                         "{\"apiVersion\":\"capsid/app-v1\",\"permissions\":{},"
+                         "\"pool\":{\"minReady\":1,\"maxWorkers\":1,"
+                         "\"queueRequests\":8}}",
+                         kPlainWorkerSource, 0, "/@capsid/orders/env", "plain-ok");
 
     // 11. Binding development uses the same app-v2 declaration and
     //     capsid:binding/<id> facade as managed mode. The explicit Host
@@ -509,8 +466,7 @@ int main(int argc, char** argv) {
     run_failure_scenario(
         argv[1], "binding-secret-rejected",
         R"json({"apiVersion":"capsid/app-v2","permissions":{},"bindings":{"echo":{"secrets":{"password":{"valueFrom":"echo-password"}}}},"pool":{"minReady":1,"maxWorkers":1}})json",
-        false, "binding secrets are unavailable in local mode",
-        echo_registry);
+        false, "binding secrets are unavailable in local mode", echo_registry);
 
     std::cout << "PASS" << std::endl;
     return 0;

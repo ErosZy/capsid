@@ -1,0 +1,12 @@
+[tool.ruff]
+required-version = "==0.17.5"
+target-version = "py312"
+line-length = 100
+indent-width = 4
+extend-exclude = ["vendor", "patches", "licenses", "docs", "bench/results", "tests/fixtures", "tests/wpt", "perf-site", ".venv-format"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = false

@@ -28,7 +28,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-
 #include <chrono>
 #include <barrier>
 #include <cerrno>
@@ -94,8 +93,7 @@ void write_file(const std::string& path, const std::string& content) {
     const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     require(fd >= 0, "cannot create fixture file: " + path);
     require(content.empty() ||
-                write(fd, content.data(), content.size()) ==
-                    static_cast<ssize_t>(content.size()),
+                write(fd, content.data(), content.size()) == static_cast<ssize_t>(content.size()),
             "cannot write fixture file");
     close(fd);
 }
@@ -127,8 +125,7 @@ bool directory_has_entries(const std::string& path) {
             require(errno == 0, "cannot enumerate directory: " + path);
             break;
         }
-        if (std::strcmp(entry->d_name, ".") != 0 &&
-            std::strcmp(entry->d_name, "..") != 0) {
+        if (std::strcmp(entry->d_name, ".") != 0 && std::strcmp(entry->d_name, "..") != 0) {
             found = true;
             break;
         }
@@ -137,8 +134,7 @@ bool directory_has_entries(const std::string& path) {
     return found;
 }
 
-bool directory_files_contain(const std::string& path,
-                             const std::string& needle) {
+bool directory_files_contain(const std::string& path, const std::string& needle) {
     DIR* directory = opendir(path.c_str());
     require(directory != nullptr, "cannot open directory: " + path);
     bool found = false;
@@ -149,16 +145,13 @@ bool directory_files_contain(const std::string& path,
             require(errno == 0, "cannot enumerate directory: " + path);
             break;
         }
-        if (std::strcmp(entry->d_name, ".") == 0 ||
-            std::strcmp(entry->d_name, "..") == 0) {
+        if (std::strcmp(entry->d_name, ".") == 0 || std::strcmp(entry->d_name, "..") == 0) {
             continue;
         }
         const std::string file = path + "/" + entry->d_name;
         struct stat metadata = {};
-        require(lstat(file.c_str(), &metadata) == 0,
-                "cannot inspect generation file: " + file);
-        if (S_ISREG(metadata.st_mode) &&
-            read_file(file).find(needle) != std::string::npos) {
+        require(lstat(file.c_str(), &metadata) == 0, "cannot inspect generation file: " + file);
+        if (S_ISREG(metadata.st_mode) && read_file(file).find(needle) != std::string::npos) {
             found = true;
             break;
         }
@@ -198,8 +191,7 @@ std::string run_command(const std::vector<std::string>& argv) {
     close(pipes[0]);
     int status = 0;
     waitpid(pid, &status, 0);
-    require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
-            "command failed: " + output);
+    require(WIFEXITED(status) && WEXITSTATUS(status) == 0, "command failed: " + output);
     return output;
 }
 
@@ -236,8 +228,7 @@ Fixtures make_fixtures(const char* worker_path, const char* compiler_tool,
     return f;
 }
 
-const char* kSourceBundle =
-    "export default { fetch: () => new Response('managed-ok') };";
+const char* kSourceBundle = "export default { fetch: () => new Response('managed-ok') };";
 
 // Managed deployment consumes the same frozen capsid/app-v1 document as the
 // M0 config boundary. Keeping a second legacy {modules,env} shape in this
@@ -255,20 +246,18 @@ const char* kLiteralEnvAppConfig =
 const char* kThreeWorkerAppConfig =
     R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":3,"maxWorkers":3}})json";
 
-void create_version(const Fixtures& fixtures, const std::string& version,
-                    const std::string& config, const std::string& bundle) {
-    const std::string directory =
-        fixtures.apps_root + "/orders/" + version;
-    require(mkdir(directory.c_str(), 0700) == 0,
-            "cannot create version directory");
+void create_version(const Fixtures& fixtures, const std::string& version, const std::string& config,
+                    const std::string& bundle) {
+    const std::string directory = fixtures.apps_root + "/orders/" + version;
+    require(mkdir(directory.c_str(), 0700) == 0, "cannot create version directory");
     write_file(directory + "/capsid.json", config);
     write_file(directory + "/bundle.mjs", bundle);
 }
 
 capsid::host::HostPolicy default_host_policy() {
     capsid::host::HostPolicy host;
-    host.module_allowlist = { "capsid:env" };
-    host.env_patterns = { "APP_*" };
+    host.module_allowlist = {"capsid:env"};
+    host.env_patterns = {"APP_*"};
     host.max_workers = 1;
     host.min_ready = 1;
     host.max_requests_per_worker = 10000;
@@ -354,7 +343,8 @@ struct ManagedPoolObservation {
     std::int64_t pid_of(const capsid::host::WorkerExecutor* executor) {
         std::lock_guard<std::mutex> lock(mutex);
         for (const auto& child : started) {
-            if (child.executor == executor) return child.pid;
+            if (child.executor == executor)
+                return child.pid;
         }
         fail("executor was not observed starting in this Managed pool");
         return -1;
@@ -376,15 +366,17 @@ struct ManagedPoolObservation {
                             !child.status.clean(),
                         "a killed Managed Worker must retain its actual signal");
             } else {
-                require(child.status.clean(), "natural Managed drain must retain actual OS exit zero");
+                require(child.status.clean(),
+                        "natural Managed drain must retain actual OS exit zero");
             }
             // This probe runs after pool.wait() joined the sole reaper.
             // ECHILD proves the product already reaped it; a zombie that
             // this test itself reaps must fail, even if its exit was zero.
             int status = 0;
             pid_t waited;
-            do { waited = waitpid(static_cast<pid_t>(child.pid), &status, WNOHANG); }
-            while (waited < 0 && errno == EINTR);
+            do {
+                waited = waitpid(static_cast<pid_t>(child.pid), &status, WNOHANG);
+            } while (waited < 0 && errno == EINTR);
             require(waited == -1 && errno == ECHILD,
                     "Managed product reaper must reclaim every owned child before return");
         }
@@ -402,103 +394,95 @@ struct TransactionHarness {
     bool retired = false;
 };
 
-void wire_admin_transactions(capsid::host::ManagedHostOptions* options,
-                             TransactionHarness* harness,
-                             std::function<void(const capsid::host::DeployOutcome&,
-                                 capsid::host::GenerationPoolOptions&)> customize = {}) {
+void wire_admin_transactions(
+    capsid::host::ManagedHostOptions* options, TransactionHarness* harness,
+    std::function<void(const capsid::host::DeployOutcome&, capsid::host::GenerationPoolOptions&)>
+        customize = {}) {
     options->prepare_activation =
-        [options, harness, customize](const std::string& application,
-           const capsid::host::DeployOutcome& prepared,
-           std::string* error)
-        -> std::unique_ptr<capsid::host::ActivationPlan> {
-            auto plan = std::make_unique<capsid::host::ActivationPlan>();
-            plan->application = application;
-            plan->version = prepared.version;
-            plan->generation_digest = prepared.generation_digest;
-            plan->new_workers = prepared.workers.size();
-            capsid::host::GenerationPoolOptions pool_options;
-            pool_options.application_id = application;
-            pool_options.version = prepared.version;
-            pool_options.generation_digest = prepared.generation_digest;
-            pool_options.workers =
-                static_cast<std::uint32_t>(prepared.workers.size());
-            pool_options.factory = prepared.generation_factory;
-            if (options->ledger) pool_options.capacity_lease = std::make_shared<capsid::host::WorkerPoolCapacityLease>(
+        [options, harness,
+         customize](const std::string& application, const capsid::host::DeployOutcome& prepared,
+                    std::string* error) -> std::unique_ptr<capsid::host::ActivationPlan> {
+        auto plan = std::make_unique<capsid::host::ActivationPlan>();
+        plan->application = application;
+        plan->version = prepared.version;
+        plan->generation_digest = prepared.generation_digest;
+        plan->new_workers = prepared.workers.size();
+        capsid::host::GenerationPoolOptions pool_options;
+        pool_options.application_id = application;
+        pool_options.version = prepared.version;
+        pool_options.generation_digest = prepared.generation_digest;
+        pool_options.workers = static_cast<std::uint32_t>(prepared.workers.size());
+        pool_options.factory = prepared.generation_factory;
+        if (options->ledger)
+            pool_options.capacity_lease = std::make_shared<capsid::host::WorkerPoolCapacityLease>(
                 options->ledger, application, prepared.workers.size());
-            // Fast deterministic recovery policy: create_adopted rejects a
-            // zeroed policy, and this harness mirrors main.cc's wiring.
-            pool_options.recovery = generation_recovery_policy();
-            auto observation = std::make_shared<ManagedPoolObservation>();
-            observation->wire(&pool_options);
-            if (customize) customize(prepared, pool_options);
-            {
-                std::lock_guard<std::mutex> lock(harness->mutex);
-                harness->generations.push_back(observation);
-                plan->old_pool = harness->active_pool;
-            }
-            std::string pool_error;
-            std::shared_ptr<capsid::host::GenerationPool> pool =
-                capsid::host::GenerationPool::create_adopted(
-                    std::move(pool_options), prepared.workers, &pool_error);
-            if (pool == nullptr) {
-                *error = "cannot adopt the warmed pool";
-                return nullptr;
-            }
-            plan->new_pool = pool;
-            return plan;
-        };
-    options->commit_activation =
-        [harness](capsid::host::ActivationPlan* plan) {
+        // Fast deterministic recovery policy: create_adopted rejects a
+        // zeroed policy, and this harness mirrors main.cc's wiring.
+        pool_options.recovery = generation_recovery_policy();
+        auto observation = std::make_shared<ManagedPoolObservation>();
+        observation->wire(&pool_options);
+        if (customize)
+            customize(prepared, pool_options);
+        {
             std::lock_guard<std::mutex> lock(harness->mutex);
-            if (plan->old_pool != nullptr) {
-                plan->old_pool->request_drain();
-            }
-            harness->active_pool = plan->new_pool;
-            harness->activated = true;
-            harness->condition.notify_all();
-        };
+            harness->generations.push_back(observation);
+            plan->old_pool = harness->active_pool;
+        }
+        std::string pool_error;
+        std::shared_ptr<capsid::host::GenerationPool> pool =
+            capsid::host::GenerationPool::create_adopted(std::move(pool_options), prepared.workers,
+                                                         &pool_error);
+        if (pool == nullptr) {
+            *error = "cannot adopt the warmed pool";
+            return nullptr;
+        }
+        plan->new_pool = pool;
+        return plan;
+    };
+    options->commit_activation = [harness](capsid::host::ActivationPlan* plan) {
+        std::lock_guard<std::mutex> lock(harness->mutex);
+        if (plan->old_pool != nullptr) {
+            plan->old_pool->request_drain();
+        }
+        harness->active_pool = plan->new_pool;
+        harness->activated = true;
+        harness->condition.notify_all();
+    };
     options->abort_activation = [](capsid::host::ActivationPlan* plan) {
         // the never-published pool dies with the plan
-        (void) plan;
+        (void)plan;
     };
     options->prepare_retire =
-        [harness](const std::string& application, std::string* error)
-        -> std::unique_ptr<capsid::host::RetirePlan> {
-            (void) error;
-            auto plan = std::make_unique<capsid::host::RetirePlan>();
-            plan->application = application;
-            {
-                std::lock_guard<std::mutex> lock(harness->mutex);
-                plan->pool = harness->active_pool;
-                plan->workers = plan->pool != nullptr
-                                    ? plan->pool->configured_workers()
-                                    : 0;
-            }
-            return plan;
-        };
-    options->commit_retire =
-        [harness](capsid::host::RetirePlan* plan) {
+        [harness](const std::string& application,
+                  std::string* error) -> std::unique_ptr<capsid::host::RetirePlan> {
+        (void)error;
+        auto plan = std::make_unique<capsid::host::RetirePlan>();
+        plan->application = application;
+        {
             std::lock_guard<std::mutex> lock(harness->mutex);
-            if (plan->pool != nullptr) {
-                plan->pool->request_drain();
-            }
-            harness->active_pool.reset();
-            harness->retired = true;
-            harness->condition.notify_all();
-        };
-    options->abort_retire = [](capsid::host::RetirePlan* plan) {
-        (void) plan;
+            plan->pool = harness->active_pool;
+            plan->workers = plan->pool != nullptr ? plan->pool->configured_workers() : 0;
+        }
+        return plan;
     };
+    options->commit_retire = [harness](capsid::host::RetirePlan* plan) {
+        std::lock_guard<std::mutex> lock(harness->mutex);
+        if (plan->pool != nullptr) {
+            plan->pool->request_drain();
+        }
+        harness->active_pool.reset();
+        harness->retired = true;
+        harness->condition.notify_all();
+    };
+    options->abort_retire = [](capsid::host::RetirePlan* plan) { (void)plan; };
 }
 
-capsid::host::OperationStatus wait_admin_operation(
-    capsid::host::AsyncAdminBackend* backend,
-    const std::string& operation_id) {
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::seconds(20 * kTestWaitScale);
+capsid::host::OperationStatus wait_admin_operation(capsid::host::AsyncAdminBackend* backend,
+                                                   const std::string& operation_id) {
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(20 * kTestWaitScale);
     for (;;) {
-        const capsid::host::OperationStatus status =
-            backend->operation_status(operation_id);
+        const capsid::host::OperationStatus status = backend->operation_status(operation_id);
         if (status.state == capsid::host::OperationState::kActive ||
             status.state == capsid::host::OperationState::kFailed) {
             return status;
@@ -516,8 +500,7 @@ capsid::host::OperationStatus wait_admin_operation(
 // compile. Positive tests call the same helpers opportunistically so they
 // continue to represent an explicitly allowed resource after the API grows.
 template <typename Policy>
-bool set_host_storage_namespaces(Policy* policy,
-                                 std::vector<std::string> namespaces) {
+bool set_host_storage_namespaces(Policy* policy, std::vector<std::string> namespaces) {
     if constexpr (requires(Policy& value) { value.storage_namespaces; }) {
         policy->storage_namespaces = std::move(namespaces);
         return true;
@@ -528,8 +511,7 @@ bool set_host_storage_namespaces(Policy* policy,
 }
 
 template <typename Policy>
-bool set_host_stdio_streams(Policy* policy,
-                            std::vector<std::string> streams) {
+bool set_host_stdio_streams(Policy* policy, std::vector<std::string> streams) {
     if constexpr (requires(Policy& value) { value.stdio_streams; }) {
         policy->stdio_streams = std::move(streams);
         return true;
@@ -547,14 +529,12 @@ bool set_host_stdio_streams(Policy* policy,
 // case deterministic without allowing the old unbounded reader to consume
 // the machine's memory.
 bool recovery_fails_promptly(capsid::host::ManagedHostOptions* options,
-                             std::chrono::milliseconds timeout,
-                             rlim_t address_space_ceiling = 0) {
+                             std::chrono::milliseconds timeout, rlim_t address_space_ceiling = 0) {
     const pid_t child = fork();
     require(child >= 0, "cannot fork recovery boundary probe");
     if (child == 0) {
         if (address_space_ceiling != 0) {
-            const struct rlimit limit = {
-                address_space_ceiling, address_space_ceiling};
+            const struct rlimit limit = {address_space_ceiling, address_space_ceiling};
             if (setrlimit(RLIMIT_AS, &limit) != 0) {
                 _exit(3);
             }
@@ -566,11 +546,7 @@ bool recovery_fails_promptly(capsid::host::ManagedHostOptions* options,
             if (recovered.worker != nullptr) {
                 capsid_worker_destroy(recovered.worker);
             }
-            _exit(!recovered.ok &&
-                          status.state ==
-                              capsid::host::OperationState::kFailed
-                      ? 0
-                      : 1);
+            _exit(!recovered.ok && status.state == capsid::host::OperationState::kFailed ? 0 : 1);
         } catch (...) {
             _exit(2);
         }
@@ -587,8 +563,7 @@ bool recovery_fails_promptly(capsid::host::ManagedHostOptions* options,
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    require(kill(child, SIGKILL) == 0,
-            "cannot terminate blocked recovery boundary probe");
+    require(kill(child, SIGKILL) == 0, "cannot terminate blocked recovery boundary probe");
     require(waitpid(child, &child_status, 0) == child,
             "cannot reap blocked recovery boundary probe");
     return false;
@@ -596,9 +571,8 @@ bool recovery_fails_promptly(capsid::host::ManagedHostOptions* options,
 
 // Worker request helper (same contract as the other worker tests).
 std::string run_request(capsid_worker* worker) {
-    require(capsid_worker_begin_bodyless_request(
-                worker, 1, "GET", "https://example.test/managed", NULL, 0) ==
-                CAPSID_OK,
+    require(capsid_worker_begin_bodyless_request(worker, 1, "GET", "https://example.test/managed",
+                                                 NULL, 0) == CAPSID_OK,
             "begin bodyless request");
     bool head = false;
     std::string body;
@@ -615,19 +589,16 @@ std::string run_request(capsid_worker* worker) {
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
-                body.append(reinterpret_cast<const char*>(event.payload.data),
-                            event.payload.size);
-                capsid_worker_grant_response_credit(
-                    worker, event.request_id,
-                    static_cast<std::uint32_t>(event.payload.size));
+                body.append(reinterpret_cast<const char*>(event.payload.data), event.payload.size);
+                capsid_worker_grant_response_credit(worker, event.request_id,
+                                                    static_cast<std::uint32_t>(event.payload.size));
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_END) {
                 require(head, "response end before head");
                 return body;
             }
-            if (event.type == CAPSID_EVENT_ERROR ||
-                event.type == CAPSID_EVENT_EXIT) {
+            if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_EXIT) {
                 fail("worker failed during request");
             }
             continue;
@@ -645,15 +616,14 @@ std::string run_request(capsid_worker* worker) {
     }
 }
 
-template <typename Outcome>
-std::vector<capsid_worker*> outcome_workers(const Outcome& outcome) {
+template <typename Outcome> std::vector<capsid_worker*> outcome_workers(const Outcome& outcome) {
     if constexpr (requires(const Outcome& value) { value.workers; }) {
         if (!outcome.workers.empty()) {
             return outcome.workers;
         }
     }
     if (outcome.worker != nullptr) {
-        return { outcome.worker };
+        return {outcome.worker};
     }
     return {};
 }
@@ -662,8 +632,7 @@ void destroy_workers(const std::vector<capsid_worker*>& workers) {
     std::set<capsid_worker*> unique;
     for (capsid_worker* worker : workers) {
         require(worker != nullptr, "pool contains a null worker");
-        require(unique.insert(worker).second,
-                "pool contains a duplicate owning worker pointer");
+        require(unique.insert(worker).second, "pool contains a duplicate owning worker pointer");
     }
     for (capsid_worker* worker : workers) {
         capsid_worker_destroy(worker);
@@ -673,8 +642,7 @@ void destroy_workers(const std::vector<capsid_worker*>& workers) {
 // Polls `predicate` until it holds or the deadline expires; returns whether
 // it held. Never sleeps longer than 10ms per poll (same idiom as the
 // generation pool suite).
-bool wait_for(const std::function<bool()>& predicate,
-              std::chrono::milliseconds timeout) {
+bool wait_for(const std::function<bool()>& predicate, std::chrono::milliseconds timeout) {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (std::chrono::steady_clock::now() < deadline) {
         if (predicate()) {
@@ -687,12 +655,11 @@ bool wait_for(const std::function<bool()>& predicate,
 
 // A zero inflight count is also produced by worker exit. Observe the real
 // response through the pool's event sink before accepting completion.
-capsid::host::WorkerExecutor* generation_round_trip(
-    capsid::host::GenerationPool& pool, std::uint64_t request_id,
-    const std::string& expected_body = "managed-ok") {
+capsid::host::WorkerExecutor*
+generation_round_trip(capsid::host::GenerationPool& pool, std::uint64_t request_id,
+                      const std::string& expected_body = "managed-ok") {
     capsid::host::WorkerExecutor* worker = pool.pick_worker();
-    require(worker != nullptr,
-            "generation round trip: no READY worker to serve the request");
+    require(worker != nullptr, "generation round trip: no READY worker to serve the request");
     struct Response {
         std::mutex mutex;
         unsigned heads = 0, ends = 0;
@@ -702,21 +669,27 @@ capsid::host::WorkerExecutor* generation_round_trip(
     };
     auto response = std::make_shared<Response>();
     pool.set_event_sink([response, worker, request_id](const auto* executor, auto event) {
-        if (executor != worker) return;
+        if (executor != worker)
+            return;
         std::lock_guard<std::mutex> lock(response->mutex);
         using Type = capsid::host::WorkerEvent::Type;
-        if (event.type == Type::kExit || event.type == Type::kError) response->failed = true;
-        if (event.request_id != request_id) return;
+        if (event.type == Type::kExit || event.type == Type::kError)
+            response->failed = true;
+        if (event.request_id != request_id)
+            return;
         if (event.type == Type::kResponseHead) {
             ++response->heads;
             response->status = event.status;
         } else if (event.type == Type::kResponseBody) {
-            if (response->heads != 1 || response->ends != 0 || response->body.size() + event.body.size() > 4096)
+            if (response->heads != 1 || response->ends != 0 ||
+                response->body.size() + event.body.size() > 4096)
                 response->failed = true;
-            else response->body.append(event.body.begin(), event.body.end());
+            else
+                response->body.append(event.body.begin(), event.body.end());
         } else if (event.type == Type::kResponseEnd) {
             ++response->ends;
-            if (response->heads != 1) response->failed = true;
+            if (response->heads != 1)
+                response->failed = true;
         } else if (event.type == Type::kRequestTimeout || event.type == Type::kRequestFailure) {
             response->failed = true;
         }
@@ -726,17 +699,19 @@ capsid::host::WorkerExecutor* generation_round_trip(
     begin.request_id = request_id;
     begin.method = "GET";
     begin.url = "https://pool.invalid/generation";
-    begin.end_request = true;  // bodyless fusion: begin + end in one frame
+    begin.end_request = true; // bodyless fusion: begin + end in one frame
     worker->submit(std::move(begin));
     capsid::host::Command grant;
     grant.type = capsid::host::CommandType::kGrantResponseCredit;
     grant.request_id = request_id;
-    grant.credit = 4096;  // covers the whole response body upfront
+    grant.credit = 4096; // covers the whole response body upfront
     worker->submit(std::move(grant));
-    const bool terminal = wait_for([&] {
-        std::lock_guard<std::mutex> lock(response->mutex);
-        return response->ends != 0 || response->failed;
-    }, std::chrono::seconds(15 * kTestWaitScale));
+    const bool terminal = wait_for(
+        [&] {
+            std::lock_guard<std::mutex> lock(response->mutex);
+            return response->ends != 0 || response->failed;
+        },
+        std::chrono::seconds(15 * kTestWaitScale));
     pool.set_event_sink({});
     {
         std::lock_guard<std::mutex> lock(response->mutex);
@@ -744,19 +719,18 @@ capsid::host::WorkerExecutor* generation_round_trip(
                     response->status == 200 && response->body == expected_body,
                 "generation round trip requires its actual complete 200 response and exact body");
     }
-    require(wait_for([&] { return pool.inflight() == 0; }, std::chrono::seconds(2 * kTestWaitScale)),
-            "completed generation response did not release inflight");
-    std::cout << "MANAGED_RESPONSE {\"requestId\":" << request_id
-              << ",\"status\":200,\"body\":\"" << expected_body << "\"}" << std::endl;
+    require(
+        wait_for([&] { return pool.inflight() == 0; }, std::chrono::seconds(2 * kTestWaitScale)),
+        "completed generation response did not release inflight");
+    std::cout << "MANAGED_RESPONSE {\"requestId\":" << request_id << ",\"status\":200,\"body\":\""
+              << expected_body << "\"}" << std::endl;
     return worker;
 }
 
-std::uint64_t percentile_us(std::vector<std::uint64_t> values,
-                            std::size_t percentile) {
+std::uint64_t percentile_us(std::vector<std::uint64_t> values, std::size_t percentile) {
     require(!values.empty(), "cannot compute a percentile without samples");
     std::sort(values.begin(), values.end());
-    const std::size_t index =
-        ((values.size() - 1) * percentile) / 100;
+    const std::size_t index = ((values.size() - 1) * percentile) / 100;
     return values[index];
 }
 
@@ -771,8 +745,8 @@ TestKey test_key() {
     TestKey key;
     key.private_key.resize(32);
     key.public_key.resize(32);
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
+    EVP_PKEY* pkey =
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
     require(pkey != nullptr, "cannot create key");
     std::size_t size = 32;
     require(EVP_PKEY_get_raw_public_key(pkey, key.public_key.data(), &size) == 1,
@@ -781,22 +755,18 @@ TestKey test_key() {
     return key;
 }
 
-std::vector<std::uint8_t> sign(const TestKey& key,
-                               const std::vector<std::uint8_t>& message) {
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
+std::vector<std::uint8_t> sign(const TestKey& key, const std::vector<std::uint8_t>& message) {
+    EVP_PKEY* pkey =
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
     require(pkey != nullptr, "cannot recreate key");
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    require(ctx != nullptr &&
-                EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey) == 1,
+    require(ctx != nullptr && EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey) == 1,
             "cannot init signing");
     std::size_t size = 64;
-    require(EVP_DigestSign(ctx, nullptr, &size, message.data(),
-                           message.size()) == 1,
+    require(EVP_DigestSign(ctx, nullptr, &size, message.data(), message.size()) == 1,
             "cannot size signature");
     std::vector<std::uint8_t> signature(size);
-    require(EVP_DigestSign(ctx, signature.data(), &size, message.data(),
-                           message.size()) == 1,
+    require(EVP_DigestSign(ctx, signature.data(), &size, message.data(), message.size()) == 1,
             "cannot sign");
     signature.resize(size);
     EVP_MD_CTX_free(ctx);
@@ -807,10 +777,8 @@ std::vector<std::uint8_t> sign(const TestKey& key,
 // Compiles kSourceBundle (the exact source in bundle.mjs) and returns
 // {bytecode, attestation, signature} with the test key; also writes the
 // files into the version dir.
-void compile_and_sign(const Fixtures& f, const TestKey& key,
-                      std::vector<std::uint8_t>* bytecode,
-                      std::string* attestation,
-                      std::vector<std::uint8_t>* signature) {
+void compile_and_sign(const Fixtures& f, const TestKey& key, std::vector<std::uint8_t>* bytecode,
+                      std::string* attestation, std::vector<std::uint8_t>* signature) {
     const std::string out_dir = f.vdir;
     const std::string source_file = out_dir + "/compile-source.mjs";
     write_file(source_file, kSourceBundle);
@@ -819,23 +787,29 @@ void compile_and_sign(const Fixtures& f, const TestKey& key,
     const std::string message_out = out_dir + "/message.bin";
     run_command({
         f.compiler_tool,
-        "--source", source_file,
-        "--source-name", ("file://orders/v1/bundle.qjsb"),
-        "--application", "orders",
-        "--version", "v1",
-        "--key-id", "test-key-1",
-        "--bytecode-out", bytecode_out,
-        "--attestation-out", attestation_out,
-        "--signing-message-out", message_out,
+        "--source",
+        source_file,
+        "--source-name",
+        ("file://orders/v1/bundle.qjsb"),
+        "--application",
+        "orders",
+        "--version",
+        "v1",
+        "--key-id",
+        "test-key-1",
+        "--bytecode-out",
+        bytecode_out,
+        "--attestation-out",
+        attestation_out,
+        "--signing-message-out",
+        message_out,
     });
     const std::string message = read_file(message_out);
     const std::vector<std::uint8_t> message_bytes(message.begin(), message.end());
     *signature = sign(key, message_bytes);
-    write_file(out_dir + "/bytecode.sig",
-               std::string(signature->begin(), signature->end()));
+    write_file(out_dir + "/bytecode.sig", std::string(signature->begin(), signature->end()));
     const std::string bytecode_text = read_file(bytecode_out);
-    *bytecode = std::vector<std::uint8_t>(bytecode_text.begin(),
-                                          bytecode_text.end());
+    *bytecode = std::vector<std::uint8_t>(bytecode_text.begin(), bytecode_text.end());
     *attestation = read_file(attestation_out);
 }
 
@@ -844,8 +818,7 @@ void compile_and_sign(const Fixtures& f, const TestKey& key,
 // second key (compile_and_sign is the v1/test-key-1 specialization).
 void compile_and_sign_version(const Fixtures& f, const std::string& version,
                               const std::string& key_id, const TestKey& key,
-                              std::string* attestation,
-                              std::vector<std::uint8_t>* signature) {
+                              std::string* attestation, std::vector<std::uint8_t>* signature) {
     const std::string directory = f.apps_root + "/orders/" + version;
     const std::string source_file = directory + "/compile-source.mjs";
     write_file(source_file, kSourceBundle);
@@ -854,25 +827,31 @@ void compile_and_sign_version(const Fixtures& f, const std::string& version,
     const std::string message_out = directory + "/message.bin";
     run_command({
         f.compiler_tool,
-        "--source", source_file,
-        "--source-name", ("file://orders/" + version + "/bundle.qjsb"),
-        "--application", "orders",
-        "--version", version,
-        "--key-id", key_id,
-        "--bytecode-out", bytecode_out,
-        "--attestation-out", attestation_out,
-        "--signing-message-out", message_out,
+        "--source",
+        source_file,
+        "--source-name",
+        ("file://orders/" + version + "/bundle.qjsb"),
+        "--application",
+        "orders",
+        "--version",
+        version,
+        "--key-id",
+        key_id,
+        "--bytecode-out",
+        bytecode_out,
+        "--attestation-out",
+        attestation_out,
+        "--signing-message-out",
+        message_out,
     });
     const std::string message = read_file(message_out);
     const std::vector<std::uint8_t> message_bytes(message.begin(), message.end());
     *signature = sign(key, message_bytes);
-    write_file(directory + "/bytecode.sig",
-               std::string(signature->begin(), signature->end()));
+    write_file(directory + "/bytecode.sig", std::string(signature->begin(), signature->end()));
     *attestation = read_file(attestation_out);
 }
 
-std::string json_string_field(const std::string& json,
-                              const std::string& field) {
+std::string json_string_field(const std::string& json, const std::string& field) {
     const std::string prefix = "\"" + field + "\":\"";
     const std::string::size_type begin = json.find(prefix);
     require(begin != std::string::npos, "cannot find JSON field: " + field);
@@ -884,26 +863,21 @@ std::string json_string_field(const std::string& json,
 
 // M2 item 7: an optional JSON string field must be distinguished from a
 // missing one (fallback reason is only written when a fallback happened).
-bool json_has_string_field(const std::string& json,
-                           const std::string& field) {
+bool json_has_string_field(const std::string& json, const std::string& field) {
     const std::string needle = "\"" + field + "\":\"";
     return json.find(needle) != std::string::npos;
 }
 
-void install_compatibility_mismatch(const Fixtures& fixtures,
-                                    const TestKey& key,
+void install_compatibility_mismatch(const Fixtures& fixtures, const TestKey& key,
                                     const std::string& attestation) {
     const std::string wrong_id =
         "sha256:0000000000000000000000000000000000000000000000000000000000000000";
-    const std::string old_id = json_string_field(attestation,
-                                                 "compatibilityId");
+    const std::string old_id = json_string_field(attestation, "compatibilityId");
     const std::string needle = "\"compatibilityId\":\"" + old_id + "\"";
     const std::string::size_type position = attestation.find(needle);
-    require(position != std::string::npos,
-            "cannot locate compatibilityId claim");
+    require(position != std::string::npos, "cannot locate compatibilityId claim");
     std::string tampered = attestation;
-    tampered.replace(position, needle.size(),
-                     "\"compatibilityId\":\"" + wrong_id + "\"");
+    tampered.replace(position, needle.size(), "\"compatibilityId\":\"" + wrong_id + "\"");
 
     std::vector<std::uint8_t> message;
     const std::string fields[] = {
@@ -918,8 +892,7 @@ void install_compatibility_mismatch(const Fixtures& fixtures,
     };
     static constexpr char kDomain[] = "capsid-bytecode-attestation-v1\0";
     message.assign(reinterpret_cast<const std::uint8_t*>(kDomain),
-                   reinterpret_cast<const std::uint8_t*>(kDomain) +
-                       sizeof(kDomain) - 1);
+                   reinterpret_cast<const std::uint8_t*>(kDomain) + sizeof(kDomain) - 1);
     for (const std::string& field : fields) {
         const std::uint32_t size = static_cast<std::uint32_t>(field.size());
         message.push_back(static_cast<std::uint8_t>(size >> 24));
@@ -930,22 +903,25 @@ void install_compatibility_mismatch(const Fixtures& fixtures,
     }
     write_file(fixtures.vdir + "/bytecode.json", tampered);
     const std::vector<std::uint8_t> signature = sign(key, message);
-    write_file(fixtures.vdir + "/bytecode.sig",
-               std::string(signature.begin(), signature.end()));
+    write_file(fixtures.vdir + "/bytecode.sig", std::string(signature.begin(), signature.end()));
 }
 
 std::size_t open_directory_handles(const std::string& path) {
     struct stat expected{};
-    require(stat(path.c_str(), &expected) == 0 && S_ISDIR(expected.st_mode), "stat observed App state directory");
+    require(stat(path.c_str(), &expected) == 0 && S_ISDIR(expected.st_mode),
+            "stat observed App state directory");
     DIR* descriptors = opendir("/proc/self/fd");
     require(descriptors != nullptr, "open own descriptor inventory");
     std::size_t count = 0;
     while (const auto* entry = readdir(descriptors)) {
         char* end = nullptr;
         const long descriptor = std::strtol(entry->d_name, &end, 10);
-        if (end == entry->d_name || *end != '\0' || descriptor < 0) continue;
+        if (end == entry->d_name || *end != '\0' || descriptor < 0)
+            continue;
         struct stat actual{};
-        if (fstat(static_cast<int>(descriptor), &actual) == 0 && actual.st_dev == expected.st_dev && actual.st_ino == expected.st_ino) ++count;
+        if (fstat(static_cast<int>(descriptor), &actual) == 0 && actual.st_dev == expected.st_dev &&
+            actual.st_ino == expected.st_ino)
+            ++count;
     }
     require(closedir(descriptors) == 0, "close own descriptor inventory");
     return count;
@@ -962,13 +938,17 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
     const bool stale = scenario == "stale_generation" || replay;
     const bool retire = scenario == "retire_stale";
     require(stale || retire || aborted || prepared || write_failure ||
-                scenario == "pending_shutdown" || scenario == "expired_notifications" || scenario == "stale_handles", "known quarantine scenario");
+                scenario == "pending_shutdown" || scenario == "expired_notifications" ||
+                scenario == "stale_handles",
+            "known quarantine scenario");
     std::mutex log_mutex;
     std::vector<std::string> log_lines;
     StructuredLog log([&](const std::string& line) {
-        std::lock_guard<std::mutex> lock(log_mutex); log_lines.push_back(line);
+        std::lock_guard<std::mutex> lock(log_mutex);
+        log_lines.push_back(line);
     });
-    auto options = make_options(fixtures); options.log = &log;
+    auto options = make_options(fixtures);
+    options.log = &log;
     TransactionHarness harness;
     QuarantineDispatcher dispatcher;
     auto box = std::make_shared<std::weak_ptr<GenerationPool>>();
@@ -976,15 +956,21 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
     std::atomic<bool> posted{false};
     bool configure_async = write_failure, during_prepare = false, queue_old = false;
     wire_admin_transactions(&options, &harness, [&](const auto& outcome, auto& pool_options) {
-        if (!configure_async) return;
-        request = std::make_shared<QuarantineRequest>(&options, outcome.generation_digest, [&, box] {
-            std::lock_guard<std::mutex> lock(harness.mutex);
-            return harness.active_pool && !box->owner_before(harness.active_pool) &&
-                   !harness.active_pool.owner_before(*box);
-        });
+        if (!configure_async)
+            return;
+        request =
+            std::make_shared<QuarantineRequest>(&options, outcome.generation_digest, [&, box] {
+                std::lock_guard<std::mutex> lock(harness.mutex);
+                return harness.active_pool && !box->owner_before(harness.active_pool) &&
+                       !harness.active_pool.owner_before(*box);
+            });
         pool_options.recovery.max_events = 1;
-        pool_options.quarantine_completion = std::shared_ptr<const std::atomic<bool>>(request, &request->completed);
-        pool_options.on_quarantine = [&, task = request] { dispatcher.enqueue(task); posted.store(true); };
+        pool_options.quarantine_completion =
+            std::shared_ptr<const std::atomic<bool>>(request, &request->completed);
+        pool_options.on_quarantine = [&, task = request] {
+            dispatcher.enqueue(task);
+            posted.store(true);
+        };
     });
     auto original_prepare = options.prepare_activation;
     std::string active_before;
@@ -993,30 +979,39 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
                              const std::function<void()>& before_quarantine = {}) {
         auto* first = pool->current_worker();
         require(pool->recycle_worker(first), "first actual recycle accepted");
-        require(wait_for([&] { return first->exited() && pool->ready_workers() == 1 &&
-                                      pool->current_worker() != first; }, std::chrono::seconds(20 * kTestWaitScale)),
+        require(wait_for(
+                    [&] {
+                        return first->exited() && pool->ready_workers() == 1 &&
+                               pool->current_worker() != first;
+                    },
+                    std::chrono::seconds(20 * kTestWaitScale)),
                 "quarantine fixture replacement is READY and original reaped");
         generation_round_trip(*pool, 17002, prepared || aborted ? "managed-v2" : "managed-ok");
-        if (before_quarantine) before_quarantine();
+        if (before_quarantine)
+            before_quarantine();
         auto* second = pool->current_worker();
         require(pool->recycle_worker(second), "second actual recycle exhausts the budget");
         require(wait_for([&] { return posted.load(); }, std::chrono::seconds(10 * kTestWaitScale)),
                 "pool queues its durable quarantine request");
         return second;
     };
-    options.prepare_activation = [&](const std::string& application, const DeployOutcome& outcome, std::string* error) {
+    options.prepare_activation = [&](const std::string& application, const DeployOutcome& outcome,
+                                     std::string* error) {
         auto plan = original_prepare(application, outcome, error);
         require(plan != nullptr, "prepare actual quarantine generation");
         if (configure_async) {
-            std::lock_guard<std::mutex> lock(harness.mutex); *box = plan->new_pool;
+            std::lock_guard<std::mutex> lock(harness.mutex);
+            *box = plan->new_pool;
         }
-        if (queue_old) dispatcher.enqueue(request);
+        if (queue_old)
+            dispatcher.enqueue(request);
         if (during_prepare) {
             auto* target = exhaust(plan->new_pool);
             const bool exited_pending = wait_for([&] { return target->exited(); },
-                                                std::chrono::milliseconds(500 * kTestWaitScale));
-            require(!request->completed.load() && !exited_pending && !target->exit_status().observed,
-                    "App lock holds persistence; quarantine must not shut down its live target yet");
+                                                 std::chrono::milliseconds(500 * kTestWaitScale));
+            require(
+                !request->completed.load() && !exited_pending && !target->exit_status().observed,
+                "App lock holds persistence; quarantine must not shut down its live target yet");
             if (aborted) {
                 require(remove(active_path.c_str()) == 0 && mkdir(active_path.c_str(), 0700) == 0,
                         "deny the actual activation rename after prepare");
@@ -1024,8 +1019,10 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
         }
         return plan;
     };
-    write_file(fixtures.vdir + "/bundle.mjs", "export default {fetch(){return new Response('managed-ok');}};");
-    create_version(fixtures, "v2", kMinimalAppConfig, "export default {fetch(){return new Response('managed-v2');}};");
+    write_file(fixtures.vdir + "/bundle.mjs",
+               "export default {fetch(){return new Response('managed-ok');}};");
+    create_version(fixtures, "v2", kMinimalAppConfig,
+                   "export default {fetch(){return new Response('managed-v2');}};");
     OperationStatus status;
     const auto first = managed_deploy(&options, "v1", &status);
     require(first.ok && harness.active_pool, "initial real quarantine fixture deploy");
@@ -1039,19 +1036,25 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
         unsigned guard_calls = 0;
         for (unsigned i = 0; i < 100; ++i) {
             OperationStatus skipped_status;
-            const auto skipped = managed_quarantine(&options, first.generation_digest, &skipped_status,
-                [&] { ++guard_calls; return false; });
+            const auto skipped =
+                managed_quarantine(&options, first.generation_digest, &skipped_status, [&] {
+                    ++guard_calls;
+                    return false;
+                });
             contract = contract && skipped.ok;
         }
         const auto after = open_directory_handles(directory);
         std::cout << "QUARANTINE_DIRECTORY_HANDLES {\"attempts\":100,\"before\":" << before
-                  << ",\"after\":" << after << ",\"guardCalls\":" << guard_calls << "}" << std::endl;
-        contract = contract && guard_calls == 100 && before == after && read_file(active_path) == active_before;
+                  << ",\"after\":" << after << ",\"guardCalls\":" << guard_calls << "}"
+                  << std::endl;
+        contract = contract && guard_calls == 100 && before == after &&
+                   read_file(active_path) == active_before;
     } else if (stale || retire) {
         const std::weak_ptr<GenerationPool> identity = old_pool;
-        request = std::make_shared<QuarantineRequest>(&options, first.generation_digest,
-            [&, identity] {
-                if (!replay && !retire) return true; // isolate the digest guard for a different generation
+        request =
+            std::make_shared<QuarantineRequest>(&options, first.generation_digest, [&, identity] {
+                if (!replay && !retire)
+                    return true; // isolate the digest guard for a different generation
                 std::lock_guard<std::mutex> lock(harness.mutex);
                 return harness.active_pool && !identity.owner_before(harness.active_pool) &&
                        !harness.active_pool.owner_before(identity);
@@ -1059,24 +1062,34 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
         if (retire) {
             auto original_retire = options.prepare_retire;
             options.prepare_retire = [&](const std::string& app, std::string* error) {
-                auto plan = original_retire(app, error); dispatcher.enqueue(request); return plan;
+                auto plan = original_retire(app, error);
+                dispatcher.enqueue(request);
+                return plan;
             };
-            require(managed_retire(&options, &status).ok, "retire while old quarantine request is queued");
+            require(managed_retire(&options, &status).ok,
+                    "retire while old quarantine request is queued");
         } else {
             queue_old = true;
             const auto next = managed_deploy(&options, replay ? "v1" : "v2", &status);
-            require(next.ok && harness.active_pool != old_pool, "new activation owns a distinct actual pool");
-            require((next.generation_digest == first.generation_digest) == replay, "same/different generation fixture identity");
-            generation_round_trip(*harness.active_pool, 17003, replay ? "managed-ok" : "managed-v2");
+            require(next.ok && harness.active_pool != old_pool,
+                    "new activation owns a distinct actual pool");
+            require((next.generation_digest == first.generation_digest) == replay,
+                    "same/different generation fixture identity");
+            generation_round_trip(*harness.active_pool, 17003,
+                                  replay ? "managed-ok" : "managed-v2");
         }
-        require(wait_for([&] { return request->completed.load(); }, std::chrono::seconds(10 * kTestWaitScale)), "queued old request completes");
+        require(wait_for([&] { return request->completed.load(); },
+                         std::chrono::seconds(10 * kTestWaitScale)),
+                "queued old request completes");
         const auto lifecycle = managed_read_lifecycle(&options);
-        contract = request->result().ok && lifecycle.ok && lifecycle.state.phase ==
-                    (retire ? ServiceLifecyclePhase::kRetired : ServiceLifecyclePhase::kActive);
+        contract = request->result().ok && lifecycle.ok &&
+                   lifecycle.state.phase ==
+                       (retire ? ServiceLifecyclePhase::kRetired : ServiceLifecyclePhase::kActive);
     } else if (aborted || prepared) {
         configure_async = during_prepare = true;
         const auto next = managed_deploy(&options, "v2", &status);
-        require(next.ok != aborted, "prepared quarantine deploy has the expected actual persist result");
+        require(next.ok != aborted,
+                "prepared quarantine deploy has the expected actual persist result");
         // An aborted candidate must be joinable before this App operation
         // returns, even while its queued management write awaits that lock.
         if (aborted) {
@@ -1084,72 +1097,112 @@ void test_quarantine_ordering(const std::string& mode, Fixtures& fixtures) {
             write_file(active_path, active_before);
             generation_round_trip(*old_pool, 17003);
         }
-        require(wait_for([&] { return request->completed.load(); }, std::chrono::seconds(10 * kTestWaitScale)), "prepared request settles after App lock release");
+        require(wait_for([&] { return request->completed.load(); },
+                         std::chrono::seconds(10 * kTestWaitScale)),
+                "prepared request settles after App lock release");
         const auto lifecycle = managed_read_lifecycle(&options);
-        contract = request->result().ok && lifecycle.ok && lifecycle.state.phase ==
-                    (aborted ? ServiceLifecyclePhase::kActive : ServiceLifecyclePhase::kQuarantined);
+        contract = request->result().ok && lifecycle.ok &&
+                   lifecycle.state.phase == (aborted ? ServiceLifecyclePhase::kActive
+                                                     : ServiceLifecyclePhase::kQuarantined);
         if (prepared) {
-            require(wait_for([&] { return harness.active_pool->state() == GenerationPool::State::kDead; },
-                             std::chrono::seconds(10 * kTestWaitScale)), "durable quarantine itself drains the committed pool");
+            require(
+                wait_for(
+                    [&] { return harness.active_pool->state() == GenerationPool::State::kDead; },
+                    std::chrono::seconds(10 * kTestWaitScale)),
+                "durable quarantine itself drains the committed pool");
             const auto recovered = managed_recover(&options, &status);
             contract = contract && recovered.ok && recovered.workers.empty();
         }
     } else if (write_failure) {
         // Fail the real write (EFBIG), while active.json remains readable.
-        struct rlimit saved{}; require(getrlimit(RLIMIT_FSIZE, &saved) == 0, "read file-size limit");
+        struct rlimit saved{};
+        require(getrlimit(RLIMIT_FSIZE, &saved) == 0, "read file-size limit");
         const auto previous_handler = signal(SIGXFSZ, SIG_IGN);
-        struct rlimit limited = saved; limited.rlim_cur = 0;
+        struct rlimit limited = saved;
+        limited.rlim_cur = 0;
         exhaust(old_pool, [&] {
-            require(setrlimit(RLIMIT_FSIZE, &limited) == 0, "bound this test process's actual file writes");
+            require(setrlimit(RLIMIT_FSIZE, &limited) == 0,
+                    "bound this test process's actual file writes");
         });
-        const bool completed = wait_for([&] { return request->completed.load(); }, std::chrono::seconds(10 * kTestWaitScale));
-        require(setrlimit(RLIMIT_FSIZE, &saved) == 0, "restore this test process's file-size limit");
+        const bool completed = wait_for([&] { return request->completed.load(); },
+                                        std::chrono::seconds(10 * kTestWaitScale));
+        require(setrlimit(RLIMIT_FSIZE, &saved) == 0,
+                "restore this test process's file-size limit");
         signal(SIGXFSZ, previous_handler);
         require(completed, "failed durable write still completes its barrier");
         const auto outcome = request->result();
-        contract = !outcome.ok && outcome.error.find("persist") != std::string::npos && read_file(active_path) == active_before;
+        contract = !outcome.ok && outcome.error.find("persist") != std::string::npos &&
+                   read_file(active_path) == active_before;
         require(wait_for([&] { return old_pool->state() == GenerationPool::State::kDead; },
-                         std::chrono::seconds(10 * kTestWaitScale)), "write failure stops in-memory quarantine without fabricating durable success");
+                         std::chrono::seconds(10 * kTestWaitScale)),
+                "write failure stops in-memory quarantine without fabricating durable success");
         log.flush();
         std::lock_guard<std::mutex> lock(log_mutex);
-        contract = contract && std::any_of(log_lines.begin(), log_lines.end(), [](const auto& line) {
-            return line.find("\"event\":\"quarantine\"") != std::string::npos && line.find("\"result\":\"fail\"") != std::string::npos;
-        });
+        contract =
+            contract && std::any_of(log_lines.begin(), log_lines.end(), [](const auto& line) {
+                return line.find("\"event\":\"quarantine\"") != std::string::npos &&
+                       line.find("\"result\":\"fail\"") != std::string::npos;
+            });
     } else if (scenario == "pending_shutdown") {
         auto app_lock = std::make_unique<AppOperationLock>("orders");
-        request = std::make_shared<QuarantineRequest>(&options, first.generation_digest, [] { return true; });
+        request = std::make_shared<QuarantineRequest>(&options, first.generation_digest,
+                                                      [] { return true; });
         dispatcher.enqueue(request);
         std::atomic<bool> joined{false};
-        std::thread stop([&] { dispatcher.stop_and_join(); joined.store(true); });
+        std::thread stop([&] {
+            dispatcher.stop_and_join();
+            joined.store(true);
+        });
         require(!request->completed.load(), "App lock keeps the real queued write pending");
-        app_lock.reset(); stop.join();
-        contract = joined.load() && request->completed.load() && request->result().ok &&
-                   managed_read_lifecycle(&options).state.phase == ServiceLifecyclePhase::kQuarantined;
+        app_lock.reset();
+        stop.join();
+        contract =
+            joined.load() && request->completed.load() && request->result().ok &&
+            managed_read_lifecycle(&options).state.phase == ServiceLifecyclePhase::kQuarantined;
     } else {
-        std::mutex gate_mutex; std::condition_variable gate_cv; bool entered = false, release = false;
+        std::mutex gate_mutex;
+        std::condition_variable gate_cv;
+        bool entered = false, release = false;
         request = std::make_shared<QuarantineRequest>(&options, first.generation_digest, [&] {
-            std::unique_lock<std::mutex> lock(gate_mutex); entered = true; gate_cv.notify_all();
-            gate_cv.wait(lock, [&] { return release; }); return false;
+            std::unique_lock<std::mutex> lock(gate_mutex);
+            entered = true;
+            gate_cv.notify_all();
+            gate_cv.wait(lock, [&] { return release; });
+            return false;
         });
         dispatcher.enqueue(request);
-        { std::unique_lock<std::mutex> lock(gate_mutex); require(gate_cv.wait_for(lock, std::chrono::seconds(10), [&] { return entered; }), "management worker reaches its controlled pause"); }
+        {
+            std::unique_lock<std::mutex> lock(gate_mutex);
+            require(gate_cv.wait_for(lock, std::chrono::seconds(10), [&] { return entered; }),
+                    "management worker reaches its controlled pause");
+        }
         for (unsigned i = 0; i < 100; ++i) {
-            auto expired = std::make_shared<QuarantineRequest>(&options, first.generation_digest, [] { return false; });
-            const std::weak_ptr<QuarantineRequest> weak = expired; dispatcher.enqueue(expired); expired.reset();
+            auto expired = std::make_shared<QuarantineRequest>(&options, first.generation_digest,
+                                                               [] { return false; });
+            const std::weak_ptr<QuarantineRequest> weak = expired;
+            dispatcher.enqueue(expired);
+            expired.reset();
             contract = contract && weak.expired();
         }
-        { std::lock_guard<std::mutex> lock(gate_mutex); release = true; } gate_cv.notify_all();
+        {
+            std::lock_guard<std::mutex> lock(gate_mutex);
+            release = true;
+        }
+        gate_cv.notify_all();
         dispatcher.stop_and_join();
         contract = contract && request->completed.load() && read_file(active_path) == active_before;
     }
-    if (harness.active_pool) harness.active_pool->stop_and_join();
-    old_pool->stop_and_join(); dispatcher.stop_and_join();
-    for (const auto& observed : harness.generations) observed->require_completed(observed->count());
+    if (harness.active_pool)
+        harness.active_pool->stop_and_join();
+    old_pool->stop_and_join();
+    dispatcher.stop_and_join();
+    for (const auto& observed : harness.generations)
+        observed->require_completed(observed->count());
     require(contract, "scoped durable quarantine contract: " + scenario);
     std::cout << "PASS: scoped durable quarantine " << scenario << std::endl;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc != 5) {
@@ -1164,50 +1217,82 @@ int main(int argc, char** argv) {
     write_file(fixtures.vdir + "/bundle.mjs", kSourceBundle);
 
     if (mode.rfind("host_managed_quarantine_", 0) == 0) {
-        test_quarantine_ordering(mode, fixtures); return 0;
+        test_quarantine_ordering(mode, fixtures);
+        return 0;
     }
-    if (mode == "host_managed_prepare_failure_capacity" || mode == "host_managed_misconfigured_activation_capacity") {
+    if (mode == "host_managed_prepare_failure_capacity" ||
+        mode == "host_managed_misconfigured_activation_capacity") {
         const bool misconfigured = mode == "host_managed_misconfigured_activation_capacity";
         const auto pid_log = fixtures.vdir + "/prepare-owned-pids.log";
         const auto wrapper = fixtures.vdir + "/prepare-real-worker";
-        write_file(wrapper, "#!/bin/sh\nprintf '%s\\n' \"$$\" >> '" + pid_log + "'\nexec '" + fixtures.worker_path + "' \"$@\"\n");
-        require(chmod(wrapper.c_str(), 0700) == 0, "make real Worker PID observation wrapper executable");
-        auto options = make_options(fixtures); options.worker_path = wrapper;
-        capsid::host::WorkerCapacityLedger ledger(1, 1); options.ledger = &ledger;
+        write_file(wrapper, "#!/bin/sh\nprintf '%s\\n' \"$$\" >> '" + pid_log + "'\nexec '" +
+                                fixtures.worker_path + "' \"$@\"\n");
+        require(chmod(wrapper.c_str(), 0700) == 0,
+                "make real Worker PID observation wrapper executable");
+        auto options = make_options(fixtures);
+        options.worker_path = wrapper;
+        capsid::host::WorkerCapacityLedger ledger(1, 1);
+        options.ledger = &ledger;
         bool called = false;
-        options.prepare_activation = [&](const std::string& app, const auto& prepared, std::string* error)
-            -> std::unique_ptr<capsid::host::ActivationPlan> {
+        options.prepare_activation =
+            [&](const std::string& app, const auto& prepared,
+                std::string* error) -> std::unique_ptr<capsid::host::ActivationPlan> {
             called = true;
             capsid::host::GenerationPoolOptions pool_options;
-            pool_options.application_id = app; pool_options.version = prepared.version;
-            pool_options.generation_digest = prepared.generation_digest; pool_options.workers = 1;
-            pool_options.factory = prepared.generation_factory; pool_options.recovery = generation_recovery_policy();
-            ManagedPoolObservation observation; observation.wire(&pool_options);
-            auto pool = capsid::host::GenerationPool::create_adopted(std::move(pool_options), outcome_workers(prepared), error);
+            pool_options.application_id = app;
+            pool_options.version = prepared.version;
+            pool_options.generation_digest = prepared.generation_digest;
+            pool_options.workers = 1;
+            pool_options.factory = prepared.generation_factory;
+            pool_options.recovery = generation_recovery_policy();
+            ManagedPoolObservation observation;
+            observation.wire(&pool_options);
+            auto pool = capsid::host::GenerationPool::create_adopted(
+                std::move(pool_options), outcome_workers(prepared), error);
             require(pool != nullptr, "adopt real warmed worker before a refused prepare");
-            pool->stop_and_join(); observation.require_completed(1);
-            require(ledger.steady_used() == 1, "coordinator still owns the warm reservation until prepare returns");
-            *error = "deliberately refused activation"; return nullptr;
+            pool->stop_and_join();
+            observation.require_completed(1);
+            require(ledger.steady_used() == 1,
+                    "coordinator still owns the warm reservation until prepare returns");
+            *error = "deliberately refused activation";
+            return nullptr;
         };
         options.abort_activation = [](auto*) {};
-        if (!misconfigured) options.commit_activation = [](auto*) {};
+        if (!misconfigured)
+            options.commit_activation = [](auto*) {};
         capsid::host::OperationStatus status;
-        require(!capsid::host::managed_deploy(&options, "v1", &status).ok, "failed prepare cannot activate the App");
-        require(called != misconfigured, "misconfigured transaction must be rejected before prepare");
-        require(ledger.steady_used() == 0 && ledger.surge_used() == 0, "failed prepare returns its held capacity after actual cleanup");
-        std::istringstream pids(read_file(pid_log)); std::int64_t pid = -1; pids >> pid;
+        require(!capsid::host::managed_deploy(&options, "v1", &status).ok,
+                "failed prepare cannot activate the App");
+        require(called != misconfigured,
+                "misconfigured transaction must be rejected before prepare");
+        require(ledger.steady_used() == 0 && ledger.surge_used() == 0,
+                "failed prepare returns its held capacity after actual cleanup");
+        std::istringstream pids(read_file(pid_log));
+        std::int64_t pid = -1;
+        pids >> pid;
         require(pid > 0, "failed activation really spawned a Worker");
-        int child_status = 0; pid_t child;
-        do { child = waitpid(static_cast<pid_t>(pid), &child_status, WNOHANG); } while (child < 0 && errno == EINTR);
-        require(child == -1 && errno == ECHILD, "failed prepare's Worker was already collected by the product");
-        if (misconfigured) std::cout << "PREPARE_REAP {\"pid\":" << pid << ",\"reapedByProduct\":true,\"exitStatusAvailable\":false}" << std::endl;
-        TransactionHarness harness; wire_admin_transactions(&options, &harness);
+        int child_status = 0;
+        pid_t child;
+        do {
+            child = waitpid(static_cast<pid_t>(pid), &child_status, WNOHANG);
+        } while (child < 0 && errno == EINTR);
+        require(child == -1 && errno == ECHILD,
+                "failed prepare's Worker was already collected by the product");
+        if (misconfigured)
+            std::cout << "PREPARE_REAP {\"pid\":" << pid
+                      << ",\"reapedByProduct\":true,\"exitStatusAvailable\":false}" << std::endl;
+        TransactionHarness harness;
+        wire_admin_transactions(&options, &harness);
         const auto retried = capsid::host::managed_deploy(&options, "v1", &status);
-        require(retried.ok && harness.active_pool, "returned capacity permits a real idempotent retry");
+        require(retried.ok && harness.active_pool,
+                "returned capacity permits a real idempotent retry");
         generation_round_trip(*harness.active_pool, 18001);
-        harness.active_pool->stop_and_join(); harness.generations.at(0)->require_completed(1);
-        require(ledger.steady_used() == 0 && ledger.surge_used() == 0, "retry releases capacity after its own actual reap");
-        std::cout << "PASS: activation preparation failure releases actual capacity" << std::endl; return 0;
+        harness.active_pool->stop_and_join();
+        harness.generations.at(0)->require_completed(1);
+        require(ledger.steady_used() == 0 && ledger.surge_used() == 0,
+                "retry releases capacity after its own actual reap");
+        std::cout << "PASS: activation preparation failure releases actual capacity" << std::endl;
+        return 0;
     }
 
     if (mode == "host_managed_deploy_integration") {
@@ -1216,16 +1301,14 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(outcome.ok, "source deploy failed: " + outcome.error);
-        require(status.state == capsid::host::OperationState::kActive,
-                "deploy not Active");
+        require(status.state == capsid::host::OperationState::kActive, "deploy not Active");
         require(outcome.worker != nullptr, "no warmed worker returned");
         // The warmed worker serves requests.
         require(run_request(outcome.worker) == "managed-ok",
                 "warmed worker did not serve the bundle");
         capsid_worker_destroy(outcome.worker);
         // active.json persisted with the generation.
-        const std::string active = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        const std::string active = read_file(fixtures.state_root + "/apps/orders/active.json");
         require(active.find("capsid-active-v1") != std::string::npos &&
                     active.find("\"generation\"") != std::string::npos,
                 "active.json missing generation");
@@ -1238,8 +1321,7 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(&options, &recover_status);
         require(recovered.ok, "recovery failed after retire");
-        require(recovered.worker == nullptr,
-                "retired recovery returned a worker");
+        require(recovered.worker == nullptr, "retired recovery returned a worker");
         require(recover_status.state != capsid::host::OperationState::kActive,
                 "retired app must not start a worker");
         std::cout << "PASS" << std::endl;
@@ -1251,8 +1333,9 @@ int main(int argc, char** argv) {
         // capsid/app-v1 document and must parse, compile and deploy like
         // any other pool field — a zero-consumption field would let a
         // queue silently disappear from the effective contract.
-        write_file(fixtures.vdir + "/capsid.json",
-                   R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1,"queueRequests":8,"queueHeaderBytes":"2MiB","queueTimeout":"250ms"}})json");
+        write_file(
+            fixtures.vdir + "/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1,"queueRequests":8,"queueHeaderBytes":"2MiB","queueTimeout":"250ms"}})json");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
@@ -1273,8 +1356,9 @@ int main(int argc, char** argv) {
         // capsid/app-v1 document like the E-1 queue fields — a
         // zero-consumption field would let the streaming budget silently
         // disappear from the effective contract.
-        write_file(fixtures.vdir + "/capsid.json",
-                   R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"maxStreamingInflightPerWorker":3,"streamIdleTimeoutMs":90000}})json");
+        write_file(
+            fixtures.vdir + "/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"maxStreamingInflightPerWorker":3,"streamIdleTimeoutMs":90000}})json");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
@@ -1295,8 +1379,9 @@ int main(int argc, char** argv) {
         // document like the E-2 SSE-permit fields — a zero-consumption
         // field would let the slow-client deadline silently disappear
         // from the effective contract.
-        write_file(fixtures.vdir + "/capsid.json",
-                   R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"writeTimeoutMs":5000}})json");
+        write_file(
+            fixtures.vdir + "/capsid.json",
+            R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"modules":["capsid:env"]},"pool":{"minReady":1,"maxWorkers":1},"request":{"writeTimeoutMs":5000}})json");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
@@ -1323,8 +1408,7 @@ int main(int argc, char** argv) {
         require(deployed.ok, "fixed 3/3 deploy failed: " + deployed.error);
         require(status.state == capsid::host::OperationState::kActive,
                 "fixed pool deploy did not become Active");
-        const std::vector<capsid_worker*> deployed_workers =
-            outcome_workers(deployed);
+        const std::vector<capsid_worker*> deployed_workers = outcome_workers(deployed);
         require(deployed_workers.size() == 3,
                 "fixed 3/3 deploy did not return three READY workers");
         std::set<std::int64_t> deployed_pids;
@@ -1342,8 +1426,7 @@ int main(int argc, char** argv) {
         require(recovered.ok, "fixed 3/3 recovery failed: " + recovered.error);
         require(recover_status.state == capsid::host::OperationState::kActive,
                 "fixed pool recovery did not become Active");
-        const std::vector<capsid_worker*> recovered_workers =
-            outcome_workers(recovered);
+        const std::vector<capsid_worker*> recovered_workers = outcome_workers(recovered);
         require(recovered_workers.size() == 3,
                 "fixed 3/3 recovery did not return three READY workers");
         std::set<std::int64_t> recovered_pids;
@@ -1374,16 +1457,14 @@ int main(int argc, char** argv) {
         require(deployed.ok, "fixed 3/3 deploy failed: " + deployed.error);
         require(status.state == capsid::host::OperationState::kActive,
                 "fixed pool deploy did not become Active");
-        const std::vector<capsid_worker*> deployed_workers =
-            outcome_workers(deployed);
+        const std::vector<capsid_worker*> deployed_workers = outcome_workers(deployed);
         require(deployed_workers.size() == 3,
                 "fixed 3/3 deploy did not return three READY workers");
         // PR-09c additive contract: the generation identity travels with
         // the outcome so a data-plane pool can be adopted in place.
         require(static_cast<bool>(deployed.generation_factory),
                 "deploy outcome lost the generation replacement factory");
-        require(deployed.version == "v1",
-                "deploy outcome lost the generation version");
+        require(deployed.version == "v1", "deploy outcome lost the generation version");
         require(deployed.generation_digest.rfind("sha256:", 0) == 0 &&
                     deployed.generation_digest.size() == 71,
                 "deploy outcome lost the generation digest");
@@ -1393,18 +1474,16 @@ int main(int argc, char** argv) {
         pool_options.application_id = "orders";
         pool_options.version = deployed.version;
         pool_options.generation_digest = deployed.generation_digest;
-        pool_options.workers =
-            static_cast<std::uint32_t>(deployed_workers.size());
+        pool_options.workers = static_cast<std::uint32_t>(deployed_workers.size());
         pool_options.factory = deployed.generation_factory;
         pool_options.recovery = generation_recovery_policy();
         observation.wire(&pool_options);
         std::string pool_error;
         std::shared_ptr<capsid::host::GenerationPool> pool =
-            capsid::host::GenerationPool::create_adopted(
-                std::move(pool_options), deployed_workers, &pool_error);
+            capsid::host::GenerationPool::create_adopted(std::move(pool_options), deployed_workers,
+                                                         &pool_error);
         require(pool != nullptr, "cannot adopt the warmed pool: " + pool_error);
-        require(pool->ready_workers() == 3,
-                "adopted pool is not fully READY");
+        require(pool->ready_workers() == 3, "adopted pool is not fully READY");
 
         auto* original = generation_round_trip(*pool, 1001);
         require(!original->exit_status().observed && !original->exit_status().clean(),
@@ -1418,16 +1497,17 @@ int main(int argc, char** argv) {
         killed_pid = observation.pid_of(original);
         require(kill(static_cast<pid_t>(killed_pid), SIGKILL) == 0,
                 "cannot stop the specifically observed Managed Worker");
-        require(wait_for([&] {
-                    return original->exited() && observation.count() == 4 &&
-                           pool->ready_workers() == 3 && pool->current_worker() != original;
-                },
-                         std::chrono::seconds(20 * kTestWaitScale)),
+        require(wait_for(
+                    [&] {
+                        return original->exited() && observation.count() == 4 &&
+                               pool->ready_workers() == 3 && pool->current_worker() != original;
+                    },
+                    std::chrono::seconds(20 * kTestWaitScale)),
                 "replacement through the generation factory did not restore "
                 "full READY capacity with a distinct Worker after the original exit");
         require(generation_round_trip(*pool, 1002) != original,
                 "the replacement response came from the original Worker");
-#endif  // __linux__
+#endif // __linux__
 
         pool->stop_and_join();
         observation.require_completed(4, killed_pid);
@@ -1455,18 +1535,19 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus submitted;
         const auto first = backend.deploy("orders", "v1", &submitted);
         require(first.ok && wait_admin_operation(&backend, first.operation_id).state ==
-                               capsid::host::OperationState::kActive,
+                                capsid::host::OperationState::kActive,
                 "initial Admin generation did not activate");
         std::shared_ptr<capsid::host::GenerationPool> old_pool;
         {
             std::lock_guard<std::mutex> lock(harness.mutex);
             old_pool = harness.active_pool;
         }
-        require(old_pool != nullptr && old_pool->ready_workers() == count, "initial full Managed fleet");
+        require(old_pool != nullptr && old_pool->ready_workers() == count,
+                "initial full Managed fleet");
         generation_round_trip(*old_pool, 8001);
         const auto second = backend.deploy("orders", "v2", &submitted);
         require(second.ok && wait_admin_operation(&backend, second.operation_id).state ==
-                                capsid::host::OperationState::kActive,
+                                 capsid::host::OperationState::kActive,
                 "replacement Admin generation did not activate");
         std::shared_ptr<capsid::host::GenerationPool> new_pool;
         {
@@ -1476,8 +1557,9 @@ int main(int argc, char** argv) {
         require(new_pool != nullptr && new_pool != old_pool && new_pool->version() == "v2" &&
                     new_pool->generation_digest() != old_pool->generation_digest(),
                 "Admin replacement must publish the distinct new generation");
-        require(wait_for([&] { return old_pool->state() == capsid::host::GenerationPool::State::kDead; },
-                         std::chrono::seconds(10 * kTestWaitScale)),
+        require(wait_for(
+                    [&] { return old_pool->state() == capsid::host::GenerationPool::State::kDead; },
+                    std::chrono::seconds(10 * kTestWaitScale)),
                 "activation commit must itself drain the previous generation");
         std::string error;
         require(old_pool->wait(&error), "join old Managed generation");
@@ -1485,10 +1567,11 @@ int main(int argc, char** argv) {
         generation_round_trip(*new_pool, 8002, "managed-v2");
         const auto retired = backend.retire("orders", &submitted);
         require(retired.ok && wait_admin_operation(&backend, retired.operation_id).state ==
-                                 capsid::host::OperationState::kActive,
+                                  capsid::host::OperationState::kActive,
                 "Admin retire of the replacement did not complete");
-        require(wait_for([&] { return new_pool->state() == capsid::host::GenerationPool::State::kDead; },
-                         std::chrono::seconds(10 * kTestWaitScale)),
+        require(wait_for(
+                    [&] { return new_pool->state() == capsid::host::GenerationPool::State::kDead; },
+                    std::chrono::seconds(10 * kTestWaitScale)),
                 "retire commit must itself drain the replacement generation");
         require(new_pool->wait(&error), "join retired Managed generation");
         require(harness.generations.size() == 2, "exactly two Admin generation preparations");
@@ -1505,7 +1588,8 @@ int main(int argc, char** argv) {
         mode == "host_managed_health_recycle_quarantine_exit_status") {
         const bool recycle = mode == "host_managed_health_recycle_quarantine_exit_status";
         const std::size_t count = mode == "host_managed_request_cancel_exit_status" ? 1 : 3;
-        write_file(fixtures.vdir + "/capsid.json", count == 1 ? kMinimalAppConfig : kThreeWorkerAppConfig);
+        write_file(fixtures.vdir + "/capsid.json",
+                   count == 1 ? kMinimalAppConfig : kThreeWorkerAppConfig);
         write_file(fixtures.vdir + "/bundle.mjs",
                    "export default {fetch(request) {"
                    "if(new URL(request.url).pathname === '/held') {"
@@ -1530,34 +1614,47 @@ int main(int argc, char** argv) {
         std::atomic<bool> persisted{false};
         pool_options.on_quarantine = [&] {
             capsid::host::OperationStatus quarantine_status;
-            persisted = capsid::host::managed_quarantine(&options, deployed.generation_digest, &quarantine_status).ok;
+            persisted = capsid::host::managed_quarantine(&options, deployed.generation_digest,
+                                                         &quarantine_status)
+                            .ok;
             ++quarantines;
         };
         std::string error;
-        auto pool = capsid::host::GenerationPool::create_adopted(
-            std::move(pool_options), outcome_workers(deployed), &error);
-        require(pool != nullptr && observation.count() == count, "adopt actual Managed lifecycle fleet: " + error);
+        auto pool = capsid::host::GenerationPool::create_adopted(std::move(pool_options),
+                                                                 outcome_workers(deployed), &error);
+        require(pool != nullptr && observation.count() == count,
+                "adopt actual Managed lifecycle fleet: " + error);
         auto* target = generation_round_trip(*pool, 9001);
         require(!target->exit_status().observed && !target->exit_status().clean(),
                 "live Managed executor must retain unknown OS exit status");
         if (recycle) {
             require(pool->recycle_worker(target), "first active-health recycle was not recorded");
-            require(wait_for([&] {
-                        return target->exited() && observation.count() == count + 1 &&
-                               pool->ready_workers() == count && pool->current_worker() != target;
-                    }, std::chrono::seconds(20 * kTestWaitScale)),
+            require(wait_for(
+                        [&] {
+                            return target->exited() && observation.count() == count + 1 &&
+                                   pool->ready_workers() == count &&
+                                   pool->current_worker() != target;
+                        },
+                        std::chrono::seconds(20 * kTestWaitScale)),
                     "health recycle must replace its exact target and restore the fleet");
-            require(target->exit_status().clean(), "health recycle must preserve natural OS exit zero");
-            require(generation_round_trip(*pool, 9002) != target, "health replacement must actually serve");
-            require(!pool->recycle_worker(target), "stale health target must not charge the budget again");
-            require(pool->recycle_worker(pool->current_worker()), "second health recycle must exhaust the budget");
-            require(wait_for([&] { return pool->state() == capsid::host::GenerationPool::State::kDead; },
-                             std::chrono::seconds(10 * kTestWaitScale)),
+            require(target->exit_status().clean(),
+                    "health recycle must preserve natural OS exit zero");
+            require(generation_round_trip(*pool, 9002) != target,
+                    "health replacement must actually serve");
+            require(!pool->recycle_worker(target),
+                    "stale health target must not charge the budget again");
+            require(pool->recycle_worker(pool->current_worker()),
+                    "second health recycle must exhaust the budget");
+            require(wait_for(
+                        [&] { return pool->state() == capsid::host::GenerationPool::State::kDead; },
+                        std::chrono::seconds(10 * kTestWaitScale)),
                     "quarantine must itself stop the full Managed fleet");
             require(pool->wait(&error), "join quarantined Managed fleet");
             require(quarantines == 1 && persisted, "one durable Managed quarantine callback");
             const auto lifecycle = capsid::host::managed_read_lifecycle(&options);
-            require(lifecycle.ok && lifecycle.state.phase == capsid::host::ServiceLifecyclePhase::kQuarantined &&
+            require(lifecycle.ok &&
+                        lifecycle.state.phase ==
+                            capsid::host::ServiceLifecyclePhase::kQuarantined &&
                         lifecycle.state.document.has_value() &&
                         lifecycle.state.document->generation == deployed.generation_digest,
                     "quarantine must retain the actual generation tombstone");
@@ -1569,7 +1666,8 @@ int main(int argc, char** argv) {
             auto entered = std::make_shared<std::atomic<bool>>(false);
             pool->set_event_sink([entered, target](const auto* executor, auto event) {
                 if (executor == target && event.type == capsid::host::WorkerEvent::Type::kLog &&
-                    event.text.find("managed-held") != std::string::npos) *entered = true;
+                    event.text.find("managed-held") != std::string::npos)
+                    *entered = true;
             });
             capsid::host::Command begin;
             begin.type = capsid::host::CommandType::kBeginRequest;
@@ -1578,8 +1676,9 @@ int main(int argc, char** argv) {
             begin.url = "https://pool.invalid/held";
             begin.end_request = true;
             target->submit(std::move(begin));
-            require(wait_for([&] { return entered->load(); }, std::chrono::seconds(5 * kTestWaitScale)),
-                    "held request must actually enter the Worker before cancel");
+            require(
+                wait_for([&] { return entered->load(); }, std::chrono::seconds(5 * kTestWaitScale)),
+                "held request must actually enter the Worker before cancel");
             require(target->inflight() == 1 && !target->exit_status().observed,
                     "cancel starts with one live, actually dispatched request");
             target->mark_canceled(9003);
@@ -1589,9 +1688,11 @@ int main(int argc, char** argv) {
             target->submit(std::move(cancel));
             require(generation_round_trip(*pool, 9004) == target,
                     "the same actual Worker must serve after request cancellation");
-            require(pool->inflight() == 0 && pool->ready_workers() == count && observation.count() == count &&
-                        !target->exit_status().observed && quarantines == 0,
-                    "request cancellation must not impersonate process exit, replacement or quarantine");
+            require(
+                pool->inflight() == 0 && pool->ready_workers() == count &&
+                    observation.count() == count && !target->exit_status().observed &&
+                    quarantines == 0,
+                "request cancellation must not impersonate process exit, replacement or quarantine");
             pool->stop_and_join();
             observation.require_completed(count);
         }
@@ -1609,20 +1710,17 @@ int main(int argc, char** argv) {
         require(worker_count_env != nullptr && duration_env != nullptr,
                 "benchmark requires CAPSID_POOL_BENCH_WORKERS and "
                 "CAPSID_POOL_BENCH_SECONDS");
-        const unsigned long parsed_workers =
-            std::strtoul(worker_count_env, nullptr, 10);
-        const unsigned long parsed_seconds =
-            std::strtoul(duration_env, nullptr, 10);
-        require(parsed_workers > 0 && parsed_workers <= 64 &&
-                    parsed_seconds > 0 && parsed_seconds <= 300,
+        const unsigned long parsed_workers = std::strtoul(worker_count_env, nullptr, 10);
+        const unsigned long parsed_seconds = std::strtoul(duration_env, nullptr, 10);
+        require(parsed_workers > 0 && parsed_workers <= 64 && parsed_seconds > 0 &&
+                    parsed_seconds <= 300,
                 "benchmark worker count or duration is out of range");
-        const std::uint32_t worker_count =
-            static_cast<std::uint32_t>(parsed_workers);
-        const std::string config =
-            "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
-            "\"permissions\":{\"modules\":[\"capsid:env\"]},\"pool\":"
-            "{\"minReady\":" + std::to_string(worker_count) +
-            ",\"maxWorkers\":" + std::to_string(worker_count) + "}}";
+        const std::uint32_t worker_count = static_cast<std::uint32_t>(parsed_workers);
+        const std::string config = "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
+                                   "\"permissions\":{\"modules\":[\"capsid:env\"]},\"pool\":"
+                                   "{\"minReady\":" +
+                                   std::to_string(worker_count) +
+                                   ",\"maxWorkers\":" + std::to_string(worker_count) + "}}";
         write_file(fixtures.vdir + "/capsid.json", config);
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         options.host_policy.max_workers = worker_count;
@@ -1636,8 +1734,7 @@ int main(int argc, char** argv) {
 
         // Warm every code path once before opening the measured barrier.
         for (capsid_worker* worker : workers) {
-            require(run_request(worker) == "managed-ok",
-                    "benchmark warm-up request failed");
+            require(run_request(worker) == "managed-ok", "benchmark warm-up request failed");
         }
         std::barrier start(static_cast<std::ptrdiff_t>(workers.size() + 1));
         std::atomic<bool> stop{false};
@@ -1651,11 +1748,9 @@ int main(int argc, char** argv) {
                     const auto began = std::chrono::steady_clock::now();
                     require(run_request(workers[index]) == "managed-ok",
                             "benchmark measured request failed");
-                    const auto elapsed = std::chrono::duration_cast<
-                        std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - began);
-                    latencies[index].push_back(
-                        static_cast<std::uint64_t>(elapsed.count()));
+                    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - began);
+                    latencies[index].push_back(static_cast<std::uint64_t>(elapsed.count()));
                 }
             });
         }
@@ -1667,8 +1762,8 @@ int main(int argc, char** argv) {
             thread.join();
         }
         const double elapsed_seconds =
-            std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                          measured_start).count();
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - measured_start)
+                .count();
         std::vector<std::uint64_t> all_latencies;
         std::vector<std::int64_t> pids;
         for (std::size_t index = 0; index < workers.size(); ++index) {
@@ -1677,16 +1772,13 @@ int main(int argc, char** argv) {
             pids.push_back(capsid_worker_pid(workers[index]));
         }
         require(!all_latencies.empty(), "benchmark completed no requests");
-        std::cout << "{\"kind\":\"managed-pool-ipc-probe\",\"workers\":"
-                  << worker_count << ",\"duration_s\":" << elapsed_seconds
+        std::cout << "{\"kind\":\"managed-pool-ipc-probe\",\"workers\":" << worker_count
+                  << ",\"duration_s\":" << elapsed_seconds
                   << ",\"completed\":" << all_latencies.size()
-                  << ",\"qps\":"
-                  << static_cast<double>(all_latencies.size()) /
-                         elapsed_seconds
+                  << ",\"qps\":" << static_cast<double>(all_latencies.size()) / elapsed_seconds
                   << ",\"p50_us\":" << percentile_us(all_latencies, 50)
                   << ",\"p95_us\":" << percentile_us(all_latencies, 95)
-                  << ",\"p99_us\":" << percentile_us(all_latencies, 99)
-                  << ",\"pids\":[";
+                  << ",\"p99_us\":" << percentile_us(all_latencies, 99) << ",\"pids\":[";
         for (std::size_t index = 0; index < pids.size(); ++index) {
             if (index != 0) {
                 std::cout << ',';
@@ -1704,16 +1796,14 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus first_status;
         const capsid::host::DeployOutcome first =
             capsid::host::managed_deploy(&options, "v1", &first_status);
-        require(first.ok && first.worker != nullptr,
-                "cannot establish the old active worker");
-        const std::string active_before = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        require(first.ok && first.worker != nullptr, "cannot establish the old active worker");
+        const std::string active_before =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
 
         create_version(fixtures, "v2", kThreeWorkerAppConfig, kSourceBundle);
         const std::string wrapper = fixtures.apps_root + "/fail-third-worker.sh";
         const std::string slots = fixtures.apps_root + "/worker-slots";
-        require(mkdir(slots.c_str(), 0700) == 0,
-                "cannot create worker wrapper state");
+        require(mkdir(slots.c_str(), 0700) == 0, "cannot create worker wrapper state");
         const std::string pid_log = slots + "/pids";
         std::ostringstream script;
         script << "#!/bin/sh\n"
@@ -1728,20 +1818,16 @@ int main(int argc, char** argv) {
                << "  exit 42\n"
                << "fi\n";
         write_file(wrapper, script.str());
-        require(chmod(wrapper.c_str(), 0700) == 0,
-                "cannot make worker failure wrapper executable");
+        require(chmod(wrapper.c_str(), 0700) == 0, "cannot make worker failure wrapper executable");
         options.worker_path = wrapper;
 
         capsid::host::OperationStatus failed_status;
         const capsid::host::DeployOutcome failed =
             capsid::host::managed_deploy(&options, "v2", &failed_status);
-        require(!failed.ok &&
-                    failed_status.state == capsid::host::OperationState::kFailed,
+        require(!failed.ok && failed_status.state == capsid::host::OperationState::kFailed,
                 "pool activated after one worker failed to warm");
-        require(outcome_workers(failed).empty(),
-                "failed pool returned partially warmed workers");
-        require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
-                    active_before,
+        require(outcome_workers(failed).empty(), "failed pool returned partially warmed workers");
+        require(read_file(fixtures.state_root + "/apps/orders/active.json") == active_before,
                 "failed pool warm changed the old active generation");
         require(run_request(first.worker) == "managed-ok",
                 "failed replacement damaged the old active worker");
@@ -1755,8 +1841,7 @@ int main(int argc, char** argv) {
             require(kill(static_cast<pid_t>(pid), 0) == -1 && errno == ESRCH,
                     "failed pool leaked a worker process");
         }
-        require(pid_count == 3,
-                "failure probe did not reach the third worker warm-up");
+        require(pid_count == 3, "failure probe did not reach the third worker warm-up");
         capsid_worker_destroy(first.worker);
         std::cout << "PASS" << std::endl;
         return 0;
@@ -1781,8 +1866,7 @@ int main(int argc, char** argv) {
         capsid::host::AsyncAdminBackend backend(&managed, async_options);
 
         capsid::host::OperationStatus submitted;
-        const capsid::host::DeployOutcome deployment =
-            backend.deploy("orders", "v1", &submitted);
+        const capsid::host::DeployOutcome deployment = backend.deploy("orders", "v1", &submitted);
         require(deployment.ok, "fixed pool Admin deploy was not accepted");
         const capsid::host::OperationStatus active =
             wait_admin_operation(&backend, deployment.operation_id);
@@ -1791,25 +1875,20 @@ int main(int argc, char** argv) {
         std::shared_ptr<capsid::host::GenerationPool> committed;
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
-            require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2 * kTestWaitScale),
-                        [&]() { return harness.activated; }),
+            require(harness.condition.wait_for(lock, std::chrono::seconds(2 * kTestWaitScale),
+                                               [&]() { return harness.activated; }),
                     "Admin deploy did not commit the whole pool");
             committed = harness.active_pool;
         }
         require(committed != nullptr, "Admin deploy committed no pool");
-        require(committed->configured_workers() == 3 &&
-                    committed->ready_workers() == 3 &&
-                    committed->state() ==
-                        capsid::host::GenerationPool::State::kActive,
+        require(committed->configured_workers() == 3 && committed->ready_workers() == 3 &&
+                    committed->state() == capsid::host::GenerationPool::State::kActive,
                 "committed pool is not a live 3-worker fleet");
-        require(committed->application_id() == "orders" &&
-                    committed->version() == "v1",
+        require(committed->application_id() == "orders" && committed->version() == "v1",
                 "committed pool lost the generation identity");
 
         capsid::host::OperationStatus retire_submitted;
-        const capsid::host::DeployOutcome retired =
-            backend.retire("orders", &retire_submitted);
+        const capsid::host::DeployOutcome retired = backend.retire("orders", &retire_submitted);
         require(retired.ok, "fixed pool Admin retire was not accepted");
         const capsid::host::OperationStatus retired_status =
             wait_admin_operation(&backend, retired.operation_id);
@@ -1817,16 +1896,13 @@ int main(int argc, char** argv) {
                 "fixed pool Admin retire did not settle");
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
-            require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2 * kTestWaitScale),
-                        [&]() { return harness.retired; }),
+            require(harness.condition.wait_for(lock, std::chrono::seconds(2 * kTestWaitScale),
+                                               [&]() { return harness.retired; }),
                     "Admin retire did not run the retire transaction");
         }
         std::string drain_error;
-        require(committed->wait(&drain_error),
-                "Admin retire did not drain the full pool");
-        require(committed->state() ==
-                    capsid::host::GenerationPool::State::kDead,
+        require(committed->wait(&drain_error), "Admin retire did not drain the full pool");
+        require(committed->state() == capsid::host::GenerationPool::State::kDead,
                 "retired pool did not reach kDead");
         harness.generations.at(0)->require_completed(3);
         std::cout << "PASS" << std::endl;
@@ -1849,10 +1925,8 @@ int main(int argc, char** argv) {
         capsid::host::AsyncAdminBackend backend(&managed, async_options);
 
         capsid::host::OperationStatus submitted;
-        const capsid::host::DeployOutcome deployed =
-            backend.deploy("orders", "v1", &submitted);
-        require(deployed.ok,
-                "Admin-managed real worker deploy was not accepted");
+        const capsid::host::DeployOutcome deployed = backend.deploy("orders", "v1", &submitted);
+        require(deployed.ok, "Admin-managed real worker deploy was not accepted");
         const capsid::host::OperationStatus active =
             wait_admin_operation(&backend, deployed.operation_id);
         require(active.state == capsid::host::OperationState::kActive,
@@ -1860,40 +1934,32 @@ int main(int argc, char** argv) {
         std::shared_ptr<capsid::host::GenerationPool> committed;
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
-            require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2 * kTestWaitScale),
-                        [&]() { return harness.activated; }),
+            require(harness.condition.wait_for(lock, std::chrono::seconds(2 * kTestWaitScale),
+                                               [&]() { return harness.activated; }),
                     "active Admin worker was discarded instead of adopted");
             committed = harness.active_pool;
         }
-        require(committed != nullptr &&
-                    committed->configured_workers() == 1 &&
+        require(committed != nullptr && committed->configured_workers() == 1 &&
                     committed->ready_workers() == 1 &&
-                    committed->state() ==
-                        capsid::host::GenerationPool::State::kActive,
+                    committed->state() == capsid::host::GenerationPool::State::kActive,
                 "Admin-owned active worker is not a live one-worker fleet");
 
         capsid::host::OperationStatus retire_submitted;
-        const capsid::host::DeployOutcome retired =
-            backend.retire("orders", &retire_submitted);
+        const capsid::host::DeployOutcome retired = backend.retire("orders", &retire_submitted);
         require(retired.ok, "Admin-managed retire was not accepted");
         const capsid::host::OperationStatus retired_status =
             wait_admin_operation(&backend, retired.operation_id);
-        require(retired_status.state ==
-                    capsid::host::OperationState::kActive,
+        require(retired_status.state == capsid::host::OperationState::kActive,
                 "Admin-managed retire did not complete");
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
-            require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2 * kTestWaitScale),
-                        [&]() { return harness.retired; }),
+            require(harness.condition.wait_for(lock, std::chrono::seconds(2 * kTestWaitScale),
+                                               [&]() { return harness.retired; }),
                     "retire did not run the retire transaction");
         }
         std::string drain_error;
-        require(committed->wait(&drain_error),
-                "retire did not drain the active Admin worker");
-        require(committed->state() ==
-                    capsid::host::GenerationPool::State::kDead,
+        require(committed->wait(&drain_error), "retire did not drain the active Admin worker");
+        require(committed->state() == capsid::host::GenerationPool::State::kDead,
                 "retired Admin worker did not reach kDead");
         harness.generations.at(0)->require_completed(1);
         std::cout << "PASS" << std::endl;
@@ -1927,8 +1993,7 @@ int main(int argc, char** argv) {
         capsid::host::AsyncAdminBackendOptions async_options;
         capsid::host::AsyncAdminBackend backend(&managed, async_options);
         capsid::host::OperationStatus submitted;
-        const capsid::host::DeployOutcome deployment =
-            backend.deploy("orders", "v1", &submitted);
+        const capsid::host::DeployOutcome deployment = backend.deploy("orders", "v1", &submitted);
         require(deployment.ok, "legacy unclaimed deploy was not accepted");
         const capsid::host::OperationStatus terminal =
             wait_admin_operation(&backend, deployment.operation_id);
@@ -1958,8 +2023,8 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
@@ -1983,51 +2048,43 @@ int main(int argc, char** argv) {
         // but compatibility-mismatched -> source fallback.
         const std::string wrong_id =
             "sha256:0000000000000000000000000000000000000000000000000000000000000000";
-        const std::string::size_type pos =
-            attestation.find("\"compatibilityId\":\"");
+        const std::string::size_type pos = attestation.find("\"compatibilityId\":\"");
         require(pos != std::string::npos, "cannot find compatibilityId");
         const std::string::size_type end =
             attestation.find('"', pos + std::strlen("\"compatibilityId\":\""));
         require(end != std::string::npos, "cannot find compatibilityId end");
         const std::string tampered =
-            attestation.substr(0, pos + std::strlen("\"compatibilityId\":\"")) +
-            wrong_id + attestation.substr(end);
+            attestation.substr(0, pos + std::strlen("\"compatibilityId\":\"")) + wrong_id +
+            attestation.substr(end);
         // The signing message must match the tampered attestation's
         // claims exactly: the real digests (unchanged by the tamper) and
         // the wrong compatibility id.
         std::string source_digest;
         std::string bytecode_digest;
         {
-            const std::string::size_type source_pos =
-                attestation.find("\"sourceSha256\":\"");
+            const std::string::size_type source_pos = attestation.find("\"sourceSha256\":\"");
             const std::string::size_type source_end =
-                attestation.find('"', source_pos +
-                                      std::strlen("\"sourceSha256\":\""));
-            source_digest = attestation.substr(
-                source_pos + std::strlen("\"sourceSha256\":\""),
-                source_end - source_pos - std::strlen("\"sourceSha256\":\""));
-            const std::string::size_type bytecode_pos =
-                attestation.find("\"bytecodeSha256\":\"");
+                attestation.find('"', source_pos + std::strlen("\"sourceSha256\":\""));
+            source_digest =
+                attestation.substr(source_pos + std::strlen("\"sourceSha256\":\""),
+                                   source_end - source_pos - std::strlen("\"sourceSha256\":\""));
+            const std::string::size_type bytecode_pos = attestation.find("\"bytecodeSha256\":\"");
             const std::string::size_type bytecode_end =
-                attestation.find('"', bytecode_pos +
-                                         std::strlen("\"bytecodeSha256\":\""));
+                attestation.find('"', bytecode_pos + std::strlen("\"bytecodeSha256\":\""));
             bytecode_digest = attestation.substr(
                 bytecode_pos + std::strlen("\"bytecodeSha256\":\""),
-                bytecode_end - bytecode_pos -
-                    std::strlen("\"bytecodeSha256\":\""));
+                bytecode_end - bytecode_pos - std::strlen("\"bytecodeSha256\":\""));
         }
         std::vector<std::uint8_t> message;
         const std::string fields[] = {
-            "capsid-bytecode-v1", "orders", "v1", "file://orders/v1/bundle.qjsb",
-            source_digest, bytecode_digest, wrong_id, "test-key-1",
+            "capsid-bytecode-v1", "orders",        "v1",     "file://orders/v1/bundle.qjsb",
+            source_digest,        bytecode_digest, wrong_id, "test-key-1",
         };
         static constexpr char kDomain[] = "capsid-bytecode-attestation-v1\0";
         message.assign(reinterpret_cast<const std::uint8_t*>(kDomain),
-                       reinterpret_cast<const std::uint8_t*>(kDomain) +
-                           sizeof(kDomain) - 1);
+                       reinterpret_cast<const std::uint8_t*>(kDomain) + sizeof(kDomain) - 1);
         for (const std::string& field : fields) {
-            const std::uint32_t size =
-                static_cast<std::uint32_t>(field.size());
+            const std::uint32_t size = static_cast<std::uint32_t>(field.size());
             message.push_back(static_cast<std::uint8_t>(size >> 24));
             message.push_back(static_cast<std::uint8_t>(size >> 16));
             message.push_back(static_cast<std::uint8_t>(size >> 8));
@@ -2041,14 +2098,13 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(outcome.ok,
-                "compatibility fallback deploy failed: " + outcome.error);
+        require(outcome.ok, "compatibility fallback deploy failed: " + outcome.error);
         require(outcome.worker != nullptr, "no worker for fallback");
         require(run_request(outcome.worker) == "managed-ok",
                 "fallback worker did not serve source");
@@ -2061,22 +2117,18 @@ int main(int argc, char** argv) {
         // A provenance-valid compatibility fallback still carries verified
         // attestation metadata. It must not collapse to the same generation
         // identity as an otherwise identical source-only deployment.
-        Fixtures source_only =
-            make_fixtures(worker_path, compiler_tool, fixture_source);
+        Fixtures source_only = make_fixtures(worker_path, compiler_tool, fixture_source);
         write_file(source_only.vdir + "/capsid.json", kMinimalAppConfig);
         write_file(source_only.vdir + "/bundle.mjs", kSourceBundle);
-        capsid::host::ManagedHostOptions source_options =
-            make_options(source_only);
+        capsid::host::ManagedHostOptions source_options = make_options(source_only);
         capsid::host::OperationStatus source_status;
         const capsid::host::DeployOutcome source =
-            capsid::host::managed_deploy(&source_options, "v1",
-                                         &source_status);
+            capsid::host::managed_deploy(&source_options, "v1", &source_status);
         require(source.ok && source.worker != nullptr,
                 "source-only baseline deploy failed: " + source.error);
         capsid_worker_destroy(source.worker);
         const std::string source_generation = json_string_field(
-            read_file(source_only.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(source_only.state_root + "/apps/orders/active.json"), "generation");
 
         const TestKey key = test_key();
         std::vector<std::uint8_t> bytecode;
@@ -2084,23 +2136,20 @@ int main(int argc, char** argv) {
         std::vector<std::uint8_t> signature;
         compile_and_sign(fixtures, key, &bytecode, &attestation, &signature);
         install_compatibility_mismatch(fixtures, key, attestation);
-        capsid::host::ManagedHostOptions fallback_options =
-            make_options(fixtures);
+        capsid::host::ManagedHostOptions fallback_options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         fallback_options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus fallback_status;
         const capsid::host::DeployOutcome fallback =
-            capsid::host::managed_deploy(&fallback_options, "v1",
-                                         &fallback_status);
+            capsid::host::managed_deploy(&fallback_options, "v1", &fallback_status);
         require(fallback.ok && fallback.worker != nullptr,
                 "compatibility fallback deploy failed: " + fallback.error);
         capsid_worker_destroy(fallback.worker);
         const std::string fallback_generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(fallback_generation != source_generation,
                 "compatibility fallback discarded verified attestation from "
                 "generation identity");
@@ -2124,61 +2173,52 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(outcome.ok,
-                "compatibility fallback deploy failed: " + outcome.error);
+        require(outcome.ok, "compatibility fallback deploy failed: " + outcome.error);
         require(outcome.worker != nullptr, "no worker for fallback");
         capsid_worker_destroy(outcome.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
-        const std::string artifact = read_file(
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/artifact.json");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
+        const std::string artifact = read_file(fixtures.state_root + "/apps/orders/generations/" +
+                                               generation + "/artifact.json");
         require(json_string_field(artifact, "selected") == "source",
                 "fallback artifact did not select source");
-        require(json_string_field(artifact, "reason") ==
-                    "compatibility-mismatch",
+        require(json_string_field(artifact, "reason") == "compatibility-mismatch",
                 "fallback artifact omits the fallback reason");
         require(json_string_field(artifact, "attestationDigest") != "",
                 "fallback artifact omits the verified attestation");
         // Positive control: the non-fallback path never records a reason.
-        Fixtures trusted_only =
-            make_fixtures(worker_path, compiler_tool, fixture_source);
+        Fixtures trusted_only = make_fixtures(worker_path, compiler_tool, fixture_source);
         write_file(trusted_only.vdir + "/capsid.json", kMinimalAppConfig);
         write_file(trusted_only.vdir + "/bundle.mjs", kSourceBundle);
         std::vector<std::uint8_t> trusted_bytecode;
         std::string trusted_attestation;
         std::vector<std::uint8_t> trusted_signature;
-        compile_and_sign(trusted_only, key, &trusted_bytecode,
-                         &trusted_attestation, &trusted_signature);
-        capsid::host::ManagedHostOptions trusted_options =
-            make_options(trusted_only);
+        compile_and_sign(trusted_only, key, &trusted_bytecode, &trusted_attestation,
+                         &trusted_signature);
+        capsid::host::ManagedHostOptions trusted_options = make_options(trusted_only);
         capsid::host::TrustedBytecodeKey trusted_key;
         trusted_key.key_id = "test-key-1";
-        trusted_key.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted_key.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         trusted_options.trusted_keys.push_back(trusted_key);
         capsid::host::OperationStatus trusted_status;
         const capsid::host::DeployOutcome trusted_outcome =
-            capsid::host::managed_deploy(&trusted_options, "v1",
-                                         &trusted_status);
+            capsid::host::managed_deploy(&trusted_options, "v1", &trusted_status);
         require(trusted_outcome.ok && trusted_outcome.worker != nullptr,
                 "trusted control deploy failed: " + trusted_outcome.error);
         capsid_worker_destroy(trusted_outcome.worker);
         const std::string trusted_generation = json_string_field(
-            read_file(trusted_only.state_root + "/apps/orders/active.json"),
-            "generation");
-        const std::string trusted_artifact = read_file(
-            trusted_only.state_root + "/apps/orders/generations/" +
-            trusted_generation + "/artifact.json");
-        require(json_string_field(trusted_artifact, "selected") ==
-                    "trusted-bytecode",
+            read_file(trusted_only.state_root + "/apps/orders/active.json"), "generation");
+        const std::string trusted_artifact =
+            read_file(trusted_only.state_root + "/apps/orders/generations/" + trusted_generation +
+                      "/artifact.json");
+        require(json_string_field(trusted_artifact, "selected") == "trusted-bytecode",
                 "trusted control deploy did not select trusted bytecode");
         require(!json_has_string_field(trusted_artifact, "reason"),
                 "trusted deployment unexpectedly records a fallback reason");
@@ -2196,13 +2236,12 @@ int main(int argc, char** argv) {
         std::vector<std::uint8_t> bytecode;
         std::string attestation;
         std::vector<std::uint8_t> signature;
-        compile_and_sign(fixtures, first_key, &bytecode, &attestation,
-                         &signature);
+        compile_and_sign(fixtures, first_key, &bytecode, &attestation, &signature);
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            first_key.public_key.data(), first_key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(first_key.public_key.data(), first_key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome first =
@@ -2211,19 +2250,18 @@ int main(int argc, char** argv) {
                 "initial trusted deploy failed: " + first.error);
         capsid_worker_destroy(first.worker);
         const std::string generation_before = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
 
         // Rotate: a NEW key id and key replace the trusted set.
         const TestKey rotated_key = test_key();
         create_version(fixtures, "v2", kMinimalAppConfig, kSourceBundle);
-        compile_and_sign_version(fixtures, "v2", "test-key-2", rotated_key,
-                                 &attestation, &signature);
+        compile_and_sign_version(fixtures, "v2", "test-key-2", rotated_key, &attestation,
+                                 &signature);
         options.trusted_keys.clear();
         capsid::host::TrustedBytecodeKey rotated_trusted;
         rotated_trusted.key_id = "test-key-2";
-        rotated_trusted.public_key = std::span<const std::uint8_t>(
-            rotated_key.public_key.data(), rotated_key.public_key.size());
+        rotated_trusted.public_key = std::span<const std::uint8_t>(rotated_key.public_key.data(),
+                                                                   rotated_key.public_key.size());
         options.trusted_keys.push_back(rotated_trusted);
         const capsid::host::DeployOutcome rotated =
             capsid::host::managed_deploy(&options, "v2", &status);
@@ -2233,17 +2271,15 @@ int main(int argc, char** argv) {
                 "rotated-key worker did not serve trusted bytecode");
         capsid_worker_destroy(rotated.worker);
         const std::string generation_after = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(generation_after != generation_before,
                 "key rotation did not change the generation digest");
         // The rotated deployment is trusted bytecode, not a silent source
         // fallback: the generation doc records the selection.
-        const std::string rotated_artifact = read_file(
-            fixtures.state_root + "/apps/orders/generations/" +
-            generation_after + "/artifact.json");
-        require(json_string_field(rotated_artifact, "selected") ==
-                    "trusted-bytecode",
+        const std::string rotated_artifact =
+            read_file(fixtures.state_root + "/apps/orders/generations/" + generation_after +
+                      "/artifact.json");
+        require(json_string_field(rotated_artifact, "selected") == "trusted-bytecode",
                 "rotated-key deploy fell back to source");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -2258,13 +2294,12 @@ int main(int argc, char** argv) {
         std::vector<std::uint8_t> bytecode;
         std::string attestation;
         std::vector<std::uint8_t> signature;
-        compile_and_sign(fixtures, revoked_key, &bytecode, &attestation,
-                         &signature);
+        compile_and_sign(fixtures, revoked_key, &bytecode, &attestation, &signature);
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            revoked_key.public_key.data(), revoked_key.public_key.size());
+        trusted.public_key = std::span<const std::uint8_t>(revoked_key.public_key.data(),
+                                                           revoked_key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome first =
@@ -2272,39 +2307,33 @@ int main(int argc, char** argv) {
         require(first.ok && first.worker != nullptr,
                 "initial trusted deploy failed: " + first.error);
         capsid_worker_destroy(first.worker);
-        const std::string active_before = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        const std::string active_before =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
 
         // Revoke: the deployment key leaves trusted_keys. A later deploy
         // still signed with it must be rejected at the attestation gate.
         const TestKey replacement_key = test_key();
         create_version(fixtures, "v2", kMinimalAppConfig, kSourceBundle);
-        compile_and_sign_version(fixtures, "v2", "test-key-1", revoked_key,
-                                 &attestation, &signature);
+        compile_and_sign_version(fixtures, "v2", "test-key-1", revoked_key, &attestation,
+                                 &signature);
         options.trusted_keys.clear();
         capsid::host::TrustedBytecodeKey replacement;
         replacement.key_id = "test-key-2";
-        replacement.public_key = std::span<const std::uint8_t>(
-            replacement_key.public_key.data(),
-            replacement_key.public_key.size());
+        replacement.public_key = std::span<const std::uint8_t>(replacement_key.public_key.data(),
+                                                               replacement_key.public_key.size());
         options.trusted_keys.push_back(replacement);
         capsid::host::OperationStatus revoked_status;
         const capsid::host::DeployOutcome revoked =
             capsid::host::managed_deploy(&options, "v2", &revoked_status);
         require(!revoked.ok, "deploy signed by a revoked key was accepted");
-        require(revoked.worker == nullptr,
-                "revoked-key deploy returned a worker");
-        require(revoked.error.find("bytecode attestation rejected") !=
-                    std::string::npos,
-                "revoked-key deploy failed outside the attestation gate: " +
-                    revoked.error);
-        require(revoked_status.state ==
-                    capsid::host::OperationState::kFailed,
+        require(revoked.worker == nullptr, "revoked-key deploy returned a worker");
+        require(revoked.error.find("bytecode attestation rejected") != std::string::npos,
+                "revoked-key deploy failed outside the attestation gate: " + revoked.error);
+        require(revoked_status.state == capsid::host::OperationState::kFailed,
                 "revoked-key deploy did not fail the operation");
-        const std::string active_after = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
-        require(active_after == active_before,
-                "revoked-key rejection changed the old active");
+        const std::string active_after =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
+        require(active_after == active_before, "revoked-key rejection changed the old active");
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -2323,8 +2352,8 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus deploy_status;
         const capsid::host::DeployOutcome deployed =
@@ -2333,8 +2362,7 @@ int main(int argc, char** argv) {
                 "trusted baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
 
         // Revoke the key, then restart. Recovery re-verifies the committed
         // attestation against the current trusted set: kUnknownKey must
@@ -2343,18 +2371,15 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions restarted = make_options(fixtures);
         capsid::host::TrustedBytecodeKey new_trusted;
         new_trusted.key_id = "test-key-2";
-        new_trusted.public_key = std::span<const std::uint8_t>(
-            new_key.public_key.data(), new_key.public_key.size());
+        new_trusted.public_key =
+            std::span<const std::uint8_t>(new_key.public_key.data(), new_key.public_key.size());
         restarted.trusted_keys.push_back(new_trusted);
         capsid::host::OperationStatus recover_status;
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(&restarted, &recover_status);
-        require(!recovered.ok,
-                "recovery re-verified a revoked-key generation as trusted");
-        require(recovered.worker == nullptr,
-                "revoked-key recovery returned a worker");
-        require(recover_status.state ==
-                    capsid::host::OperationState::kFailed,
+        require(!recovered.ok, "recovery re-verified a revoked-key generation as trusted");
+        require(recovered.worker == nullptr, "revoked-key recovery returned a worker");
+        require(recover_status.state == capsid::host::OperationState::kFailed,
                 "revoked-key recovery did not fail closed");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -2375,8 +2400,8 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus deploy_status;
         const capsid::host::DeployOutcome deployed =
@@ -2385,16 +2410,13 @@ int main(int argc, char** argv) {
                 "trusted baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation_before = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
-        const std::string artifact_before = read_file(
-            fixtures.state_root + "/apps/orders/generations/" +
-            generation_before + "/artifact.json");
-        require(json_string_field(artifact_before, "selected") ==
-                    "trusted-bytecode",
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
+        const std::string artifact_before =
+            read_file(fixtures.state_root + "/apps/orders/generations/" + generation_before +
+                      "/artifact.json");
+        require(json_string_field(artifact_before, "selected") == "trusted-bytecode",
                 "baseline generation was not trusted bytecode");
-        require(json_string_field(artifact_before, "attestationDigest") !=
-                    "",
+        require(json_string_field(artifact_before, "attestationDigest") != "",
                 "trusted generation omitted its attestation digest");
 
         capsid::host::OperationStatus recover_status;
@@ -2406,13 +2428,12 @@ int main(int argc, char** argv) {
                 "trusted restart served the wrong bundle");
         capsid_worker_destroy(recovered.worker);
         const std::string generation_after = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(generation_after == generation_before,
                 "restart changed the committed generation identity");
-        const std::string artifact_after = read_file(
-            fixtures.state_root + "/apps/orders/generations/" +
-            generation_after + "/artifact.json");
+        const std::string artifact_after =
+            read_file(fixtures.state_root + "/apps/orders/generations/" + generation_after +
+                      "/artifact.json");
         require(artifact_after == artifact_before,
                 "restart drifted the generation's provenance document");
         std::cout << "PASS" << std::endl;
@@ -2429,8 +2450,8 @@ int main(int argc, char** argv) {
             capsid::host::managed_deploy(&options, "v1", &status);
         require(first.ok, "initial deploy failed");
         capsid_worker_destroy(first.worker);
-        const std::string active_before = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        const std::string active_before =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
         // Corrupt the bundle.qjsb (a version with broken bytecode).
         write_file(fixtures.vdir + "/bundle.qjsb", "broken-bytecode");
         write_file(fixtures.vdir + "/bytecode.json", "{}");
@@ -2440,10 +2461,9 @@ int main(int argc, char** argv) {
             capsid::host::managed_deploy(&options, "v1", &fail_status);
         require(!failed.ok, "corrupt bytecode deploy accepted");
         require(failed.worker == nullptr, "failed deploy returned a worker");
-        const std::string active_after = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
-        require(active_after == active_before,
-                "failed deploy changed the old active");
+        const std::string active_after =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
+        require(active_after == active_before, "failed deploy changed the old active");
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -2473,9 +2493,8 @@ int main(int argc, char** argv) {
         std::shared_ptr<capsid::host::GenerationPool> v1_pool;
         {
             std::unique_lock<std::mutex> lock(harness.mutex);
-            require(harness.condition.wait_for(
-                        lock, std::chrono::seconds(2 * kTestWaitScale),
-                        [&]() { return harness.activated; }),
+            require(harness.condition.wait_for(lock, std::chrono::seconds(2 * kTestWaitScale),
+                                               [&]() { return harness.activated; }),
                     "v1 deploy did not commit its pool");
             v1_pool = harness.active_pool;
         }
@@ -2483,11 +2502,9 @@ int main(int argc, char** argv) {
         // The persist's renameat(tmp, active.json) cannot overwrite a
         // directory: the write path stays exactly as far as a real storage
         // failure would take it (temp written, rename denied).
-        require(remove((fixtures.state_root +
-                        "/apps/orders/active.json").c_str()) == 0,
+        require(remove((fixtures.state_root + "/apps/orders/active.json").c_str()) == 0,
                 "cannot remove active.json for the failure injection");
-        require(mkdir((fixtures.state_root +
-                       "/apps/orders/active.json").c_str(), 0700) == 0,
+        require(mkdir((fixtures.state_root + "/apps/orders/active.json").c_str(), 0700) == 0,
                 "cannot replace active.json with a directory");
         capsid::host::OperationStatus fail_status;
         const capsid::host::DeployOutcome failed =
@@ -2528,15 +2545,12 @@ int main(int argc, char** argv) {
         require(v2_gone, "aborted v2 pool leaked a worker process");
         // Restore the state directory and prove the old active survives:
         // an idempotent v1 redeploy revalidates and re-persists it.
-        require(rmdir((fixtures.state_root +
-                       "/apps/orders/active.json").c_str()) == 0,
+        require(rmdir((fixtures.state_root + "/apps/orders/active.json").c_str()) == 0,
                 "cannot restore the active state directory");
         capsid::host::OperationStatus replay_status;
         const capsid::host::DeployOutcome replay =
             capsid::host::managed_deploy(&options, "v1", &replay_status);
-        require(replay.ok,
-                "idempotent v1 redeploy failed after the aborted v2: " +
-                    replay.error);
+        require(replay.ok, "idempotent v1 redeploy failed after the aborted v2: " + replay.error);
         std::shared_ptr<capsid::host::GenerationPool> replay_pool;
         {
             std::lock_guard<std::mutex> lock(harness.mutex);
@@ -2545,9 +2559,10 @@ int main(int argc, char** argv) {
         require(replay_pool != nullptr && replay_pool != v1_pool,
                 "idempotent redeploy must reactivate its own warmed pool");
         generation_round_trip(*replay_pool, 7003);
-        require(wait_for([&] { return v1_pool->state() == capsid::host::GenerationPool::State::kDead; },
-                         std::chrono::seconds(10 * kTestWaitScale)),
-                "idempotent reactivation must drain its preceding pool");
+        require(
+            wait_for([&] { return v1_pool->state() == capsid::host::GenerationPool::State::kDead; },
+                     std::chrono::seconds(10 * kTestWaitScale)),
+            "idempotent reactivation must drain its preceding pool");
         std::string drain_error;
         require(v1_pool->wait(&drain_error), "join previous v1 pool after reactivation");
         replay_pool->stop_and_join();
@@ -2563,10 +2578,8 @@ int main(int argc, char** argv) {
     if (mode == "host_managed_secret_snapshot") {
         // A secret file + an env request; the warmed worker receives the
         // value via capsid:env and serves it.
-        require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0,
-                "cannot create secret app dir");
-        write_file(fixtures.secret_root + "/orders/api-token",
-                   "secret-value-managed-1");
+        require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0, "cannot create secret app dir");
+        write_file(fixtures.secret_root + "/orders/api-token", "secret-value-managed-1");
         write_file(fixtures.vdir + "/capsid.json", kSecretAppConfig);
         write_file(fixtures.vdir + "/bundle.mjs",
                    "import { env } from 'capsid:env';\n"
@@ -2586,27 +2599,33 @@ int main(int argc, char** argv) {
 
     if (mode == "host_managed_secret_snapshot_limit_precedes_staging") {
         const std::string value(13U * 1024U, 'x');
-        const std::string config =
-            "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
-            "\"permissions\":{\"modules\":[\"capsid:env\"],\"env\":{"
-            "\"APP_A\":{\"value\":\"" + value + "\"},"
-            "\"APP_B\":{\"value\":\"" + value + "\"},"
-            "\"APP_C\":{\"value\":\"" + value + "\"},"
-            "\"APP_D\":{\"value\":\"" + value + "\"}}},"
-            "\"pool\":{\"minReady\":1,\"maxWorkers\":1}}";
+        const std::string config = "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
+                                   "\"permissions\":{\"modules\":[\"capsid:env\"],\"env\":{"
+                                   "\"APP_A\":{\"value\":\"" +
+                                   value +
+                                   "\"},"
+                                   "\"APP_B\":{\"value\":\"" +
+                                   value +
+                                   "\"},"
+                                   "\"APP_C\":{\"value\":\"" +
+                                   value +
+                                   "\"},"
+                                   "\"APP_D\":{\"value\":\"" +
+                                   value +
+                                   "\"}}},"
+                                   "\"pool\":{\"minReady\":1,\"maxWorkers\":1}}";
         write_file(fixtures.vdir + "/capsid.json", config);
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(!outcome.ok, "oversized environment snapshot was accepted");
-        require(outcome.worker == nullptr,
-                "oversized environment snapshot returned a worker");
+        require(outcome.worker == nullptr, "oversized environment snapshot returned a worker");
         require(outcome.error.find("/permissions/env") != std::string::npos,
                 "secret snapshot compiler diagnostic lost its JSON Pointer");
         struct stat mapping = {};
-        require(lstat((fixtures.state_root + "/apps/orders/versions/v1").c_str(),
-                      &mapping) != 0 && errno == ENOENT,
+        require(lstat((fixtures.state_root + "/apps/orders/versions/v1").c_str(), &mapping) != 0 &&
+                    errno == ENOENT,
                 "invalid environment froze a Version mapping before compile");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -2614,11 +2633,9 @@ int main(int argc, char** argv) {
 
     if (mode == "host_managed_secret_app_symlink_rejected") {
         std::string escape_root = "/tmp/capsid-managed-secret-escape-XXXXXX";
-        require(mkdtemp(&escape_root[0]) != nullptr,
-                "cannot create secret escape fixture");
+        require(mkdtemp(&escape_root[0]) != nullptr, "cannot create secret escape fixture");
         write_file(escape_root + "/api-token", "escaped-secret-value");
-        require(symlink(escape_root.c_str(),
-                        (fixtures.secret_root + "/orders").c_str()) == 0,
+        require(symlink(escape_root.c_str(), (fixtures.secret_root + "/orders").c_str()) == 0,
                 "cannot create secret App symlink");
         write_file(fixtures.vdir + "/capsid.json", kSecretAppConfig);
 
@@ -2626,17 +2643,14 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(!outcome.ok,
-                "managed deploy followed the secret App directory symlink");
-        require(outcome.worker == nullptr,
-                "secret App symlink rejection returned a worker");
+        require(!outcome.ok, "managed deploy followed the secret App directory symlink");
+        require(outcome.worker == nullptr, "secret App symlink rejection returned a worker");
         std::cout << "PASS" << std::endl;
         return 0;
     }
 
     if (mode == "host_managed_secret_value_not_persisted") {
-        const std::string secret_value =
-            "secret-value-must-never-enter-generation-metadata";
+        const std::string secret_value = "secret-value-must-never-enter-generation-metadata";
         require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0,
                 "cannot create secret App directory");
         write_file(fixtures.secret_root + "/orders/api-token", secret_value);
@@ -2650,10 +2664,9 @@ int main(int argc, char** argv) {
         capsid_worker_destroy(deployed.worker);
 
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
-        const std::string generation_dir = fixtures.state_root +
-            "/apps/orders/generations/" + generation;
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
+        const std::string generation_dir =
+            fixtures.state_root + "/apps/orders/generations/" + generation;
         require(!directory_files_contain(generation_dir, secret_value),
                 "secret value was persisted in the committed generation");
         std::cout << "PASS" << std::endl;
@@ -2668,15 +2681,12 @@ int main(int argc, char** argv) {
         // and stays healthy through the redeploy; a redeploy with an
         // unchanged secret is idempotent and reuses the committed
         // generation (same digest, no new pool).
-        require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0,
-                "cannot create secret app dir");
-        const std::string secret_file =
-            fixtures.secret_root + "/orders/api-token";
+        require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0, "cannot create secret app dir");
+        const std::string secret_file = fixtures.secret_root + "/orders/api-token";
         write_file(secret_file, "secret-rotation-v1");
-        const std::string bundle =
-            "import { env } from 'capsid:env';\n"
-            "export default { fetch: () => "
-            "new Response(env.get('APP_TOKEN')) };";
+        const std::string bundle = "import { env } from 'capsid:env';\n"
+                                   "export default { fetch: () => "
+                                   "new Response(env.get('APP_TOKEN')) };";
         write_file(fixtures.vdir + "/capsid.json", kSecretAppConfig);
         write_file(fixtures.vdir + "/bundle.mjs", bundle);
         capsid::host::ManagedHostOptions options = make_options(fixtures);
@@ -2689,9 +2699,7 @@ int main(int argc, char** argv) {
         require(run_request(first.worker) == "secret-rotation-v1",
                 "initial snapshot missing from the first worker");
         const std::string generation_before = json_string_field(
-            read_file(fixtures.state_root +
-                      "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
 
         // No rotation: the same version and secret resolve to the same
         // generation — idempotent redeploy reuses the committed snapshot.
@@ -2702,9 +2710,7 @@ int main(int argc, char** argv) {
         require(run_request(reused.worker) == "secret-rotation-v1",
                 "idempotent redeploy lost the snapshot");
         const std::string generation_reused = json_string_field(
-            read_file(fixtures.state_root +
-                      "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(generation_reused == generation_before,
                 "an unchanged secret produced a new generation");
 
@@ -2720,13 +2726,10 @@ int main(int argc, char** argv) {
             capsid::host::managed_deploy(&options, "v2", &status);
         require(rotated.ok && rotated.worker != nullptr,
                 "rotated redeploy failed: " + rotated.error);
-        require(run_request(rotated.worker) ==
-                    "secret-rotation-v2-different-length",
+        require(run_request(rotated.worker) == "secret-rotation-v2-different-length",
                 "rotated value did not reach the new worker");
         const std::string generation_after = json_string_field(
-            read_file(fixtures.state_root +
-                      "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(generation_after != generation_before,
                 "secret rotation did not change the generation digest");
 
@@ -2737,41 +2740,35 @@ int main(int argc, char** argv) {
         // Row 5: the provider's file-v1: revision also changes when the
         // file is replaced outright — a NEW device/inode, not just a
         // rewritten ctime/size. That must drive another rotation.
-        require(unlink(secret_file.c_str()) == 0,
-                "cannot remove the secret file for replacement");
+        require(unlink(secret_file.c_str()) == 0, "cannot remove the secret file for replacement");
         write_file(secret_file, "secret-rotation-v3-replaced-inode");
         create_version(fixtures, "v3", kSecretAppConfig, bundle);
         const capsid::host::DeployOutcome replaced =
             capsid::host::managed_deploy(&options, "v3", &status);
         require(replaced.ok && replaced.worker != nullptr,
                 "inode-replaced redeploy failed: " + replaced.error);
-        require(run_request(replaced.worker) ==
-                    "secret-rotation-v3-replaced-inode",
+        require(run_request(replaced.worker) == "secret-rotation-v3-replaced-inode",
                 "replaced value did not reach the new worker");
         const std::string generation_third = json_string_field(
-            read_file(fixtures.state_root +
-                      "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(generation_third != generation_after,
                 "replaced secret file (new device/inode) did not change "
                 "the generation digest");
 
         // Every prior worker is still healthy with its frozen snapshot.
-        require(run_request(rotated.worker) ==
-                    "secret-rotation-v2-different-length",
+        require(run_request(rotated.worker) == "secret-rotation-v2-different-length",
                 "v2 worker lost its mid-rotation env snapshot");
 
         // All three generations stay committed: content-addressed
         // generations are immutable history, never cleaned up by redeploy.
-        const std::string generations_root =
-            fixtures.state_root + "/apps/orders/generations/";
+        const std::string generations_root = fixtures.state_root + "/apps/orders/generations/";
         const std::string generation_ids[] = {
-            generation_before, generation_after, generation_third,
+            generation_before,
+            generation_after,
+            generation_third,
         };
         for (const std::string& generation_id : generation_ids) {
-            require(access((generations_root + generation_id + "/COMPLETE")
-                               .c_str(),
-                           F_OK) == 0,
+            require(access((generations_root + generation_id + "/COMPLETE").c_str(), F_OK) == 0,
                     "a committed generation was cleaned up by redeploy");
         }
 
@@ -2783,13 +2780,11 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (mode ==
-        "host_managed_recovery_accepts_large_valid_env_metadata") {
+    if (mode == "host_managed_recovery_accepts_large_valid_env_metadata") {
         require(mkdirat(fixtures.secrets_fd, "orders", 0700) == 0,
                 "cannot create large-metadata secret directory");
-        std::string config =
-            "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
-            "\"permissions\":{\"modules\":[\"capsid:env\"],\"env\":{";
+        std::string config = "{\"apiVersion\":\"capsid/app-v1\",\"entry\":\"bundle.mjs\","
+                             "\"permissions\":{\"modules\":[\"capsid:env\"],\"env\":{";
         constexpr std::size_t kEntryCount = 256;
         for (std::size_t index = 0; index < kEntryCount; ++index) {
             std::string decimal = std::to_string(index);
@@ -2800,12 +2795,10 @@ int main(int argc, char** argv) {
             if (index > 0) {
                 config += ',';
             }
-            config += "\"" + env_name + "\":{\"valueFrom\":\"" +
-                      key_id + "\"}";
+            config += "\"" + env_name + "\":{\"valueFrom\":\"" + key_id + "\"}";
             write_file(fixtures.secret_root + "/orders/" + key_id, "x");
         }
-        config +=
-            "}},\"pool\":{\"minReady\":1,\"maxWorkers\":1}}";
+        config += "}},\"pool\":{\"minReady\":1,\"maxWorkers\":1}}";
         write_file(fixtures.vdir + "/capsid.json", config);
 
         capsid::host::ManagedHostOptions options = make_options(fixtures);
@@ -2816,21 +2809,17 @@ int main(int argc, char** argv) {
                 "large valid metadata deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
-        const std::string env_json = read_file(
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/env.json");
-        require(env_json.size() >
-                    capsid::host::kMaxEnvironmentSnapshotBytes,
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
+        const std::string env_json =
+            read_file(fixtures.state_root + "/apps/orders/generations/" + generation + "/env.json");
+        require(env_json.size() > capsid::host::kMaxEnvironmentSnapshotBytes,
                 "large-metadata fixture did not exceed the value budget");
 
         capsid::host::OperationStatus recover_status;
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(&options, &recover_status);
         require(recovered.ok && recovered.worker != nullptr,
-                "recovery rejected metadata produced by the compiler: " +
-                    recovered.error);
+                "recovery rejected metadata produced by the compiler: " + recovered.error);
         capsid_worker_destroy(recovered.worker);
         std::cout << "PASS" << std::endl;
         return 0;
@@ -2878,10 +2867,8 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus first_status;
         const capsid::host::DeployOutcome first =
             capsid::host::managed_retire(&options, &first_status);
-        require(first.ok && !first.operation_id.empty(),
-                "first retire failed: " + first.error);
-        const std::string tombstone = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        require(first.ok && !first.operation_id.empty(), "first retire failed: " + first.error);
+        const std::string tombstone = read_file(fixtures.state_root + "/apps/orders/active.json");
         const std::string inactive = "{\"active\":false,\"app\":\"orders\"}";
         require(capsid::host::managed_app_status(options) == inactive,
                 "retired App status must omit empty active identity fields");
@@ -2893,8 +2880,7 @@ int main(int argc, char** argv) {
                 "repeated retire was not idempotent: " + second.error);
         require(second.operation_id != first.operation_id,
                 "separate retire operations reused an operation id");
-        require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
-                    tombstone,
+        require(read_file(fixtures.state_root + "/apps/orders/active.json") == tombstone,
                 "idempotent retire changed the canonical tombstone");
         require(capsid::host::managed_app_status(options) == inactive,
                 "idempotent retire must preserve canonical inactive status");
@@ -2934,8 +2920,8 @@ int main(int argc, char** argv) {
         require(first.ok && first.worker != nullptr,
                 "initial version deploy failed: " + first.error);
         capsid_worker_destroy(first.worker);
-        const std::string active_before = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        const std::string active_before =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
 
         // Exact same App/Version content is idempotent and may either reuse
         // the active worker or return a newly warmed equivalent worker.
@@ -2946,8 +2932,7 @@ int main(int argc, char** argv) {
         if (repeated.worker != nullptr) {
             capsid_worker_destroy(repeated.worker);
         }
-        require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
-                    active_before,
+        require(read_file(fixtures.state_root + "/apps/orders/active.json") == active_before,
                 "identical version redeploy changed active identity");
 
         write_file(fixtures.vdir + "/bundle.mjs",
@@ -2955,12 +2940,9 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus conflict_status;
         const capsid::host::DeployOutcome conflict =
             capsid::host::managed_deploy(&options, "v1", &conflict_status);
-        require(!conflict.ok,
-                "same Version ID accepted different immutable content");
-        require(conflict.worker == nullptr,
-                "version immutability conflict returned a worker");
-        require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
-                    active_before,
+        require(!conflict.ok, "same Version ID accepted different immutable content");
+        require(conflict.worker == nullptr, "version immutability conflict returned a worker");
+        require(read_file(fixtures.state_root + "/apps/orders/active.json") == active_before,
                 "version immutability conflict changed old active state");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -2971,17 +2953,16 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(deployed.ok && deployed.worker != nullptr,
-                "deploy failed: " + deployed.error);
+        require(deployed.ok && deployed.worker != nullptr, "deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         struct stat canonical = {};
-        require(lstat((fixtures.state_root +
-                       "/apps/orders/versions/v1.json").c_str(),
-                      &canonical) == 0 && S_ISREG(canonical.st_mode),
+        require(lstat((fixtures.state_root + "/apps/orders/versions/v1.json").c_str(),
+                      &canonical) == 0 &&
+                    S_ISREG(canonical.st_mode),
                 "immutable Version mapping is not versions/<version>.json");
         struct stat legacy = {};
-        require(lstat((fixtures.state_root + "/apps/orders/versions/v1").c_str(),
-                      &legacy) != 0 && errno == ENOENT,
+        require(lstat((fixtures.state_root + "/apps/orders/versions/v1").c_str(), &legacy) != 0 &&
+                    errno == ENOENT,
                 "legacy non-canonical Version mapping was published");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -2992,12 +2973,10 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus first_status;
         const capsid::host::DeployOutcome first =
             capsid::host::managed_deploy(&options, "v1", &first_status);
-        require(first.ok && first.worker != nullptr,
-                "baseline deploy failed: " + first.error);
+        require(first.ok && first.worker != nullptr, "baseline deploy failed: " + first.error);
         capsid_worker_destroy(first.worker);
         const std::string first_generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
 
         create_version(
             fixtures, "v2",
@@ -3010,8 +2989,7 @@ int main(int argc, char** argv) {
                 "resource-bearing deploy failed: " + second.error);
         capsid_worker_destroy(second.worker);
         const std::string second_generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         require(second_generation != first_generation,
                 "worker resource config was omitted from generation identity");
         std::cout << "PASS" << std::endl;
@@ -3029,13 +3007,12 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "worker.memoryMax changed identity but was not enforced");
+        require(!deployed.ok, "worker.memoryMax changed identity but was not enforced");
         require(status.state == capsid::host::OperationState::kFailed,
                 "invalid worker memory limit did not fail deployment");
         struct stat active = {};
-        require(stat((fixtures.state_root + "/apps/orders/active.json").c_str(),
-                     &active) != 0 && errno == ENOENT,
+        require(stat((fixtures.state_root + "/apps/orders/active.json").c_str(), &active) != 0 &&
+                    errno == ENOENT,
                 "unenforced worker memory limit published active.json");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -3053,8 +3030,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "App request limit above the Host maximum was ignored");
+        require(!deployed.ok, "App request limit above the Host maximum was ignored");
         require(status.state == capsid::host::OperationState::kFailed,
                 "request limit overreach did not fail deployment");
         std::cout << "PASS" << std::endl;
@@ -3066,30 +3042,24 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus first_status;
         const capsid::host::DeployOutcome first =
             capsid::host::managed_deploy(&first_options, "v1", &first_status);
-        require(first.ok && first.worker != nullptr,
-                "baseline deploy failed: " + first.error);
+        require(first.ok && first.worker != nullptr, "baseline deploy failed: " + first.error);
         capsid_worker_destroy(first.worker);
         const std::string first_generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
 
-        Fixtures changed =
-            make_fixtures(worker_path, compiler_tool, fixture_source);
+        Fixtures changed = make_fixtures(worker_path, compiler_tool, fixture_source);
         write_file(changed.vdir + "/capsid.json", kMinimalAppConfig);
         write_file(changed.vdir + "/bundle.mjs", kSourceBundle);
         capsid::host::ManagedHostOptions changed_options = make_options(changed);
-        changed_options.host_policy.max_worker_memory_bytes =
-            512U * 1024U * 1024U;
+        changed_options.host_policy.max_worker_memory_bytes = 512U * 1024U * 1024U;
         capsid::host::OperationStatus changed_status;
         const capsid::host::DeployOutcome changed_outcome =
-            capsid::host::managed_deploy(&changed_options, "v1",
-                                         &changed_status);
+            capsid::host::managed_deploy(&changed_options, "v1", &changed_status);
         require(changed_outcome.ok && changed_outcome.worker != nullptr,
                 "changed Host policy deploy failed: " + changed_outcome.error);
         capsid_worker_destroy(changed_outcome.worker);
         const std::string changed_generation = json_string_field(
-            read_file(changed.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(changed.state_root + "/apps/orders/active.json"), "generation");
         require(changed_generation != first_generation,
                 "Host policy was replaced by a constant generation digest");
         std::cout << "PASS" << std::endl;
@@ -3101,15 +3071,12 @@ int main(int argc, char** argv) {
             fixtures.vdir + "/capsid.json",
             R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"fetch":{"allow":["api.example:443"]}},"pool":{"minReady":1,"maxWorkers":1}})json");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
-        options.host_policy.fetch_targets = { { "api.example", { 443 } } };
+        options.host_policy.fetch_targets = {{"api.example", {443}}};
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(deployed.ok,
-                "valid fetch policy could not warm a worker: " +
-                    deployed.error);
-        require(deployed.worker != nullptr,
-                "valid fetch policy returned no READY worker");
+        require(deployed.ok, "valid fetch policy could not warm a worker: " + deployed.error);
+        require(deployed.worker != nullptr, "valid fetch policy returned no READY worker");
         require(run_request(deployed.worker) == "managed-ok",
                 "fetch policy worker did not serve the bundle");
         capsid_worker_destroy(deployed.worker);
@@ -3122,17 +3089,13 @@ int main(int argc, char** argv) {
             fixtures.vdir + "/capsid.json",
             R"json({"apiVersion":"capsid/app-v1","entry":"bundle.mjs","permissions":{"fs":{"read":{"allow":["/tmp/capsid-managed-a","/tmp/capsid-managed-b"]}}},"pool":{"minReady":1,"maxWorkers":1}})json");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
-        options.host_policy.fs_read_roots = {
-            "/tmp/capsid-managed-a", "/tmp/capsid-managed-b"
-        };
+        options.host_policy.fs_read_roots = {"/tmp/capsid-managed-a", "/tmp/capsid-managed-b"};
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(deployed.ok,
-                "multiple effective rules corrupted the Runtime descriptor: " +
-                    deployed.error);
-        require(deployed.worker != nullptr,
-                "multiple effective rules returned no READY worker");
+                "multiple effective rules corrupted the Runtime descriptor: " + deployed.error);
+        require(deployed.worker != nullptr, "multiple effective rules returned no READY worker");
         capsid_worker_destroy(deployed.worker);
         std::cout << "PASS" << std::endl;
         return 0;
@@ -3151,10 +3114,8 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome deployed =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(deployed.ok,
-                "multiple env entries corrupted the Runtime descriptor: " +
-                    deployed.error);
-        require(deployed.worker != nullptr,
-                "multiple env entries returned no READY worker");
+                "multiple env entries corrupted the Runtime descriptor: " + deployed.error);
+        require(deployed.worker != nullptr, "multiple env entries returned no READY worker");
         require(run_request(deployed.worker) == "one:two",
                 "multiple env entries reached the worker incorrectly");
         capsid_worker_destroy(deployed.worker);
@@ -3167,11 +3128,10 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus first_status;
         const capsid::host::DeployOutcome first =
             capsid::host::managed_deploy(&options, "v1", &first_status);
-        require(first.ok && first.worker != nullptr,
-                "initial deploy failed: " + first.error);
+        require(first.ok && first.worker != nullptr, "initial deploy failed: " + first.error);
         capsid_worker_destroy(first.worker);
-        const std::string active_before = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        const std::string active_before =
+            read_file(fixtures.state_root + "/apps/orders/active.json");
 
         create_version(
             fixtures, "v2",
@@ -3181,12 +3141,10 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome invalid =
             capsid::host::managed_deploy(&options, "v2", &invalid_status);
         require(!invalid.ok, "managed deploy accepted an unknown config field");
-        require(invalid.worker == nullptr,
-                "invalid config returned a warmed worker");
+        require(invalid.worker == nullptr, "invalid config returned a warmed worker");
         require(invalid.error.find("/mystery") != std::string::npos,
                 "unknown config diagnostic omitted its JSON Pointer");
-        require(read_file(fixtures.state_root + "/apps/orders/active.json") ==
-                    active_before,
+        require(read_file(fixtures.state_root + "/apps/orders/active.json") == active_before,
                 "invalid config changed old active state");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -3219,13 +3177,12 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(!outcome.ok, "worker compatibility mismatch was accepted");
-        require(outcome.worker == nullptr,
-                "worker compatibility mismatch returned a worker");
+        require(outcome.worker == nullptr, "worker compatibility mismatch returned a worker");
         require(status.state == capsid::host::OperationState::kFailed,
                 "worker compatibility mismatch did not fail the operation");
         struct stat active = {};
-        require(stat((fixtures.state_root + "/apps/orders/active.json").c_str(),
-                     &active) != 0 && errno == ENOENT,
+        require(stat((fixtures.state_root + "/apps/orders/active.json").c_str(), &active) != 0 &&
+                    errno == ENOENT,
                 "worker compatibility mismatch published active.json");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -3233,10 +3190,8 @@ int main(int argc, char** argv) {
 
     if (mode == "host_managed_state_root_symlink_rejected") {
         std::string escape_root = "/tmp/capsid-managed-state-escape-XXXXXX";
-        require(mkdtemp(&escape_root[0]) != nullptr,
-                "cannot create state escape fixture");
-        require(symlink(escape_root.c_str(),
-                        (fixtures.state_root + "/apps").c_str()) == 0,
+        require(mkdtemp(&escape_root[0]) != nullptr, "cannot create state escape fixture");
+        require(symlink(escape_root.c_str(), (fixtures.state_root + "/apps").c_str()) == 0,
                 "cannot create state apps symlink");
 
         capsid::host::ManagedHostOptions options = make_options(fixtures);
@@ -3244,11 +3199,9 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(!outcome.ok, "managed deploy followed stateRoot/apps symlink");
-        require(outcome.worker == nullptr,
-                "stateRoot symlink rejection returned a worker");
+        require(outcome.worker == nullptr, "stateRoot symlink rejection returned a worker");
         struct stat escaped = {};
-        require(stat((escape_root + "/orders/active.json").c_str(), &escaped) !=
-                    0 &&
+        require(stat((escape_root + "/orders/active.json").c_str(), &escaped) != 0 &&
                     errno == ENOENT,
                 "managed deploy published active state outside stateRoot");
         std::cout << "PASS" << std::endl;
@@ -3257,51 +3210,41 @@ int main(int argc, char** argv) {
 
     if (mode == "host_managed_staging_symlink_rejected") {
         std::string escape_root = "/tmp/capsid-managed-staging-escape-XXXXXX";
-        require(mkdtemp(&escape_root[0]) != nullptr,
-                "cannot create staging escape fixture");
-        require(symlink(escape_root.c_str(),
-                        (fixtures.state_root + "/staging").c_str()) == 0,
+        require(mkdtemp(&escape_root[0]) != nullptr, "cannot create staging escape fixture");
+        require(symlink(escape_root.c_str(), (fixtures.state_root + "/staging").c_str()) == 0,
                 "cannot create staging symlink");
 
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(!outcome.ok,
-                "managed deploy followed the stateRoot/staging symlink");
-        require(outcome.worker == nullptr,
-                "staging symlink rejection returned a worker");
+        require(!outcome.ok, "managed deploy followed the stateRoot/staging symlink");
+        require(outcome.worker == nullptr, "staging symlink rejection returned a worker");
         struct stat active = {};
-        require(stat((fixtures.state_root + "/apps/orders/active.json").c_str(),
-                     &active) != 0 && errno == ENOENT,
+        require(stat((fixtures.state_root + "/apps/orders/active.json").c_str(), &active) != 0 &&
+                    errno == ENOENT,
                 "staging symlink deploy published active.json");
         std::cout << "PASS" << std::endl;
         return 0;
     }
 
     if (mode == "host_managed_generations_symlink_rejected") {
-        std::string escape_root =
-            "/tmp/capsid-managed-generations-escape-XXXXXX";
-        require(mkdtemp(&escape_root[0]) != nullptr,
-                "cannot create generations escape fixture");
+        std::string escape_root = "/tmp/capsid-managed-generations-escape-XXXXXX";
+        require(mkdtemp(&escape_root[0]) != nullptr, "cannot create generations escape fixture");
         require(mkdir((fixtures.state_root + "/apps").c_str(), 0700) == 0,
                 "cannot create state apps directory");
-        require(mkdir((fixtures.state_root + "/apps/orders").c_str(), 0700) ==
-                    0,
+        require(mkdir((fixtures.state_root + "/apps/orders").c_str(), 0700) == 0,
                 "cannot create App state directory");
         require(symlink(escape_root.c_str(),
-                        (fixtures.state_root +
-                         "/apps/orders/generations").c_str()) == 0,
+                        (fixtures.state_root + "/apps/orders/generations").c_str()) == 0,
                 "cannot create generations symlink");
 
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_deploy(&options, "v1", &status);
-        require(!outcome.ok,
-                "managed deploy accepted a symlinked generations directory");
-        require(outcome.worker == nullptr,
-                "generations symlink rejection returned a worker");
+        require(!outcome.ok, "managed deploy accepted a symlinked generations directory");
+        require(outcome.worker == nullptr, "generations symlink rejection returned a worker");
         require(!directory_has_entries(escape_root),
                 "managed deploy published a generation outside stateRoot");
         std::cout << "PASS" << std::endl;
@@ -3314,34 +3257,27 @@ int main(int argc, char** argv) {
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         require(mkdir((fixtures.state_root + "/apps").c_str(), 0700) == 0,
                 "cannot create state apps directory");
-        require(mkdir(app_state.c_str(), 0700) == 0,
-                "cannot create App state directory");
+        require(mkdir(app_state.c_str(), 0700) == 0, "cannot create App state directory");
         require(mkdir((app_state + "/generations").c_str(), 0700) == 0,
                 "cannot create generations directory");
-        require(mkdir((app_state + "/generations/" + generation).c_str(),
-                      0700) == 0,
+        require(mkdir((app_state + "/generations/" + generation).c_str(), 0700) == 0,
                 "cannot create generation directory");
         const std::string outside_marker = fixtures.state_root + "/outside";
         write_file(outside_marker, "not-a-generation-marker");
         require(symlink(outside_marker.c_str(),
-                        (app_state + "/generations/" + generation +
-                         "/COMPLETE")
-                            .c_str()) == 0,
+                        (app_state + "/generations/" + generation + "/COMPLETE").c_str()) == 0,
                 "cannot create COMPLETE symlink");
-        write_file(
-            app_state + "/active.json",
-            "{\"schema\":\"capsid-active-v1\",\"app\":\"orders\","
-            "\"state\":\"active\",\"version\":\"v1\",\"generation\":\"" +
-                generation + "\"}");
+        write_file(app_state + "/active.json",
+                   "{\"schema\":\"capsid-active-v1\",\"app\":\"orders\","
+                   "\"state\":\"active\",\"version\":\"v1\",\"generation\":\"" +
+                       generation + "\"}");
 
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome outcome =
             capsid::host::managed_recover(&options, &status);
-        require(!outcome.ok,
-                "recovery accepted a symlink as the COMPLETE marker");
-        require(outcome.worker == nullptr,
-                "invalid COMPLETE marker returned a worker");
+        require(!outcome.ok, "recovery accepted a symlink as the COMPLETE marker");
+        require(outcome.worker == nullptr, "invalid COMPLETE marker returned a worker");
         require(status.state == capsid::host::OperationState::kFailed,
                 "invalid COMPLETE marker did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3359,21 +3295,17 @@ int main(int argc, char** argv) {
             threads.emplace_back([&, index]() {
                 start.arrive_and_wait();
                 capsid::host::OperationStatus status;
-                const capsid::host::DeployOutcome outcome =
-                    capsid::host::managed_deploy(
-                        &options, "missing-" + std::to_string(index), &status);
-                require(!outcome.ok,
-                        "missing concurrent version unexpectedly deployed");
+                const capsid::host::DeployOutcome outcome = capsid::host::managed_deploy(
+                    &options, "missing-" + std::to_string(index), &status);
+                require(!outcome.ok, "missing concurrent version unexpectedly deployed");
                 operation_ids[index] = outcome.operation_id;
             });
         }
         for (std::thread& thread : threads) {
             thread.join();
         }
-        const std::set<std::string> unique_ids(operation_ids.begin(),
-                                                operation_ids.end());
-        require(unique_ids.size() == kThreadCount,
-                "concurrent operations received duplicate IDs");
+        const std::set<std::string> unique_ids(operation_ids.begin(), operation_ids.end());
+        require(unique_ids.size() == kThreadCount, "concurrent operations received duplicate IDs");
         require(unique_ids.find("") == unique_ids.end(),
                 "concurrent operation received an empty ID");
         std::cout << "PASS" << std::endl;
@@ -3399,9 +3331,7 @@ int main(int argc, char** argv) {
         capsid::host::OperationStatus recover_status;
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(&options, &recover_status);
-        require(recovered.ok,
-                "recovery depended on mutable applicationsRoot: " +
-                    recovered.error);
+        require(recovered.ok, "recovery depended on mutable applicationsRoot: " + recovered.error);
         require(recovered.worker != nullptr,
                 "committed generation recovery returned no READY worker");
         require(run_request(recovered.worker) == "managed-ok",
@@ -3420,8 +3350,8 @@ int main(int argc, char** argv) {
                 "initial deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
 
-        const std::string stale = fixtures.state_root +
-            "/apps/orders/active.json.tmp.interrupted-operation";
+        const std::string stale =
+            fixtures.state_root + "/apps/orders/active.json.tmp.interrupted-operation";
         write_file(stale, "partial-active-state");
         capsid::host::OperationStatus recover_status;
         const capsid::host::DeployOutcome recovered =
@@ -3445,12 +3375,9 @@ int main(int argc, char** argv) {
                 "initial deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
-        write_file(
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-                "/bundle.bin",
-            "export default { fetch: () => new Response('tampered') };");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
+        write_file(fixtures.state_root + "/apps/orders/generations/" + generation + "/bundle.bin",
+                   "export default { fetch: () => new Response('tampered') };");
 
         capsid::host::OperationStatus recover_status;
         const capsid::host::DeployOutcome recovered =
@@ -3458,8 +3385,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "recovery activated a tampered committed bundle");
+        require(!recovered.ok, "recovery activated a tampered committed bundle");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "generation tamper did not fail the recovery operation");
         std::cout << "PASS" << std::endl;
@@ -3475,25 +3401,20 @@ int main(int argc, char** argv) {
                 "snapshot FIFO baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string effective_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/effective.json";
-        require(unlink(effective_path.c_str()) == 0,
-                "cannot remove committed effective snapshot");
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/effective.json";
+        require(unlink(effective_path.c_str()) == 0, "cannot remove committed effective snapshot");
         require(mkfifo(effective_path.c_str(), 0600) == 0,
                 "cannot install committed snapshot FIFO");
 
-        require(recovery_fails_promptly(&options,
-                                        std::chrono::milliseconds(1500)),
+        require(recovery_fails_promptly(&options, std::chrono::milliseconds(1500)),
                 "recovery blocked on a committed snapshot FIFO");
         std::cout << "PASS" << std::endl;
         return 0;
     }
 
-    if (mode ==
-        "host_managed_recovery_rejects_optional_snapshot_fifo") {
+    if (mode == "host_managed_recovery_rejects_optional_snapshot_fifo") {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus deploy_status;
         const capsid::host::DeployOutcome deployed =
@@ -3502,16 +3423,12 @@ int main(int argc, char** argv) {
                 "optional FIFO baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string bytecode_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/bytecode.bin";
-        require(mkfifo(bytecode_path.c_str(), 0600) == 0,
-                "cannot install optional snapshot FIFO");
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/bytecode.bin";
+        require(mkfifo(bytecode_path.c_str(), 0600) == 0, "cannot install optional snapshot FIFO");
 
-        require(recovery_fails_promptly(&options,
-                                        std::chrono::milliseconds(1500)),
+        require(recovery_fails_promptly(&options, std::chrono::milliseconds(1500)),
                 "recovery ignored or blocked on an invalid optional snapshot");
         std::cout << "PASS" << std::endl;
         return 0;
@@ -3525,7 +3442,8 @@ int main(int argc, char** argv) {
         // Report unavailable coverage rather than PASS. Release, UBSan and
         // the supported Clang ASan path retain the original bounded probe.
         std::cout << "SKIP: finite RLIMIT_AS recovery probe is unavailable "
-                     "with this sanitizer runtime" << std::endl;
+                     "with this sanitizer runtime"
+                  << std::endl;
         return 77;
 #else
         capsid::host::ManagedHostOptions options = make_options(fixtures);
@@ -3536,25 +3454,20 @@ int main(int argc, char** argv) {
                 "snapshot-size baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string effective_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/effective.json";
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/effective.json";
         const int fd = open(effective_path.c_str(), O_WRONLY | O_TRUNC);
         require(fd >= 0, "cannot open committed snapshot for size probe");
-        constexpr off_t kOversizedSnapshotBytes =
-            static_cast<off_t>(512) * 1024 * 1024;
+        constexpr off_t kOversizedSnapshotBytes = static_cast<off_t>(512) * 1024 * 1024;
         require(ftruncate(fd, kOversizedSnapshotBytes) == 0,
                 "cannot create oversized sparse snapshot");
         close(fd);
 
-        constexpr rlim_t kProbeAddressSpace =
-            static_cast<rlim_t>(256) * 1024 * 1024;
-        require(recovery_fails_promptly(&options,
-                                        std::chrono::milliseconds(3000),
-                                        kProbeAddressSpace),
-                "recovery did not reject an oversized snapshot before reading it");
+        constexpr rlim_t kProbeAddressSpace = static_cast<rlim_t>(256) * 1024 * 1024;
+        require(
+            recovery_fails_promptly(&options, std::chrono::milliseconds(3000), kProbeAddressSpace),
+            "recovery did not reject an oversized snapshot before reading it");
         std::cout << "PASS" << std::endl;
         return 0;
 #endif
@@ -3578,8 +3491,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "recovery bypassed the current Host module policy");
+        require(!recovered.ok, "recovery bypassed the current Host module policy");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "Host policy revocation did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3601,24 +3513,20 @@ int main(int argc, char** argv) {
         require(deployed.ok && deployed.worker != nullptr,
                 "initial secret deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
-        const std::string old_active = read_file(
-            fixtures.state_root + "/apps/orders/active.json");
+        const std::string old_active = read_file(fixtures.state_root + "/apps/orders/active.json");
         write_file(fixtures.secret_root + "/orders/api-token", "secret-v2");
 
         capsid::host::OperationStatus recover_status;
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(&options, &recover_status);
         if (!recovered.ok) {
-            require(recovered.worker == nullptr,
-                    "failed secret revalidation returned a worker");
+            require(recovered.worker == nullptr, "failed secret revalidation returned a worker");
         } else {
-            require(recovered.worker != nullptr,
-                    "successful secret rotation returned no worker");
+            require(recovered.worker != nullptr, "successful secret rotation returned no worker");
             require(run_request(recovered.worker) == "secret-v2",
                     "recovery reused the stale committed secret value");
             capsid_worker_destroy(recovered.worker);
-            require(read_file(fixtures.state_root +
-                              "/apps/orders/active.json") != old_active,
+            require(read_file(fixtures.state_root + "/apps/orders/active.json") != old_active,
                     "secret rotation did not publish a new generation");
         }
         std::cout << "PASS" << std::endl;
@@ -3634,8 +3542,8 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
 
         capsid::host::OperationStatus deploy_status;
@@ -3645,8 +3553,7 @@ int main(int argc, char** argv) {
                 "trusted baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
 
         // Produce a second, valid QuickJS bytecode bundle with the same
         // sourceName but different code. Recovery must bind the bytes it
@@ -3654,21 +3561,27 @@ int main(int argc, char** argv) {
         // committed attestation (bytecode.bin).
         const std::string altered_source = fixtures.vdir + "/altered.mjs";
         const std::string altered_bytecode = fixtures.vdir + "/altered.qjsb";
-        write_file(altered_source,
-                   "export default { fetch: () => new Response('swapped') };");
+        write_file(altered_source, "export default { fetch: () => new Response('swapped') };");
         run_command({
             fixtures.compiler_tool,
-            "--source", altered_source,
-            "--source-name", "file://orders/v1/bundle.qjsb",
-            "--application", "orders",
-            "--version", "v1",
-            "--key-id", "unused-key",
-            "--bytecode-out", altered_bytecode,
-            "--attestation-out", fixtures.vdir + "/altered.json",
-            "--signing-message-out", fixtures.vdir + "/altered-message.bin",
+            "--source",
+            altered_source,
+            "--source-name",
+            "file://orders/v1/bundle.qjsb",
+            "--application",
+            "orders",
+            "--version",
+            "v1",
+            "--key-id",
+            "unused-key",
+            "--bytecode-out",
+            altered_bytecode,
+            "--attestation-out",
+            fixtures.vdir + "/altered.json",
+            "--signing-message-out",
+            fixtures.vdir + "/altered-message.bin",
         });
-        write_file(fixtures.state_root + "/apps/orders/generations/" +
-                       generation + "/bundle.bin",
+        write_file(fixtures.state_root + "/apps/orders/generations/" + generation + "/bundle.bin",
                    read_file(altered_bytecode));
 
         capsid::host::OperationStatus recover_status;
@@ -3677,8 +3590,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "recovery loaded bytecode not covered by the attestation");
+        require(!recovered.ok, "recovery loaded bytecode not covered by the attestation");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "trusted bundle swap did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3694,8 +3606,8 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::TrustedBytecodeKey trusted;
         trusted.key_id = "test-key-1";
-        trusted.public_key = std::span<const std::uint8_t>(
-            key.public_key.data(), key.public_key.size());
+        trusted.public_key =
+            std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size());
         options.trusted_keys.push_back(trusted);
         capsid::host::OperationStatus deploy_status;
         const capsid::host::DeployOutcome deployed =
@@ -3704,11 +3616,9 @@ int main(int argc, char** argv) {
                 "trusted baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string attestation_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/attestation.json";
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/attestation.json";
         std::string drifted = read_file(attestation_path);
         require(!drifted.empty() && drifted.front() == '{',
                 "trusted snapshot has no JSON attestation");
@@ -3724,8 +3634,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "trusted recovery ignored attestation document drift");
+        require(!recovered.ok, "trusted recovery ignored attestation document drift");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "trusted attestation drift did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3741,21 +3650,15 @@ int main(int argc, char** argv) {
                 "source baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string artifact_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/artifact.json";
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/artifact.json";
         std::string artifact = read_file(artifact_path);
-        const std::string committed_source_name =
-            json_string_field(artifact, "sourceName");
-        const std::string original =
-            "\"sourceName\":\"" + committed_source_name + "\"";
+        const std::string committed_source_name = json_string_field(artifact, "sourceName");
+        const std::string original = "\"sourceName\":\"" + committed_source_name + "\"";
         const std::string::size_type position = artifact.find(original);
-        require(position != std::string::npos,
-                "source snapshot omitted its sourceName");
-        artifact.replace(position, original.size(),
-                         "\"sourceName\":\"tampered-source-name.mjs\"");
+        require(position != std::string::npos, "source snapshot omitted its sourceName");
+        artifact.replace(position, original.size(), "\"sourceName\":\"tampered-source-name.mjs\"");
         write_file(artifact_path, artifact);
 
         capsid::host::OperationStatus recover_status;
@@ -3764,8 +3667,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "recovery accepted a sourceName outside generation identity");
+        require(!recovered.ok, "recovery accepted a sourceName outside generation identity");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "sourceName tamper did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3781,28 +3683,20 @@ int main(int argc, char** argv) {
                 "source baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string artifact_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/artifact.json";
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/artifact.json";
         std::string artifact = read_file(artifact_path);
-        const std::string committed_source_name =
-            json_string_field(artifact, "sourceName");
-        const std::string::size_type separator =
-            committed_source_name.rfind('/');
-        require(separator != std::string::npos,
-                "sourceName has no version/name separator");
+        const std::string committed_source_name = json_string_field(artifact, "sourceName");
+        const std::string::size_type separator = committed_source_name.rfind('/');
+        require(separator != std::string::npos, "sourceName has no version/name separator");
         std::string malformed_source_name = committed_source_name;
         malformed_source_name[separator] = 'X';
-        const std::string original =
-            "\"sourceName\":\"" + committed_source_name + "\"";
+        const std::string original = "\"sourceName\":\"" + committed_source_name + "\"";
         const std::string::size_type position = artifact.find(original);
-        require(position != std::string::npos,
-                "artifact snapshot omitted sourceName");
+        require(position != std::string::npos, "artifact snapshot omitted sourceName");
         artifact.replace(position, original.size(),
-                         "\"sourceName\":\"" + malformed_source_name +
-                             "\"");
+                         "\"sourceName\":\"" + malformed_source_name + "\"");
         write_file(artifact_path, artifact);
 
         capsid::host::OperationStatus recover_status;
@@ -3811,8 +3705,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "sourceName parser accepted a non-slash path separator");
+        require(!recovered.ok, "sourceName parser accepted a non-slash path separator");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "malformed sourceName separator did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3828,32 +3721,24 @@ int main(int argc, char** argv) {
                 "source baseline deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
         const std::string generation = json_string_field(
-            read_file(fixtures.state_root + "/apps/orders/active.json"),
-            "generation");
+            read_file(fixtures.state_root + "/apps/orders/active.json"), "generation");
         const std::string artifact_path =
-            fixtures.state_root + "/apps/orders/generations/" + generation +
-            "/artifact.json";
+            fixtures.state_root + "/apps/orders/generations/" + generation + "/artifact.json";
         std::string artifact = read_file(artifact_path);
-        const std::string committed_source_name =
-            json_string_field(artifact, "sourceName");
+        const std::string committed_source_name = json_string_field(artifact, "sourceName");
         const std::string prefix = "file://orders/";
-        const std::string::size_type final_separator =
-            committed_source_name.rfind('/');
-        require(committed_source_name.rfind(prefix, 0) == 0 &&
-                    final_separator > prefix.size(),
+        const std::string::size_type final_separator = committed_source_name.rfind('/');
+        require(committed_source_name.rfind(prefix, 0) == 0 && final_separator > prefix.size(),
                 "sourceName has no bound middle segment");
         std::string tampered_source_name = committed_source_name;
         const std::string::size_type segment_offset = prefix.size();
         tampered_source_name[segment_offset] =
             tampered_source_name[segment_offset] == 'x' ? 'y' : 'x';
-        const std::string original =
-            "\"sourceName\":\"" + committed_source_name + "\"";
+        const std::string original = "\"sourceName\":\"" + committed_source_name + "\"";
         const std::string::size_type position = artifact.find(original);
-        require(position != std::string::npos,
-                "artifact snapshot omitted sourceName");
+        require(position != std::string::npos, "artifact snapshot omitted sourceName");
         artifact.replace(position, original.size(),
-                         "\"sourceName\":\"" + tampered_source_name +
-                             "\"");
+                         "\"sourceName\":\"" + tampered_source_name + "\"");
         write_file(artifact_path, artifact);
 
         capsid::host::OperationStatus recover_status;
@@ -3862,8 +3747,7 @@ int main(int argc, char** argv) {
         if (recovered.worker != nullptr) {
             capsid_worker_destroy(recovered.worker);
         }
-        require(!recovered.ok,
-                "recovery accepted a different valid sourceName segment");
+        require(!recovered.ok, "recovery accepted a different valid sourceName segment");
         require(recover_status.state == capsid::host::OperationState::kFailed,
                 "sourceName segment tamper did not fail recovery");
         std::cout << "PASS" << std::endl;
@@ -3878,17 +3762,14 @@ int main(int argc, char** argv) {
         require(deployed.ok && deployed.worker != nullptr,
                 "initial deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
-        const std::string active_path =
-            fixtures.state_root + "/apps/orders/active.json";
+        const std::string active_path = fixtures.state_root + "/apps/orders/active.json";
         const std::string active_before = read_file(active_path);
-        const std::string generation =
-            json_string_field(active_before, "generation");
+        const std::string generation = json_string_field(active_before, "generation");
         // COMPLETE alone is not proof that a content-addressed generation
         // still contains the bytes/configuration named by its digest.
         // Keep the marker but corrupt the committed artifact; an idempotent
         // Version mapping must validate the object before reusing it.
-        write_file(fixtures.state_root + "/apps/orders/generations/" +
-                       generation + "/bundle.bin",
+        write_file(fixtures.state_root + "/apps/orders/generations/" + generation + "/bundle.bin",
                    "export default { fetch: () => new Response('corrupt') };");
 
         capsid::host::OperationStatus repeat_status;
@@ -3897,8 +3778,7 @@ int main(int argc, char** argv) {
         if (repeated.worker != nullptr) {
             capsid_worker_destroy(repeated.worker);
         }
-        require(!repeated.ok,
-                "idempotent deploy reused a corrupt generation");
+        require(!repeated.ok, "idempotent deploy reused a corrupt generation");
         require(repeat_status.state == capsid::host::OperationState::kFailed,
                 "corrupt mapped generation did not fail redeploy");
         require(read_file(active_path) == active_before,
@@ -3951,8 +3831,7 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome repeated =
             capsid::host::managed_deploy(&options, "v2", &repeat_status);
         require(repeated.ok && repeated.worker != nullptr,
-                "idempotent v2 rejected its shared generation: " +
-                    repeated.error);
+                "idempotent v2 rejected its shared generation: " + repeated.error);
         require(run_request(repeated.worker) == "managed-ok",
                 "reused shared generation served the wrong source");
         capsid_worker_destroy(repeated.worker);
@@ -3980,8 +3859,7 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome recovered =
             capsid::host::managed_recover(&options, &recover_status);
         require(recovered.ok && recovered.worker != nullptr,
-                "active v2 could not recover its shared generation: " +
-                    recovered.error);
+                "active v2 could not recover its shared generation: " + recovered.error);
         require(run_request(recovered.worker) == "managed-ok",
                 "recovered shared generation served the wrong source");
         capsid_worker_destroy(recovered.worker);
@@ -3999,10 +3877,9 @@ int main(int argc, char** argv) {
                    "'storage-ok'); return new Response(storage.get('tenant-a', "
                    "'k')); } };\n");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
-        options.host_policy.module_allowlist = { "capsid:storage" };
+        options.host_policy.module_allowlist = {"capsid:storage"};
         options.host_policy.storage_allowed = true;
-        (void)set_host_storage_namespaces(&options.host_policy,
-                                          {"tenant-a"});
+        (void)set_host_storage_namespaces(&options.host_policy, {"tenant-a"});
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
             capsid::host::managed_deploy(&options, "v1", &status);
@@ -4024,7 +3901,7 @@ int main(int argc, char** argv) {
                    "export default { fetch() { stdio.write('stdout', "
                    "'managed-log'); return new Response('stdio-ok'); } };\n");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
-        options.host_policy.module_allowlist = { "capsid:stdio" };
+        options.host_policy.module_allowlist = {"capsid:stdio"};
         options.host_policy.stdio_allowed = true;
         (void)set_host_stdio_streams(&options.host_policy, {"stdout"});
         capsid::host::OperationStatus status;
@@ -4046,8 +3923,7 @@ int main(int argc, char** argv) {
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         options.host_policy.module_allowlist = {"capsid:storage"};
         options.host_policy.storage_allowed = true;
-        require(set_host_storage_namespaces(&options.host_policy,
-                                            {"tenant-b"}),
+        require(set_host_storage_namespaces(&options.host_policy, {"tenant-b"}),
                 "HostPolicy cannot express exact storage namespaces");
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
@@ -4055,8 +3931,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "Host bool-only storage permission widened tenant-a");
+        require(!deployed.ok, "Host bool-only storage permission widened tenant-a");
         require(status.state == capsid::host::OperationState::kFailed,
                 "storage namespace overreach did not fail deployment");
         std::cout << "PASS" << std::endl;
@@ -4078,8 +3953,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "Host bool-only stdio permission widened stderr");
+        require(!deployed.ok, "Host bool-only stdio permission widened stderr");
         require(status.state == capsid::host::OperationState::kFailed,
                 "stdio stream overreach did not fail deployment");
         std::cout << "PASS" << std::endl;
@@ -4098,9 +3972,8 @@ int main(int argc, char** argv) {
             require(deployed.ok && deployed.worker != nullptr,
                     "resource identity deploy failed for " + version + ": " + deployed.error);
             capsid_worker_destroy(deployed.worker);
-            return json_string_field(
-                read_file(fixtures.state_root + "/apps/orders/active.json"),
-                "generation");
+            return json_string_field(read_file(fixtures.state_root + "/apps/orders/active.json"),
+                                     "generation");
         };
         const std::string first_generation = deploy_generation("v1");
         create_version(
@@ -4146,16 +4019,14 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "managed Host ignored distinct JS/address-space limits");
+        require(!deployed.ok, "managed Host ignored distinct JS/address-space limits");
         require(status.state == capsid::host::OperationState::kFailed,
                 "invalid worker resource relation did not fail deployment");
         std::cout << "PASS" << std::endl;
         return 0;
     }
 
-    if (mode ==
-        "host_managed_process_address_space_reaches_release_runtime") {
+    if (mode == "host_managed_process_address_space_reaches_release_runtime") {
 #if CAPSID_TEST_ASAN_BUILD || CAPSID_TEST_TSAN_BUILD
         // A finite RLIMIT_AS is incompatible with ASan's shadow-memory
         // reservation. The production Release path remains required to
@@ -4174,8 +4045,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "Release managed Host ignored processAddressSpace");
+        require(!deployed.ok, "Release managed Host ignored processAddressSpace");
         require(status.state == capsid::host::OperationState::kFailed,
                 "unenforceable processAddressSpace did not fail deployment");
         std::cout << "PASS" << std::endl;
@@ -4183,8 +4053,7 @@ int main(int argc, char** argv) {
 #endif
     }
 
-    if (mode ==
-        "host_managed_process_address_space_skipped_under_tsan") {
+    if (mode == "host_managed_process_address_space_skipped_under_tsan") {
 #if CAPSID_TEST_TSAN_BUILD
         // TSan, like ASan, reserves a vast shadow-memory address range. A
         // finite RLIMIT_AS prevents an instrumented worker from reaching
@@ -4198,8 +4067,7 @@ int main(int argc, char** argv) {
         const capsid::host::DeployOutcome deployed =
             capsid::host::managed_deploy(&options, "v1", &status);
         require(deployed.ok && deployed.worker != nullptr,
-                "TSan managed Host forwarded an incompatible RLIMIT_AS: " +
-                    deployed.error);
+                "TSan managed Host forwarded an incompatible RLIMIT_AS: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
 #endif
         std::cout << "PASS" << std::endl;
@@ -4208,14 +4076,11 @@ int main(int argc, char** argv) {
 
     if (mode == "host_managed_failed_deploy_cleans_staging") {
         std::string escape = "/tmp/capsid-managed-cleanup-escape-XXXXXX";
-        require(mkdtemp(&escape[0]) != nullptr,
-                "cannot create failed-cleanup escape fixture");
+        require(mkdtemp(&escape[0]) != nullptr, "cannot create failed-cleanup escape fixture");
         const std::string apps = fixtures.state_root + "/apps";
         const std::string app = apps + "/orders";
-        require(mkdir(apps.c_str(), 0700) == 0,
-                "cannot create state apps fixture");
-        require(mkdir(app.c_str(), 0700) == 0,
-                "cannot create state App fixture");
+        require(mkdir(apps.c_str(), 0700) == 0, "cannot create state apps fixture");
+        require(mkdir(app.c_str(), 0700) == 0, "cannot create state App fixture");
         require(symlink(escape.c_str(), (app + "/generations").c_str()) == 0,
                 "cannot create generations failure fixture");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
@@ -4225,8 +4090,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "generations symlink did not trigger staging failure");
+        require(!deployed.ok, "generations symlink did not trigger staging failure");
         require(!directory_has_entries(fixtures.state_root + "/staging"),
                 "failed deploy leaked its non-empty staging tree");
         std::cout << "PASS" << std::endl;
@@ -4235,10 +4099,8 @@ int main(int argc, char** argv) {
 
     if (mode == "host_managed_staging_mode_rejected") {
         const std::string staging = fixtures.state_root + "/staging";
-        require(mkdir(staging.c_str(), 0700) == 0,
-                "cannot create staging mode fixture");
-        require(chmod(staging.c_str(), 0777) == 0,
-                "cannot make staging mode unsafe");
+        require(mkdir(staging.c_str(), 0700) == 0, "cannot create staging mode fixture");
+        require(chmod(staging.c_str(), 0777) == 0, "cannot make staging mode unsafe");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
@@ -4246,8 +4108,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "managed deploy accepted group/other-writable staging");
+        require(!deployed.ok, "managed deploy accepted group/other-writable staging");
         require(status.state == capsid::host::OperationState::kFailed,
                 "unsafe staging mode did not fail deployment");
         std::cout << "PASS" << std::endl;
@@ -4258,14 +4119,10 @@ int main(int argc, char** argv) {
         const std::string apps = fixtures.state_root + "/apps";
         const std::string app = apps + "/orders";
         const std::string generations = app + "/generations";
-        require(mkdir(apps.c_str(), 0700) == 0,
-                "cannot create state apps fixture");
-        require(mkdir(app.c_str(), 0700) == 0,
-                "cannot create state App fixture");
-        require(mkdir(generations.c_str(), 0700) == 0,
-                "cannot create generations mode fixture");
-        require(chmod(generations.c_str(), 0777) == 0,
-                "cannot make generations mode unsafe");
+        require(mkdir(apps.c_str(), 0700) == 0, "cannot create state apps fixture");
+        require(mkdir(app.c_str(), 0700) == 0, "cannot create state App fixture");
+        require(mkdir(generations.c_str(), 0700) == 0, "cannot create generations mode fixture");
+        require(chmod(generations.c_str(), 0777) == 0, "cannot make generations mode unsafe");
         capsid::host::ManagedHostOptions options = make_options(fixtures);
         capsid::host::OperationStatus status;
         const capsid::host::DeployOutcome deployed =
@@ -4273,8 +4130,7 @@ int main(int argc, char** argv) {
         if (deployed.worker != nullptr) {
             capsid_worker_destroy(deployed.worker);
         }
-        require(!deployed.ok,
-                "managed deploy accepted group/other-writable generations");
+        require(!deployed.ok, "managed deploy accepted group/other-writable generations");
         require(status.state == capsid::host::OperationState::kFailed,
                 "unsafe generations mode did not fail deployment");
         std::cout << "PASS" << std::endl;
@@ -4289,13 +4145,9 @@ int main(int argc, char** argv) {
         require(deployed.ok && deployed.worker != nullptr,
                 "initial deploy failed: " + deployed.error);
         capsid_worker_destroy(deployed.worker);
-        const std::string mapping = fixtures.state_root +
-            "/apps/orders/versions/v1.json";
-        const std::string generation = json_string_field(read_file(mapping),
-                                                         "generation");
-        write_file(mapping,
-                   "{\"generation\":\"" + generation +
-                       "\",\"mystery\":true}");
+        const std::string mapping = fixtures.state_root + "/apps/orders/versions/v1.json";
+        const std::string generation = json_string_field(read_file(mapping), "generation");
+        write_file(mapping, "{\"generation\":\"" + generation + "\",\"mystery\":true}");
 
         capsid::host::OperationStatus repeat_status;
         const capsid::host::DeployOutcome repeated =
@@ -4303,8 +4155,7 @@ int main(int argc, char** argv) {
         if (repeated.worker != nullptr) {
             capsid_worker_destroy(repeated.worker);
         }
-        require(!repeated.ok,
-                "managed deploy accepted a corrupt Version mapping");
+        require(!repeated.ok, "managed deploy accepted a corrupt Version mapping");
         require(repeat_status.state == capsid::host::OperationState::kFailed,
                 "corrupt Version mapping did not fail the operation");
         std::cout << "PASS" << std::endl;
@@ -4322,8 +4173,7 @@ int main(int argc, char** argv) {
                 "failed deploy did not enter Failed state");
 
         const capsid::host::OperationStatus queried =
-            capsid::host::managed_operation_status(options,
-                                                   failed.operation_id);
+            capsid::host::managed_operation_status(options, failed.operation_id);
         require(queried.state == capsid::host::OperationState::kFailed,
                 "failed operation query returned the wrong state");
         require(queried.error == deploy_status.error,

@@ -33,42 +33,38 @@
 #include <string>
 #include <vector>
 
-extern char **environ;
+extern char** environ;
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require(bool condition, const char *message) {
+void require(bool condition, const char* message) {
     if (!condition) {
         fail(message);
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail("cannot open fixture");
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-void write_all(int fd, const std::vector<uint8_t> &data) {
+void write_all(int fd, const std::vector<uint8_t>& data) {
     size_t offset = 0;
     while (offset < data.size()) {
 #if defined(_WIN32)
-        const ssize_t count = capsid::win32::send_fd(
-            fd, &data[offset], data.size() - offset, 0);
+        const ssize_t count = capsid::win32::send_fd(fd, &data[offset], data.size() - offset, 0);
 #elif defined(MSG_NOSIGNAL)
-        const ssize_t count =
-            send(fd, &data[offset], data.size() - offset, MSG_NOSIGNAL);
+        const ssize_t count = send(fd, &data[offset], data.size() - offset, MSG_NOSIGNAL);
 #else
-        const ssize_t count =
-            send(fd, &data[offset], data.size() - offset, 0);
+        const ssize_t count = send(fd, &data[offset], data.size() - offset, 0);
 #endif
         if (count <= 0) {
             fail("could not write protocol frame");
@@ -77,19 +73,16 @@ void write_all(int fd, const std::vector<uint8_t> &data) {
     }
 }
 
-void send_frame(int fd, const capsid::protocol::Frame &frame) {
+void send_frame(int fd, const capsid::protocol::Frame& frame) {
     std::vector<uint8_t> wire;
     require(capsid::protocol::encode(frame, &wire), "frame encodes");
     write_all(fd, wire);
 }
 
-bool read_frame(int fd,
-                capsid::protocol::Parser *parser,
-                capsid::protocol::Frame *frame,
+bool read_frame(int fd, capsid::protocol::Parser* parser, capsid::protocol::Frame* frame,
                 int timeout_ms) {
     const std::chrono::steady_clock::time_point deadline =
-        std::chrono::steady_clock::now() +
-        std::chrono::milliseconds(timeout_ms);
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
     for (;;) {
         const capsid::protocol::ParseResult result = parser->next(frame);
         if (result == capsid::protocol::kParseFrame) {
@@ -98,8 +91,7 @@ bool read_frame(int fd,
         if (result == capsid::protocol::kParseError) {
             fail("worker response protocol error");
         }
-        const std::chrono::steady_clock::time_point now =
-            std::chrono::steady_clock::now();
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
         if (now >= deadline) {
             return false;
         }
@@ -107,9 +99,7 @@ bool read_frame(int fd,
         descriptor.fd = fd;
         descriptor.events = POLLIN;
         const int remaining = static_cast<int>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                deadline - now)
-                .count());
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
         if (capsid::win32::capsid_poll(&descriptor, 1, remaining) <= 0) {
             return false;
         }
@@ -123,13 +113,11 @@ bool read_frame(int fd,
         if (count <= 0) {
             return false;
         }
-        require(
-            parser->append(buffer, static_cast<size_t>(count)),
-            "worker response buffered");
+        require(parser->append(buffer, static_cast<size_t>(count)), "worker response buffered");
     }
 }
 
-pid_t spawn_worker(const char *path, int *parent_fd) {
+pid_t spawn_worker(const char* path, int* parent_fd) {
 #if defined(_WIN32)
     // Windows manual spawn: socket pair + CreateProcess with the child
     // socket in the explicit inheritable-handle list (the test needs to
@@ -141,39 +129,31 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
     if (!capsid::win32::create_socket_pair(sockets)) {
         fail("socket pair failed");
     }
-    HANDLE child_handle = reinterpret_cast<HANDLE>(
-        static_cast<intptr_t>(_get_osfhandle(sockets[1])));
-    if (!SetHandleInformation(child_handle, HANDLE_FLAG_INHERIT,
-                              HANDLE_FLAG_INHERIT)) {
+    HANDLE child_handle =
+        reinterpret_cast<HANDLE>(static_cast<intptr_t>(_get_osfhandle(sockets[1])));
+    if (!SetHandleInformation(child_handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) {
         fail("handle inheritance failed");
     }
-    const std::string fd_text = std::to_string(
-        static_cast<unsigned long long>(
-            reinterpret_cast<uintptr_t>(child_handle)));
-    std::string command_line =
-        std::string("\"") + path + "\" --ipc-fd " + fd_text;
+    const std::string fd_text =
+        std::to_string(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(child_handle)));
+    std::string command_line = std::string("\"") + path + "\" --ipc-fd " + fd_text;
     STARTUPINFOEXA startup;
     std::memset(&startup, 0, sizeof(startup));
     startup.StartupInfo.cb = sizeof(startup);
     SIZE_T attribute_size = 0;
     (void)InitializeProcThreadAttributeList(NULL, 1, 0, &attribute_size);
-    startup.lpAttributeList =
-        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
-            HeapAlloc(GetProcessHeap(), 0, attribute_size));
+    startup.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+        HeapAlloc(GetProcessHeap(), 0, attribute_size));
     if (startup.lpAttributeList == NULL ||
-        !InitializeProcThreadAttributeList(
-            startup.lpAttributeList, 1, 0, &attribute_size) ||
-        !UpdateProcThreadAttribute(
-            startup.lpAttributeList, 0,
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &child_handle,
-            sizeof(child_handle), NULL, NULL)) {
+        !InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0, &attribute_size) ||
+        !UpdateProcThreadAttribute(startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                   &child_handle, sizeof(child_handle), NULL, NULL)) {
         fail("spawn attribute list failed");
     }
     PROCESS_INFORMATION info;
     std::memset(&info, 0, sizeof(info));
-    if (!CreateProcessA(path, &command_line[0], NULL, NULL, TRUE,
-                        EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
-                        &startup.StartupInfo, &info)) {
+    if (!CreateProcessA(path, &command_line[0], NULL, NULL, TRUE, EXTENDED_STARTUPINFO_PRESENT,
+                        NULL, NULL, &startup.StartupInfo, &info)) {
         fail("worker spawn failed");
     }
     DeleteProcThreadAttributeList(startup.lpAttributeList);
@@ -198,15 +178,14 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
         posix_spawn_file_actions_addclose(&actions, sockets[1]);
     }
     char fd_text[] = "3";
-    char *const arguments[] = {
-        const_cast<char *>(path),
-        const_cast<char *>("--ipc-fd"),
+    char* const arguments[] = {
+        const_cast<char*>(path),
+        const_cast<char*>("--ipc-fd"),
         fd_text,
         NULL,
     };
     pid_t pid = -1;
-    const int result =
-        posix_spawn(&pid, path, &actions, NULL, arguments, environ);
+    const int result = posix_spawn(&pid, path, &actions, NULL, arguments, environ);
     posix_spawn_file_actions_destroy(&actions);
     close(sockets[1]);
     if (result != 0) {
@@ -218,7 +197,7 @@ pid_t spawn_worker(const char *path, int *parent_fd) {
 #endif
 }
 
-void send_startup(int fd, const std::string &bundle) {
+void send_startup(int fd, const std::string& bundle) {
     capsid::protocol::Frame hello;
     hello.type = capsid::protocol::kHello;
     hello.flags = 0;
@@ -252,30 +231,25 @@ void send_startup(int fd, const std::string &bundle) {
 
     capsid::protocol::Frame load;
     load.type = capsid::protocol::kLoadBundle;
-    load.flags =
-        capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
+    load.flags = capsid::protocol::kFlagStart | capsid::protocol::kFlagEnd;
     load.request_id = 0;
     load.payload.assign(bundle.begin(), bundle.end());
     send_frame(fd, load);
 }
 
-void append_string16(std::vector<uint8_t> *output,
-                     const std::string &value) {
-    capsid::protocol::append_u16(
-        output, static_cast<uint16_t>(value.size()));
+void append_string16(std::vector<uint8_t>* output, const std::string& value) {
+    capsid::protocol::append_u16(output, static_cast<uint16_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
-void append_string32(std::vector<uint8_t> *output,
-                     const std::string &value) {
-    capsid::protocol::append_u32(
-        output, static_cast<uint32_t>(value.size()));
+void append_string32(std::vector<uint8_t>* output, const std::string& value) {
+    capsid::protocol::append_u32(output, static_cast<uint32_t>(value.size()));
     output->insert(output->end(), value.begin(), value.end());
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 3) {
         fail("expected worker path and fixture path");
     }
@@ -298,10 +272,8 @@ int main(int argc, char **argv) {
     send_frame(fd, head);
 
     require(read_frame(fd, &parser, &frame, 3000), "initial credit received");
-    require(
-        frame.type == capsid::protocol::kWindowUpdate &&
-            frame.request_id == 41,
-        "worker advertised request credit");
+    require(frame.type == capsid::protocol::kWindowUpdate && frame.request_id == 41,
+            "worker advertised request credit");
 
     capsid::protocol::Frame body;
     body.type = capsid::protocol::kRequestBody;
@@ -311,15 +283,12 @@ int main(int argc, char **argv) {
     send_frame(fd, body);
 
     require(read_frame(fd, &parser, &frame, 3000), "violation error received");
-    require(
-        frame.type == capsid::protocol::kError &&
-            frame.request_id == 41,
-        "worker rejects request body beyond credit");
+    require(frame.type == capsid::protocol::kError && frame.request_id == 41,
+            "worker rejects request body beyond credit");
 
     close(fd);
 #if defined(_WIN32)
-    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE,
-                                 static_cast<DWORD>(pid));
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, static_cast<DWORD>(pid));
     if (process != NULL) {
         TerminateProcess(process, 1);
         WaitForSingleObject(process, 5000);

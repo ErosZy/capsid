@@ -14,17 +14,16 @@
 
 static int g_checks = 0;
 
-#define CHECK(condition)                                          \
-    do {                                                          \
-        if (!(condition)) {                                       \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__,         \
-                    __LINE__, #condition);                        \
-            return 1;                                             \
-        }                                                         \
-        ++g_checks;                                               \
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #condition);                   \
+            return 1;                                                                              \
+        }                                                                                          \
+        ++g_checks;                                                                                \
     } while (0)
 
-static int is_lower_hex(const char *value, size_t size) {
+static int is_lower_hex(const char* value, size_t size) {
     if (value == NULL || strlen(value) != size) {
         return 0;
     }
@@ -58,7 +57,7 @@ int main(void) {
      * (newer) version so the v1 caller knows it must be conservative. */
     CHECK(capsid_runtime_build_info(&info) == CAPSID_OK);
     CHECK(info.struct_size == sizeof(info)); /* unchanged: only v1 fields fit */
-    CHECK(info.version == 2u); /* current CAPSID_BUILD_INFO_VERSION */
+    CHECK(info.version == 2u);               /* current CAPSID_BUILD_INFO_VERSION */
 
     /* Every v1 field is filled. */
     CHECK(info.runtime_version != NULL && info.runtime_version[0] != '\0');
@@ -67,18 +66,13 @@ int main(void) {
     CHECK(is_lower_hex(info.quickjs_commit, 40));
     CHECK(is_lower_hex(info.txiki_overlay_key, 64));
     CHECK(is_lower_hex(info.txiki_overlay_manifest, 64));
-    CHECK(info.bytecode_compile_flags != NULL &&
-          info.bytecode_compile_flags[0] != '\0');
-    CHECK(info.target_architecture != NULL &&
-          info.target_architecture[0] != '\0');
-    CHECK((strcmp(info.endianness, "little") == 0 ||
-           strcmp(info.endianness, "big") == 0) &&
-          info.pointer_width_bits == sizeof(void *) * 8);
-    CHECK(info.bytecode_format_identity != NULL &&
-          info.bytecode_format_identity[0] != '\0');
+    CHECK(info.bytecode_compile_flags != NULL && info.bytecode_compile_flags[0] != '\0');
+    CHECK(info.target_architecture != NULL && info.target_architecture[0] != '\0');
+    CHECK((strcmp(info.endianness, "little") == 0 || strcmp(info.endianness, "big") == 0) &&
+          info.pointer_width_bits == sizeof(void*) * 8);
+    CHECK(info.bytecode_format_identity != NULL && info.bytecode_format_identity[0] != '\0');
     CHECK(is_lower_hex(info.capability_manifest_sha256, 64));
-    CHECK(info.compatibility_id != NULL &&
-          strncmp(info.compatibility_id, "sha256:", 7) == 0 &&
+    CHECK(info.compatibility_id != NULL && strncmp(info.compatibility_id, "sha256:", 7) == 0 &&
           is_lower_hex(info.compatibility_id + 7, 64));
 
     /* Canary: the library must not touch memory beyond the v1 buffer even
@@ -88,7 +82,7 @@ int main(void) {
     {
         unsigned char raw[sizeof(capsid_build_info) + 64];
         memset(raw, 0, sizeof(raw));
-        capsid_build_info *probe = (capsid_build_info *)raw;
+        capsid_build_info* probe = (capsid_build_info*)raw;
         capsid_build_info_init(probe);
         memset(raw + sizeof(capsid_build_info), 0xAB, 64);
         CHECK(capsid_runtime_build_info(probe) == CAPSID_OK);

@@ -12,7 +12,10 @@ using capsid::host::probe_client_read;
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
 void require(bool value, const char* message) {
-    if (!value) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
+    if (!value) {
+        std::fprintf(stderr, "FAIL: %s\n", message);
+        std::exit(1);
+    }
 }
 void await_readable(asio::io_context& io, tcp::socket& socket) {
     // TCP write/shutdown completion does not imply peer readability yet.
@@ -37,7 +40,8 @@ int main() {
     asio::io_context io;
     tcp::acceptor listener(io, {asio::ip::make_address("127.0.0.1"), 0});
     tcp::socket client(io), server(io);
-    client.connect(listener.local_endpoint()); listener.accept(server);
+    client.connect(listener.local_endpoint());
+    listener.accept(server);
     require(!server.non_blocking(), "accepted socket starts in user blocking mode");
     const auto began = std::chrono::steady_clock::now();
     require(probe_client_read(server) == ClientReadProbe::kRetry,
@@ -60,11 +64,13 @@ int main() {
     require(probe_client_read(server) == ClientReadProbe::kEof,
             "client send half-close is distinct from reset/error");
     asio::write(server, asio::buffer("ok", 2));
-    char response[2]; asio::read(client, asio::buffer(response));
+    char response[2];
+    asio::read(client, asio::buffer(response));
     require(response[0] == 'o' && response[1] == 'k',
             "half-closed client can still receive its response");
     server.close();
     require(probe_client_read(server) == ClientReadProbe::kError,
             "closed descriptor fails without attempting a blocking read");
-    std::puts("client probe: stale readiness, nonblocking peek, data preservation and half-close PASS");
+    std::puts(
+        "client probe: stale readiness, nonblocking peek, data preservation and half-close PASS");
 }

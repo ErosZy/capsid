@@ -64,7 +64,7 @@ bool create_stop_pipe(int pipe_fds[2]) {
 #endif
 }
 
-}  // namespace
+} // namespace
 
 AdminService::AdminService(AdminServiceOptions options, AdminBackend* backend)
     : options_(std::move(options)), backend_(backend) {}
@@ -256,8 +256,7 @@ void AdminService::accept_loop() {
             active_fd_ = fd;
         }
         std::string ignored;
-        (void)serve_accepted_admin_http_connection(
-            fd, options_.http, backend_, &ignored);
+        (void)serve_accepted_admin_http_connection(fd, options_.http, backend_, &ignored);
         {
             // Clear the active fd under the same lock request_stop uses,
             // THEN close: a concurrent stop either sees the live fd (and
@@ -297,8 +296,8 @@ bool AdminService::wait(std::string* error) {
 #else
     if (socket_dev_ != 0 && socket_ino_ != 0) {
         struct stat st = {};
-        if (lstat(options_.socket.path.c_str(), &st) == 0 &&
-            st.st_dev == socket_dev_ && st.st_ino == socket_ino_) {
+        if (lstat(options_.socket.path.c_str(), &st) == 0 && st.st_dev == socket_dev_ &&
+            st.st_ino == socket_ino_) {
             (void)unlink(options_.socket.path.c_str());
         }
     }
@@ -322,4 +321,4 @@ bool AdminService::wait(std::string* error) {
     return true;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

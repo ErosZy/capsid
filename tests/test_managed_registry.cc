@@ -59,7 +59,7 @@ OperationStatus make_status(const std::string& operation_id) {
     return status;
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -84,8 +84,7 @@ int main(int argc, char** argv) {
         require(newest.operation_id == "op-" + std::to_string(kRecordBurst - 1),
                 "newest operation status did not round-trip");
         OperationStatus dummy;
-        require(!lookup_operation("op-0", &dummy),
-                "oldest recorded operation survived eviction");
+        require(!lookup_operation("op-0", &dummy), "oldest recorded operation survived eviction");
         require(!lookup_operation("op-975", &dummy),
                 "an evicted burst operation was still queryable");
         return 0;
@@ -99,10 +98,8 @@ int main(int argc, char** argv) {
                 "recorded status fields did not round-trip");
         // Re-recording the same id overwrites; the entry count is unchanged.
         record_operation("op-1", make_status("op-1"));
-        require(operation_record_count() == 1,
-                "re-record did not overwrite the existing entry");
-        require(!lookup_operation("op-missing", &out),
-                "unknown operation id reported as recorded");
+        require(operation_record_count() == 1, "re-record did not overwrite the existing entry");
+        require(!lookup_operation("op-missing", &out), "unknown operation id reported as recorded");
         return 0;
     }
 
@@ -190,7 +187,7 @@ int main(int argc, char** argv) {
         for (int t = 0; t < kPins; ++t) {
             threads.emplace_back([&, t]() {
                 AppOperationLock lock("pinned-app-" + std::to_string(t));
-                values[t].store(1);  // touch the slot while pinned
+                values[t].store(1); // touch the slot while pinned
                 ready.fetch_add(1);
                 while (!go.load()) {
                     std::this_thread::yield();
@@ -234,8 +231,7 @@ int main(int argc, char** argv) {
         for (int t = 0; t < kPins; ++t) {
             touched += values[t].load();
         }
-        require(touched == kPins,
-                "a pinned slot was evicted while its lock was held");
+        require(touched == kPins, "a pinned slot was evicted while its lock was held");
         require(app_operation_slot_count() <= 256,
                 "table did not self-heal under the cap after pins released");
         return 0;

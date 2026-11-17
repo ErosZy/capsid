@@ -29,20 +29,20 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 2) {
         fail("expected stubborn worker path");
     }
@@ -54,16 +54,14 @@ int main(int argc, char **argv) {
     // test budget; the stubborn worker never answers either way.
     config.request_timeout_ms = 200;
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
-    require_result(
-        capsid_worker_begin_bodyless_request(
-            worker, 1, "GET", "https://example.test/hang", NULL, 0),
-        "begin request 1");
-    require_result(
-        capsid_worker_begin_bodyless_request(
-            worker, 2, "GET", "https://example.test/hang", NULL, 0),
-        "begin request 2");
+    require_result(capsid_worker_begin_bodyless_request(worker, 1, "GET",
+                                                        "https://example.test/hang", NULL, 0),
+                   "begin request 1");
+    require_result(capsid_worker_begin_bodyless_request(worker, 2, "GET",
+                                                        "https://example.test/hang", NULL, 0),
+                   "begin request 2");
     require_result(capsid_worker_flush(worker), "flush requests");
 
     std::set<uint64_t> timed_out;
@@ -81,8 +79,7 @@ int main(int argc, char **argv) {
                 timed_out.insert(event.request_id);
                 continue;
             }
-            if (event.type == CAPSID_EVENT_EXIT ||
-                event.type == CAPSID_EVENT_ERROR) {
+            if (event.type == CAPSID_EVENT_EXIT || event.type == CAPSID_EVENT_ERROR) {
                 fail("unexpected event before the timeout drain");
             }
             continue;
@@ -101,8 +98,7 @@ int main(int argc, char **argv) {
         if (result == CAPSID_CLOSED) {
             break;
         }
-        fail(std::string("unexpected event result: ") +
-             capsid_result_string(result));
+        fail(std::string("unexpected event result: ") + capsid_result_string(result));
     }
 
     if (timed_out != std::set<uint64_t>({1, 2})) {
@@ -110,8 +106,7 @@ int main(int argc, char **argv) {
         for (const uint64_t id : timed_out) {
             actual += std::to_string(id) + " ";
         }
-        fail("hard timeout did not drain every inflight request; got: " +
-             actual);
+        fail("hard timeout did not drain every inflight request; got: " + actual);
     }
 
     capsid_worker_destroy(worker);

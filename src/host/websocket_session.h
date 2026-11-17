@@ -10,7 +10,7 @@
 
 namespace capsid::host {
 class WebSocketSession : public std::enable_shared_from_this<WebSocketSession> {
-public:
+  public:
     using Sender = std::function<bool(Command)>;
     using Completion = std::function<void(boost::beast::error_code, size_t)>;
     // The pump owns the same bounded codec/queues for accepted TCP,
@@ -21,22 +21,29 @@ public:
         std::function<void(boost::asio::const_buffer, Completion)> write;
         std::function<void()> close;
     };
-    WebSocketSession(boost::beast::tcp_stream &stream, std::shared_ptr<void> anchor,
-        std::shared_ptr<ChannelLease> lease, uint32_t id, const capsid::protocol::ChannelLimits &limits,
-        uint64_t write_timeout_ms, Sender sender,
-        std::function<void()> done, std::shared_ptr<ServiceChannelBudget> budget = nullptr);
-    WebSocketSession(std::shared_ptr<Network> network, std::shared_ptr<void> anchor,
-        uint32_t id, const capsid::protocol::ChannelLimits &limits,
-        uint64_t write_timeout_ms, Sender sender, std::function<void()> done,
-        std::shared_ptr<ServiceChannelBudget> budget = nullptr);
+    WebSocketSession(boost::beast::tcp_stream& stream, std::shared_ptr<void> anchor,
+                     std::shared_ptr<ChannelLease> lease, uint32_t id,
+                     const capsid::protocol::ChannelLimits& limits, uint64_t write_timeout_ms,
+                     Sender sender, std::function<void()> done,
+                     std::shared_ptr<ServiceChannelBudget> budget = nullptr);
+    WebSocketSession(std::shared_ptr<Network> network, std::shared_ptr<void> anchor, uint32_t id,
+                     const capsid::protocol::ChannelLimits& limits, uint64_t write_timeout_ms,
+                     Sender sender, std::function<void()> done,
+                     std::shared_ptr<ServiceChannelBudget> budget = nullptr);
     void start(std::string handshake, std::vector<uint8_t> leftovers);
     void start_client(std::vector<uint8_t> leftovers);
     void on_event(WorkerEvent event);
     // Send Going Away and allow a bounded peer Close reply before teardown.
     void shutdown();
     void abort(bool notify_worker = true);
-private:
-    struct Write { std::shared_ptr<std::vector<uint8_t>> bytes; std::shared_ptr<void> charge; uint64_t credit = 0; bool close = false, handshake = false, pong = false; };
+
+  private:
+    struct Write {
+        std::shared_ptr<std::vector<uint8_t>> bytes;
+        std::shared_ptr<void> charge;
+        uint64_t credit = 0;
+        bool close = false, handshake = false, pong = false;
+    };
     bool submit(Command command);
     void pump_input();
     void read();
@@ -86,7 +93,8 @@ private:
 };
 // Sanitized response fields only. Transport-owned fields cannot be chosen
 // by the application. Subprotocol selection must match an offered token.
-bool websocket_handshake(const std::string &key, const std::string &offered,
-    const std::vector<std::pair<std::string,std::string>> &headers, std::string *out);
+bool websocket_handshake(const std::string& key, const std::string& offered,
+                         const std::vector<std::pair<std::string, std::string>>& headers,
+                         std::string* out);
 }
 #endif

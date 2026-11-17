@@ -18,7 +18,7 @@ namespace capsid::host {
 // thread, and a dropped byte is harmless because a drop can only happen
 // while the worker is already draining.
 class WorkerEventSource {
-public:
+  public:
     // Outcome of a writable wait (see wait_writable_or_wake).
     enum class WakeResult { kWritable, kWoken, kTimedOut, kError };
 
@@ -47,21 +47,19 @@ public:
     // wake byte arrives, or `until` passes. kWritable means the flush can
     // proceed; kWoken means a command (kShutdown most likely) is waiting and
     // the caller must return to the command loop so it can run.
-    WakeResult wait_writable_or_wake(
-        std::optional<std::chrono::steady_clock::time_point> until);
+    WakeResult wait_writable_or_wake(std::optional<std::chrono::steady_clock::time_point> until);
 
-private:
+  private:
     enum class PollResult { kWorker, kWake, kTimeout, kError };
 
     PollResult poll_worker(short worker_events, short wake_events,
-                           std::optional<std::chrono::steady_clock::time_point>
-                               until);
+                           std::optional<std::chrono::steady_clock::time_point> until);
 
     capsid_worker* worker_ = nullptr;
-    int worker_fd_ = -1;  // from capsid_worker_fd(); the sole call site
+    int worker_fd_ = -1; // from capsid_worker_fd(); the sole call site
     int wake_pipe_[2] = {-1, -1};
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

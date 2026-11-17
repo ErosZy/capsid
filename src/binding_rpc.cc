@@ -21,21 +21,18 @@ namespace capsid {
 namespace {
 
 struct CloneContext {
-    JSContext *ctx;
+    JSContext* ctx;
     std::size_t depth;
     std::size_t nodes;
     std::size_t bytes;
-    std::unordered_set<const void *> ancestors;  // cycle detection
-    JSValue object_proto;   // Object.prototype, referenced
+    std::unordered_set<const void*> ancestors; // cycle detection
+    JSValue object_proto;                      // Object.prototype, referenced
 };
 
-bool clone_value(JSContext *ctx,
-                 JSValueConst value,
-                 NeutralValue *out,
-                 std::string *error,
-                 CloneContext *context);
+bool clone_value(JSContext* ctx, JSValueConst value, NeutralValue* out, std::string* error,
+                 CloneContext* context);
 
-bool fail_closed(std::string *error, const char *message) {
+bool fail_closed(std::string* error, const char* message) {
     if (error != NULL) {
         *error = message;
     }
@@ -46,13 +43,12 @@ bool fail_closed(std::string *error, const char *message) {
 // without consulting a mutable global constructor. Every exotic kind uses
 // QuickJS's native predicate below; no attacker-controlled Symbol.hasInstance
 // or replaced global constructor participates in type classification.
-bool learn_class_ids(JSContext *ctx, CloneContext *context) {
+bool learn_class_ids(JSContext* ctx, CloneContext* context) {
     // Class instances share the plain-object class id in this quickjs-ng,
     // so instance detection uses the prototype: a plain object's prototype
     // is Object.prototype (or null). The Proxy class id stays class-based
     // because a proxy's prototype mirrors its target's.
-    JSValue plain = JS_Eval(
-        ctx, "({})", 4, "<clone-probe>", JS_EVAL_TYPE_GLOBAL);
+    JSValue plain = JS_Eval(ctx, "({})", 4, "<clone-probe>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(plain)) {
         JS_FreeValue(ctx, plain);
         return false;
@@ -68,12 +64,9 @@ bool learn_class_ids(JSContext *ctx, CloneContext *context) {
     return true;
 }
 
-bool clone_string(JSContext *ctx,
-                  JSValueConst value,
-                  std::string *target,
-                  std::string *error,
-                  CloneContext *context) {
-    const char *text = JS_ToCString(ctx, value);
+bool clone_string(JSContext* ctx, JSValueConst value, std::string* target, std::string* error,
+                  CloneContext* context) {
+    const char* text = JS_ToCString(ctx, value);
     if (text == NULL) {
         return fail_closed(error, "unprintable string");
     }
@@ -88,29 +81,19 @@ bool clone_string(JSContext *ctx,
     return true;
 }
 
-bool reject_enumerable_symbol_keys(JSContext *ctx,
-                                   JSValueConst value,
-                                   std::string *error) {
-    JSPropertyEnum *properties = NULL;
+bool reject_enumerable_symbol_keys(JSContext* ctx, JSValueConst value, std::string* error) {
+    JSPropertyEnum* properties = NULL;
     uint32_t count = 0;
-    if (JS_GetOwnPropertyNames(
-            ctx,
-            &properties,
-            &count,
-            value,
-            JS_GPN_ENUM_ONLY | JS_GPN_SYMBOL_MASK) < 0) {
+    if (JS_GetOwnPropertyNames(ctx, &properties, &count, value,
+                               JS_GPN_ENUM_ONLY | JS_GPN_SYMBOL_MASK) < 0) {
         return fail_closed(error, "object properties are unreadable");
     }
     JS_FreePropertyEnum(ctx, properties, count);
-    return count == 0 ||
-           fail_closed(error, "symbol property keys are not cloneable");
+    return count == 0 || fail_closed(error, "symbol property keys are not cloneable");
 }
 
-bool clone_value(JSContext *ctx,
-                 JSValueConst value,
-                 NeutralValue *out,
-                 std::string *error,
-                 CloneContext *context) {
+bool clone_value(JSContext* ctx, JSValueConst value, NeutralValue* out, std::string* error,
+                 CloneContext* context) {
     if (context->depth > kMaxBindingCloneDepth) {
         return fail_closed(error, "clone depth limit exceeded");
     }
@@ -182,7 +165,7 @@ bool clone_value(JSContext *ctx,
     if (JS_IsArrayBuffer(value)) {
         out->kind = NeutralValue::Kind::kBytes;
         size_t size = 0;
-        uint8_t *data = JS_GetArrayBuffer(ctx, &size, value);
+        uint8_t* data = JS_GetArrayBuffer(ctx, &size, value);
         if (data == NULL) {
             return fail_closed(error, "array buffer is unreadable");
         }
@@ -200,7 +183,7 @@ bool clone_value(JSContext *ctx,
     if (JS_GetTypedArrayType(value) == JS_TYPED_ARRAY_UINT8) {
         out->kind = NeutralValue::Kind::kBytes;
         size_t typed_size = 0;
-        uint8_t *typed = JS_GetUint8Array(ctx, &typed_size, value);
+        uint8_t* typed = JS_GetUint8Array(ctx, &typed_size, value);
         if (typed == NULL) {
             return fail_closed(error, "byte array is unreadable");
         }
@@ -237,18 +220,15 @@ bool clone_value(JSContext *ctx,
         JSValue proto = JS_GetPrototype(ctx, value);
         const bool plain = !JS_IsException(proto) &&
                            (JS_IsNull(proto) ||
-                            JS_VALUE_GET_PTR(proto) ==
-                                JS_VALUE_GET_PTR(context->object_proto));
+                            JS_VALUE_GET_PTR(proto) == JS_VALUE_GET_PTR(context->object_proto));
         JS_FreeValue(ctx, proto);
         if (!plain) {
-            return fail_closed(error,
-                               "class instance values are not cloneable");
+            return fail_closed(error, "class instance values are not cloneable");
         }
     }
 
     // Cycle detection by object identity along the current path.
-    const void *identity = static_cast<const void *>(
-        JS_VALUE_GET_PTR(value));
+    const void* identity = static_cast<const void*>(JS_VALUE_GET_PTR(value));
     if (!context->ancestors.insert(identity).second) {
         return fail_closed(error, "cyclic values are not cloneable");
     }
@@ -257,8 +237,7 @@ bool clone_value(JSContext *ctx,
         out->kind = NeutralValue::Kind::kArray;
         uint32_t length = 0;
         JSValue length_value = JS_GetPropertyStr(ctx, value, "length");
-        if (JS_IsException(length_value) ||
-            JS_ToUint32(ctx, &length, length_value) != 0) {
+        if (JS_IsException(length_value) || JS_ToUint32(ctx, &length, length_value) != 0) {
             JS_FreeValue(ctx, length_value);
             context->ancestors.erase(identity);
             return fail_closed(error, "array length is unreadable");
@@ -269,20 +248,17 @@ bool clone_value(JSContext *ctx,
         for (uint32_t index = 0; index < length; ++index) {
             JSAtom atom = JS_NewAtomUInt32(ctx, index);
             JSPropertyDescriptor descriptor;
-            const int present =
-                JS_GetOwnProperty(ctx, &descriptor, value, atom);
+            const int present = JS_GetOwnProperty(ctx, &descriptor, value, atom);
             JS_FreeAtom(ctx, atom);
             if (present < 0) {
                 --context->depth;
                 context->ancestors.erase(identity);
-                return fail_closed(error,
-                                   "array element is unreadable");
+                return fail_closed(error, "array element is unreadable");
             }
             JSValue element = JS_UNDEFINED;
             if (present > 0) {
                 const bool is_accessor =
-                    !JS_IsUndefined(descriptor.getter) ||
-                    !JS_IsUndefined(descriptor.setter);
+                    !JS_IsUndefined(descriptor.getter) || !JS_IsUndefined(descriptor.setter);
                 element = descriptor.value;
                 JS_FreeValue(ctx, descriptor.getter);
                 JS_FreeValue(ctx, descriptor.setter);
@@ -290,13 +266,11 @@ bool clone_value(JSContext *ctx,
                     JS_FreeValue(ctx, element);
                     --context->depth;
                     context->ancestors.erase(identity);
-                    return fail_closed(
-                        error, "accessor properties are not cloneable");
+                    return fail_closed(error, "accessor properties are not cloneable");
                 }
             }
             NeutralValue child;
-            const bool ok = clone_value(
-                ctx, element, &child, error, context);
+            const bool ok = clone_value(ctx, element, &child, error, context);
             JS_FreeValue(ctx, element);
             if (!ok) {
                 --context->depth;
@@ -311,16 +285,16 @@ bool clone_value(JSContext *ctx,
     }
 
     out->kind = NeutralValue::Kind::kObject;
-    JSPropertyEnum *tab = NULL;
+    JSPropertyEnum* tab = NULL;
     uint32_t count = 0;
-    if (JS_GetOwnPropertyNames(ctx, &tab, &count, value,
-                               JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) < 0) {
+    if (JS_GetOwnPropertyNames(ctx, &tab, &count, value, JS_GPN_ENUM_ONLY | JS_GPN_STRING_MASK) <
+        0) {
         context->ancestors.erase(identity);
         return fail_closed(error, "object properties are unreadable");
     }
     ++context->depth;
     for (uint32_t index = 0; index < count; ++index) {
-        const char *key = JS_AtomToCString(ctx, tab[index].atom);
+        const char* key = JS_AtomToCString(ctx, tab[index].atom);
         if (key == NULL) {
             continue;
         }
@@ -340,16 +314,14 @@ bool clone_value(JSContext *ctx,
         // invoking them; anything function-shaped here is a getter/setter
         // and is rejected (never executed).
         JSPropertyDescriptor descriptor;
-        if (JS_GetOwnProperty(ctx, &descriptor, value, tab[index].atom) <
-            0) {
+        if (JS_GetOwnProperty(ctx, &descriptor, value, tab[index].atom) < 0) {
             JS_FreePropertyEnum(ctx, tab, count);
             --context->depth;
             context->ancestors.erase(identity);
             return fail_closed(error, "object property is unreadable");
         }
         const bool is_accessor =
-            !JS_IsUndefined(descriptor.getter) ||
-            !JS_IsUndefined(descriptor.setter);
+            !JS_IsUndefined(descriptor.getter) || !JS_IsUndefined(descriptor.setter);
         const JSValue member = descriptor.value;
         if (is_accessor) {
             JS_FreeValue(ctx, descriptor.getter);
@@ -358,14 +330,12 @@ bool clone_value(JSContext *ctx,
             JS_FreePropertyEnum(ctx, tab, count);
             --context->depth;
             context->ancestors.erase(identity);
-            return fail_closed(error,
-                               "accessor properties are not cloneable");
+            return fail_closed(error, "accessor properties are not cloneable");
         }
         JS_FreeValue(ctx, descriptor.getter);
         JS_FreeValue(ctx, descriptor.setter);
         NeutralValue child;
-        const bool ok =
-            clone_value(ctx, member, &child, error, context);
+        const bool ok = clone_value(ctx, member, &child, error, context);
         JS_FreeValue(ctx, member);
         if (!ok) {
             JS_FreePropertyEnum(ctx, tab, count);
@@ -373,8 +343,7 @@ bool clone_value(JSContext *ctx,
             context->ancestors.erase(identity);
             return false;
         }
-        out->object.push_back(
-            std::make_pair(key_string, std::move(child)));
+        out->object.push_back(std::make_pair(key_string, std::move(child)));
     }
     JS_FreePropertyEnum(ctx, tab, count);
     --context->depth;
@@ -382,9 +351,9 @@ bool clone_value(JSContext *ctx,
     return true;
 }
 
-}  // namespace
+} // namespace
 
-JSValue neutral_to_js(JSContext *ctx, const NeutralValue &value) {
+JSValue neutral_to_js(JSContext* ctx, const NeutralValue& value) {
     switch (value.kind) {
     case NeutralValue::Kind::kUndefined:
         return JS_UNDEFINED;
@@ -397,37 +366,29 @@ JSValue neutral_to_js(JSContext *ctx, const NeutralValue &value) {
     }
     case NeutralValue::Kind::kBigInt: {
         std::size_t offset = 0;
-        if (!value.bigint.empty() &&
-            (value.bigint[0] == '-' || value.bigint[0] == '+')) {
+        if (!value.bigint.empty() && (value.bigint[0] == '-' || value.bigint[0] == '+')) {
             offset = 1;
         }
         if (offset == value.bigint.size()) {
-            return JS_ThrowSyntaxError(ctx,
-                                       "invalid neutral bigint");
+            return JS_ThrowSyntaxError(ctx, "invalid neutral bigint");
         }
         for (; offset < value.bigint.size(); ++offset) {
-            if (!std::isdigit(
-                    static_cast<unsigned char>(value.bigint[offset]))) {
-                return JS_ThrowSyntaxError(ctx,
-                                           "invalid neutral bigint");
+            if (!std::isdigit(static_cast<unsigned char>(value.bigint[offset]))) {
+                return JS_ThrowSyntaxError(ctx, "invalid neutral bigint");
             }
         }
         // QuickJS's JS_ToBigInt64 intentionally truncates modulo 2^64. Use a
         // validated decimal literal so arbitrary precision survives exactly.
-        const std::string literal =
-            "(" + value.bigint + "n)";
-        return JS_Eval(
-            ctx, literal.data(), literal.size(), "<binding-bigint>",
-            JS_EVAL_TYPE_GLOBAL);
+        const std::string literal = "(" + value.bigint + "n)";
+        return JS_Eval(ctx, literal.data(), literal.size(), "<binding-bigint>",
+                       JS_EVAL_TYPE_GLOBAL);
     }
     case NeutralValue::Kind::kString:
-        return JS_NewStringLen(
-            ctx, value.string.data(), value.string.size());
+        return JS_NewStringLen(ctx, value.string.data(), value.string.size());
     case NeutralValue::Kind::kDate:
         return JS_NewDate(ctx, value.date_ms);
     case NeutralValue::Kind::kBytes: {
-        JSValue array = JS_NewUint8ArrayCopy(
-            ctx, value.bytes.data(), value.bytes.size());
+        JSValue array = JS_NewUint8ArrayCopy(ctx, value.bytes.data(), value.bytes.size());
         return array;
     }
     case NeutralValue::Kind::kArray: {
@@ -441,8 +402,7 @@ JSValue neutral_to_js(JSContext *ctx, const NeutralValue &value) {
                 JS_FreeValue(ctx, array);
                 return child;
             }
-            if (JS_SetPropertyUint32(
-                    ctx, array, static_cast<uint32_t>(index), child) < 0) {
+            if (JS_SetPropertyUint32(ctx, array, static_cast<uint32_t>(index), child) < 0) {
                 JS_FreeValue(ctx, array);
                 return JS_EXCEPTION;
             }
@@ -454,14 +414,13 @@ JSValue neutral_to_js(JSContext *ctx, const NeutralValue &value) {
         if (JS_IsException(object)) {
             return object;
         }
-        for (const auto &entry : value.object) {
+        for (const auto& entry : value.object) {
             JSValue child = neutral_to_js(ctx, entry.second);
             if (JS_IsException(child)) {
                 JS_FreeValue(ctx, object);
                 return child;
             }
-            if (JS_SetPropertyStr(
-                    ctx, object, entry.first.c_str(), child) < 0) {
+            if (JS_SetPropertyStr(ctx, object, entry.first.c_str(), child) < 0) {
                 JS_FreeValue(ctx, object);
                 return JS_EXCEPTION;
             }
@@ -472,10 +431,7 @@ JSValue neutral_to_js(JSContext *ctx, const NeutralValue &value) {
     return JS_ThrowInternalError(ctx, "invalid neutral value kind");
 }
 
-bool neutral_from_js(JSContext *ctx,
-                     JSValueConst value,
-                     NeutralValue *out,
-                     std::string *error) {
+bool neutral_from_js(JSContext* ctx, JSValueConst value, NeutralValue* out, std::string* error) {
     if (ctx == NULL || out == NULL) {
         return fail_closed(error, "clone arguments are invalid");
     }
@@ -491,8 +447,7 @@ bool neutral_from_js(JSContext *ctx,
         return fail_closed(error, "clone class probe failed");
     }
     NeutralValue result;
-    const bool ok =
-        clone_value(ctx, value, &result, error, &context);
+    const bool ok = clone_value(ctx, value, &result, error, &context);
     JS_FreeValue(ctx, context.object_proto);
     if (ok) {
         *out = std::move(result);
@@ -500,18 +455,15 @@ bool neutral_from_js(JSContext *ctx,
     return ok;
 }
 
-JSValue binding_call_id_to_js(JSContext *ctx, std::uint64_t call_id) {
+JSValue binding_call_id_to_js(JSContext* ctx, std::uint64_t call_id) {
     if (ctx == NULL || call_id == 0) {
-        return ctx != NULL
-                   ? JS_ThrowRangeError(ctx, "binding call id zero is invalid")
-                   : JS_EXCEPTION;
+        return ctx != NULL ? JS_ThrowRangeError(ctx, "binding call id zero is invalid")
+                           : JS_EXCEPTION;
     }
     return JS_NewBigUint64(ctx, call_id);
 }
 
-bool binding_call_id_from_js(JSContext *ctx,
-                             JSValueConst value,
-                             std::uint64_t *call_id) {
+bool binding_call_id_from_js(JSContext* ctx, JSValueConst value, std::uint64_t* call_id) {
     if (ctx == NULL || call_id == NULL || !JS_IsBigInt(value)) {
         return false;
     }
@@ -528,4 +480,4 @@ bool binding_call_id_from_js(JSContext *ctx,
     return true;
 }
 
-}  // namespace capsid
+} // namespace capsid

@@ -5,6 +5,7 @@ Compression is only transport: callers must still run the ordinary lane/point
 validators. No measured metadata, raw bytes, checksums or budgets are repaired.
 The destination is new and retained on failure for inspection.
 """
+
 import argparse
 import gzip
 import hashlib
@@ -12,8 +13,7 @@ import json
 from pathlib import Path
 import tarfile
 
-from perf_evidence import (EvidenceError, SHA256, is_link, need, object_pairs,
-                           relative_name, sha256)
+from perf_evidence import EvidenceError, SHA256, is_link, need, object_pairs, relative_name, sha256
 
 MAX_FILES = 20000
 MAX_MEMBER_BYTES = 256 * 1024 * 1024
@@ -29,28 +29,42 @@ def positive(value, label, maximum):
 def load_index(repo):
     repo = Path(repo).resolve()
     path = repo / "perf-site/archive-index.json"
-    need(path.is_file() and not is_link(path) and path.resolve().is_relative_to(repo) and
-         not is_link(path.parent) and path.stat().st_size <= 1024 * 1024,
-         "missing or oversized packed performance index")
+    need(
+        path.is_file()
+        and not is_link(path)
+        and path.resolve().is_relative_to(repo)
+        and not is_link(path.parent)
+        and path.stat().st_size <= 1024 * 1024,
+        "missing or oversized packed performance index",
+    )
     index = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=object_pairs)
-    need(isinstance(index, dict) and index.get("schema") == 1 and
-         index.get("contract") == "capsid-perf-packed-archives-v1",
-         "unsupported packed performance contract")
+    need(
+        isinstance(index, dict)
+        and index.get("schema") == 1
+        and index.get("contract") == "capsid-perf-packed-archives-v1",
+        "unsupported packed performance contract",
+    )
     bundles = index.get("bundles")
-    need(isinstance(bundles, list) and 0 < len(bundles) <= 30,
-         "invalid packed performance bundle list")
+    need(
+        isinstance(bundles, list) and 0 < len(bundles) <= 30,
+        "invalid packed performance bundle list",
+    )
     prefixes, parts_seen = set(), set()
     total_files = total_bytes = 0
     for bundle in bundles:
         need(isinstance(bundle, dict), "invalid packed bundle")
         prefix = bundle.get("prefix")
         relative_name(prefix)
-        need(prefix.startswith("bench/results/") and prefix not in prefixes,
-             "duplicate or non-performance archive prefix")
+        need(
+            prefix.startswith("bench/results/") and prefix not in prefixes,
+            "duplicate or non-performance archive prefix",
+        )
         prefixes.add(prefix)
         need(bundle.get("lane") in ("cold-start", "qps", "density"), "unknown packed lane")
         total_files += positive(bundle.get("files"), "packed file count", MAX_FILES)
-        total_bytes += positive(bundle.get("uncompressedBytes"), "uncompressed bytes", MAX_TOTAL_BYTES)
+        total_bytes += positive(
+            bundle.get("uncompressedBytes"), "uncompressed bytes", MAX_TOTAL_BYTES
+        )
         transport_bytes = positive(bundle.get("bytes"), "compressed bytes", MAX_TRANSPORT_BYTES)
         need(SHA256.fullmatch(str(bundle.get("sha256", ""))), "invalid compressed digest")
         parts = bundle.get("parts")
@@ -60,14 +74,18 @@ def load_index(repo):
             need(isinstance(part, dict), "invalid transport part")
             name = part.get("path")
             relative_name(name)
-            need(name.startswith("perf-site/archives/") and name not in parts_seen,
-                 "duplicate or misplaced transport part")
+            need(
+                name.startswith("perf-site/archives/") and name not in parts_seen,
+                "duplicate or misplaced transport part",
+            )
             parts_seen.add(name)
             size += positive(part.get("bytes"), "part bytes", MAX_TRANSPORT_BYTES)
             need(SHA256.fullmatch(str(part.get("sha256", ""))), "invalid part digest")
         need(size == transport_bytes, "transport part lengths disagree")
-    need(total_files <= MAX_FILES and total_bytes <= MAX_TOTAL_BYTES,
-         "packed archive aggregate exceeds bound")
+    need(
+        total_files <= MAX_FILES and total_bytes <= MAX_TOTAL_BYTES,
+        "packed archive aggregate exceeds bound",
+    )
     return index
 
 
@@ -89,11 +107,16 @@ def materialize(repo, destination, required_prefixes=None):
         with joined.open("xb") as target:
             for part in bundle["parts"]:
                 source = repo / part["path"]
-                need(source.is_file() and not is_link(source) and
-                     source.resolve().is_relative_to(repo) and
-                     not any(is_link(parent) for parent in source.parents
-                             if parent.is_relative_to(repo)) and
-                     source.stat().st_size == part["bytes"], "missing or changed transport part")
+                need(
+                    source.is_file()
+                    and not is_link(source)
+                    and source.resolve().is_relative_to(repo)
+                    and not any(
+                        is_link(parent) for parent in source.parents if parent.is_relative_to(repo)
+                    )
+                    and source.stat().st_size == part["bytes"],
+                    "missing or changed transport part",
+                )
                 current = hashlib.sha256()
                 with source.open("rb") as stream:
                     while data := stream.read(1024 * 1024):
@@ -101,21 +124,26 @@ def materialize(repo, destination, required_prefixes=None):
                         combined.update(data)
                         target.write(data)
                 need(current.hexdigest() == part["sha256"], "transport part digest mismatch")
-        need(joined.stat().st_size == bundle["bytes"] and
-             combined.hexdigest() == bundle["sha256"], "combined transport digest mismatch")
+        need(
+            joined.stat().st_size == bundle["bytes"] and combined.hexdigest() == bundle["sha256"],
+            "combined transport digest mismatch",
+        )
         names, portable_names, total = set(), set(), 0
         try:
             with joined.open("rb") as raw, gzip.GzipFile(fileobj=raw, mode="rb") as decoded:
                 # Bound padding/headers and trailing decompression, not just files.
                 maximum = bundle["uncompressedBytes"] + bundle["files"] * 4096 + 1024 * 1024
+
                 class BoundedStream:
                     size = 0
+
                     def read(self, count):
                         need(count >= 0, "unbounded archive read")
                         data = decoded.read(min(count, maximum - self.size + 1))
                         self.size += len(data)
                         need(self.size <= maximum, "decompressed transport exceeds bound")
                         return data
+
                 bounded = BoundedStream()
 
                 class BoundedTarInfo(tarfile.TarInfo):
@@ -130,12 +158,16 @@ def materialize(repo, destination, required_prefixes=None):
                         cls.headers += 1
                         need(cls.headers <= bundle["files"] * 2, "too many packed headers")
                         if self.type == tarfile.XHDTYPE:
-                            need(not cls.pending_pax and 0 <= self.size <= 8192,
-                                 "oversized or repeated packed metadata header")
+                            need(
+                                not cls.pending_pax and 0 <= self.size <= 8192,
+                                "oversized or repeated packed metadata header",
+                            )
                             cls.pending_pax = True
                         else:
-                            need(self.type in (tarfile.REGTYPE, tarfile.AREGTYPE),
-                                 "non-regular packed member")
+                            need(
+                                self.type in (tarfile.REGTYPE, tarfile.AREGTYPE),
+                                "non-regular packed member",
+                            )
                             need(0 <= self.size <= MAX_MEMBER_BYTES, "packed member too large")
                             cls.pending_pax = False
                         return super()._proc_member(archive)
@@ -144,23 +176,37 @@ def materialize(repo, destination, required_prefixes=None):
                     for member in archive:
                         name = member.name
                         relative_name(name)
-                        need(name.startswith(bundle["prefix"] + "/"), "member outside declared archive")
+                        need(
+                            name.startswith(bundle["prefix"] + "/"),
+                            "member outside declared archive",
+                        )
                         need(member.isfile() and not member.issparse(), "non-regular packed member")
-                        need(name not in names and name.casefold() not in portable_names and
-                             name.casefold() not in portable_inventory,
-                             "duplicate or case-aliased packed member")
+                        need(
+                            name not in names
+                            and name.casefold() not in portable_names
+                            and name.casefold() not in portable_inventory,
+                            "duplicate or case-aliased packed member",
+                        )
                         need(0 <= member.size <= MAX_MEMBER_BYTES, "packed member too large")
                         names.add(name)
                         portable_names.add(name.casefold())
                         portable_inventory.add(name.casefold())
                         total += member.size
-                        need(len(names) <= bundle["files"] and total <= bundle["uncompressedBytes"],
-                             "packed archive exceeds declared bounds")
+                        need(
+                            len(names) <= bundle["files"] and total <= bundle["uncompressedBytes"],
+                            "packed archive exceeds declared bounds",
+                        )
                         target = destination / name
                         target.parent.mkdir(parents=True, exist_ok=True)
-                        need(target.resolve().is_relative_to(destination.resolve()) and
-                             not any(is_link(parent) for parent in target.parents
-                                     if parent.is_relative_to(destination)), "unsafe archive destination")
+                        need(
+                            target.resolve().is_relative_to(destination.resolve())
+                            and not any(
+                                is_link(parent)
+                                for parent in target.parents
+                                if parent.is_relative_to(destination)
+                            ),
+                            "unsafe archive destination",
+                        )
                         stream = archive.extractfile(member)
                         need(stream is not None, "missing packed member content")
                         digest, written = hashlib.sha256(), 0
@@ -170,16 +216,20 @@ def materialize(repo, destination, required_prefixes=None):
                                 need(written <= member.size, "packed member size mismatch")
                                 digest.update(data)
                                 output.write(data)
-                        need(written == member.size and sha256(target) == digest.hexdigest(),
-                             "restored member bytes changed")
+                        need(
+                            written == member.size and sha256(target) == digest.hexdigest(),
+                            "restored member bytes changed",
+                        )
                         inventory[name] = digest.hexdigest()
                 # Consume the gzip trailer and verify its CRC too.
                 while tail := bounded.read(1024 * 1024):
                     need(not any(tail), "unexpected non-padding archive trailer")
         except (tarfile.TarError, gzip.BadGzipFile, EOFError) as exc:
             raise EvidenceError("invalid packed archive stream") from exc
-        need(len(names) == bundle["files"] and total == bundle["uncompressedBytes"],
-             "packed archive omitted declared files or bytes")
+        need(
+            len(names) == bundle["files"] and total == bundle["uncompressedBytes"],
+            "packed archive omitted declared files or bytes",
+        )
         reports.append({"prefix": bundle["prefix"], "files": len(names), "bytes": total})
     return {"root": str(destination), "files": inventory, "bundles": reports, "index": index}
 
@@ -190,7 +240,9 @@ def main():
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
     report = materialize(args.repo, args.output)
-    print(json.dumps({"restoredFiles": len(report["files"]), "root": report["root"]}, sort_keys=True))
+    print(
+        json.dumps({"restoredFiles": len(report["files"]), "root": report["root"]}, sort_keys=True)
+    )
 
 
 if __name__ == "__main__":

@@ -20,12 +20,10 @@
 namespace capsid::host {
 
 inline int poll_timeout_ms(std::uint64_t timeout_ms) {
-    constexpr std::uint64_t kIntMax =
-        static_cast<std::uint64_t>(std::numeric_limits<int>::max());
-    return timeout_ms >= kIntMax ? std::numeric_limits<int>::max()
-                                 : static_cast<int>(timeout_ms);
+    constexpr std::uint64_t kIntMax = static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+    return timeout_ms >= kIntMax ? std::numeric_limits<int>::max() : static_cast<int>(timeout_ms);
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
-#endif  // CAPSID_SRC_HOST_POLL_LIMITS_H_
+#endif // CAPSID_SRC_HOST_POLL_LIMITS_H_

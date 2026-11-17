@@ -41,7 +41,7 @@ class MetricsRegistry;
 struct DeployOutcome {
     bool ok = false;
     std::string operation_id;
-    std::string error;  // static text
+    std::string error; // static text
     // The whole owning pool: every warmed worker (READY + compatibility
     // verified), all owned by the caller after a successful deploy; the
     // caller wires the data plane and drains the previous pool. The pool
@@ -110,19 +110,17 @@ struct ManagedHostOptions {
     // the persist failed. On the transactional path the coordinator owns
     // no workers after prepare: the plan does.
     std::function<std::unique_ptr<ActivationPlan>(
-        const std::string& application, const DeployOutcome& prepared,
-        std::string* error)>
+        const std::string& application, const DeployOutcome& prepared, std::string* error)>
         prepare_activation;
-    std::function<void(ActivationPlan* plan)> commit_activation;  // noexcept
-    std::function<void(ActivationPlan* plan)> abort_activation;   // noexcept
+    std::function<void(ActivationPlan* plan)> commit_activation; // noexcept
+    std::function<void(ActivationPlan* plan)> abort_activation;  // noexcept
     // §9.3 retire transaction: prepare_retire before the tombstone
     // persist (may fail), commit_retire after it (noexcept — drain
     // signal + ledger category switch), abort_retire when it failed.
-    std::function<std::unique_ptr<RetirePlan>(
-        const std::string& application, std::string* error)>
+    std::function<std::unique_ptr<RetirePlan>(const std::string& application, std::string* error)>
         prepare_retire;
-    std::function<void(RetirePlan* plan)> commit_retire;  // noexcept
-    std::function<void(RetirePlan* plan)> abort_retire;   // noexcept
+    std::function<void(RetirePlan* plan)> commit_retire; // noexcept
+    std::function<void(RetirePlan* plan)> abort_retire;  // noexcept
     // §9.4 process-global weighted capacity ledger (one object shared by
     // every App's options). The coordinator reserves the target pool
     // count before ANY spawn and settles the reserve on the transaction
@@ -147,7 +145,7 @@ struct OperationStatus {
     std::string operation_id;
     OperationState state = OperationState::kValidating;
     std::string version;
-    std::string error;  // static text; never secret values or paths
+    std::string error; // static text; never secret values or paths
 };
 
 enum class DeployErrorCode {
@@ -165,14 +163,12 @@ enum class DeployErrorCode {
 // Runs the deploy pipeline for app/version. On success the active
 // generation is persisted and the worker is warm; the caller then
 // publishes the data-plane routing.
-DeployOutcome managed_deploy(ManagedHostOptions* options,
-                             const std::string& version,
+DeployOutcome managed_deploy(ManagedHostOptions* options, const std::string& version,
                              OperationStatus* status);
 
 // Retire the active App: persist the retired tombstone (no worker
 // restart). Returns the operation id.
-DeployOutcome managed_retire(ManagedHostOptions* options,
-                             OperationStatus* status);
+DeployOutcome managed_retire(ManagedHostOptions* options, OperationStatus* status);
 
 // M2 item 5a: persist the crash-budget quarantine tombstone (state
 // quarantined + CRASH_BUDGET_EXCEEDED) for the expected active generation.
@@ -183,8 +179,7 @@ DeployOutcome managed_retire(ManagedHostOptions* options,
 // The caller (the worker supervisor) stops automatic replacement and
 // removes the dead worker from the routing map after this returns.
 DeployOutcome managed_quarantine(ManagedHostOptions* options,
-                                 const std::string& expected_generation,
-                                 OperationStatus* status,
+                                 const std::string& expected_generation, OperationStatus* status,
                                  const std::function<bool()>& still_current = {});
 
 // M2 item 5a: reads the current App lifecycle (active-state document +
@@ -208,17 +203,15 @@ HealthCheckConfig managed_read_health_check(ManagedHostOptions* options,
 // Startup recovery: load active.json if present; validate the COMPLETE
 // generation (artifacts, policy, trusted keys, identity); spawn and warm
 // the worker; publish routing. Missing active.json means no active App.
-DeployOutcome managed_recover(ManagedHostOptions* options,
-                              OperationStatus* status);
+DeployOutcome managed_recover(ManagedHostOptions* options, OperationStatus* status);
 
 // Reads the current operation status by id.
-OperationStatus managed_operation_status(
-    const ManagedHostOptions& options,
-    const std::string& operation_id);
+OperationStatus managed_operation_status(const ManagedHostOptions& options,
+                                         const std::string& operation_id);
 
 // Reads the App status (active version, generation digest, worker pid).
 std::string managed_app_status(const ManagedHostOptions& options);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

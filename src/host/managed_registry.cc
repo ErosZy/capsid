@@ -36,11 +36,9 @@ std::map<std::string, OperationRecord>& operation_registry() {
 
 // Caller holds operation_registry_mutex().
 void prune_operation_registry_locked() {
-    const std::chrono::steady_clock::time_point now =
-        std::chrono::steady_clock::now();
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
     std::map<std::string, OperationRecord>& registry = operation_registry();
-    for (std::map<std::string, OperationRecord>::iterator it =
-             registry.begin();
+    for (std::map<std::string, OperationRecord>::iterator it = registry.begin();
          it != registry.end();) {
         if (now - it->second.recorded_at >= kOperationRecordTtl) {
             it = registry.erase(it);
@@ -51,10 +49,8 @@ void prune_operation_registry_locked() {
     // TTL alone bounds steady state; a burst of records within one TTL
     // window still needs a hard cap. Evict the oldest recorded entries.
     while (registry.size() > kMaxOperationRecords) {
-        std::map<std::string, OperationRecord>::iterator oldest =
-            registry.begin();
-        for (std::map<std::string, OperationRecord>::iterator it =
-                 registry.begin();
+        std::map<std::string, OperationRecord>::iterator oldest = registry.begin();
+        for (std::map<std::string, OperationRecord>::iterator it = registry.begin();
              it != registry.end(); ++it) {
             if (it->second.recorded_at < oldest->second.recorded_at) {
                 oldest = it;
@@ -81,8 +77,7 @@ std::mutex& app_operation_table_mutex() {
     return mutex;
 }
 
-std::map<std::string, std::unique_ptr<AppOperationSlot>>&
-app_operation_table() {
+std::map<std::string, std::unique_ptr<AppOperationSlot>>& app_operation_table() {
     static std::map<std::string, std::unique_ptr<AppOperationSlot>> table;
     return table;
 }
@@ -92,19 +87,15 @@ app_operation_table() {
 // Slots with users > 0 are never touched: an in-flight state transition
 // keeps its mutex valid for its whole critical section.
 void prune_app_operation_table_locked() {
-    std::map<std::string, std::unique_ptr<AppOperationSlot>>& table =
-        app_operation_table();
+    std::map<std::string, std::unique_ptr<AppOperationSlot>>& table = app_operation_table();
     while (table.size() > kMaxAppOperationSlots) {
-        std::map<std::string, std::unique_ptr<AppOperationSlot>>::iterator
-            evict = table.end();
-        for (std::map<std::string, std::unique_ptr<AppOperationSlot>>::
-                 iterator it = table.begin();
+        std::map<std::string, std::unique_ptr<AppOperationSlot>>::iterator evict = table.end();
+        for (std::map<std::string, std::unique_ptr<AppOperationSlot>>::iterator it = table.begin();
              it != table.end(); ++it) {
             if (it->second->users > 0) {
                 continue;
             }
-            if (evict == table.end() ||
-                it->second->last_used < evict->second->last_used) {
+            if (evict == table.end() || it->second->last_used < evict->second->last_used) {
                 evict = it;
             }
         }
@@ -117,10 +108,9 @@ void prune_app_operation_table_locked() {
     }
 }
 
-}  // namespace
+} // namespace
 
-void record_operation(const std::string& operation_id,
-                      const OperationStatus& status) {
+void record_operation(const std::string& operation_id, const OperationStatus& status) {
     std::lock_guard<std::mutex> lock(operation_registry_mutex());
     OperationRecord record;
     record.status = status;
@@ -129,8 +119,7 @@ void record_operation(const std::string& operation_id,
     prune_operation_registry_locked();
 }
 
-bool lookup_operation(const std::string& operation_id,
-                      OperationStatus* out) {
+bool lookup_operation(const std::string& operation_id, OperationStatus* out) {
     std::lock_guard<std::mutex> lock(operation_registry_mutex());
     prune_operation_registry_locked();
     const std::map<std::string, OperationRecord>::const_iterator found =
@@ -144,12 +133,10 @@ bool lookup_operation(const std::string& operation_id,
     return true;
 }
 
-AppOperationLock::AppOperationLock(const std::string& application)
-    : slot_(nullptr), lock_() {
+AppOperationLock::AppOperationLock(const std::string& application) : slot_(nullptr), lock_() {
     {
         std::lock_guard<std::mutex> table_lock(app_operation_table_mutex());
-        std::unique_ptr<AppOperationSlot>& slot =
-            app_operation_table()[application];
+        std::unique_ptr<AppOperationSlot>& slot = app_operation_table()[application];
         if (!slot) {
             slot = std::make_unique<AppOperationSlot>();
         }
@@ -163,8 +150,7 @@ AppOperationLock::AppOperationLock(const std::string& application)
     }
     // Lock outside the table mutex: waiting on another App's transition
     // must not block table bookkeeping.
-    lock_ = std::unique_lock<std::mutex>(
-        static_cast<AppOperationSlot*>(slot_)->mutex);
+    lock_ = std::unique_lock<std::mutex>(static_cast<AppOperationSlot*>(slot_)->mutex);
 }
 
 AppOperationLock::~AppOperationLock() {
@@ -185,4 +171,4 @@ std::size_t app_operation_slot_count() {
     return app_operation_table().size();
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

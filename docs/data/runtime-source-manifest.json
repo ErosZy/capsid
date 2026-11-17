@@ -1,9 +1,1546 @@
 {
-  "schema": 1,
+  "schema": 2,
   "sourceCommit": "87ed4630fa57e360ac0a3a8158218398250c8035",
   "sourceTree": "96bef3a7b0a1acec0cd37be9d470a312046386cb",
-  "semantics": "Canonical Git object identities for runtime/build inputs and vendor gitlinks; not binary or performance equivalence",
+  "semantics": "sourceCommit/sourceTree identify the qualified release only. files fingerprint the reviewed formatting-successor checkout, not a new binary qualification.",
   "files": {
+    "CMakeLists.txt": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9671a096c72e8142ec939ccc54bfb043826ec177"
+    },
+    "cmake/AuditEscapeCapabilityDefaults.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "61c2aeba7858a41e3b666ba1554172a00465cdd7"
+    },
+    "cmake/AuditRestrictedWorker.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "95e94ae274bcd4d9972858d4e4eb8e6b8c66df80"
+    },
+    "cmake/AuditTxikiVendor.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "25735a0ef0cec0347445d2d7bb90d82b949d55bc"
+    },
+    "cmake/AuditWasmLimits.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "41b1f1d8f2c4e903e28951f9939a5a57e348b8fd"
+    },
+    "cmake/AuditWptCoverage.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e1eac4373efd3b9447bceaf615b65d85b0dc4e51"
+    },
+    "cmake/CapsidConfig.cmake.in": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2de9549039ae9553de78fe19dd000b571a099383"
+    },
+    "cmake/CapsidPackage.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "34b799f99112bb749bd658f88be4770ea326c50b"
+    },
+    "cmake/ComparePackageReproducibility.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "4ea79ee06a387a6fd09f108c63897b8a603b58b6"
+    },
+    "cmake/ComputeBuildIdentity.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "779a996b249be3258016501d2e600f5fcc437aa5"
+    },
+    "cmake/ComputeTxikiOverlayKey.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0e9685d176f999771cf39a052e181748f129f05f"
+    },
+    "cmake/GeneratePackageArtifacts.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "631f6984cf3eefee775d60d110c6e6f1f6fa2e5e"
+    },
+    "cmake/PrepareTxiki.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b0c739af56565bfcca9cb66155789f81b8cb0fee"
+    },
+    "cmake/ReadPackageAsanRuntime.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ad66878ab079ce5c90936ac6324feb911dc964ad"
+    },
+    "cmake/TestCapsidProductNames.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c9330866c0b5e27e3ba9f17926214779b714a137"
+    },
+    "cmake/TestEscapeCapabilityConfigure.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e0818d2063840bc921e4dde8d887b3eb45826b59"
+    },
+    "cmake/TestHostSanitizerInstrumentation.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7defa0b59ed9ea112e5a7a61b28f1fc1b47b9120"
+    },
+    "cmake/TestMsvcDependencyPrefix.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bfd5e28bcfd0fee726074b40a87ed8352822e108"
+    },
+    "cmake/TestRestrictedWorkerAuditNegative.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "32980b4df75ef5a73d61a3becd9fc2e4623c20f9"
+    },
+    "cmake/TestTxikiOverlayAudit.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "de1e328e6da583ee8e77fe084c9945cf389b07e7"
+    },
+    "cmake/TestTxikiOverlayConfigureDependencies.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "59f0d6f1cead5f0c4eb912f29d9cd214c7cda2b4"
+    },
+    "cmake/TestTxikiOverlayKey.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "fc7fb138c1b7fe5b2768c0caccfd5094b2def236"
+    },
+    "cmake/TestWasmLimitsNegative.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c6df49aa1ae9b07bd130bce68dbb0132584574ad"
+    },
+    "cmake/TestWptCoverageAudit.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ee5cbd022abd7b129654822ff9ff643de3b8d284"
+    },
+    "cmake/TestWptCoverageMissingPathsFile.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "03c1fd3e282e1400c57c6cccae5520395d4099d2"
+    },
+    "cmake/ValidatePackageMetadata.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b9efe575c80b3e96719e48ca688c46cd329c7f25"
+    },
+    "cmake/WindowsAsanRuntime.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "fbfa76861234176ed70e3efef52e0f66a8d4e59a"
+    },
+    "cmake/build_host.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "06b1d6fdd507829fc2fa72c374ca4630e3564275"
+    },
+    "cmake/build_identity.h.in": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "494bdb218a1dddd8b528684d4e9514d6815b4072"
+    },
+    "cmake/build_tests.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3b81d4eb2f2f1e256c31f1898915795a9de9c4dc"
+    },
+    "cmake/build_worker.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "835fe8a6629217083865717108594237fc25d2ca"
+    },
+    "cmake/capability_manifest_hash.h.in": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "afa93d018829e6467097160d4aac2bcf8b68e353"
+    },
+    "cmake/host_dns.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7b8fb8f6be77c8536017e42b67e59de2d21f0faa"
+    },
+    "cmake/host_dns_provider.h.in": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7e5b4c63cceb959c0bf5fd20cafdb5cc9263fb6d"
+    },
+    "cmake/msvc_dependency_prefix.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1d0281f9bbff1fe06cd853270966734cdb1b6a90"
+    },
+    "include/capsid/runtime.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1201b5ad44ab741dd5f3a570c3bd59d6cfbfa82e"
+    },
+    "include/capsid/runtime.hpp": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1ae8512d0196da587572fc29ff77d5e824cd4772"
+    },
+    "js/bootstrap.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67"
+    },
+    "js/dom-exception.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6a9fa079ae57a9f0468125384c1c8be0a34cabe4"
+    },
+    "js/encoding-data/encodings.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ccfb8d2245f08cbd49237b80e26c50de4704414b"
+    },
+    "js/encoding-data/gb18030-ranges.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ea9b0bfbad709a9dd07e4755e8ddfd43ad694081"
+    },
+    "js/encoding-data/multibyte-indexes.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "017fa1a0b22380096e07a484fc70abdbbfadcd0e"
+    },
+    "js/encoding-data/single-byte-indexes.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c455e2e8b7d9799d5ee12a00104ca286610cacd6"
+    },
+    "js/events.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5c4b53cae402f6f1e6f4b97ec22f40aa6d4c4b40"
+    },
+    "js/fetch.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6258e4adde36e41ade3e940608839f0332297905"
+    },
+    "js/file.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f360884f5f0585b289e6ad8b915a8bb514a8ad4e"
+    },
+    "js/message-channel.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e2967e61cf03b44f77c748a56710ea5d9e11dfcf"
+    },
+    "js/multibyte-decoder.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f043e65a1038c368748f309c7f7e8ccce262147c"
+    },
+    "js/profile-manifest.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bb48aee55dc2fa9853664538d0e6f63316aba4fd"
+    },
+    "js/single-byte-decoder.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3f2a90b2554ad4107be32c101c67911b376bef1c"
+    },
+    "js/streams.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e4081a12b96ec9803cb4ea44cf6b1aec68b9b5d3"
+    },
+    "js/text-decoder.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d53331c3016ed08e4de3fd666296dbf75cc2a5f3"
+    },
+    "js/url-search-params.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7ec3b79cb12efef6f1688873e596b9b3454c8c63"
+    },
+    "js/url.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab"
+    },
+    "js/wasm.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e4998c6707dec1b362af4499112b733b7ecc6d79"
+    },
+    "js/websocket.js": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "44989b6789ab9e9755ef15b06ef4cd0f1b40deac"
+    },
+    "patches/native-providers/cares-qualified-corrections.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "53c9a61210ee6630d3936d9e0be097c3b928ae8a"
+    },
+    "patches/native-providers/cares-source-manifest.json": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "30fb87d58671d4360f418a15f09762a4e031daf0"
+    },
+    "patches/native-providers/manifest.json": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e5ffa31c15aa50663494a54a098ec99c25a9e27d"
+    },
+    "patches/native-providers/openssl-qualified-corrections.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "938e288ecca5567d46f876e6d00f5d3f7b772722"
+    },
+    "patches/native-providers/openssl-source-manifest.json": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ead9f9b2b6d97b2046c91233caab28ac7d95dace"
+    },
+    "patches/txiki/0001-build-system.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "45e5b12e8e44ecc5c3c5be9fc6e6512f0d7759ea"
+    },
+    "patches/txiki/0002-runtime-core.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d2c573610ff177b9e2dd447a98dd1f35daff6638"
+    },
+    "patches/txiki/0003-module-system.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "484ce83c01d71285209fbbb59c66b4d75a85064c"
+    },
+    "patches/txiki/0004-restricted-module-guards.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "20b00538a79c42a233d30c912d3d19ebc0dc4474"
+    },
+    "patches/txiki/0005-web-api-polyfills.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2c319f3a477d0007e7f72069065112b35a9e9fd7"
+    },
+    "patches/txiki/0006-fetch-polyfills.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c9705b4844e35dba8951a0b4d63baf27967acd3b"
+    },
+    "patches/txiki/0007-http-and-c-fixes.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "030c12a0aafd083e5e4556445d8db6971dcea0a6"
+    },
+    "patches/txiki/0008-webassembly.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3f9c17fc12327b3608896215e5dd63a7fd7da973"
+    },
+    "patches/txiki/0009-lws-vendor.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2aa005b31e6c870a3e1902a80499ef3a70e2d22a"
+    },
+    "patches/txiki/0010-benchmark-sqlite.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6f502adf549ace68b2a8504aa0d0dda7685e5052"
+    },
+    "patches/txiki/0011-lws-cpack-top-level.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9b841ea2b64621bf8a1703ce6ee82b21991a5d30"
+    },
+    "patches/txiki/0011-restricted-utility-builtins.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6952cf50f0bbd203decf546c9f9128d910b63ba4"
+    },
+    "patches/txiki/0012-capsid-async-context.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5727ff78ac8cfcbca41c32fb6e3f325933189e5c"
+    },
+    "patches/txiki/0013-capsid-async-context.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7bbc316356c8452ccc463b1b22bb6e8a5a58af7f"
+    },
+    "patches/txiki/0014-capsid-async-context-reactions.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "93235243d9a1c7a6dcae40caa23e70eac61c763c"
+    },
+    "patches/txiki/0015-capsid-uncatchable-jobs.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "aa5d1f5ca19e874416cbc5f24df86b4c978209f9"
+    },
+    "patches/txiki/0016-capsid-shared-loop.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1775cca19603c4c714c5dccfbe3795b1c04826f9"
+    },
+    "patches/txiki/0017-capsid-raw-egress-gate.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "689ff36a9d949a28567892d4a606a96e690bff4b"
+    },
+    "patches/txiki/0018-capsid-fs-native-gate.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "53d665ceff07fa543801ec922b236ec6f7f65a58"
+    },
+    "patches/txiki/0019-capsid-fs-module-gate.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "987586e5dbf6627d0d98b11ceeb444725ea7d4a0"
+    },
+    "patches/txiki/0020-capsid-grantable-modules.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3bef4882d78de5115e4d7addf758233d492a1ec1"
+    },
+    "patches/txiki/0021-capsid-wasi-gates.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9ec0e1c390df1c7aa25c4753d564f6c5bfd5990c"
+    },
+    "patches/txiki/0022-capsid-sqlite-gates.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ab5b077873c369bcbb5c5b39224a4d6ada22d263"
+    },
+    "patches/txiki/0023-capsid-fd-adoption-gates.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1fa398e8094651f7565d74d436259dcafc2b2e95"
+    },
+    "patches/txiki/0024-capsid-native-resource-owners.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c161d3239f18f4a6f492a0cc2ed5f72a9899a084"
+    },
+    "patches/txiki/0025-capsid-safe-date-slot.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8a9a69705dfff943c42c0076978b8e4b8a375600"
+    },
+    "patches/txiki/0026-capsid-lws-shared-loop.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1293b92be9582f92a6bf457aedcaadec46a40b2d"
+    },
+    "patches/txiki/0027-capsid-http-redirect-connect-errors.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ba8d66bce099ea0f824b0bab760331810c1c0a00"
+    },
+    "patches/txiki/0028-capsid-bootstrap-opaque-getter.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7e0815b90667560fc3175f68093f24b8b0d8d20b"
+    },
+    "patches/txiki/0029-capsid-websocket-binding-gates.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b732076eedccff55e695241f2e1b09dbcf774d2e"
+    },
+    "patches/txiki/0030-capsid-http-pre-resolve.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0c3a2c57ce9526490f36b2293a172c432e733a3e"
+    },
+    "patches/txiki/0031-capsid-http-connection-pool.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "27955cae53bea441b918bfa267ef81e6c5051149"
+    },
+    "patches/txiki/0032-capsid-http-keepalive-queue-fail-closed.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "68a263aba19bc71922cbb54c571eb99347837d4d"
+    },
+    "patches/txiki/0033-capsid-http-keepalive-gated-pool.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "cc305e869cb333550515b1b94e8b3c4fde6e2b73"
+    },
+    "patches/txiki/0034-capsid-per-token-job-pending.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6e88bddbfdd34dfcfae997fceb0067341eae547e"
+    },
+    "patches/txiki/0035-lws-cookie-attribute-elements.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6bb1be65bf88acd858b5036c55fa3817c2b9bd38"
+    },
+    "patches/txiki/0036-quickjs-async-closure-gc.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "576f3ef5dfb9fe16105927e927227458e6a6ad22"
+    },
+    "patches/txiki/0037-workerd-event-contract.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7dd96dbabd23f032e6d4c3b101ff1ffd4f98a2c4"
+    },
+    "patches/txiki/0038-workerd-event-checkpoints.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f515376722839d07dac1e475972856df230b124f"
+    },
+    "patches/txiki/0039-workerd-listener-contract.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8f4fe2ae0b19d1373565600ea8e006188d9f9ada"
+    },
+    "patches/txiki/0040-workerd-event-handler-attributes.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0c060e52a3dde877fd352d3c695903b049f898a4"
+    },
+    "patches/txiki/0041-capsid-http-abort-pending-handshake.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "69693519ccb01f9b4bb3f7750f56a1e6434f807a"
+    },
+    "patches/txiki/0043-capsid-fetch-open-failure-cleanup.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ecc0caf64b6d5e81740746ab80728b20ae6c99cb"
+    },
+    "patches/txiki/0044-quickjs-call-dispatch-and-regexp-captures.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "086c1504599f371448e3a95aea22128fbc0d9fe5"
+    },
+    "patches/txiki/0045-event-string-intrinsic.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "be58a80ddb206aef301e9bb08ab5a2ab492861a0"
+    },
+    "patches/txiki/0046-connection-async-lifetime.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "22343e5d7942cf3c62a8a4ab33e1d5f1a5360b91"
+    },
+    "patches/txiki/0047-scoped-async-callback-errors.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f6c939d99969a21ecc3bf54d105ccb05bd434c79"
+    },
+    "patches/txiki/0048-error-event-source-metadata.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3542210410f77dec56f0f8266a121f62be3dfab7"
+    },
+    "patches/txiki/0049-rejection-event-context.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "77a1808b3b91974c8dd7e1a8ae7278026d287917"
+    },
+    "patches/txiki/0050-promise-creation-context.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "281388e48508428276cd65f26c5798c5ffa71d0f"
+    },
+    "patches/txiki/0051-connection-http-resource-lifetime.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0d211a593f1d5d1867fe84a17ba4fece5c2027c2"
+    },
+    "patches/txiki/0052-workerd-fetch-abort-exceptions.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2ff7b6ee0c12db7c06917130889f6b78e1ed8006"
+    },
+    "patches/txiki/0053-synchronous-http-abort-checkpoint.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2c596aff7016c0421127584d5d55e0ee4ebef2ef"
+    },
+    "patches/txiki/0054-disabled-cookie-cache-path.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "442d5f74ed6866597980ea9bd016dfafb79e949d"
+    },
+    "patches/txiki/0055-http-policy-caller-context.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "45ee42068a38824b1d442ecaee3787853eb5156e"
+    },
+    "patches/txiki/0056-workerd-digest-hmac-operations.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "a37933ca5fc6ab4d8ee4b84c7e9eb6386edff13c"
+    },
+    "patches/txiki/0057-crypto-state-intrinsics.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "69d541ea7f59b11279443b33b540645aca21a2c9"
+    },
+    "patches/txiki/0058-fetch-request-authority.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c87ecc6f49e1905b9b33e98afdcf1ed87f79e79a"
+    },
+    "patches/txiki/0059-quickjs-call-literal-storage.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "595079b72b322d1bf3ba9be83a527afb89d7ff06"
+    },
+    "patches/txiki/0060-quickjs-bigint-unsigned-width.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2a2d82713e17bde0093ed88ea03c8c28a99f4f9d"
+    },
+    "patches/txiki/0061-quickjs-arraybuffer-alias.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bd8b16d4108d1267b269775aef7e165fe1ea262a"
+    },
+    "patches/txiki/0062-quickjs-stream-observer-context.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "03e60f5717d21c9f651272bb6e3026c5165705db"
+    },
+    "patches/txiki/0063-quickjs-bytecode-value-frame.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7b555ce0fc12b1be45837e08c30d789e0a836dd1"
+    },
+    "patches/txiki/0064-ordinary-fetch-response-body.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b5b9e1a5a8c282e8ad93ca7323a5b6bef9b5f92f"
+    },
+    "patches/txiki/0065-native-http-read-profile.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0d5324135801f60b8bf8922d24694bbecebe8408"
+    },
+    "patches/txiki/0066-http-gzip-and-read-demand.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "592b8d3959cf43d9001400bdfa992cb7047d6066"
+    },
+    "patches/txiki/0067-http-bounded-gzip-pump.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "930186555e38dadbee35e3ea5ffe1fc685682075"
+    },
+    "patches/txiki/0068-platform-digest.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "604aa85dc94025d4719f7b8da989630915f33085"
+    },
+    "patches/txiki/0069-http-abort-callback-order.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "46486ad2c51748b2042d1fe25ae6d2de9cbf816c"
+    },
+    "patches/txiki/0070-native-fetch-encoded-branches.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "02efa8c04b6a51ad38e0f7329659dc43fbfb2b91"
+    },
+    "patches/txiki/0071-http-bodyless-completion.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f44851f08edc548d192e18fa9c96b9f0255eaa20"
+    },
+    "patches/txiki/0072-runtime-rejection-event-identity.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0283a9cfbc32acf77d4036ad281deb9bffc7969a"
+    },
+    "patches/txiki/0073-quickjs-native-stream-dependencies.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c2cd725ac248443d632e9b8dcf17ae7df677b0f2"
+    },
+    "patches/txiki/0074-quickjs-iterator-owned-storage.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ba56103f2a4119a79d74a9b15e7d1fd5a18af494"
+    },
+    "patches/txiki/0075-http-gzip-decoder-factory.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "48990c05df4002159a1152b1772703611821cdad"
+    },
+    "patches/txiki/0076-wasm-unaligned-storage-and-validation.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "844333b443be07132fe394b623292c4e16038041"
+    },
+    "patches/txiki/0077-arraybuffer-empty-view-null-storage.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b1c1c68b6450757f6c1b999ee06aff66eecf0f38"
+    },
+    "patches/txiki/0078-quickjs-compiler-probe-cache-identifiers.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "36347e5a20608c0a88391dbc111c166d9bb05451"
+    },
+    "patches/web-streams/0001-workerd-byte-profile.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "4218ffc2a5d0349d01f7a573b1db0b15cfd066b3"
+    },
+    "src/audit.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ee2daf31a72c72dbcfe3c390044bbc32fd355780"
+    },
+    "src/binding_rpc.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b4efefb12fe1819b52d77644c12f930a8445a2cf"
+    },
+    "src/binding_rpc.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "eb14b23469fc29829226aa4be664ad521c55a65e"
+    },
+    "src/build_info.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bd2e6a5df1414a5191c64eb06baadce0eb5b8540"
+    },
+    "src/capability_policy.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6630e108f362c44e51d2a343c0f50c7f5a5d6400"
+    },
+    "src/capability_policy.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0eb7d9f592530e22e0a6b25fd827072412b1561c"
+    },
+    "src/channel_io.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "180d8dd807c30484bc0fe30499a22560f2358fd0"
+    },
+    "src/channel_io.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b02e56c533235aed2b063b5510e88bca1b30d38f"
+    },
+    "src/channel_registry.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c1fec3e38def49ffabca0edc5bf1c00d8c540199"
+    },
+    "src/channel_registry.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "380cc16b17edd0ecca82cbe7a4f784365f426700"
+    },
+    "src/channel_state.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "aa68238b916680e9eb61246ed2e9eaa367841323"
+    },
+    "src/client.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "15b108ad38bc786aca70fdc1b8a3f6fa8d7067cd"
+    },
+    "src/client_channel_state.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d13aa91d890d76b2cf508dbaa750f668085bc397"
+    },
+    "src/client_ipc_metrics.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "833442e832f7b2b11175ed4adb6f29186d309bb0"
+    },
+    "src/cpu_topology.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "019cae1cb24200c992b5f337c9bab16fbfe2557c"
+    },
+    "src/cpu_topology.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8f8404e9664d5751636b4c0318df92d88f506846"
+    },
+    "src/egress_policy.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d957395d8ad900af2b72dbadcac6c40f06b906db"
+    },
+    "src/egress_policy.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "69cd06edeba10bda0816216387bbc7f43176c0df"
+    },
+    "src/host/activation_transaction.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b360f496b70a32fa098a8f64d23b9ff0916636b7"
+    },
+    "src/host/active_state.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "18d30d836aba1986abab6a58162f40bb8064f3df"
+    },
+    "src/host/active_state.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bb153ba156b5293704b819e49ed939ff12976677"
+    },
+    "src/host/admin_api.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ce10592d6e31cb163f67869e1129f957cf44f1bb"
+    },
+    "src/host/admin_api.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6b00495aa9125ea143397858fce56031b3a33fa8"
+    },
+    "src/host/admin_http.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2c6ac369ffca76aa55a831afa4a1def443ad075a"
+    },
+    "src/host/admin_http.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "881360f3dae5374284575cdaacc6340e91fa5675"
+    },
+    "src/host/admin_service.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9c82eeb44bf2ad86ffa38bf22d8e220c643c61a5"
+    },
+    "src/host/admin_service.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d5c50ad5b44b4047619c22756c939ecc80dc2586"
+    },
+    "src/host/artifact_safe_read.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d1536db332460ee8638cbe446e304e0046eda96c"
+    },
+    "src/host/artifact_safe_read.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7568d4221ccb4e1a81de53c0aefacd69277fafe4"
+    },
+    "src/host/async_resolver.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "dd181bc0f814e0e678be9948cd17dcbd8a88f578"
+    },
+    "src/host/async_resolver.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "de3d3b12df629e81270f3f5bf23f69b280e7611a"
+    },
+    "src/host/binding_compile.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0238d9c5ba862f2d31ce74b919bc2db5cdcf7207"
+    },
+    "src/host/binding_compile.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "90f72dc348102d68e3f069a8eb739956a712227b"
+    },
+    "src/host/binding_registry.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5ebcb2fd4f730d8abaac81f1eb735909a1f6d9a7"
+    },
+    "src/host/binding_registry.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "22eee4c1056007af239fc5c88513391677e24451"
+    },
+    "src/host/bytecode_attestation.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "4c7abf04fcfd8eeba4651e2257c615e94911df28"
+    },
+    "src/host/bytecode_attestation.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b2821257476ae30157a4d316607d3080f9424724"
+    },
+    "src/host/channel_ledger.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9daac0f3a3a7f37f1f4ed18538dd01f27f407516"
+    },
+    "src/host/channel_ledger.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b0ce7044630ffeb3a8b0a1f7d4e46e286f681213"
+    },
+    "src/host/client_disconnect.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8ef6f125382780b7ae224313f0ec2c7702f90c59"
+    },
+    "src/host/config.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0f76398faccc8e8d955b245a33d5175fee3870d5"
+    },
+    "src/host/config.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5b7218b92550ff600e1369e182dd65739a6e6034"
+    },
+    "src/host/credit_limits.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "dc3491d895630409337ee5d41c6bc6a5d416892e"
+    },
+    "src/host/generation_identity.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "89f01188d7a7b7de1c4b6437ce5d5c0d482ae2bc"
+    },
+    "src/host/generation_identity.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "77dcf72ef408f1f62b70f9692219f07a850efc88"
+    },
+    "src/host/generation_pool.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c5db3caaf5203821cf7dff9eb2c4395be6a73a23"
+    },
+    "src/host/generation_pool.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "4f7bc8e182a540a9e4876c4db5f56a5fa4e8ceef"
+    },
+    "src/host/generation_reclaimer.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "737b94e0723e4a442d3bc53f240fc17d7cb49388"
+    },
+    "src/host/host_config_model.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d52aafaf9d49e09ce25a1a58c496ab9a53b3ed96"
+    },
+    "src/host/host_config_model.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "34dbded49b8490ec58659c9bc6b786d24f75326d"
+    },
+    "src/host/ipc_metrics.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "4c73e612f5ccc6c39c0530392d440299aafa0ab9"
+    },
+    "src/host/ipc_metrics.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "2dd0987a96c9b415767689f40f289d9087c417ca"
+    },
+    "src/host/listener_cors.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "a0818f206cb2507f5279b857ce289ce69890b965"
+    },
+    "src/host/listener_cors.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "53cd6c01a1382ce8efb39cd3a66f8c7664b15c87"
+    },
+    "src/host/local_capsid_policy.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1f00267b8006604391ed52a0e985aebd93753550"
+    },
+    "src/host/local_capsid_policy.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3116be745457c21b688358d6c4bb4476670e1e17"
+    },
+    "src/host/main.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5917073a5a7cab7eacb7ee25977b3d8653d6c746"
+    },
+    "src/host/managed_admin_backend.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ce5df12653180d519fb440d817a9e76dd8d1a203"
+    },
+    "src/host/managed_admin_backend.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d860137d9addfb49e20ed5595368a5669ed069af"
+    },
+    "src/host/managed_host.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c6f6d301f525d11d56c9276b9129f5a16caa5b5c"
+    },
+    "src/host/managed_host.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "cabf39f70a2052fdc6b12fbf0716f1d579e77a64"
+    },
+    "src/host/managed_listener.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "a75341b2530eeba7cbb9857374c9acafcaceda27"
+    },
+    "src/host/managed_listener.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5f22d03b0f1b9a576af0c8e0d0b1ac51a6b4cd68"
+    },
+    "src/host/managed_registry.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "46f6123db515129db8d0288400b20c361c2baecd"
+    },
+    "src/host/managed_registry.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1f1f2fefc6c0769b36500c88134ffce98dd0bd49"
+    },
+    "src/host/metrics.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "930e4f992669ba064b837d8b73b9c151d8c4863a"
+    },
+    "src/host/metrics.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "172cb2250956ab9c74859568db2b257ef08d26aa"
+    },
+    "src/host/parent_stop_monitor.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9b79415851d369aae3c4fac3c14668dce7cd75ab"
+    },
+    "src/host/parent_stop_monitor.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0dd67d63121c87e033a352aa96a68221f34ccbd9"
+    },
+    "src/host/policy_compiler.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "777dbba93c40c0b7e965d6cfcdfcf8938c0724d6"
+    },
+    "src/host/policy_compiler.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d4d001c802c2a952408735acf9d433823f5106a0"
+    },
+    "src/host/poll_limits.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ae9c764fff021d45b5da4e086271c86d652831ff"
+    },
+    "src/host/process_snapshot.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e1dc2f2142aa8f46f723e76827a28af89c65c5c3"
+    },
+    "src/host/process_snapshot.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "cbfabc695ff5c954d0afbba5da02fed21682749a"
+    },
+    "src/host/protocol_launch.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "03328c33c56a66ab262df7e72db78d0ccc58b7e1"
+    },
+    "src/host/quarantine_dispatcher.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1d98461c32603d903591d39083943f6d1b92eb12"
+    },
+    "src/host/quarantine_dispatcher.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f071648be4bf1c3d2c7e4f78d716f19cd548627c"
+    },
+    "src/host/request_header_budget.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6543ab5d940b0c70e0b4bdcdf661d77396e87a25"
+    },
+    "src/host/request_normalization.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7fcc1ea86301be8fec2026e62350e92a3b7c866d"
+    },
+    "src/host/request_normalization.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f3b2c00f21d2d6a0e262a588a8140f29025c0756"
+    },
+    "src/host/response_body_batch.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8d195f54c82a7076b7b40250780f722045587624"
+    },
+    "src/host/routing_snapshot.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d84462654bdfee47b3428b2bd2416c3215bd366b"
+    },
+    "src/host/routing_snapshot.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "274c6cd10ee8f38595e298b6a4c6b2d6710a9889"
+    },
+    "src/host/secret_file_provider.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e225043b4c59f89c66e62acc05f94fe3401bc856"
+    },
+    "src/host/secret_file_provider.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "063dc0868513bd7f2a9a13223e1bb1426a9cb6c1"
+    },
+    "src/host/secret_snapshot.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c95091f3255848b729c4f8ac5bc7581edaf3f88b"
+    },
+    "src/host/secret_snapshot.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6b1e3891f4841e943e8f091e9e09bdd093d30ef1"
+    },
+    "src/host/service_lifecycle.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f7bc8d22401dcbed442a78a07d11deb11ca0d3bf"
+    },
+    "src/host/service_lifecycle.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3530b5cc246df1b153beb6a0be397ca9ae72790f"
+    },
+    "src/host/single_worker_server.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0275c85b930f83fd20fdc222b8c27770262599fb"
+    },
+    "src/host/single_worker_server.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "74507c84b720b294127f396692f88f5e2b4691ea"
+    },
+    "src/host/static_pool.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9c049ee38807ce725ed5fe827f09e912e104fea5"
+    },
+    "src/host/static_pool.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "02b07846731f3cc51abf6b3d78620ee8b2df5e1a"
+    },
+    "src/host/static_pool_server.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c76530539162e5638d2dd4961ba4ab4adafad5a0"
+    },
+    "src/host/static_pool_server.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "6f40db249179fd37776dc10b070d02573495db7b"
+    },
+    "src/host/structured_log.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1b524560dc161f055a5227c9b226ca4ac0d2f7f9"
+    },
+    "src/host/structured_log.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "08bb340556eadc34a8360d36facfa556752c5630"
+    },
+    "src/host/trusted_key_store.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "abbcc5c424f93c586ac7490224e62f009eb3d362"
+    },
+    "src/host/trusted_key_store.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "89b57af0d1bc6f196cd680ae3679308f7da5cf09"
+    },
+    "src/host/websocket_dialer.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b8fc1ce93d97b1ddb3bb17989b27c35678a178a3"
+    },
+    "src/host/websocket_dialer.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "58490132cd5ad985ce1a0e5f961594d8e7e1d2bd"
+    },
+    "src/host/websocket_session.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f4d4b7abdacc3cfcff041df51cf5eeafe88743ab"
+    },
+    "src/host/websocket_session.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9b529c25d9bc052db40e1bf3b550f589f3692f39"
+    },
+    "src/host/worker_capacity_ledger.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "dfe5c4720fdc57d04c1df102cc2a2005c60db249"
+    },
+    "src/host/worker_capacity_ledger.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1617bda355bff3e69dce99a2d3b7fe7e98cb6254"
+    },
+    "src/host/worker_event_source.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "01ecc83ee9b8bf958bf727d7394af5e785c5d01b"
+    },
+    "src/host/worker_event_source.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f1f19b658f8a6aaf82101d9336f09580cd3d2c8b"
+    },
+    "src/host/worker_executor.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bdfef9409d63257796627058d29fb66ae9c67cca"
+    },
+    "src/host/worker_executor.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "fbebe4e652ecbe2077d1c264f66cba8083c385b5"
+    },
+    "src/host/worker_recovery.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "834c58fc11dca8497cc44adf870baf4dd14addc1"
+    },
+    "src/host/worker_recovery.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b650376ef929b23d0abe054d56722ff58ca2f347"
+    },
+    "src/host/worker_supervisor.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3c3287d02c13154f501cfa6fb185ec20a936804b"
+    },
+    "src/host/worker_supervisor.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7e656976962690e7cb0d0f14e2e488375c06274c"
+    },
+    "src/host/ws_codec.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "e081f2f2b13f8306f420b513532961bea00ffbe8"
+    },
+    "src/host/ws_codec.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "335da3de3d7f5384c8283919e4d8b447d26d959e"
+    },
+    "src/host/ws_stream.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "52432de4f4d0fbfeb2851862085e96e09ef374e1"
+    },
+    "src/host/ws_stream.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "c30b217b9e5897abead92c804564cd2b20a1440e"
+    },
+    "src/ipc_validation.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "441e62a0f2d94780d89abddc6891646241bce46a"
+    },
+    "src/ipc_validation.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "11542a55e16ad7e3dec71308569b027154da5eea"
+    },
+    "src/memory_metrics.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9bb2c939a08fdf87d553a8518169f7a568371dff"
+    },
+    "src/outbound_buffer.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "41d6a6f04be38f5263216e1b7a7fdcb5036e2fb9"
+    },
+    "src/protocol.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "afcffe4c4aa6545cde04df5eb6da280e246ce1ca"
+    },
+    "src/protocol.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9cdba82fcf85bb326c31f62756d6085aca46fc3b"
+    },
+    "src/response_headers.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ba2445133b42ce9cd8ba5a07602c3d868b679d15"
+    },
+    "src/response_headers.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bfbccb759212bb85fb2cad061e1580b853d0eb4d"
+    },
+    "src/restricted_worker_tu_marker.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "900c40bd146a08b76f4524c9a8d98e60583a54c9"
+    },
+    "src/sandbox.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "653569a7741c22d23125cb24b9de6e1644537a08"
+    },
+    "src/sandbox.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5d9b94e4cc6c1492b281b0ef7346189eaa1ce333"
+    },
+    "src/txiki_restricted_core.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8077a6e3cf5f1712b293ef209162ebbc54a0696d"
+    },
+    "src/win32_compat.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "904fdb768f64aa05eecb39ad2b20d2ab06663d67"
+    },
+    "src/worker_exit_status.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "4dd939a540d45eb2cc10b88c045f165db970d172"
+    },
+    "src/worker_main.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "ca11b33af2ef4c135f4ab7a26cd0268152309264"
+    },
+    "src/worker_runtime.cc": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "229fb1403d6185d4e13b412e9ca66ec04677240b"
+    },
+    "src/worker_runtime.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "3057530545b0a4a7bfd42e7b888398c39b7352c1"
+    },
+    "src/worker_runtime_io.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "bb0a73269caafbef840c0f7086d21d862b2313e6"
+    },
+    "vendor/jansson/CMakeLists.txt": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "27766d2ab00b6ec76e7c124a71c26dacb05463a0"
+    },
+    "vendor/jansson/LICENSE": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "418ee6a8cfdcae27c0c457f310d5d1b9741af34a"
+    },
+    "vendor/jansson/VENDOR.txt": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "679ea2b69d08149ce8cde48b72b1aa7020bef7cb"
+    },
+    "vendor/jansson/cmake/jansson_config.h.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0e17aa3df6b56319315d1ec5937708efbf0eaeea"
+    },
+    "vendor/jansson/cmake/jansson_private_config.h.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "1fb14f48e476db29d32a839ed89a12568049689b"
+    },
+    "vendor/jansson/src/dtoa.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "062ac24fcae1282c5245c6057f1d64aff7832e7e"
+    },
+    "vendor/jansson/src/dump.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9b44c112560f5e6a824f72d922aa88638488d9ed"
+    },
+    "vendor/jansson/src/error.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "14d0047d92646880945574f2823fb77aaff825b9"
+    },
+    "vendor/jansson/src/hashtable.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "a34b7735f9dcb9e703b0087461175023f891a693"
+    },
+    "vendor/jansson/src/hashtable.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "59ae7c5912f4b0d8c1156948b25a992ad619c803"
+    },
+    "vendor/jansson/src/hashtable_seed.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d156b400cb02c220364d7c39abaf6c5e41b9b6a9"
+    },
+    "vendor/jansson/src/jansson.def": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "605b288552c78f99705c7b9de86308064fc03244"
+    },
+    "vendor/jansson/src/jansson.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "14ad486edb35f59ffb9e0afecfcff8ce3f2f2fdb"
+    },
+    "vendor/jansson/src/jansson_private.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8f930f0b9fb39074be58772112eaa793f5795331"
+    },
+    "vendor/jansson/src/load.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "8ae7abd12854588e8c897547eb55a0ff28b24e9a"
+    },
+    "vendor/jansson/src/lookup3.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9b39aa1ce3113b9f19cdac260154c4514c995233"
+    },
+    "vendor/jansson/src/memory.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "869dd1a3b40c94fdc556b71b27b77bed7fd768d5"
+    },
+    "vendor/jansson/src/pack_unpack.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5447005eb8e9641f7fe0d7cd4e9db8088558e68d"
+    },
+    "vendor/jansson/src/strbuffer.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "79708b67c35b5079212c4d2ac7eb744109ea3784"
+    },
+    "vendor/jansson/src/strbuffer.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "70f2646df58d03f77e39b1bcc082f59ee9dcb51a"
+    },
+    "vendor/jansson/src/strconv.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "9e202c5c352ea0bc22d3c4e716f237808d0fe2b5"
+    },
+    "vendor/jansson/src/utf.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "28b2f7d38ff12f1aa8cf08f9042a14ccc3ca4d2f"
+    },
+    "vendor/jansson/src/utf.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5db99df677c3b881407e9bc52e9615c27907da11"
+    },
+    "vendor/jansson/src/value.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "cb347385638fa0fa7d737f0495b214292892f4cc"
+    },
+    "vendor/jansson/src/version.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "f1026af14baa76ee5de4d635ba1291a21be03e98"
+    },
+    "vendor/txiki.js": {
+      "mode": "160000",
+      "kind": "commit",
+      "gitObject": "1a230d31183f062fae7a6c4fd2cff466cecc1787"
+    },
+    "vendor/win-iconv/VENDOR.txt": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7c424c5bd7bb2b4f7a907d2c2d38bfa99086deeb"
+    },
+    "vendor/win-iconv/iconv.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "a6625ab1ea2674417c14ddc8f7ff5aa8ba04d817"
+    },
+    "vendor/win-iconv/readme.txt": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "0765edc0b7ea3285a13f6de5677c40d2383bd8ff"
+    },
+    "vendor/win-iconv/win_iconv.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "d7a4ade43120e8e95627d7cf99c12c177db026d5"
+    },
+    "vendor/win32-shims/getopt.c": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "7a3bb54aa1ef8b24c84f93fba0ead6347ba243e8"
+    },
+    "vendor/win32-shims/getopt.h": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "5bea104be53d4ce6746ac30effa88640ffd6e17c"
+    }
+  },
+  "qualifiedReleaseFiles": {
     "CMakeLists.txt": {
       "mode": "100644",
       "kind": "blob",
@@ -1539,5 +3076,19 @@
       "kind": "blob",
       "gitObject": "5bea104be53d4ce6746ac30effa88640ffd6e17c"
     }
+  },
+  "qualifiedReleaseDigests": {
+    "headerSHA256": "454d295855db2149c45d63ae9202e6656821805d9551489a54663de3cd87978d",
+    "protocolSHA256": "bd4efe8b459c0fd649f158d64ff7985b4be033be16f51b2de022684dda69f60d"
+  },
+  "checkout": {
+    "kind": "formatting-successor",
+    "baseCommit": "5d9ab83d6487cde118927de39d4873da2b9673fc",
+    "formatters": {
+      "clang-format": "23.1.5",
+      "prettier": "3.8.3",
+      "ruff": "0.17.5"
+    },
+    "releaseQualificationInherited": false
   }
 }

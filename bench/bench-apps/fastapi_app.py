@@ -3,6 +3,7 @@ fixtures (json/bytes/stream at 1k/4k/8k/16k/32k/64k). JSON bodies are
 precomputed at import; raw starlette Response avoids any re-serialization.
 bytes bodies are precomputed byte strings; stream bodies yield 4 KiB chunks
 of 's' with the frozen stream contract so loadgen verify matches all stacks."""
+
 import json
 
 from fastapi import FastAPI
@@ -26,8 +27,10 @@ MATRIX_PADS = {label: "x" * (size - 11) for label, size in MATRIX_SIZES.items()}
 MATRIX_BYTES = {label: b"b" * size for label, size in MATRIX_SIZES.items()}
 # Precomputed compact JSON bodies — identical bytes across all stacks; no
 # per-request serialization.
-MATRIX_JSON = {label: json.dumps({"data": pad}, separators=(",", ":")).encode()
-               for label, pad in MATRIX_PADS.items()}
+MATRIX_JSON = {
+    label: json.dumps({"data": pad}, separators=(",", ":")).encode()
+    for label, pad in MATRIX_PADS.items()
+}
 
 _JSON_HEADERS = {"Content-Type": "application/json"}
 _OCTET_HEADERS = {"Content-Type": "application/octet-stream"}
@@ -124,14 +127,18 @@ def _matrix_json(label: str) -> Response:
     size = MATRIX_SIZES.get(label)
     if size is None:
         return Response("not found", status_code=404)
-    return Response(content=MATRIX_JSON[label], headers={**_JSON_HEADERS, "Content-Length": str(size)})
+    return Response(
+        content=MATRIX_JSON[label], headers={**_JSON_HEADERS, "Content-Length": str(size)}
+    )
 
 
 def _matrix_bytes(label: str) -> Response:
     size = MATRIX_SIZES.get(label)
     if size is None:
         return Response("not found", status_code=404)
-    return Response(content=MATRIX_BYTES[label], headers={**_OCTET_HEADERS, "Content-Length": str(size)})
+    return Response(
+        content=MATRIX_BYTES[label], headers={**_OCTET_HEADERS, "Content-Length": str(size)}
+    )
 
 
 def _matrix_stream(label: str) -> StreamingResponse:
@@ -156,13 +163,23 @@ def _handler(builder, label):
     # would be run without awaiting (jsonable_encoder chokes on it).
     async def endpoint() -> Response:
         return builder(label)
+
     return endpoint
 
 
 for _label in MATRIX_SIZES:
-    app.add_api_route(f"/@capsid/orders/bench/matrix-json-{_label}",
-                      _handler(_matrix_json, _label), methods=["GET"])
-    app.add_api_route(f"/@capsid/orders/bench/matrix-bytes-{_label}",
-                      _handler(_matrix_bytes, _label), methods=["GET"])
-    app.add_api_route(f"/@capsid/orders/bench/matrix-stream-{_label}",
-                      _handler(_matrix_stream, _label), methods=["GET"])
+    app.add_api_route(
+        f"/@capsid/orders/bench/matrix-json-{_label}",
+        _handler(_matrix_json, _label),
+        methods=["GET"],
+    )
+    app.add_api_route(
+        f"/@capsid/orders/bench/matrix-bytes-{_label}",
+        _handler(_matrix_bytes, _label),
+        methods=["GET"],
+    )
+    app.add_api_route(
+        f"/@capsid/orders/bench/matrix-stream-{_label}",
+        _handler(_matrix_stream, _label),
+        methods=["GET"],
+    )

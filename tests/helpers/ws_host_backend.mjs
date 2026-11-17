@@ -14,252 +14,515 @@ const childClosures = new WeakMap();
 // Preserve the scenario failure when cleanup also fails. Both errors remain
 // inspectable, and a cleanup failure still fails an otherwise healthy scenario.
 export async function withCleanup(operation, cleanup) {
-    let result, primary;
-    try { result = await operation(); } catch (error) { primary = error; }
-    try { await cleanup(); } catch (error) {
-        if (primary) throw new AggregateError([primary, error],
-            `${primary.message}; cleanup: ${error.message}`, {cause: primary});
-        throw error;
-    }
-    if (primary) throw primary;
-    return result;
+  let result, primary;
+  try {
+    result = await operation();
+  } catch (error) {
+    primary = error;
+  }
+  try {
+    await cleanup();
+  } catch (error) {
+    if (primary)
+      throw new AggregateError([primary, error], `${primary.message}; cleanup: ${error.message}`, {
+        cause: primary,
+      });
+    throw error;
+  }
+  if (primary) throw primary;
+  return result;
 }
 
-async function admin(socketPath, target, body, method=body?'POST':'GET') {
-    return new Promise((resolve,reject) => {
-        const fail=error=>{
-            const failure=new Error(`admin ${method} ${target}: ${error.message}`,{cause:error});
-            if(error.code!==undefined)failure.code=error.code;
-            failure.adminRequest={method,target};
-            reject(failure);
-        };
-        const request=http.request({socketPath,path:target,method,headers:body?{'content-type':'application/json'}:{}},response => {
-            const chunks=[]; response.on('data',c=>chunks.push(c));
-            response.once('error',fail);
-            response.on('end',()=>{try {const text=Buffer.concat(chunks).toString();resolve({status:response.statusCode,text,...(target==='/metrics'?{}:{json:JSON.parse(text)})});} catch(error){fail(error);}});
+async function admin(socketPath, target, body, method = body ? 'POST' : 'GET') {
+  return new Promise((resolve, reject) => {
+    const fail = (error) => {
+      const failure = new Error(`admin ${method} ${target}: ${error.message}`, { cause: error });
+      if (error.code !== undefined) failure.code = error.code;
+      failure.adminRequest = { method, target };
+      reject(failure);
+    };
+    const request = http.request(
+      {
+        socketPath,
+        path: target,
+        method,
+        headers: body ? { 'content-type': 'application/json' } : {},
+      },
+      (response) => {
+        const chunks = [];
+        response.on('data', (c) => chunks.push(c));
+        response.once('error', fail);
+        response.on('end', () => {
+          try {
+            const text = Buffer.concat(chunks).toString();
+            resolve({
+              status: response.statusCode,
+              text,
+              ...(target === '/metrics' ? {} : { json: JSON.parse(text) }),
+            });
+          } catch (error) {
+            fail(error);
+          }
         });
-        request.on('error',fail); request.end(body?JSON.stringify(body):undefined);
-        request.setTimeout(5000,()=>request.destroy(new Error(`admin request deadline: ${target}`)));
-    });
+      },
+    );
+    request.on('error', fail);
+    request.end(body ? JSON.stringify(body) : undefined);
+    request.setTimeout(5000, () => request.destroy(new Error(`admin request deadline: ${target}`)));
+  });
 }
 // bind() publishes the pathname before listen() accepts connections. Probe
 // only this startup condition under the original absolute deadline; deployment
 // and operation requests below remain one-shot, including ECONNREFUSED.
-async function waitForAdminListener(child,socketPath,deadline,stderr) {
-    for(;;) {
-        assert.ok(Date.now()<deadline&&child.exitCode===null&&child.signalCode===null,
-            `admin startup: ${stderr()}`);
-        try {
-            await new Promise((resolve,reject)=>{
-                const socket=net.createConnection({path:socketPath});
-                let settled=false;
-                const finish=error=>{
-                    if(settled)return;
-                    settled=true;clearTimeout(timer);
-                    child.removeListener('exit',exited);child.removeListener('error',failed);
-                    socket.destroy();
-                    if(error)reject(error);else resolve();
-                };
-                const exited=()=>finish(new Error(`admin startup: host exited: ${stderr()}`));
-                const failed=error=>finish(new Error('admin startup: host spawn failed',{cause:error}));
-                const timer=setTimeout(()=>finish(new Error('admin listener startup deadline')),
-                    Math.max(1,deadline-Date.now()));
-                socket.once('connect',()=>finish());socket.once('error',finish);
-                child.once('exit',exited);child.once('error',failed);
-                if(child.exitCode!==null||child.signalCode!==null)exited();
-            });
-            return;
-        } catch(error) {
-            if(!['ENOENT','ECONNREFUSED'].includes(error.code))throw error;
-            await delay(Math.min(25,Math.max(0,deadline-Date.now())));
-        }
+async function waitForAdminListener(child, socketPath, deadline, stderr) {
+  for (;;) {
+    assert.ok(
+      Date.now() < deadline && child.exitCode === null && child.signalCode === null,
+      `admin startup: ${stderr()}`,
+    );
+    try {
+      await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ path: socketPath });
+        let settled = false;
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          child.removeListener('exit', exited);
+          child.removeListener('error', failed);
+          socket.destroy();
+          if (error) reject(error);
+          else resolve();
+        };
+        const exited = () => finish(new Error(`admin startup: host exited: ${stderr()}`));
+        const failed = (error) =>
+          finish(new Error('admin startup: host spawn failed', { cause: error }));
+        const timer = setTimeout(
+          () => finish(new Error('admin listener startup deadline')),
+          Math.max(1, deadline - Date.now()),
+        );
+        socket.once('connect', () => finish());
+        socket.once('error', finish);
+        child.once('exit', exited);
+        child.once('error', failed);
+        if (child.exitCode !== null || child.signalCode !== null) exited();
+      });
+      return;
+    } catch (error) {
+      if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
+      await delay(Math.min(25, Math.max(0, deadline - Date.now())));
     }
+  }
 }
 function processStart(pid) {
-    const stat=fs.readFileSync(`/proc/${pid}/stat`,'utf8');
-    const start=stat.slice(stat.lastIndexOf(')')+2).trim().split(/\s+/)[19];
-    assert.match(start,/^\d+$/,'owned host process start identity');
-    return start;
+  const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+  const start = stat
+    .slice(stat.lastIndexOf(')') + 2)
+    .trim()
+    .split(/\s+/)[19];
+  assert.match(start, /^\d+$/, 'owned host process start identity');
+  return start;
 }
-async function managedListenerPort(child,start,deadline,stderr) {
-    if(process.platform==='linux') {
-        assert.equal(processStart(child.pid),start,'same owned host process');
-        const inodes=new Set();
-        for(const fd of fs.readdirSync(`/proc/${child.pid}/fd`)) {
-            let target;
-            try {target=fs.readlinkSync(`/proc/${child.pid}/fd/${fd}`);}
-            catch(error) {if(error.code==='ENOENT')continue;throw error;}
-            const socket=/^socket:\[(\d+)\]$/.exec(target);
-            if(socket)inodes.add(socket[1]);
-        }
-        const ports=new Set();
-        for(const line of fs.readFileSync(`/proc/${child.pid}/net/tcp`,'utf8').trim().split('\n').slice(1)) {
-            const fields=line.trim().split(/\s+/),local=/^0100007F:([0-9A-F]{4})$/i.exec(fields[1]);
-            if(fields[3]==='0A'&&local&&inodes.has(fields[9]))ports.add(Number.parseInt(local[1],16));
-        }
-        assert.equal(processStart(child.pid),start,'host identity unchanged during listener capture');
-        assert.ok(child.exitCode===null&&child.signalCode===null,'owned host still running');
-        assert.equal(ports.size,1,'one owned IPv4 loopback data listener, not a namespace-wide LISTEN guess');
-        const [port]=ports;assert.ok(port>0&&port<=65535);return port;
+async function managedListenerPort(child, start, deadline, stderr) {
+  if (process.platform === 'linux') {
+    assert.equal(processStart(child.pid), start, 'same owned host process');
+    const inodes = new Set();
+    for (const fd of fs.readdirSync(`/proc/${child.pid}/fd`)) {
+      let target;
+      try {
+        target = fs.readlinkSync(`/proc/${child.pid}/fd/${fd}`);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
+      const socket = /^socket:\[(\d+)\]$/.exec(target);
+      if (socket) inodes.add(socket[1]);
     }
-    // Product managed mode is Linux-only. Non-Linux diagnostic hosts use
-    // their existing private ready pipe, never a released port reservation.
-    const line=await new Promise((resolve,reject)=>{
-        let buffer='';const timer=setTimeout(()=>reject(new Error(`managed ready deadline: ${stderr()}`)),Math.max(1,deadline-Date.now()));
-        child.stdio[3].setEncoding('utf8');child.stdio[3].on('data',chunk=>{buffer+=chunk;if(buffer.includes('\n')){clearTimeout(timer);resolve(buffer.split('\n')[0]);}});
-        child.once('error',reject);child.once('exit',()=>{clearTimeout(timer);reject(new Error(`host exited: ${stderr()}`));});
+    const ports = new Set();
+    for (const line of fs
+      .readFileSync(`/proc/${child.pid}/net/tcp`, 'utf8')
+      .trim()
+      .split('\n')
+      .slice(1)) {
+      const fields = line.trim().split(/\s+/),
+        local = /^0100007F:([0-9A-F]{4})$/i.exec(fields[1]);
+      if (fields[3] === '0A' && local && inodes.has(fields[9]))
+        ports.add(Number.parseInt(local[1], 16));
+    }
+    assert.equal(processStart(child.pid), start, 'host identity unchanged during listener capture');
+    assert.ok(child.exitCode === null && child.signalCode === null, 'owned host still running');
+    assert.equal(
+      ports.size,
+      1,
+      'one owned IPv4 loopback data listener, not a namespace-wide LISTEN guess',
+    );
+    const [port] = ports;
+    assert.ok(port > 0 && port <= 65535);
+    return port;
+  }
+  // Product managed mode is Linux-only. Non-Linux diagnostic hosts use
+  // their existing private ready pipe, never a released port reservation.
+  const line = await new Promise((resolve, reject) => {
+    let buffer = '';
+    const timer = setTimeout(
+      () => reject(new Error(`managed ready deadline: ${stderr()}`)),
+      Math.max(1, deadline - Date.now()),
+    );
+    child.stdio[3].setEncoding('utf8');
+    child.stdio[3].on('data', (chunk) => {
+      buffer += chunk;
+      if (buffer.includes('\n')) {
+        clearTimeout(timer);
+        resolve(buffer.split('\n')[0]);
+      }
     });
-    const ready=JSON.parse(line);assert.equal(ready.schema,'capsid-host-ready-v1');
-    assert.ok(Number.isInteger(ready.port)&&ready.port>0&&ready.port<=65535);return ready.port;
+    child.once('error', reject);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      reject(new Error(`host exited: ${stderr()}`));
+    });
+  });
+  const ready = JSON.parse(line);
+  assert.equal(ready.schema, 'capsid-host-ready-v1');
+  assert.ok(Number.isInteger(ready.port) && ready.port > 0 && ready.port <= 65535);
+  return ready.port;
 }
-export async function startCapsid(host,worker,bundle,dir,mode='single-worker',options={}) {
-    let socketPath, port;
-    let args=['--mode',mode,'--worker',worker,'--source-bundle',bundle,'--source-name',pathToFileURL(bundle).href,
-        '--application','orders','--listen','127.0.0.1:0','--routing','path','--public-scheme','http',
-        '--public-authority','public.example','--request-timeout-ms',String(options.requestTimeoutMs ?? 10000),'--strict-sandbox','off','--ready-fd','3'];
-    const workers=options.workers ?? 1;
-    if(mode==='static-pool') args.push('--workers',String(workers));
-    const capacity=options.channelCapacity ?? {};
-    if(mode!=='managed') {
-        for(const [key,flag] of [['channelsTotal','channels-total'],['pendingDialsTotal','pending-dials-total'],['channelQueueBytesTotal','channel-queue-bytes-total']])
-            if(capacity[key]!==undefined)args.push('--'+flag,String(capacity[key]));
-        if(options.listenerChannels!==undefined)args.push('--listener-channels',String(options.listenerChannels));
-        if(options.listenerChannelQueueBytes!==undefined)args.push('--listener-channel-queue-bytes',String(options.listenerChannelQueueBytes));
+export async function startCapsid(host, worker, bundle, dir, mode = 'single-worker', options = {}) {
+  let socketPath, port;
+  let args = [
+    '--mode',
+    mode,
+    '--worker',
+    worker,
+    '--source-bundle',
+    bundle,
+    '--source-name',
+    pathToFileURL(bundle).href,
+    '--application',
+    'orders',
+    '--listen',
+    '127.0.0.1:0',
+    '--routing',
+    'path',
+    '--public-scheme',
+    'http',
+    '--public-authority',
+    'public.example',
+    '--request-timeout-ms',
+    String(options.requestTimeoutMs ?? 10000),
+    '--strict-sandbox',
+    'off',
+    '--ready-fd',
+    '3',
+  ];
+  const workers = options.workers ?? 1;
+  if (mode === 'static-pool') args.push('--workers', String(workers));
+  const capacity = options.channelCapacity ?? {};
+  if (mode !== 'managed') {
+    for (const [key, flag] of [
+      ['channelsTotal', 'channels-total'],
+      ['pendingDialsTotal', 'pending-dials-total'],
+      ['channelQueueBytesTotal', 'channel-queue-bytes-total'],
+    ])
+      if (capacity[key] !== undefined) args.push('--' + flag, String(capacity[key]));
+    if (options.listenerChannels !== undefined)
+      args.push('--listener-channels', String(options.listenerChannels));
+    if (options.listenerChannelQueueBytes !== undefined)
+      args.push('--listener-channel-queue-bytes', String(options.listenerChannelQueueBytes));
+  }
+  const permissions = options.permissions ?? { modules: [] };
+  if (mode !== 'managed' && options.permissions) {
+    const config = path.join(dir, 'capsid.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: path.basename(bundle),
+        permissions,
+        pool: { minReady: workers, maxWorkers: workers },
+        ...(options.worker ? { worker: options.worker } : {}),
+      }),
+    );
+    args.push('--capsid-json', config);
+  }
+  if (mode === 'managed') {
+    // Let the actual Host own the kernel-selected endpoint for its entire
+    // lifetime. bind(0)/close in this driver leaves a real TOCTOU window.
+    port = 0;
+    const applicationsRoot = path.join(dir, 'apps'),
+      stateRoot = path.join(dir, 'state'),
+      runRoot = path.join(dir, 'run'),
+      secrets = path.join(dir, 'secrets');
+    for (const root of [applicationsRoot, stateRoot, runRoot, path.join(secrets, 'orders')])
+      fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+    const version = path.join(applicationsRoot, 'orders', 'v1');
+    fs.mkdirSync(version, { recursive: true, mode: 0o700 });
+    fs.copyFileSync(bundle, path.join(version, 'bundle.mjs'));
+    fs.writeFileSync(
+      path.join(version, 'capsid.json'),
+      JSON.stringify({
+        apiVersion: 'capsid/app-v1',
+        entry: 'bundle.mjs',
+        permissions,
+        pool: { minReady: workers, maxWorkers: workers },
+        ...(options.worker ? { worker: options.worker } : {}),
+        ...(options.requestTimeoutMs
+          ? { request: { timeout: `${options.requestTimeoutMs}ms` } }
+          : {}),
+      }),
+    );
+    socketPath = path.join(runRoot, 'admin.sock');
+    const config = path.join(dir, 'host.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        apiVersion: 'capsid/host-v1',
+        applicationsRoot,
+        stateRoot,
+        secretRootTemplate: path.join(secrets, '{application}'),
+        admin: { unix: socketPath, mode: '0600' },
+        permissions: {
+          modules: [],
+          environmentNames: [],
+          fsReadRoots: [],
+          fetchTargets: options.fetchTargets ?? [],
+          storageNamespaces: [],
+          stdioStreams: [],
+        },
+        isolation: { mode: 'strict', required: [] },
+        capacity: {
+          workersTotal: workers,
+          startupsConcurrent: 1,
+          ...options.hostCapacity,
+          ...capacity,
+        },
+        ...(options.channels ? { channels: options.channels } : {}),
+        ...(options.recovery ? { recovery: options.recovery } : {}),
+        listeners: [
+          {
+            name: 'public',
+            tcp: `127.0.0.1:${port}`,
+            publicScheme: 'http',
+            publicAuthority: 'public.example',
+            trusted: false,
+            routing: { mode: 'path' },
+            limits: {
+              ...(options.listenerChannels === undefined
+                ? {}
+                : { channels: options.listenerChannels }),
+              ...(options.listenerChannelQueueBytes === undefined
+                ? {}
+                : { channelQueueBytes: options.listenerChannelQueueBytes }),
+            },
+          },
+        ],
+      }),
+    );
+    args = ['--mode', 'managed', '--host-config', config, '--worker', worker];
+  }
+  if (mode !== 'managed') args.push('--stop-fd', '4');
+  const child = spawn(host, args, {
+    stdio:
+      mode === 'managed'
+        ? ['ignore', 'pipe', 'pipe', 'pipe']
+        : ['ignore', 'pipe', 'pipe', 'pipe', 'pipe'],
+    env: { ...process.env, ...options.env },
+  });
+  childClosures.set(child, new Promise((resolve) => child.once('close', resolve)));
+  if (mode !== 'managed') {
+    const control = { stream: child.stdio[4], error: null };
+    control.stream.on('error', (error) => {
+      control.error = error;
+    });
+    parentControls.set(child, control);
+  }
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (c) => (stderr += c));
+  try {
+    if (mode === 'managed') {
+      const deadline = Date.now() + 20000;
+      const start = process.platform === 'linux' ? processStart(child.pid) : null;
+      await waitForAdminListener(child, socketPath, deadline, () => stderr);
+      const deploy = await admin(socketPath, '/v1/deploy', { app: 'orders', version: 'v1' });
+      assert.equal(deploy.status, 202, JSON.stringify(deploy.json));
+      for (;;) {
+        const operation = await admin(socketPath, `/v1/operations/${deploy.json.operationId}`);
+        assert.notEqual(
+          operation.json.state,
+          'failed',
+          `${JSON.stringify(operation.json)} ${stderr}`,
+        );
+        if (operation.json.state === 'active') break;
+        assert.ok(Date.now() < deadline, `deploy deadline: ${stderr}`);
+        await delay(25);
+      }
+      port = await managedListenerPort(child, start, deadline, () => stderr);
+    } else {
+      const line = await new Promise((resolve, reject) => {
+        let buffer = '';
+        const timer = setTimeout(() => reject(new Error(`ready timeout: ${stderr}`)), 15000);
+        child.stdio[3].setEncoding('utf8');
+        child.stdio[3].on('data', (chunk) => {
+          buffer += chunk;
+          if (buffer.includes('\n')) {
+            clearTimeout(timer);
+            resolve(buffer.split('\n')[0]);
+          }
+        });
+        child.once('error', reject);
+        child.once('exit', () => {
+          clearTimeout(timer);
+          reject(new Error(`host exited: ${stderr}`));
+        });
+      });
+      const ready = JSON.parse(line);
+      assert.equal(ready.schema, 'capsid-host-ready-v1');
+      port = ready.port;
     }
-    const permissions=options.permissions ?? {modules:[]};
-    if(mode!=='managed' && options.permissions) {
-        const config=path.join(dir,'capsid.json');
-        fs.writeFileSync(config,JSON.stringify({apiVersion:'capsid/app-v1',entry:path.basename(bundle),permissions,pool:{minReady:workers,maxWorkers:workers},...(options.worker?{worker:options.worker}:{})}));
-        args.push('--capsid-json',config);
-    }
-    if(mode==='managed') {
-        // Let the actual Host own the kernel-selected endpoint for its entire
-        // lifetime. bind(0)/close in this driver leaves a real TOCTOU window.
-        port=0;
-        const applicationsRoot=path.join(dir,'apps'),stateRoot=path.join(dir,'state'),runRoot=path.join(dir,'run'),secrets=path.join(dir,'secrets');
-        for(const root of [applicationsRoot,stateRoot,runRoot,path.join(secrets,'orders')]) fs.mkdirSync(root,{recursive:true,mode:0o700});
-        const version=path.join(applicationsRoot,'orders','v1');fs.mkdirSync(version,{recursive:true,mode:0o700});
-        fs.copyFileSync(bundle,path.join(version,'bundle.mjs'));
-        fs.writeFileSync(path.join(version,'capsid.json'),JSON.stringify({apiVersion:'capsid/app-v1',entry:'bundle.mjs',permissions,pool:{minReady:workers,maxWorkers:workers},
-            ...(options.worker?{worker:options.worker}:{}),
-            ...(options.requestTimeoutMs ? {request:{timeout:`${options.requestTimeoutMs}ms`}} : {})}));
-        socketPath=path.join(runRoot,'admin.sock');
-        const config=path.join(dir,'host.json');
-        fs.writeFileSync(config,JSON.stringify({apiVersion:'capsid/host-v1',applicationsRoot,stateRoot,
-            secretRootTemplate:path.join(secrets,'{application}'),admin:{unix:socketPath,mode:'0600'},
-            permissions:{modules:[],environmentNames:[],fsReadRoots:[],fetchTargets:options.fetchTargets ?? [],storageNamespaces:[],stdioStreams:[]},
-            isolation:{mode:'strict',required:[]},capacity:{workersTotal:workers,startupsConcurrent:1,...options.hostCapacity,...capacity},
-            ...(options.channels?{channels:options.channels}:{}),
-            ...(options.recovery?{recovery:options.recovery}:{}),
-            listeners:[{name:'public',tcp:`127.0.0.1:${port}`,publicScheme:'http',publicAuthority:'public.example',trusted:false,routing:{mode:'path'},
-                limits:{...(options.listenerChannels===undefined?{}:{channels:options.listenerChannels}),...(options.listenerChannelQueueBytes===undefined?{}:{channelQueueBytes:options.listenerChannelQueueBytes})}}]}));
-        args=['--mode','managed','--host-config',config,'--worker',worker];
-    }
-    if(mode!=='managed') args.push('--stop-fd','4');
-    const child=spawn(host,args,{stdio:mode==='managed'?['ignore','pipe','pipe','pipe']:['ignore','pipe','pipe','pipe','pipe'],env:{...process.env,...options.env}});
-    childClosures.set(child,new Promise(resolve=>child.once('close',resolve)));
-    if(mode!=='managed') {
-        const control={stream:child.stdio[4],error:null};
-        control.stream.on('error',error=>{control.error=error;});
-        parentControls.set(child,control);
-    }
-    let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',c=>stderr+=c);
+    return {
+      child,
+      port,
+      stderr: () => stderr,
+      socketPath,
+      admin: (target, body, method) => admin(socketPath, target, body, method),
+    };
+  } catch (error) {
+    let shutdown, cleanupFailure;
     try {
-        if(mode==='managed') {
-            const deadline=Date.now()+20000;
-            const start=process.platform==='linux'?processStart(child.pid):null;
-            await waitForAdminListener(child,socketPath,deadline,()=>stderr);
-            const deploy=await admin(socketPath,'/v1/deploy',{app:'orders',version:'v1'});
-            assert.equal(deploy.status,202,JSON.stringify(deploy.json));
-            for(;;) {
-                const operation=await admin(socketPath,`/v1/operations/${deploy.json.operationId}`);
-                assert.notEqual(operation.json.state,'failed',`${JSON.stringify(operation.json)} ${stderr}`);
-                if(operation.json.state==='active') break;
-                assert.ok(Date.now()<deadline,`deploy deadline: ${stderr}`);await delay(25);
-            }
-            port=await managedListenerPort(child,start,deadline,()=>stderr);
-        } else {
-            const line=await new Promise((resolve,reject)=>{
-                let buffer='';const timer=setTimeout(()=>reject(new Error(`ready timeout: ${stderr}`)),15000);
-                child.stdio[3].setEncoding('utf8');child.stdio[3].on('data',chunk=>{buffer+=chunk;if(buffer.includes('\n')){clearTimeout(timer);resolve(buffer.split('\n')[0]);}});
-                child.once('error',reject);child.once('exit',()=>{clearTimeout(timer);reject(new Error(`host exited: ${stderr}`));});
-            });
-            const ready=JSON.parse(line);assert.equal(ready.schema,'capsid-host-ready-v1');port=ready.port;
-        }
-        return {child,port,stderr:()=>stderr,socketPath,admin:(target,body,method)=>admin(socketPath,target,body,method)};
-    } catch(error) {
-        let shutdown,cleanupFailure;
-        try {shutdown=await stopCapsid(child);} catch(cleanupError) {cleanupFailure=cleanupError;}
-        const message=`host startup (${mode}): ${error.message}\n${stderr}`;
-        const failure=cleanupFailure
-            ?new AggregateError([error,cleanupFailure],`${message}; cleanup: ${cleanupFailure.message}`,{cause:error})
-            :new Error(message,{cause:error});
-        if(error.code!==undefined)failure.code=error.code;
-        // Callers have no backend on this path. Attach the evidence here, after
-        // cleanup, so their existing failureObservation capture can retain it.
-        failure.observation={phase:'capsid-startup',mode,pid:child.pid??null,
-            adminRequest:error.adminRequest??null,stderr,shutdown:shutdown??null,
-            failure:{name:error.name,message:error.message,code:error.code??null,
-                stack:error.stack??null,causeStack:error.cause?.stack??null},
-            cleanupFailure:cleanupFailure?.stack??null};
-        throw failure;
+      shutdown = await stopCapsid(child);
+    } catch (cleanupError) {
+      cleanupFailure = cleanupError;
     }
+    const message = `host startup (${mode}): ${error.message}\n${stderr}`;
+    const failure = cleanupFailure
+      ? new AggregateError(
+          [error, cleanupFailure],
+          `${message}; cleanup: ${cleanupFailure.message}`,
+          { cause: error },
+        )
+      : new Error(message, { cause: error });
+    if (error.code !== undefined) failure.code = error.code;
+    // Callers have no backend on this path. Attach the evidence here, after
+    // cleanup, so their existing failureObservation capture can retain it.
+    failure.observation = {
+      phase: 'capsid-startup',
+      mode,
+      pid: child.pid ?? null,
+      adminRequest: error.adminRequest ?? null,
+      stderr,
+      shutdown: shutdown ?? null,
+      failure: {
+        name: error.name,
+        message: error.message,
+        code: error.code ?? null,
+        stack: error.stack ?? null,
+        causeStack: error.cause?.stack ?? null,
+      },
+      cleanupFailure: cleanupFailure?.stack ?? null,
+    };
+    throw failure;
+  }
 }
 export function stopCapsid(child) {
-    if(!stopRequests.has(child)) stopRequests.set(child,stopOnce(child));
-    return stopRequests.get(child);
+  if (!stopRequests.has(child)) stopRequests.set(child, stopOnce(child));
+  return stopRequests.get(child);
 }
 async function stopOnce(child) {
-    if(child.exitCode!==null || child.signalCode!==null) {
-        await childClosures.get(child);
-        return {code:child.exitCode,signal:child.signalCode,forced:false};
-    }
-    // ChildProcess exit precedes closure of its stdio. Returning only after
-    // close also makes it safe for the driver itself to finish on Windows.
-    const exited=childClosures.get(child) ?? new Promise(resolve=>child.once('close',resolve));
-    const control=parentControls.get(child);
-    if(control) control.stream.end(Buffer.from([1]));
-    else child.kill('SIGTERM');
-    let timer,forced=false;
-    await Promise.race([exited,new Promise(resolve=>{timer=setTimeout(()=>{forced=true;child.kill('SIGKILL');resolve();},15000);})]);
-    clearTimeout(timer);await exited;
-    if(control?.error && child.exitCode!==0) throw new Error('parent stop control failed', {cause:control.error});
-    return {code:child.exitCode,signal:child.signalCode,forced};
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await childClosures.get(child);
+    return { code: child.exitCode, signal: child.signalCode, forced: false };
+  }
+  // ChildProcess exit precedes closure of its stdio. Returning only after
+  // close also makes it safe for the driver itself to finish on Windows.
+  const exited = childClosures.get(child) ?? new Promise((resolve) => child.once('close', resolve));
+  const control = parentControls.get(child);
+  if (control) control.stream.end(Buffer.from([1]));
+  else child.kill('SIGTERM');
+  let timer,
+    forced = false;
+  await Promise.race([
+    exited,
+    new Promise((resolve) => {
+      timer = setTimeout(() => {
+        forced = true;
+        child.kill('SIGKILL');
+        resolve();
+      }, 15000);
+    }),
+  ]);
+  clearTimeout(timer);
+  await exited;
+  if (control?.error && child.exitCode !== 0)
+    throw new Error('parent stop control failed', { cause: control.error });
+  return { code: child.exitCode, signal: child.signalCode, forced };
 }
 
 // A localhost authority includes both loopback families. Reserving only IPv4
 // leaves its IPv6 endpoint available to an unrelated service, and a refused
 // IPv6 connect can consume most of a fixture's unchanged observation budget.
 // Return only after both exact loopback addresses belong to this fixture.
-export async function listenLoopbackTcp(onConnection, {port=0}={}) {
-    assert.equal(typeof onConnection,'function');
-    assert.ok(Number.isInteger(port)&&port>=0&&port<=65535,'valid loopback port');
-    const sockets=new Set(),started=[];
-    const create=()=>net.createServer({allowHalfOpen:true},socket=>{
-        sockets.add(socket);socket.once('close',()=>sockets.delete(socket));
-        onConnection(socket);
+export async function listenLoopbackTcp(onConnection, { port = 0 } = {}) {
+  assert.equal(typeof onConnection, 'function');
+  assert.ok(Number.isInteger(port) && port >= 0 && port <= 65535, 'valid loopback port');
+  const sockets = new Set(),
+    started = [];
+  const create = () =>
+    net.createServer({ allowHalfOpen: true }, (socket) => {
+      sockets.add(socket);
+      socket.once('close', () => sockets.delete(socket));
+      onConnection(socket);
     });
-    const ipv4=create(),ipv6=create();
-    const listen=(server,options)=>new Promise((resolve,reject)=>{
-        const failed=error=>{server.removeListener('listening',ready);reject(error);};
-        const ready=()=>{server.removeListener('error',failed);started.push(server);resolve();};
-        server.once('error',failed);server.once('listening',ready);server.listen(options);
+  const ipv4 = create(),
+    ipv6 = create();
+  const listen = (server, options) =>
+    new Promise((resolve, reject) => {
+      const failed = (error) => {
+        server.removeListener('listening', ready);
+        reject(error);
+      };
+      const ready = () => {
+        server.removeListener('error', failed);
+        started.push(server);
+        resolve();
+      };
+      server.once('error', failed);
+      server.once('listening', ready);
+      server.listen(options);
     });
-    const closeListeners=()=>Promise.all(started.map(server=>new Promise((resolve,reject)=>{
-        server.close(error=>error?reject(error):resolve());
-    })));
+  const closeListeners = () =>
+    Promise.all(
+      started.map(
+        (server) =>
+          new Promise((resolve, reject) => {
+            server.close((error) => (error ? reject(error) : resolve()));
+          }),
+      ),
+    );
+  try {
+    await listen(ipv4, { host: '127.0.0.1', port, exclusive: true });
+    await listen(ipv6, { host: '::1', port: ipv4.address().port, ipv6Only: true, exclusive: true });
+  } catch (error) {
+    for (const socket of sockets) socket.destroy();
     try {
-        await listen(ipv4,{host:'127.0.0.1',port,exclusive:true});
-        await listen(ipv6,{host:'::1',port:ipv4.address().port,ipv6Only:true,exclusive:true});
-    } catch(error) {
-        for(const socket of sockets)socket.destroy();
-        try {await closeListeners();} catch(cleanupError) {
-            throw new AggregateError([error,cleanupError],'loopback bind and cleanup failed',{cause:error});
-        }
-        throw error;
+      await closeListeners();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'loopback bind and cleanup failed', {
+        cause: error,
+      });
     }
-    const addresses=Object.freeze([ipv4.address(),ipv6.address()].map(value=>Object.freeze(value)));
-    let closing;
-    return Object.freeze({port:addresses[0].port,addresses,
-        close(){if(!closing)closing=closeListeners();return closing;}});
+    throw error;
+  }
+  const addresses = Object.freeze(
+    [ipv4.address(), ipv6.address()].map((value) => Object.freeze(value)),
+  );
+  let closing;
+  return Object.freeze({
+    port: addresses[0].port,
+    addresses,
+    close() {
+      if (!closing) closing = closeListeners();
+      return closing;
+    },
+  });
 }

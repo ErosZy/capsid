@@ -42,8 +42,7 @@ namespace {
 #define CAPSID_KT_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
 #endif
 
-template <typename Stat>
-bool stat_identical(const Stat& before, const Stat& after) {
+template <typename Stat> bool stat_identical(const Stat& before, const Stat& after) {
     return before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
            before.st_size == after.st_size &&
            CAPSID_KT_MTIME_SEC(before) == CAPSID_KT_MTIME_SEC(after) &&
@@ -66,40 +65,31 @@ void set_key_error(std::string* error, const char* stable_message) {
 // equivalent; intermediate directory traversal follows Windows default
 // resolution, see docs/windows.md).
 int open_trusted_key(const std::string& path, std::string* error) {
-    const int wide_size = MultiByteToWideChar(
-        CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
+    const int wide_size = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
     if (wide_size <= 0) {
         set_key_error(error, "trusted key path encoding rejected");
         return -1;
     }
     std::wstring wide(static_cast<std::size_t>(wide_size - 1), L'\0');
-    if (MultiByteToWideChar(
-            CP_UTF8, 0, path.c_str(), -1, &wide[0], wide_size) <= 0) {
+    if (MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wide[0], wide_size) <= 0) {
         set_key_error(error, "trusted key path encoding rejected");
         return -1;
     }
-    const HANDLE handle = CreateFileW(
-        wide.c_str(),
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        nullptr,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
-        nullptr);
+    const HANDLE handle =
+        CreateFileW(wide.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
         return -1;
     }
     FILE_ATTRIBUTE_TAG_INFO attributes = {};
-    if (GetFileInformationByHandleEx(
-            handle, FileAttributeTagInfo, &attributes,
-            sizeof(attributes)) != 0 &&
+    if (GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes,
+                                     sizeof(attributes)) != 0 &&
         (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
         CloseHandle(handle);
         set_key_error(error, "trusted key file cannot be opened");
         return -1;
     }
-    const int fd = _open_osfhandle(
-        reinterpret_cast<intptr_t>(handle), _O_RDONLY | _O_BINARY);
+    const int fd = _open_osfhandle(reinterpret_cast<intptr_t>(handle), _O_RDONLY | _O_BINARY);
     if (fd < 0) {
         CloseHandle(handle);
     }
@@ -113,13 +103,10 @@ bool read_exactly(int fd, std::array<std::uint8_t, kEd25519PublicKeyBytes>* out,
     while (filled < out->size()) {
 #if defined(_WIN32)
         // MSVC read() takes an unsigned int count; the key is 32 bytes.
-        const ssize_t count = read(
-            fd,
-            out->data() + filled,
-            static_cast<unsigned int>(out->size() - filled));
-#else
         const ssize_t count =
-            read(fd, out->data() + filled, out->size() - filled);
+            read(fd, out->data() + filled, static_cast<unsigned int>(out->size() - filled));
+#else
+        const ssize_t count = read(fd, out->data() + filled, out->size() - filled);
 #endif
         if (count < 0) {
             if (errno == EINTR) {
@@ -148,10 +135,10 @@ bool read_exactly(int fd, std::array<std::uint8_t, kEd25519PublicKeyBytes>* out,
     return true;
 }
 
-}  // namespace
+} // namespace
 
-TrustedKeyStore TrustedKeyStore::load(
-    std::span<const TrustedKeyDescriptor> descriptors, std::string* error) {
+TrustedKeyStore TrustedKeyStore::load(std::span<const TrustedKeyDescriptor> descriptors,
+                                      std::string* error) {
     TrustedKeyStore store;
     if (descriptors.size() > kMaxTrustedKeys) {
         set_key_error(error, "too many trusted bytecode keys");
@@ -162,8 +149,7 @@ TrustedKeyStore TrustedKeyStore::load(
     store.keys_.reserve(descriptors.size());
 
     for (const TrustedKeyDescriptor& descriptor : descriptors) {
-        if (descriptor.key_id.empty() ||
-            descriptor.key_id.size() > kMaxTrustedKeyIdBytes) {
+        if (descriptor.key_id.empty() || descriptor.key_id.size() > kMaxTrustedKeyIdBytes) {
             set_key_error(error, "trusted key id is empty or too long");
             return TrustedKeyStore();
         }
@@ -179,18 +165,13 @@ TrustedKeyStore TrustedKeyStore::load(
         bool absolute_path = false;
 #if defined(_WIN32)
         // Windows absolute form: <drive>:\ or <drive>:/.
-        absolute_path =
-            descriptor.key_path.size() >= 3 &&
-            ((descriptor.key_path[0] >= 'A' &&
-              descriptor.key_path[0] <= 'Z') ||
-             (descriptor.key_path[0] >= 'a' &&
-              descriptor.key_path[0] <= 'z')) &&
-            descriptor.key_path[1] == ':' &&
-            (descriptor.key_path[2] == '\\' ||
-             descriptor.key_path[2] == '/');
+        absolute_path = descriptor.key_path.size() >= 3 &&
+                        ((descriptor.key_path[0] >= 'A' && descriptor.key_path[0] <= 'Z') ||
+                         (descriptor.key_path[0] >= 'a' && descriptor.key_path[0] <= 'z')) &&
+                        descriptor.key_path[1] == ':' &&
+                        (descriptor.key_path[2] == '\\' || descriptor.key_path[2] == '/');
 #else
-        absolute_path =
-            !descriptor.key_path.empty() && descriptor.key_path[0] == '/';
+        absolute_path = !descriptor.key_path.empty() && descriptor.key_path[0] == '/';
 #endif
         if (!absolute_path) {
             set_key_error(error, "trusted key path must be absolute");
@@ -203,8 +184,8 @@ TrustedKeyStore TrustedKeyStore::load(
 #if defined(_WIN32)
         const int fd = open_trusted_key(descriptor.key_path, error);
 #else
-        const int fd = open(descriptor.key_path.c_str(),
-                            O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
+        const int fd =
+            open(descriptor.key_path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
 #endif
         if (fd < 0) {
             set_key_error(error, "trusted key file cannot be opened");
@@ -234,11 +215,9 @@ TrustedKeyStore TrustedKeyStore::load(
         // (Windows has no uid/mode on files; NTFS ACLs are the boundary,
         // see docs/windows.md.)
         const uid_t euid = geteuid();
-        if (!(before.st_uid == 0 || before.st_uid == euid) ||
-            (before.st_mode & 0022) != 0) {
+        if (!(before.st_uid == 0 || before.st_uid == euid) || (before.st_mode & 0022) != 0) {
             close(fd);
-            set_key_error(error,
-                          "trusted key file owner or permissions rejected");
+            set_key_error(error, "trusted key file owner or permissions rejected");
             return TrustedKeyStore();
         }
 #endif
@@ -260,8 +239,7 @@ TrustedKeyStore TrustedKeyStore::load(
         if (fstat(fd, &after) != 0 || !stat_identical(before, after)) {
 #endif
             close(fd);
-            set_key_error(error,
-                          "trusted key file changed during verification");
+            set_key_error(error, "trusted key file changed during verification");
             return TrustedKeyStore();
         }
         close(fd);
@@ -272,11 +250,11 @@ TrustedKeyStore TrustedKeyStore::load(
         // push_backs below cannot reallocate.
         store.ids_.push_back(descriptor.key_id);
         store.raw_keys_.push_back(raw_key);
-        store.keys_.push_back(TrustedBytecodeKey{
-            std::string_view(store.ids_.back()),
-            std::span<const std::uint8_t>(store.raw_keys_.back())});
+        store.keys_.push_back(
+            TrustedBytecodeKey{std::string_view(store.ids_.back()),
+                               std::span<const std::uint8_t>(store.raw_keys_.back())});
     }
     return store;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

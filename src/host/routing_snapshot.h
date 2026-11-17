@@ -33,7 +33,7 @@ namespace capsid::host {
 // Immutable App → GenerationPool map. Empty = admin-only mode: the router
 // synthesizes 503 for every request (no configured listener routes).
 class RoutingSnapshot {
-public:
+  public:
     RoutingSnapshot() = default;
 
     // Builds the snapshot from app→pool pairs. A null pool entry is a
@@ -41,9 +41,8 @@ public:
     // pool entry for the same name wins over a tombstone. Duplicate live
     // routes are an error: a duplicated route is a coordinator bug, not
     // something the router can disambiguate at request time.
-    static std::shared_ptr<const RoutingSnapshot> build(
-        std::vector<std::pair<std::string, std::shared_ptr<GenerationPool>>>
-            routes);
+    static std::shared_ptr<const RoutingSnapshot>
+    build(std::vector<std::pair<std::string, std::shared_ptr<GenerationPool>>> routes);
 
     // The live pool for the App, or nullptr when the App has no live route
     // in THIS snapshot (never routed, or retired).
@@ -57,16 +56,11 @@ public:
     // pool in the snapshot gets the event sink installed) and diagnostics.
     // Tombstones are deliberately absent: no pool exists to wire. The
     // snapshot is immutable, so the reference is stable for its lifetime.
-    const std::map<std::string, std::shared_ptr<GenerationPool>>& routes()
-        const {
-        return routes_;
-    }
+    const std::map<std::string, std::shared_ptr<GenerationPool>>& routes() const { return routes_; }
 
-    std::size_t size() const {
-        return routes_.size() + tombstones_.size();
-    }
+    std::size_t size() const { return routes_.size() + tombstones_.size(); }
 
-private:
+  private:
     std::map<std::string, std::shared_ptr<GenerationPool>> routes_;
     std::set<std::string> tombstones_;
 };
@@ -76,7 +70,7 @@ private:
 // form is not available on every libc++ the Host ships on); generation()
 // counts publications for diagnostics.
 class RoutingTable {
-public:
+  public:
     void publish(std::shared_ptr<const RoutingSnapshot> snapshot);
     std::shared_ptr<const RoutingSnapshot> load() const;
     // Render-time observation follows the same committed snapshot as
@@ -85,7 +79,7 @@ public:
     std::int64_t worker_process_id() const;
     std::uint64_t generation() const { return generation_.load(std::memory_order_relaxed); }
 
-private:
+  private:
     // Not std::atomic<shared_ptr>: older Apple libc++ rejects the
     // non-trivially-copyable specialization. The free-function forms below
     // give the same release/acquire publication semantics on both libc++ and
@@ -94,6 +88,6 @@ private:
     std::atomic<std::uint64_t> generation_{0};
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

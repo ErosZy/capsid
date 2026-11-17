@@ -56,9 +56,9 @@ struct WorkerBindingDescriptor {
     std::vector<uint8_t> source;
     std::string config_json;
     std::vector<WorkerBindingSecret> secrets;
-    std::vector<std::string> profiles;   // sandbox.requires (fixed set)
-    std::vector<std::string> modules;    // manifest permission modules
-    std::vector<std::string> net_rules;  // effective allow targets
+    std::vector<std::string> profiles;  // sandbox.requires (fixed set)
+    std::vector<std::string> modules;   // manifest permission modules
+    std::vector<std::string> net_rules; // effective allow targets
     std::vector<std::string> fs_read;
     std::vector<std::string> fs_write;
     std::vector<std::string> env;
@@ -69,35 +69,28 @@ struct WorkerBindingDescriptor {
 // included) into a startup config. Exported for the conformance
 // harness; the worker runtime reaches it through
 // WorkerStartupState::consume.
-bool decode_hello(const protocol::Frame &frame,
-                  WorkerStartupConfig *output,
-                  std::string *error);
+bool decode_hello(const protocol::Frame& frame, WorkerStartupConfig* output, std::string* error);
 
 class WorkerStartupState {
-public:
+  public:
     WorkerStartupState();
 
-    bool consume(const protocol::Frame &frame, std::string *error);
+    bool consume(const protocol::Frame& frame, std::string* error);
 
     bool hello_received() const { return hello_received_; }
     bool bundle_started() const { return bundle_started_; }
     bool bundle_complete() const { return bundle_complete_; }
-    const WorkerStartupConfig &config() const { return config_; }
-    WorkerStartupConfig &config() { return config_; }
-    const std::vector<uint8_t> &bundle() const { return bundle_; }
-    std::vector<uint8_t> &bundle() { return bundle_; }
-    const std::string &bundle_name() const { return bundle_name_; }
-    bool bundle_is_trusted_bytecode() const {
-        return bundle_is_trusted_bytecode_;
-    }
+    const WorkerStartupConfig& config() const { return config_; }
+    WorkerStartupConfig& config() { return config_; }
+    const std::vector<uint8_t>& bundle() const { return bundle_; }
+    std::vector<uint8_t>& bundle() { return bundle_; }
+    const std::string& bundle_name() const { return bundle_name_; }
+    bool bundle_is_trusted_bytecode() const { return bundle_is_trusted_bytecode_; }
     // Binding descriptors in arrival order; empty for zero-binding workers.
-    const std::vector<WorkerBindingDescriptor> &bindings() const {
-        return bindings_;
-    }
+    const std::vector<WorkerBindingDescriptor>& bindings() const { return bindings_; }
 
-private:
-    bool consume_load_binding(const protocol::Frame &frame,
-                              std::string *error);
+  private:
+    bool consume_load_binding(const protocol::Frame& frame, std::string* error);
 
     WorkerStartupConfig config_;
     bool hello_received_;
@@ -129,10 +122,8 @@ struct WorkerRequestHead {
     uint64_t upgrade_max_message_bytes = 0;
 };
 
-bool decode_worker_request_head(const protocol::Frame &frame,
-                                uint32_t max_header_bytes,
-                                WorkerRequestHead *output,
-                                std::string *error);
+bool decode_worker_request_head(const protocol::Frame& frame, uint32_t max_header_bytes,
+                                WorkerRequestHead* output, std::string* error);
 
 // --- Binding v1 READY proof (docs/binding-technical-design.md §4.3) ------
 
@@ -144,28 +135,24 @@ struct WorkerReadyProof {
     uint32_t applied_feature_bits = 0;
     uint32_t seccomp_mode = 0;
     uint32_t landlock_abi = 0;
-    std::string network_namespace_identity;  // empty when no namespace fd
-    std::string sandbox_profile_digest;      // "sha256:" + 64 hex
+    std::string network_namespace_identity; // empty when no namespace fd
+    std::string sandbox_profile_digest;     // "sha256:" + 64 hex
 };
 
 // Appends the proof sections to a READY payload (after the caller's
 // compatibility id). With an empty profile digest this is a no-op — the
 // baseline payload stays byte-identical.
-bool append_ready_proof(std::vector<uint8_t> *payload,
-                        uint32_t applied_feature_bits,
-                        uint32_t seccomp_mode,
-                        uint32_t landlock_abi,
-                        const std::string &network_namespace_identity,
-                        const std::string &sandbox_profile_digest);
+bool append_ready_proof(std::vector<uint8_t>* payload, uint32_t applied_feature_bits,
+                        uint32_t seccomp_mode, uint32_t landlock_abi,
+                        const std::string& network_namespace_identity,
+                        const std::string& sandbox_profile_digest);
 
 // Parses a READY payload: the first 71 bytes are the compatibility id; a
 // longer payload must decode the full proof. Any malformed extension
 // fails closed with a static diagnostic.
-bool parse_ready_proof(const std::vector<uint8_t> &payload,
-                       std::string *compatibility_id,
-                       WorkerReadyProof *proof,
-                       std::string *error);
+bool parse_ready_proof(const std::vector<uint8_t>& payload, std::string* compatibility_id,
+                       WorkerReadyProof* proof, std::string* error);
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

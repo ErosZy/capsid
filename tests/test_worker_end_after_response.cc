@@ -33,27 +33,26 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot open fixture: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-void wait_for_ready(capsid_worker *worker) {
+void wait_for_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
@@ -71,7 +70,7 @@ void wait_for_ready(capsid_worker *worker) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker startup error: ") +
-                     std::string(reinterpret_cast<const char *>(event.payload.data),
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
                                  event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
@@ -101,10 +100,9 @@ void wait_for_ready(capsid_worker *worker) {
 // request state is only erased when next_event reads RESPONSE_END, so the
 // end can still be queued here. Returns the response body; fails if the
 // worker errors out or exits.
-std::string run_split_request(capsid_worker *worker, uint64_t id) {
+std::string run_split_request(capsid_worker* worker, uint64_t id) {
     require_result(
-        capsid_worker_begin_request(worker, id, "GET",
-                                    "https://example.test/sync", NULL, 0),
+        capsid_worker_begin_request(worker, id, "GET", "https://example.test/sync", NULL, 0),
         "begin request");
     require_result(capsid_worker_flush(worker), "flush request head");
 
@@ -147,12 +145,10 @@ std::string run_split_request(capsid_worker *worker, uint64_t id) {
                 if (!received_head || event.request_id != id) {
                     fail("response body arrived before its head");
                 }
-                body.append(reinterpret_cast<const char *>(event.payload.data),
-                            event.payload.size);
+                body.append(reinterpret_cast<const char*>(event.payload.data), event.payload.size);
                 require_result(
-                    capsid_worker_grant_response_credit(
-                        worker, event.request_id,
-                        static_cast<uint32_t>(event.payload.size)),
+                    capsid_worker_grant_response_credit(worker, event.request_id,
+                                                        static_cast<uint32_t>(event.payload.size)),
                     "replenish response credit");
                 continue;
             }
@@ -165,7 +161,7 @@ std::string run_split_request(capsid_worker *worker, uint64_t id) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker error: ") +
-                     std::string(reinterpret_cast<const char *>(event.payload.data),
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
                                  event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
@@ -188,9 +184,9 @@ std::string run_split_request(capsid_worker *worker, uint64_t id) {
     return body;
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 3) {
         fail("expected worker path and JavaScript fixture path");
     }
@@ -200,14 +196,11 @@ int main(int argc, char **argv) {
     capsid_worker_config_init(&config);
     config.worker_path = argv[1];
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
-    require_result(
-        capsid_worker_load_bundle(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size()),
-        "load bundle");
+    require_result(capsid_worker_load_bundle(
+                       worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()),
+                   "load bundle");
     wait_for_ready(worker);
 
     const std::string body = run_split_request(worker, 1);

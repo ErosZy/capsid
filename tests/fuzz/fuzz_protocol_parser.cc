@@ -7,7 +7,7 @@
 
 namespace {
 
-void check_round_trip(const capsid::protocol::Frame &frame) {
+void check_round_trip(const capsid::protocol::Frame& frame) {
     std::vector<uint8_t> encoded;
     if (!capsid::protocol::encode_versioned(frame.version, frame, &encoded)) {
         std::abort();
@@ -18,21 +18,18 @@ void check_round_trip(const capsid::protocol::Frame &frame) {
     }
     capsid::protocol::Frame decoded;
     if (parser.next(&decoded) != capsid::protocol::kParseFrame ||
-        decoded.version != frame.version ||
-        decoded.type != frame.type ||
-        decoded.flags != frame.flags ||
-        decoded.request_id != frame.request_id ||
+        decoded.version != frame.version || decoded.type != frame.type ||
+        decoded.flags != frame.flags || decoded.request_id != frame.request_id ||
         decoded.payload != frame.payload ||
         parser.next(&decoded) != capsid::protocol::kParseNeedMore) {
         std::abort();
     }
 }
 
-bool drain(capsid::protocol::Parser *parser) {
+bool drain(capsid::protocol::Parser* parser) {
     for (;;) {
         capsid::protocol::Frame frame;
-        const capsid::protocol::ParseResult result =
-            parser->next(&frame);
+        const capsid::protocol::ParseResult result = parser->next(&frame);
         if (result == capsid::protocol::kParseFrame) {
             check_round_trip(frame);
             continue;
@@ -41,7 +38,7 @@ bool drain(capsid::protocol::Parser *parser) {
     }
 }
 
-void exercise_valid_frame(const uint8_t *data, size_t size, uint16_t version) {
+void exercise_valid_frame(const uint8_t* data, size_t size, uint16_t version) {
     capsid::protocol::Frame frame;
     frame.version = version;
     frame.type = capsid::protocol::kRequestBody;
@@ -59,12 +56,9 @@ void exercise_valid_frame(const uint8_t *data, size_t size, uint16_t version) {
     size_t offset = 0;
     while (offset < encoded.size()) {
         const size_t desired =
-            1 + (offset < size
-                     ? static_cast<size_t>(data[offset] % 31)
-                     : offset % 31);
+            1 + (offset < size ? static_cast<size_t>(data[offset] % 31) : offset % 31);
         const size_t remaining = encoded.size() - offset;
-        const size_t chunk =
-            desired < remaining ? desired : remaining;
+        const size_t chunk = desired < remaining ? desired : remaining;
         if (!parser.append(&encoded[offset], chunk)) {
             std::abort();
         }
@@ -75,9 +69,9 @@ void exercise_valid_frame(const uint8_t *data, size_t size, uint16_t version) {
     }
 }
 
-}  // namespace
+} // namespace
 
-void exercise_wire_version(const uint8_t *data, size_t size, uint16_t version) {
+void exercise_wire_version(const uint8_t* data, size_t size, uint16_t version) {
     capsid::protocol::Parser parser(version);
     if (size == 0) {
         parser.append(NULL, 0);
@@ -88,8 +82,7 @@ void exercise_wire_version(const uint8_t *data, size_t size, uint16_t version) {
 
     size_t offset = 0;
     while (offset < size) {
-        const size_t chunk =
-            1 + static_cast<size_t>(data[offset] % 63);
+        const size_t chunk = 1 + static_cast<size_t>(data[offset] % 63);
         const size_t remaining = size - offset;
         const size_t actual = chunk < remaining ? chunk : remaining;
         if (!parser.append(data + offset, actual)) {
@@ -105,7 +98,7 @@ void exercise_wire_version(const uint8_t *data, size_t size, uint16_t version) {
     return;
 }
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Preserve the complete legacy corpus path and independently parse v4.
     // In particular, v4 seeds must reach payload validation before rejection.
     exercise_wire_version(data, size, capsid::protocol::kVersion);

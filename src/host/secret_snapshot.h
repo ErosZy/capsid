@@ -23,8 +23,7 @@ inline constexpr std::size_t kMaxEnvironmentSnapshotBytes = 48U * 1024U;
 // revisions). The metadata carries identifier material that can legitimately
 // exceed the value budget, so it gets its own ceiling; values never enter
 // this document.
-inline constexpr std::size_t kMaxEnvironmentMetadataJsonBytes =
-    256U * 1024U;
+inline constexpr std::size_t kMaxEnvironmentMetadataJsonBytes = 256U * 1024U;
 inline constexpr std::size_t kMaxSecretKeyBytes = 128U;
 inline constexpr std::size_t kMaxSecretRevisionBytes = 256U;
 
@@ -106,32 +105,24 @@ struct EnvironmentSnapshotMetadata {
 struct SecretSnapshotCompileResult;
 
 class SecretSnapshot {
-public:
+  public:
     SecretSnapshot() = default;
 
-    const std::vector<EnvironmentSnapshotEntry>& entries() const {
-        return entries_;
-    }
-    const std::vector<EnvironmentSnapshotMetadata>& metadata() const {
-        return metadata_;
-    }
-    const std::string& secret_revision() const {
-        return secret_revision_;
-    }
+    const std::vector<EnvironmentSnapshotEntry>& entries() const { return entries_; }
+    const std::vector<EnvironmentSnapshotMetadata>& metadata() const { return metadata_; }
+    const std::string& secret_revision() const { return secret_revision_; }
     // Canonical one-line JSON. It contains names, source kind, secret key IDs
     // and opaque revisions, but no literal or secret values.
-    const std::string& effective_environment_json() const {
-        return effective_environment_json_;
-    }
+    const std::string& effective_environment_json() const { return effective_environment_json_; }
 
     // Descriptors point into this snapshot and remain valid until it is moved,
     // assigned or destroyed. capsid_worker_spawn() copies them synchronously.
     std::vector<capsid_env_entry> runtime_entries() const;
 
-private:
+  private:
     friend struct SecretSnapshotCompileResult;
-    friend SecretSnapshotCompileResult compile_secret_snapshot(
-        const SecretSnapshotCompileInput& input);
+    friend SecretSnapshotCompileResult
+    compile_secret_snapshot(const SecretSnapshotCompileInput& input);
 
     std::vector<EnvironmentSnapshotEntry> entries_;
     std::vector<EnvironmentSnapshotMetadata> metadata_;
@@ -147,9 +138,8 @@ struct SecretSnapshotCompileResult {
 
 // Pure policy/snapshot compiler. It deep-copies successful values, sorts
 // entries by environment name and fails atomically with an empty snapshot.
-SecretSnapshotCompileResult compile_secret_snapshot(
-    const SecretSnapshotCompileInput& input);
+SecretSnapshotCompileResult compile_secret_snapshot(const SecretSnapshotCompileInput& input);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

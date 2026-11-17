@@ -4,19 +4,43 @@
   "sourceBaseline": "87ed4630fa57e360ac0a3a8158218398250c8035",
   "meaning": "Reviewed means current maintained claims or explicit historical disposition reviewed; not every page rewritten, every command executed, or historical result requalified.",
   "counts": {
-    "current-reference": 45,
+    "current-reference": 46,
     "historical-plan-or-journal": 13,
     "immutable-evidence": 37,
     "release-history": 5
   },
   "documents": [
     {
-      "path": "bench/perf-evidence.md",
+      "path": "CONTRIBUTING.md",
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "b2d1a4409d3ffc9de98a8cd64766dd47f74c2457589f7341910783e8a335e5b9",
-      "review": "Original complete lane/point/round/response/PSS/identity controls retained; bounded hashed compression is transport only."
+      "sha256": "05c23e7768ee95fc89f65616f3a4d84e9b5da1c2f34220a5eed53a5e17d3375f",
+      "review": "Clean isolated source/build practice, scopes, current docs/data/workflow checks and immutable evidence requirements. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
+    },
+    {
+      "path": "README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "c5ab8f3ba18066450d0fd3c00b535f11f0d9929641c4173bf382fc35d7d54392",
+      "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
+    },
+    {
+      "path": "ROADMAP.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "37dcbaf26c5c89dd3c86e1d6cc96541fe6aac3db5cc00ea57fad9c0098a264a0",
+      "review": "Delivered negotiated-v4/WebSocket foundation separated from future waitUntil/Binding-v2/Wrangler work; connection owner is not general background authority."
+    },
+    {
+      "path": "SECURITY.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "abc33c1bff2e9cb3b320d7714fcfb315885930a4637c753ca8d2db1ea7efaf1e",
+      "review": "Linux-only strict production boundary, native trusted-dev limits, credential reporting and recognized-but-unenforced App PID field."
     },
     {
       "path": "bench/README.md",
@@ -35,12 +59,20 @@
       "review": "Normative protocol constants/budgets retained; status/current acceptance/transport and same-version history caveat corrected."
     },
     {
-      "path": "CONTRIBUTING.md",
+      "path": "bench/perf-evidence.md",
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "976a3c8fe93de37a764ef3b2d3868a56fc9ac8c82a2769be2cfa507ef6b98806",
-      "review": "Clean isolated source/build practice, scopes, current docs/data/workflow checks and immutable evidence requirements."
+      "sha256": "b2d1a4409d3ffc9de98a8cd64766dd47f74c2457589f7341910783e8a335e5b9",
+      "review": "Original complete lane/point/round/response/PSS/identity controls retained; bounded hashed compression is transport only."
+    },
+    {
+      "path": "docs/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "5aa0e5a9c7a30b83d3207df01c8b0751d500abf31574e8ef0268e8b0ba464931",
+      "review": "Task navigation, current status entry, per-file review and exact historical sources; no journal treated as a current procedure. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
     },
     {
       "path": "docs/ai-review-brief-v0.2.2-to-v0.3.0.md",
@@ -111,8 +143,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "7ec2afa5c1d2d8f213ac96ca82f55400103520efa6c3e53de9e7fb3d2e0391ce",
-      "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures."
+      "sha256": "0efcebc16e6a4df2704845c0b3b8d3b001b9e9be246dd8c5b685dfa92aa5315a",
+      "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
     },
     {
       "path": "docs/evidence/v0.3.0/2026-11-12-byob-density/qualification-before.md",
@@ -131,7 +163,7 @@
       "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
     },
     {
-      "path": "docs/evidence/v0.3.0/2026-11-12-darwin-ci/qualification-before.md",
+      "path": "docs/evidence/v0.3.0/2026-11-12-darwin-ci-r2/qualification-before.md",
       "kind": "immutable-evidence",
       "reviewed": true,
       "hashMode": "exact-bytes",
@@ -139,7 +171,7 @@
       "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
     },
     {
-      "path": "docs/evidence/v0.3.0/2026-11-12-darwin-ci-r2/qualification-before.md",
+      "path": "docs/evidence/v0.3.0/2026-11-12-darwin-ci/qualification-before.md",
       "kind": "immutable-evidence",
       "reviewed": true,
       "hashMode": "exact-bytes",
@@ -371,6 +403,22 @@
       "review": "Current immutable wire/base+A2 contract, no silent default-v4 upgrade, unsupported half-close/lifetime limits; exact old source retained."
     },
     {
+      "path": "docs/formatting.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification.",
+      "sha256": "927819ce2025ec4be841ef9b581c5ac071da161973dd7bc3cb0edc9d29b60d76"
+    },
+    {
+      "path": "docs/framework-compatibility/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "0f06fb7cb92d989e250cb7d9e73e9871c192c7b30500756cc7a22c159328cc2a",
+      "review": "Exact locked framework matrix, required dependency trees and focused versus full qualification; no Node/Wrangler/server compatibility promise."
+    },
+    {
       "path": "docs/framework-compatibility/elysia.md",
       "kind": "current-reference",
       "reviewed": true,
@@ -403,20 +451,20 @@
       "review": "Locked router and self-contained worker entry, required dependency setup and exact focused driver/test selection."
     },
     {
-      "path": "docs/framework-compatibility/README.md",
-      "kind": "current-reference",
-      "reviewed": true,
-      "hashMode": "canonical-lf-text",
-      "sha256": "0f06fb7cb92d989e250cb7d9e73e9871c192c7b30500756cc7a22c159328cc2a",
-      "review": "Exact locked framework matrix, required dependency trees and focused versus full qualification; no Node/Wrangler/server compatibility promise."
-    },
-    {
       "path": "docs/getting-started.md",
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
       "sha256": "91f71bb5934e27da1fb2cae33da38f2fd015c4d5b605edfff8e192cc3352bc58",
       "review": "Complete trusted-local CLI/app/policy/READY/request; unchanged commands match prior actual Windows/Linux published-binary smoke, not macOS execution."
+    },
+    {
+      "path": "docs/history/README.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "3407ace7a01b0f960f8168fdda2cb80ece545b8ee8f5a9f3be6af25e694627ed",
+      "review": "Historical dispositions, six captured source files/hashes/483 aliases, dated reviews/plans and source-bound evidence rules."
     },
     {
       "path": "docs/history/archives/2026-11-17/fetchrpc-v4.md.txt",
@@ -465,14 +513,6 @@
       "hashMode": "exact-bytes",
       "sha256": "f4e6b1535e714ecc80398a0bc3dbed3df77f0e5d3e3841968cdc93d931f0ca1f",
       "review": "Exact source-bound snapshot; original dated text/data/links retained, not a current-reference or new acceptance claim."
-    },
-    {
-      "path": "docs/history/README.md",
-      "kind": "current-reference",
-      "reviewed": true,
-      "hashMode": "canonical-lf-text",
-      "sha256": "3407ace7a01b0f960f8168fdda2cb80ece545b8ee8f5a9f3be6af25e694627ed",
-      "review": "Historical dispositions, six captured source files/hashes/483 aliases, dated reviews/plans and source-bound evidence rules."
     },
     {
       "path": "docs/host-config.md",
@@ -553,14 +593,6 @@
       "hashMode": "canonical-lf-text",
       "sha256": "10321c168371315fa5d92ae6c8e911e2a806177085d6518debf0cee27de19106",
       "review": "Native versus Linux production isolation, supported assets, local modes, trusted Binding owners and platform-specific resource semantics."
-    },
-    {
-      "path": "docs/README.md",
-      "kind": "current-reference",
-      "reviewed": true,
-      "hashMode": "canonical-lf-text",
-      "sha256": "d753cdd1398adc7d6756f332058ea04d490b801c928acd0a6480b75c3256f2d2",
-      "review": "Task navigation, current status entry, per-file review and exact historical sources; no journal treated as a current procedure."
     },
     {
       "path": "docs/releases.md",
@@ -739,14 +771,6 @@
       "review": "Actual generated files, complete restore/replay commands, source/release boundaries, dev push branch and genuine deployment requirements."
     },
     {
-      "path": "README.md",
-      "kind": "current-reference",
-      "reviewed": true,
-      "hashMode": "canonical-lf-text",
-      "sha256": "a2b1d5a0b164927272e6cb101121e23cb3952015d276dcfa6f37c8a98bac2fc6",
-      "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim."
-    },
-    {
       "path": "release-notes/v0.2.0-rc.07.md",
       "kind": "release-history",
       "reviewed": true,
@@ -793,22 +817,6 @@
       "hashMode": "canonical-lf-text",
       "sha256": "f5d0b4f559cc90f8f5b86cd26a7d0277cfbc6929c5480540d3d1166629fcd61b",
       "review": "Published source/run/assets and actual macOS retry, ABI/default-v3/additive-v4 and runtime/security/PID/standards/performance limits."
-    },
-    {
-      "path": "ROADMAP.md",
-      "kind": "current-reference",
-      "reviewed": true,
-      "hashMode": "canonical-lf-text",
-      "sha256": "37dcbaf26c5c89dd3c86e1d6cc96541fe6aac3db5cc00ea57fad9c0098a264a0",
-      "review": "Delivered negotiated-v4/WebSocket foundation separated from future waitUntil/Binding-v2/Wrangler work; connection owner is not general background authority."
-    },
-    {
-      "path": "SECURITY.md",
-      "kind": "current-reference",
-      "reviewed": true,
-      "hashMode": "canonical-lf-text",
-      "sha256": "abc33c1bff2e9cb3b320d7714fcfb315885930a4637c753ca8d2db1ea7efaf1e",
-      "review": "Linux-only strict production boundary, native trusted-dev limits, credential reporting and recognized-but-unenforced App PID field."
     }
   ]
 }

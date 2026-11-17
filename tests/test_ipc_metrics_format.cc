@@ -20,7 +20,8 @@ namespace {
     std::exit(1);
 }
 void require(bool condition, const std::string& message) {
-    if (!condition) fail(message);
+    if (!condition)
+        fail(message);
 }
 using Values = std::map<std::string, std::uint64_t>;
 
@@ -40,7 +41,8 @@ Values object(std::string_view text, std::size_t& offset) {
         offset = static_cast<std::size_t>(parsed.ptr - text.data());
         require(values.emplace(key, value).second, "duplicate field: " + key);
         require(offset < text.size(), "object end");
-        if (text[offset++] == '}') return values;
+        if (text[offset++] == '}')
+            return values;
         require(text[offset - 1] == ',', "field delimiter");
     }
 }
@@ -62,7 +64,8 @@ void compare(const Values& actual, const Values& expected, const char* group) {
         const auto found = actual.find(key);
         require(found != actual.end(), std::string(group) + " missing " + key);
         require(found->second == value, std::string(group) + '.' + key +
-            " expected=" + std::to_string(value) + " actual=" + std::to_string(found->second));
+                                            " expected=" + std::to_string(value) +
+                                            " actual=" + std::to_string(found->second));
     }
 }
 void run_case(std::uint64_t seed, bool distinct) {
@@ -71,22 +74,35 @@ void run_case(std::uint64_t seed, bool distinct) {
     H host;
     C client;
     const std::array<std::pair<const char*, std::uint64_t H::*>, 15> host_fields = {{
-        {"commands_submitted", &H::commands_submitted}, {"command_batches", &H::command_batches},
-        {"commands_executed", &H::commands_executed}, {"flush_calls", &H::flush_calls},
-        {"flush_eagain", &H::flush_eagain}, {"events_queued", &H::events_queued},
-        {"asio_posts", &H::asio_posts}, {"response_heads", &H::response_heads},
-        {"response_body_frames", &H::response_body_frames}, {"response_ends", &H::response_ends},
-        {"grant_commands", &H::grant_commands}, {"credit_bytes_granted", &H::credit_bytes_granted},
-        {"credit_stall_count", &H::credit_stall_count}, {"command_queue_hw", &H::command_queue_high_water},
+        {"commands_submitted", &H::commands_submitted},
+        {"command_batches", &H::command_batches},
+        {"commands_executed", &H::commands_executed},
+        {"flush_calls", &H::flush_calls},
+        {"flush_eagain", &H::flush_eagain},
+        {"events_queued", &H::events_queued},
+        {"asio_posts", &H::asio_posts},
+        {"response_heads", &H::response_heads},
+        {"response_body_frames", &H::response_body_frames},
+        {"response_ends", &H::response_ends},
+        {"grant_commands", &H::grant_commands},
+        {"credit_bytes_granted", &H::credit_bytes_granted},
+        {"credit_stall_count", &H::credit_stall_count},
+        {"command_queue_hw", &H::command_queue_high_water},
         {"event_queue_hw", &H::event_queue_high_water},
     }};
     const std::array<std::pair<const char*, std::atomic<std::uint64_t> C::*>, 13> client_fields = {{
-        {"queued_frames", &C::queued_frames}, {"queued_wire_bytes", &C::queued_wire_bytes},
-        {"queue_would_block", &C::queue_would_block}, {"flush_calls", &C::flush_calls},
-        {"socket_write_calls", &C::socket_write_calls}, {"socket_write_bytes", &C::socket_write_bytes},
-        {"socket_write_eagain", &C::socket_write_eagain}, {"next_event_calls", &C::next_event_calls},
-        {"parsed_frames", &C::parsed_frames}, {"parser_payload_copied_bytes", &C::parser_payload_copied_bytes},
-        {"socket_read_calls", &C::socket_read_calls}, {"socket_read_bytes", &C::socket_read_bytes},
+        {"queued_frames", &C::queued_frames},
+        {"queued_wire_bytes", &C::queued_wire_bytes},
+        {"queue_would_block", &C::queue_would_block},
+        {"flush_calls", &C::flush_calls},
+        {"socket_write_calls", &C::socket_write_calls},
+        {"socket_write_bytes", &C::socket_write_bytes},
+        {"socket_write_eagain", &C::socket_write_eagain},
+        {"next_event_calls", &C::next_event_calls},
+        {"parsed_frames", &C::parsed_frames},
+        {"parser_payload_copied_bytes", &C::parser_payload_copied_bytes},
+        {"socket_read_calls", &C::socket_read_calls},
+        {"socket_read_bytes", &C::socket_read_bytes},
         {"socket_read_eagain", &C::socket_read_eagain},
     }};
     Values expected_host, expected_client;
@@ -112,7 +128,8 @@ void run_case(std::uint64_t seed, bool distinct) {
 #endif
     require(output != nullptr, "temporary output exists");
     capsid::host::write_ipc_metrics_line(output, host, client);
-    require(std::fflush(output) == 0 && std::fseek(output, 0, SEEK_SET) == 0, "read actual formatter output");
+    require(std::fflush(output) == 0 && std::fseek(output, 0, SEEK_SET) == 0,
+            "read actual formatter output");
     char buffer[4096];
     const auto bytes = std::fread(buffer, 1, sizeof(buffer), output);
     require(std::feof(output) != 0 && std::ferror(output) == 0, "complete bounded output");
@@ -122,7 +139,7 @@ void run_case(std::uint64_t seed, bool distinct) {
     compare(observed.second, expected_client, "client");
     std::cout << "PASS: actual IPC formatter, seed=" << seed << " distinct=" << distinct << '\n';
 }
-}  // namespace
+} // namespace
 
 int main() {
     run_case(0, false);

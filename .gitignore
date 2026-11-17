@@ -19,6 +19,8 @@
 **/__pycache__/
 *.py[cod]
 /.pytest_cache/
+/.ruff_cache/
+/.venv-format/
 /.coverage
 
 # PHP benchmark app: composer artifacts are reproducible from composer.json.

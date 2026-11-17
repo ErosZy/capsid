@@ -40,8 +40,7 @@ int create_cloexec_unix_socket() {
     if (handle == INVALID_SOCKET) {
         return -1;
     }
-    return _open_osfhandle(
-        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+    return _open_osfhandle(static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
 #elif defined(__linux__) && defined(SOCK_CLOEXEC)
     return socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 #else
@@ -64,8 +63,7 @@ int create_cloexec_unix_socket() {
 // Winsock takes the raw SOCKET handle; these wrappers translate CRT fds
 // and winsock errno so the shared bind/connect/listen call sites below
 // stay source-identical with POSIX.
-int bind_unix_fd(int fd, const struct sockaddr *address,
-                 socklen_t address_size) {
+int bind_unix_fd(int fd, const struct sockaddr* address, socklen_t address_size) {
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -91,8 +89,7 @@ int listen_unix_fd(int fd, int backlog) {
     return result;
 }
 
-int connect_unix_fd(int fd, const struct sockaddr *address,
-                    socklen_t address_size) {
+int connect_unix_fd(int fd, const struct sockaddr* address, socklen_t address_size) {
     const SOCKET socket_handle = static_cast<SOCKET>(_get_osfhandle(fd));
     if (socket_handle == INVALID_SOCKET) {
         errno = EBADF;
@@ -126,11 +123,21 @@ std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (const char c : value) {
         switch (c) {
-        case '"': out << "\\\""; break;
-        case '\\': out << "\\\\"; break;
-        case '\n': out << "\\n"; break;
-        case '\r': out << "\\r"; break;
-        case '\t': out << "\\t"; break;
+        case '"':
+            out << "\\\"";
+            break;
+        case '\\':
+            out << "\\\\";
+            break;
+        case '\n':
+            out << "\\n";
+            break;
+        case '\r':
+            out << "\\r";
+            break;
+        case '\t':
+            out << "\\t";
+            break;
         default:
             if (static_cast<unsigned char>(c) < 0x20) {
                 char buffer[8];
@@ -145,8 +152,7 @@ std::string json_escape(const std::string& value) {
 }
 
 bool ascii_alnum(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9');
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
 // Frozen identifier grammars. App, Version and operation IDs are validated
@@ -160,13 +166,12 @@ bool valid_app_id(const std::string& value) {
     if (value.empty() || value.size() > 63) {
         return false;
     }
-    if (!((value[0] >= 'a' && value[0] <= 'z') ||
-          (value[0] >= '0' && value[0] <= '9'))) {
+    if (!((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= '0' && value[0] <= '9'))) {
         return false;
     }
     for (const char c : value) {
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-              c == '.' || c == '_' || c == '-')) {
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' ||
+              c == '-')) {
             return false;
         }
     }
@@ -205,12 +210,18 @@ bool valid_operation_id(const std::string& value) {
 
 std::string operation_state_text(OperationState state) {
     switch (state) {
-    case OperationState::kValidating: return "validating";
-    case OperationState::kStaging: return "staging";
-    case OperationState::kWarming: return "warming";
-    case OperationState::kActivating: return "activating";
-    case OperationState::kActive: return "active";
-    case OperationState::kFailed: return "failed";
+    case OperationState::kValidating:
+        return "validating";
+    case OperationState::kStaging:
+        return "staging";
+    case OperationState::kWarming:
+        return "warming";
+    case OperationState::kActivating:
+        return "activating";
+    case OperationState::kActive:
+        return "active";
+    case OperationState::kFailed:
+        return "failed";
     }
     return "unknown";
 }
@@ -221,13 +232,10 @@ std::string operation_state_text(OperationState state) {
 // through json_string_length so an embedded  cannot be silently
 // truncated by json_string_value; the NUL then fails the identifier
 // grammar.
-bool parse_deploy_body(const std::string& body, std::string* application,
-                       std::string* version) {
+bool parse_deploy_body(const std::string& body, std::string* application, std::string* version) {
     json_error_t parse_error;
-    json_t* root = json_loadb(body.data(), body.size(),
-                              JSON_REJECT_DUPLICATES, &parse_error);
-    if (root == nullptr || !json_is_object(root) ||
-        json_object_size(root) != 2) {
+    json_t* root = json_loadb(body.data(), body.size(), JSON_REJECT_DUPLICATES, &parse_error);
+    if (root == nullptr || !json_is_object(root) || json_object_size(root) != 2) {
         if (root) {
             json_decref(root);
         }
@@ -239,10 +247,8 @@ bool parse_deploy_body(const std::string& body, std::string* application,
         json_decref(root);
         return false;
     }
-    application->assign(json_string_value(app_json),
-                        json_string_length(app_json));
-    version->assign(json_string_value(version_json),
-                    json_string_length(version_json));
+    application->assign(json_string_value(app_json), json_string_length(app_json));
+    version->assign(json_string_value(version_json), json_string_length(version_json));
     json_decref(root);
     return valid_app_id(*application) && valid_version_id(*version);
 }
@@ -252,12 +258,10 @@ bool parse_deploy_body(const std::string& body, std::string* application,
 // unknown fields, wrong types and malformed generation digests are
 // rejected so a backend string is never reflected verbatim. The canonical
 // document is rebuilt from the validated fields.
-bool parse_app_status_document(const std::string& json,
-                               std::string* canonical,
+bool parse_app_status_document(const std::string& json, std::string* canonical,
                                std::string* app_out) {
     json_error_t parse_error;
-    json_t* root = json_loadb(json.data(), json.size(),
-                              JSON_REJECT_DUPLICATES, &parse_error);
+    json_t* root = json_loadb(json.data(), json.size(), JSON_REJECT_DUPLICATES, &parse_error);
     if (root == nullptr || !json_is_object(root)) {
         if (root) {
             json_decref(root);
@@ -265,7 +269,10 @@ bool parse_app_status_document(const std::string& json,
         return false;
     }
     static const std::set<std::string> kAllowedFields = {
-        "active", "app", "version", "generation",
+        "active",
+        "app",
+        "version",
+        "generation",
     };
     const char* key = nullptr;
     json_t* value = nullptr;
@@ -292,9 +299,8 @@ bool parse_app_status_document(const std::string& json,
         return false;
     }
     if (version_json != nullptr) {
-        const std::string version_text(
-            json_string_value(version_json),
-            json_string_length(version_json));
+        const std::string version_text(json_string_value(version_json),
+                                       json_string_length(version_json));
         if (!valid_version_id(version_text)) {
             json_decref(root);
             return false;
@@ -321,23 +327,20 @@ bool parse_app_status_document(const std::string& json,
     }
     if (app_out != nullptr) {
         *app_out = app_json != nullptr
-            ? std::string(json_string_value(app_json),
-                          json_string_length(app_json))
-            : std::string();
+                       ? std::string(json_string_value(app_json), json_string_length(app_json))
+                       : std::string();
     }
     std::ostringstream out;
-    out << "{\"active\":"
-        << (json_is_true(active_json) ? "true" : "false");
+    out << "{\"active\":" << (json_is_true(active_json) ? "true" : "false");
     if (app_json != nullptr) {
         out << ",\"app\":\""
-            << json_escape(std::string(json_string_value(app_json),
-                                       json_string_length(app_json)))
+            << json_escape(std::string(json_string_value(app_json), json_string_length(app_json)))
             << '"';
     }
     if (version_json != nullptr) {
         out << ",\"version\":\""
-            << json_escape(std::string(json_string_value(version_json),
-                                       json_string_length(version_json)))
+            << json_escape(
+                   std::string(json_string_value(version_json), json_string_length(version_json)))
             << '"';
     }
     if (generation_json != nullptr) {
@@ -355,8 +358,7 @@ bool parse_app_status_document(const std::string& json,
 // Runs a coordinator call and converts any backend exception (std or
 // unknown) into the static redacted failure response. Backend messages
 // never cross the boundary.
-template <typename F>
-AdminResponse guarded_call(F&& call, const char* failure_text) {
+template <typename F> AdminResponse guarded_call(F&& call, const char* failure_text) {
     try {
         return call();
     } catch (const std::exception&) {
@@ -366,10 +368,9 @@ AdminResponse guarded_call(F&& call, const char* failure_text) {
     }
 }
 
-}  // namespace
+} // namespace
 
-bool query_admin_peer_credentials(int fd, AdminPeerCredentials* peer,
-                                  std::string* error) {
+bool query_admin_peer_credentials(int fd, AdminPeerCredentials* peer, std::string* error) {
     if (peer == nullptr) {
         if (error != nullptr) {
             *error = "invalid credential argument";
@@ -416,8 +417,7 @@ bool admin_peer_authorized(const AdminAuthorization& authorization,
     if (peer.uid == authorization.allowed_uid) {
         return true;
     }
-    return authorization.allowed_gid.has_value() &&
-           peer.gid == *authorization.allowed_gid;
+    return authorization.allowed_gid.has_value() && peer.gid == *authorization.allowed_gid;
 }
 
 // Verifies the socket's parent directory before anything is created:
@@ -426,10 +426,9 @@ bool admin_peer_authorized(const AdminAuthorization& authorization,
 // let another principal replace the socket pathname after it is created.
 bool verify_socket_parent(const std::string& path) {
     const std::string::size_type slash = path.rfind('/');
-    const std::string parent =
-        slash == std::string::npos
-            ? std::string(".")
-            : (slash == 0 ? std::string("/") : path.substr(0, slash));
+    const std::string parent = slash == std::string::npos
+                                   ? std::string(".")
+                                   : (slash == 0 ? std::string("/") : path.substr(0, slash));
 #if defined(_WIN32)
     // Windows has no uid/mode on socket inodes: the parent just has to be
     // a real directory. NTFS ACLs on it are the access-control boundary
@@ -444,8 +443,8 @@ bool verify_socket_parent(const std::string& path) {
     if (lstat(parent.c_str(), &st) != 0) {
         return false;
     }
-    return S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode) &&
-           st.st_uid == geteuid() && (st.st_mode & 0022) == 0;
+    return S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode) && st.st_uid == geteuid() &&
+           (st.st_mode & 0022) == 0;
 #endif
 }
 
@@ -464,13 +463,10 @@ bool remove_stale_socket(const std::string& path) {
     }
     struct sockaddr_un address = {};
     address.sun_family = AF_UNIX;
-    std::strncpy(address.sun_path, path.c_str(),
-                 sizeof(address.sun_path) - 1);
-    const bool refused =
-        connect_unix_fd(probe,
-                        reinterpret_cast<const struct sockaddr*>(&address),
-                        sizeof(address)) != 0 &&
-        errno == ECONNREFUSED;
+    std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
+    const bool refused = connect_unix_fd(probe, reinterpret_cast<const struct sockaddr*>(&address),
+                                         sizeof(address)) != 0 &&
+                         errno == ECONNREFUSED;
     close(probe);
     return refused && unlink(path.c_str()) == 0;
 #else
@@ -485,27 +481,24 @@ bool remove_stale_socket(const std::string& path) {
     }
     struct sockaddr_un address = {};
     address.sun_family = AF_UNIX;
-    std::strncpy(address.sun_path, path.c_str(),
-                 sizeof(address.sun_path) - 1);
+    std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
     const bool refused =
-        connect(probe, reinterpret_cast<const struct sockaddr*>(&address),
-                sizeof(address)) != 0 &&
+        connect(probe, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address)) != 0 &&
         errno == ECONNREFUSED;
     close(probe);
     if (!refused) {
         return false;
     }
     struct stat after = {};
-    if (lstat(path.c_str(), &after) != 0 ||
-        after.st_dev != before.st_dev || after.st_ino != before.st_ino) {
+    if (lstat(path.c_str(), &after) != 0 || after.st_dev != before.st_dev ||
+        after.st_ino != before.st_ino) {
         return false;
     }
     return unlink(path.c_str()) == 0;
 #endif
 }
 
-bool open_admin_listener(const AdminSocketOptions& options, int* listener,
-                         std::string* error) {
+bool open_admin_listener(const AdminSocketOptions& options, int* listener, std::string* error) {
     if (listener == nullptr || options.path.empty() ||
         options.path.size() >= sizeof(sockaddr_un::sun_path)) {
         if (error != nullptr) {
@@ -534,21 +527,17 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     }
     struct sockaddr_un address = {};
     address.sun_family = AF_UNIX;
-    std::strncpy(address.sun_path, options.path.c_str(),
-                 sizeof(address.sun_path) - 1);
+    std::strncpy(address.sun_path, options.path.c_str(), sizeof(address.sun_path) - 1);
 #if defined(_WIN32)
     // Windows socket inodes have no mode/uid/gid to manage: the parent
     // directory's NTFS ACL is the access-control boundary (see
     // docs/windows.md). Bind, with the same one-shot stale-socket retry
     // as POSIX.
-    int bind_result = bind_unix_fd(
-        fd, reinterpret_cast<const struct sockaddr*>(&address),
-        sizeof(address));
-    if (bind_result != 0 && errno == EADDRINUSE &&
-        remove_stale_socket(options.path)) {
-        bind_result = bind_unix_fd(
-            fd, reinterpret_cast<const struct sockaddr*>(&address),
-            sizeof(address));
+    int bind_result =
+        bind_unix_fd(fd, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address));
+    if (bind_result != 0 && errno == EADDRINUSE && remove_stale_socket(options.path)) {
+        bind_result =
+            bind_unix_fd(fd, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address));
     }
     if (bind_result != 0) {
         close(fd);
@@ -558,7 +547,7 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
         return false;
     }
     if (listen_unix_fd(fd, options.backlog) != 0) {
-        (void) unlink(options.path.c_str());
+        (void)unlink(options.path.c_str());
         close(fd);
         if (error != nullptr) {
             *error = "cannot prepare admin listener";
@@ -570,12 +559,9 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     const std::string parent_path =
         final_slash == std::string::npos
             ? std::string(".")
-            : (final_slash == 0 ? std::string("/")
-                                : options.path.substr(0, final_slash));
+            : (final_slash == 0 ? std::string("/") : options.path.substr(0, final_slash));
     const std::string socket_name =
-        final_slash == std::string::npos
-            ? options.path
-            : options.path.substr(final_slash + 1);
+        final_slash == std::string::npos ? options.path : options.path.substr(final_slash + 1);
     // The socket inode's mode is fixed at bind time as 0777 & ~umask, so
     // the creating umask is narrowed to the exact requested mode for the
     // bind window and restored immediately after (a Linux fchmod on a
@@ -585,18 +571,14 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     // needs CAP_SETGID).
     const mode_t created_mask = static_cast<mode_t>(~options.mode & 0777);
     const mode_t saved_umask = umask(created_mask);
-    int bind_result = bind(fd, reinterpret_cast<const struct sockaddr*>(&address),
-                           sizeof(address));
+    int bind_result = bind(fd, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address));
     umask(saved_umask);
-    if (bind_result != 0 && errno == EADDRINUSE &&
-        remove_stale_socket(options.path)) {
+    if (bind_result != 0 && errno == EADDRINUSE && remove_stale_socket(options.path)) {
         // A crash left its socket behind; the stale pathname was removed
         // under the three-evidence rule, so bind may be retried once.
         const mode_t retry_mask = static_cast<mode_t>(~options.mode & 0777);
         const mode_t retry_umask = umask(retry_mask);
-        bind_result = bind(fd,
-                           reinterpret_cast<const struct sockaddr*>(&address),
-                           sizeof(address));
+        bind_result = bind(fd, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address));
         umask(retry_umask);
     }
     if (bind_result != 0) {
@@ -613,20 +595,18 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     // re-verified with fstatat (still no symlink follow): socket type,
     // Host owner, configured management group and exact mode.
     const int parent_fd =
-        openat(AT_FDCWD, parent_path.c_str(),
-               O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+        openat(AT_FDCWD, parent_path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (parent_fd < 0) {
         close(fd);
-        (void) unlink(options.path.c_str());
+        (void)unlink(options.path.c_str());
         if (error != nullptr) {
             *error = "cannot prepare admin listener";
         }
         return false;
     }
-    const bool group_ok =
-        !options.group_gid.has_value() ||
-        fchownat(parent_fd, socket_name.c_str(), static_cast<uid_t>(-1),
-                 *options.group_gid, AT_SYMLINK_NOFOLLOW) == 0;
+    const bool group_ok = !options.group_gid.has_value() ||
+                          fchownat(parent_fd, socket_name.c_str(), static_cast<uid_t>(-1),
+                                   *options.group_gid, AT_SYMLINK_NOFOLLOW) == 0;
     // The exact-mode pass. On virtiofs (Lima/Docker Desktop on macOS)
     // every chmod variant fails a socket inode with EINVAL and even the
     // bind-time umask is ignored (the inode is created 0755 by the
@@ -636,21 +616,15 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     // parent directory keeps the socket reachable only by the Host owner,
     // and the Admin API additionally authenticates peers by credential.
     const bool mode_exact =
-        fchmodat(parent_fd, socket_name.c_str(), options.mode,
-                 AT_SYMLINK_NOFOLLOW) == 0;
-    const bool mode_unenforceable =
-        !mode_exact && errno == EINVAL;
+        fchmodat(parent_fd, socket_name.c_str(), options.mode, AT_SYMLINK_NOFOLLOW) == 0;
+    const bool mode_unenforceable = !mode_exact && errno == EINVAL;
     struct stat recheck = {};
     const bool recheck_ok =
-        fstatat(parent_fd, socket_name.c_str(), &recheck,
-                AT_SYMLINK_NOFOLLOW) == 0 &&
+        fstatat(parent_fd, socket_name.c_str(), &recheck, AT_SYMLINK_NOFOLLOW) == 0 &&
         S_ISSOCK(recheck.st_mode) && recheck.st_uid == geteuid() &&
-        (!options.group_gid.has_value() ||
-         recheck.st_gid == *options.group_gid) &&
-        (mode_exact
-             ? (recheck.st_mode & 0777) == options.mode
-             : (mode_unenforceable &&
-                (recheck.st_mode & (S_IWGRP | S_IWOTH)) == 0));
+        (!options.group_gid.has_value() || recheck.st_gid == *options.group_gid) &&
+        (mode_exact ? (recheck.st_mode & 0777) == options.mode
+                    : (mode_unenforceable && (recheck.st_mode & (S_IWGRP | S_IWOTH)) == 0));
     if (mode_unenforceable) {
         std::fprintf(stderr,
                      "admin: filesystem cannot chmod socket inodes; "
@@ -659,17 +633,15 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
                      recheck_ok ? (recheck.st_mode & 0777) : 0);
     }
     close(parent_fd);
-    if (!group_ok || (!mode_exact && !mode_unenforceable) ||
-        !recheck_ok || listen(fd, options.backlog) != 0) {
+    if (!group_ok || (!mode_exact && !mode_unenforceable) || !recheck_ok ||
+        listen(fd, options.backlog) != 0) {
         // Remove the half-created socket ONLY when it is still the one
         // this call created (device/inode re-checked before the unlink).
         struct stat before = {};
         struct stat after = {};
-        if (lstat(options.path.c_str(), &before) == 0 &&
-            lstat(options.path.c_str(), &after) == 0 &&
-            after.st_dev == before.st_dev &&
-            after.st_ino == before.st_ino) {
-            (void) unlink(options.path.c_str());
+        if (lstat(options.path.c_str(), &before) == 0 && lstat(options.path.c_str(), &after) == 0 &&
+            after.st_dev == before.st_dev && after.st_ino == before.st_ino) {
+            (void)unlink(options.path.c_str());
         }
         close(fd);
         if (error != nullptr) {
@@ -685,10 +657,8 @@ bool open_admin_listener(const AdminSocketOptions& options, int* listener,
     return true;
 }
 
-AdminResponse handle_admin_request(const AdminApiOptions& options,
-                                   const AdminPeerCredentials& peer,
-                                   const AdminRequest& request,
-                                   AdminBackend* backend) {
+AdminResponse handle_admin_request(const AdminApiOptions& options, const AdminPeerCredentials& peer,
+                                   const AdminRequest& request, AdminBackend* backend) {
     // 1. Global authorization from kernel credentials, before anything
     // else: an unauthorized peer never reaches the coordinator.
     if (!admin_peer_authorized(options.authorization, peer)) {
@@ -697,8 +667,7 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
         // line.
         if (options.log != nullptr) {
             options.log->log(LogLane::kControl,
-                             {.event = log_events::kAdminAuth,
-                              .result = "forbidden"});
+                             {.event = log_events::kAdminAuth, .result = "forbidden"});
         }
         return error_response(403, "forbidden");
     }
@@ -733,10 +702,8 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
         return guarded_call(
             [&]() -> AdminResponse {
                 OperationStatus status;
-                const DeployOutcome outcome =
-                    backend->deploy(application, version, &status);
-                if (!outcome.ok ||
-                    !valid_operation_id(outcome.operation_id)) {
+                const DeployOutcome outcome = backend->deploy(application, version, &status);
+                if (!outcome.ok || !valid_operation_id(outcome.operation_id)) {
                     // Static redaction: coordinator internals (paths,
                     // secrets, bundle or environment content) and
                     // malformed backend output never enter the response.
@@ -756,14 +723,12 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
             "deployment failed");
     }
     if (request.target.size() > std::string("/v1/apps/").size() &&
-        request.target.compare(0, std::string("/v1/apps/").size(),
-                               "/v1/apps/") == 0) {
-        std::string rest =
-            request.target.substr(std::string("/v1/apps/").size());
+        request.target.compare(0, std::string("/v1/apps/").size(), "/v1/apps/") == 0) {
+        std::string rest = request.target.substr(std::string("/v1/apps/").size());
         bool retire = false;
         if (rest.size() > std::string("/retire").size() &&
-            rest.compare(rest.size() - std::string("/retire").size(),
-                         std::string("/retire").size(), "/retire") == 0) {
+            rest.compare(rest.size() - std::string("/retire").size(), std::string("/retire").size(),
+                         "/retire") == 0) {
             retire = true;
             rest = rest.substr(0, rest.size() - std::string("/retire").size());
         }
@@ -788,10 +753,8 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
             return guarded_call(
                 [&]() -> AdminResponse {
                     OperationStatus status;
-                    const DeployOutcome outcome =
-                        backend->retire(application, &status);
-                    if (!outcome.ok ||
-                        !valid_operation_id(outcome.operation_id)) {
+                    const DeployOutcome outcome = backend->retire(application, &status);
+                    if (!outcome.ok || !valid_operation_id(outcome.operation_id)) {
                         return error_response(500, "operation failed");
                     }
                     std::string body = "{\"operationId\":\"";
@@ -820,8 +783,7 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
                 const std::string document = backend->app_status(application);
                 std::string canonical;
                 std::string document_app;
-                if (!parse_app_status_document(document, &canonical,
-                                               &document_app) ||
+                if (!parse_app_status_document(document, &canonical, &document_app) ||
                     document_app != application) {
                     // An unknown field, malformed digest or a status
                     // document for another App is redacted.
@@ -832,10 +794,8 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
             "operation failed");
     }
     if (request.target.size() > std::string("/v1/operations/").size() &&
-        request.target.compare(0, std::string("/v1/operations/").size(),
-                               "/v1/operations/") == 0) {
-        const std::string id =
-            request.target.substr(std::string("/v1/operations/").size());
+        request.target.compare(0, std::string("/v1/operations/").size(), "/v1/operations/") == 0) {
+        const std::string id = request.target.substr(std::string("/v1/operations/").size());
         if (id.find('/') != std::string::npos) {
             return error_response(404, "not found");
         }
@@ -853,11 +813,9 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
         }
         return guarded_call(
             [&]() -> AdminResponse {
-                const OperationStatus status =
-                    backend->operation_status(id);
+                const OperationStatus status = backend->operation_status(id);
                 if (status.operation_id != id ||
-                    (!status.version.empty() &&
-                     !valid_version_id(status.version))) {
+                    (!status.version.empty() && !valid_version_id(status.version))) {
                     // The query result must echo the requested operation
                     // and carry a well-formed version; malformed backend
                     // output is redacted.
@@ -900,4 +858,4 @@ AdminResponse handle_admin_request(const AdminApiOptions& options,
     return error_response(404, "not found");
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

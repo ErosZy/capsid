@@ -79,8 +79,8 @@ static const uint32_t kCapFetchUpgrade = 64u;
 // Requires UPGRADE + CONFIRM; legacy peers never receive lifetime frames.
 static const uint32_t kCapConnectionLifetime = 128u;
 static const uint32_t kCapabilitiesKnownMask =
-    kCapDuplexChannel | kCapUpgrade | kCapHalfClose | kCapChannelLayoutA2 |
-    kCapChannelConfirm | kCapChannelCloseFinal | kCapFetchUpgrade | kCapConnectionLifetime;
+    kCapDuplexChannel | kCapUpgrade | kCapHalfClose | kCapChannelLayoutA2 | kCapChannelConfirm |
+    kCapChannelCloseFinal | kCapFetchUpgrade | kCapConnectionLifetime;
 // true iff the bitset satisfies the A2 dependency closure (§1.2).
 bool capabilities_satisfy_closure(uint32_t capabilities);
 
@@ -104,7 +104,7 @@ struct ChannelLimits {
     uint32_t per_channel_queue_bytes = 4u * 1024u * 1024u;
 };
 // Frozen bounds; any violation is "invalid hello extension".
-bool validate_channel_limits(const ChannelLimits &limits);
+bool validate_channel_limits(const ChannelLimits& limits);
 
 // ---- A2 channel payloads (contract §3.2) ----
 static const size_t kMaxUrlBytes = 2048;
@@ -134,7 +134,11 @@ enum ChannelKindCode {
 static const size_t kMaxChannelHttpHeaders = 128;
 static const size_t kMaxChannelHttpHeaderBytes = 48u * 1024u;
 static const size_t kMaxChannelHttpStatusTextBytes = 1024;
-enum FetchUpgradeRedirect { kFetchRedirectFollow = 0, kFetchRedirectManual = 1, kFetchRedirectError = 2 };
+enum FetchUpgradeRedirect {
+    kFetchRedirectFollow = 0,
+    kFetchRedirectManual = 1,
+    kFetchRedirectError = 2
+};
 // Header names are HTTP tokens; values are raw ByteString octets. Preserve
 // order and duplicates, including separate Set-Cookie fields. HTTP bodies
 // travel in credit-controlled DATA after ACCEPT, never in this metadata.
@@ -166,8 +170,8 @@ enum ChannelCancelReason {
 };
 
 struct ChannelOpenPayload {
-    uint32_t channel_id = 0;    // 0: dial request
-    uint64_t dial_id = 0;       // nonzero for dials
+    uint32_t channel_id = 0; // 0: dial request
+    uint64_t dial_id = 0;    // nonzero for dials
     uint8_t owner_kind = 0;
     uint8_t channel_kind = 0;
     uint64_t owner_request_id = 0;
@@ -178,15 +182,15 @@ struct ChannelOpenPayload {
 };
 struct ChannelAcceptPayload {
     uint64_t dial_id = 0;
-    uint32_t channel_id = 0;    // assigned, nonzero
+    uint32_t channel_id = 0; // assigned, nonzero
     uint64_t accepted_max_message_bytes = 0;
-    std::string selected_protocol;    // may be empty
+    std::string selected_protocol; // may be empty
     bool has_http_response = false;
     FetchUpgradeResponse http_response;
 };
 struct ChannelRejectPayload {
     uint64_t dial_id = 0;
-    uint32_t channel_id = 0;    // 0 until assigned
+    uint32_t channel_id = 0; // 0 until assigned
     uint32_t reason_code = 0;
     std::string diagnostic;
 };
@@ -208,11 +212,7 @@ struct ChannelCancelPayload {
     // Assigned-channel CANCEL keeps its original 8-byte encoding.
     uint64_t dial_id = 0;
 };
-enum ChannelAckKind {
-    kAckDialResult = 0,
-    kAckCancel = 1,
-    kAckTransportClose = 2
-};
+enum ChannelAckKind { kAckDialResult = 0, kAckCancel = 1, kAckTransportClose = 2 };
 struct ChannelAckPayload {
     uint32_t channel_id = 0;
     uint64_t dial_id = 0;
@@ -231,52 +231,45 @@ struct UpgradeTail {
 // Encode/decode pairs. Decoders are strict: any grammar violation
 // (contract §3.2 bounds, §3.6 close matrix) returns false and sets
 // *error to the exact contract string.
-bool encode_channel_open(const ChannelOpenPayload &in,
-                         std::vector<uint8_t> *out, uint32_t capabilities = 0);
-bool decode_channel_open(const uint8_t *data, size_t size,
-                         ChannelOpenPayload *out, std::string *error, uint32_t capabilities = 0);
-bool encode_channel_accept(const ChannelAcceptPayload &in,
-                           std::vector<uint8_t> *out, uint32_t capabilities = 0);
-bool decode_channel_accept(const uint8_t *data, size_t size,
-                           ChannelAcceptPayload *out, std::string *error, uint32_t capabilities = 0);
-bool encode_channel_reject(const ChannelRejectPayload &in,
-                           std::vector<uint8_t> *out);
-bool decode_channel_reject(const uint8_t *data, size_t size,
-                           ChannelRejectPayload *out, std::string *error);
-bool encode_channel_credit(const ChannelCreditPayload &in,
-                           std::vector<uint8_t> *out);
-bool decode_channel_credit(const uint8_t *data, size_t size,
-                           ChannelCreditPayload *out, std::string *error);
-bool encode_channel_close(const ChannelClosePayload &in,
-                          std::vector<uint8_t> *out);
-bool decode_channel_close(const uint8_t *data, size_t size,
-                          ChannelClosePayload *out, std::string *error);
-bool encode_channel_cancel(const ChannelCancelPayload &in,
-                           std::vector<uint8_t> *out);
-bool decode_channel_cancel(const uint8_t *data, size_t size,
-                           ChannelCancelPayload *out, std::string *error);
-bool encode_channel_ack(const ChannelAckPayload &in, std::vector<uint8_t> *out);
-bool decode_channel_ack(const uint8_t *data, size_t size,
-                        ChannelAckPayload *out, std::string *error);
-bool encode_connection_lifetime(const ConnectionLifetimePayload &in, std::vector<uint8_t> *out);
-bool decode_connection_lifetime(const uint8_t *data, size_t size,
-                                ConnectionLifetimePayload *out, std::string *error);
+bool encode_channel_open(const ChannelOpenPayload& in, std::vector<uint8_t>* out,
+                         uint32_t capabilities = 0);
+bool decode_channel_open(const uint8_t* data, size_t size, ChannelOpenPayload* out,
+                         std::string* error, uint32_t capabilities = 0);
+bool encode_channel_accept(const ChannelAcceptPayload& in, std::vector<uint8_t>* out,
+                           uint32_t capabilities = 0);
+bool decode_channel_accept(const uint8_t* data, size_t size, ChannelAcceptPayload* out,
+                           std::string* error, uint32_t capabilities = 0);
+bool encode_channel_reject(const ChannelRejectPayload& in, std::vector<uint8_t>* out);
+bool decode_channel_reject(const uint8_t* data, size_t size, ChannelRejectPayload* out,
+                           std::string* error);
+bool encode_channel_credit(const ChannelCreditPayload& in, std::vector<uint8_t>* out);
+bool decode_channel_credit(const uint8_t* data, size_t size, ChannelCreditPayload* out,
+                           std::string* error);
+bool encode_channel_close(const ChannelClosePayload& in, std::vector<uint8_t>* out);
+bool decode_channel_close(const uint8_t* data, size_t size, ChannelClosePayload* out,
+                          std::string* error);
+bool encode_channel_cancel(const ChannelCancelPayload& in, std::vector<uint8_t>* out);
+bool decode_channel_cancel(const uint8_t* data, size_t size, ChannelCancelPayload* out,
+                           std::string* error);
+bool encode_channel_ack(const ChannelAckPayload& in, std::vector<uint8_t>* out);
+bool decode_channel_ack(const uint8_t* data, size_t size, ChannelAckPayload* out,
+                        std::string* error);
+bool encode_connection_lifetime(const ConnectionLifetimePayload& in, std::vector<uint8_t>* out);
+bool decode_connection_lifetime(const uint8_t* data, size_t size, ConnectionLifetimePayload* out,
+                                std::string* error);
 // APPEND semantics: the tail follows existing payload bytes (e.g. a
 // ResponseHead status prefix); start from an empty vector for a
 // standalone tail.
-bool encode_upgrade_tail(const UpgradeTail &in,
-                         std::vector<uint8_t> *out);
-bool decode_upgrade_tail(const uint8_t *data, size_t size,
-                         UpgradeTail *out, std::string *error);
+bool encode_upgrade_tail(const UpgradeTail& in, std::vector<uint8_t>* out);
+bool decode_upgrade_tail(const uint8_t* data, size_t size, UpgradeTail* out, std::string* error);
 // DATA prefix: first payload bytes are the u32 channel id.
-bool decode_channel_data_id(const uint8_t *data, size_t size,
-                            uint32_t *channel_id, std::string *error);
+bool decode_channel_data_id(const uint8_t* data, size_t size, uint32_t* channel_id,
+                            std::string* error);
 // A2 limits extension append/decode relative to a composed Hello
 // payload (startup bytes already present; tail appended after).
-bool append_hello_a2_extension(std::vector<uint8_t> *payload,
-                               const ChannelLimits &limits);
-bool decode_hello_a2_extension(const uint8_t *data, size_t size,
-                               ChannelLimits *out, std::string *error);
+bool append_hello_a2_extension(std::vector<uint8_t>* payload, const ChannelLimits& limits);
+bool decode_hello_a2_extension(const uint8_t* data, size_t size, ChannelLimits* out,
+                               std::string* error);
 // RFC 6455 §7.4.1 sendable close code set shared by kinds 0/1.
 bool is_sendable_close_code(uint16_t code);
 
@@ -328,68 +321,53 @@ struct Frame {
     std::vector<uint8_t> payload{0, uint8_t{0}, std::allocator<uint8_t>{}};
 };
 
-enum ParseResult {
-    kParseNeedMore,
-    kParseFrame,
-    kParseError
-};
+enum ParseResult { kParseNeedMore, kParseFrame, kParseError };
 
 class Parser {
-public:
+  public:
     // expected_version pins the wire version this parser accepts; the
     // default keeps the shipped v3 behavior byte-identical.
     explicit Parser(uint16_t expected_version = kVersion);
 
-    bool append(const uint8_t *data, size_t size);
-    ParseResult next(Frame *frame);
-    ParseResult next(Frame *frame, std::vector<uint8_t> *payload);
-    const std::string &error() const { return error_; }
+    bool append(const uint8_t* data, size_t size);
+    ParseResult next(Frame* frame);
+    ParseResult next(Frame* frame, std::vector<uint8_t>* payload);
+    const std::string& error() const { return error_; }
 
-private:
+  private:
     std::vector<uint8_t> buffer_;
     size_t offset_;
     std::string error_;
     uint16_t expected_version_;
 };
 
-bool encode(const Frame &frame, std::vector<uint8_t> *output);
+bool encode(const Frame& frame, std::vector<uint8_t>* output);
 // Encodes with an explicit wire version (v4 channel frames). Type and
 // flag validity are checked against that version.
-bool encode_versioned(uint16_t version,
-                      const Frame &frame,
-                      std::vector<uint8_t> *output);
-bool append_encoded(uint16_t type,
-                    uint32_t flags,
-                    uint64_t request_id,
-                    const uint8_t *payload,
-                    size_t payload_size,
-                    std::vector<uint8_t> *output);
+bool encode_versioned(uint16_t version, const Frame& frame, std::vector<uint8_t>* output);
+bool append_encoded(uint16_t type, uint32_t flags, uint64_t request_id, const uint8_t* payload,
+                    size_t payload_size, std::vector<uint8_t>* output);
 // Append-semantics twin with an explicit wire version (v4 channel
 // frames); preserves any prefix already in output.
-bool append_encoded_versioned(uint16_t version,
-                              uint16_t type,
-                              uint32_t flags,
-                              uint64_t request_id,
-                              const uint8_t *payload,
-                              size_t payload_size,
-                              std::vector<uint8_t> *output);
+bool append_encoded_versioned(uint16_t version, uint16_t type, uint32_t flags, uint64_t request_id,
+                              const uint8_t* payload, size_t payload_size,
+                              std::vector<uint8_t>* output);
 
 // Direct little-endian loads at an address (bounds belong to the
 // caller); used by tail readers that index from a frame payload end.
-uint16_t load_u16_at(const uint8_t *input);
-uint32_t load_u32_at(const uint8_t *input);
+uint16_t load_u16_at(const uint8_t* input);
+uint32_t load_u32_at(const uint8_t* input);
 // Validate the complete v3 head prefix before reading the appended A2
 // tail. This prevents tail-only fixtures from standing in for real heads.
-bool decode_upgrade_head(const Frame &frame, UpgradeTail *tail,
-                         std::string *error);
-void append_u16(std::vector<uint8_t> *output, uint16_t value);
-void append_u32(std::vector<uint8_t> *output, uint32_t value);
-void append_u64(std::vector<uint8_t> *output, uint64_t value);
-bool read_u16(const uint8_t **cursor, const uint8_t *end, uint16_t *value);
-bool read_u32(const uint8_t **cursor, const uint8_t *end, uint32_t *value);
-bool read_u64(const uint8_t **cursor, const uint8_t *end, uint64_t *value);
+bool decode_upgrade_head(const Frame& frame, UpgradeTail* tail, std::string* error);
+void append_u16(std::vector<uint8_t>* output, uint16_t value);
+void append_u32(std::vector<uint8_t>* output, uint32_t value);
+void append_u64(std::vector<uint8_t>* output, uint64_t value);
+bool read_u16(const uint8_t** cursor, const uint8_t* end, uint16_t* value);
+bool read_u32(const uint8_t** cursor, const uint8_t* end, uint32_t* value);
+bool read_u64(const uint8_t** cursor, const uint8_t* end, uint64_t* value);
 
-}  // namespace protocol
-}  // namespace capsid
+} // namespace protocol
+} // namespace capsid
 
 #endif

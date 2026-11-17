@@ -19,7 +19,8 @@ using namespace capsid::host;
 using namespace std::chrono_literals;
 
 void require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition)
+        throw std::runtime_error(message);
 }
 
 // The same fixture also builds against the former borrowed-pointer
@@ -89,7 +90,8 @@ struct ExitNotifyGate {
         std::unique_lock<std::mutex> lock(mutex);
         entered = true;
         cv.notify_all();
-        if (!cv.wait_for(lock, 10s, [&] { return released; })) timed_out = true;
+        if (!cv.wait_for(lock, 10s, [&] { return released; }))
+            timed_out = true;
     }
     void release() {
         std::lock_guard<std::mutex> lock(mutex);
@@ -107,16 +109,19 @@ struct PoolFixture {
     std::string identity;
 
     PoolFixture(const std::string& worker_path, char name,
-                const std::shared_ptr<ExitNotifyGate>& exit_gate = {}) : identity(1, name) {
+                const std::shared_ptr<ExitNotifyGate>& exit_gate = {})
+        : identity(1, name) {
         generation = "sha256:" + std::string(64, name);
         // Each process maintains its own probe counter. A later ordinary
         // request observes what its real fetch handler executed, including
         // a probe that was queued before the request but completed earlier.
         const std::string bundle = "let probes=0; export default {fetch(request){"
-            "const path=new URL(request.url).pathname;"
-            "if(path==='/health'){++probes;return new Response('healthy');}"
-            "if(path==='/status')return new Response('" + identity + ":'+probes);"
-            "throw new Error('unexpected request '+path);}};";
+                                   "const path=new URL(request.url).pathname;"
+                                   "if(path==='/health'){++probes;return new Response('healthy');}"
+                                   "if(path==='/status')return new Response('" +
+                                   identity +
+                                   ":'+probes);"
+                                   "throw new Error('unexpected request '+path);}};";
         GenerationPoolOptions options;
         options.application_id = "supervisor-test";
         options.version = "v1";
@@ -140,7 +145,8 @@ struct PoolFixture {
                 return false;
             }
             if (capsid_worker_load_bundle(worker,
-                    reinterpret_cast<const std::uint8_t*>(bundle.data()), bundle.size()) != CAPSID_OK ||
+                                          reinterpret_cast<const std::uint8_t*>(bundle.data()),
+                                          bundle.size()) != CAPSID_OK ||
                 capsid_worker_flush(worker) != CAPSID_OK) {
                 capsid_worker_destroy(worker);
                 *error = "real Worker bundle load/flush failed";
@@ -162,7 +168,8 @@ struct PoolFixture {
                     std::lock_guard<std::mutex> lock(observed->mutex);
                     executor = observed->started;
                 }
-                if (executor != nullptr && executor->exit_status().observed) exit_gate->pause();
+                if (executor != nullptr && executor->exit_status().observed)
+                    exit_gate->pause();
             };
         }
         options.on_worker_started = [observed](const WorkerExecutor* executor) {
@@ -177,21 +184,27 @@ struct PoolFixture {
             observed->cv.notify_all();
         };
         options.event_sink = [observed](const WorkerExecutor*, WorkerEvent event) {
-            if (event.request_id != 101) return;
+            if (event.request_id != 101)
+                return;
             std::lock_guard<std::mutex> lock(observed->mutex);
             switch (event.type) {
-                case WorkerEvent::Type::kResponseHead:
-                    ++observed->heads;
-                    observed->status = event.status;
-                    break;
-                case WorkerEvent::Type::kResponseBody:
-                    observed->response.append(event.body.begin(), event.body.end());
-                    break;
-                case WorkerEvent::Type::kResponseEnd: ++observed->ends; break;
-                case WorkerEvent::Type::kError:
-                case WorkerEvent::Type::kRequestFailure:
-                case WorkerEvent::Type::kRequestTimeout: ++observed->errors; break;
-                default: break;
+            case WorkerEvent::Type::kResponseHead:
+                ++observed->heads;
+                observed->status = event.status;
+                break;
+            case WorkerEvent::Type::kResponseBody:
+                observed->response.append(event.body.begin(), event.body.end());
+                break;
+            case WorkerEvent::Type::kResponseEnd:
+                ++observed->ends;
+                break;
+            case WorkerEvent::Type::kError:
+            case WorkerEvent::Type::kRequestFailure:
+            case WorkerEvent::Type::kRequestTimeout:
+                ++observed->errors;
+                break;
+            default:
+                break;
             }
             observed->cv.notify_all();
         };
@@ -203,7 +216,8 @@ struct PoolFixture {
         require(!weak_executor.expired(), "real Worker must cross READY");
     }
     ~PoolFixture() {
-        if (pool) pool->stop_and_join();
+        if (pool)
+            pool->stop_and_join();
     }
     void expect_probes(unsigned count) {
         auto executor = pool->current_worker_snapshot();
@@ -221,19 +235,20 @@ struct PoolFixture {
         credit.credit = 4096;
         executor->submit(std::move(credit));
         std::unique_lock<std::mutex> lock(observation->mutex);
-        require(observation->cv.wait_for(lock, 5s, [&] {
-                    return observation->ends != 0 || observation->errors != 0;
-                }), "real status response must reach its terminal event");
-        std::printf("STATUS generation=%s body=%s expected=%u\n",
-                    identity.c_str(), observation->response.c_str(), count);
-        require(observation->heads == 1 && observation->status == 200 &&
-                observation->ends == 1 && observation->errors == 0,
+        require(observation->cv.wait_for(
+                    lock, 5s, [&] { return observation->ends != 0 || observation->errors != 0; }),
+                "real status response must reach its terminal event");
+        std::printf("STATUS generation=%s body=%s expected=%u\n", identity.c_str(),
+                    observation->response.c_str(), count);
+        require(observation->heads == 1 && observation->status == 200 && observation->ends == 1 &&
+                    observation->errors == 0,
                 "status requires one 200 head and one successful response end");
         require(observation->response == identity + ":" + std::to_string(count),
                 "Worker executed an unexpected number of health probes");
     }
     void expect_reaped() {
-        if (pool) pool->stop_and_join();
+        if (pool)
+            pool->stop_and_join();
         std::lock_guard<std::mutex> lock(observation->mutex);
         require(observation->exits.size() == 1, "exactly one real Worker must be reaped");
         capsid_test::print_worker_exit(observation->exits.front());
@@ -263,7 +278,9 @@ struct SupervisorFixture {
             std::lock_guard<std::mutex> lock(selection_mutex);
             return selected_pool(decltype(WorkerSupervisorOptions::current_pool){}, selected->pool);
         };
-        options.health_check_reader = [&](const std::string& generation) { return gate.read(generation); };
+        options.health_check_reader = [&](const std::string& generation) {
+            return gate.read(generation);
+        };
         supervisor = std::make_unique<WorkerSupervisor>(std::move(options));
     }
     ~SupervisorFixture() { stop(); }
@@ -283,7 +300,8 @@ void run_exit_notifier(const std::string& worker) {
         std::thread thread;
         ~DrainThread() {
             gate.release();
-            if (thread.joinable()) thread.join();
+            if (thread.joinable())
+                thread.join();
         }
     } drain{*gate, {}};
     executor_pin->request_shutdown();
@@ -309,7 +327,8 @@ void run_exit_notifier(const std::string& worker) {
     require(!gate->timed_out, "exit notifier barrier must not expire");
     require(!completed_before_notifier,
             "pool wait must join the final executor notifier despite an external executor lease");
-    require(!fixture.weak_executor.expired(), "external executor lease remains valid after the join");
+    require(!fixture.weak_executor.expired(),
+            "external executor lease remains valid after the join");
     executor_pin.reset();
     require(fixture.weak_executor.expired(), "last external lease releases the joined executor");
 }
@@ -369,8 +388,10 @@ void run(const std::string& worker, const std::string& mode) {
         runner.stop();
         require(first.weak_executor.expired(), "join must release the drained executor lease");
     } else if (mode == "stop-local" || mode == "stop-external") {
-        if (mode == "stop-local") runner.supervisor->request_stop();
-        else runner.external_stop.store(true);
+        if (mode == "stop-local")
+            runner.supervisor->request_stop();
+        else
+            runner.external_stop.store(true);
         gate.release_all();
         runner.supervisor->join();
         first.expect_probes(0);
@@ -392,7 +413,7 @@ void run(const std::string& worker, const std::string& mode) {
     first.expect_reaped();
     require(!gate.timed_out, "controlled reader must finish without a barrier timeout");
 }
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     try {

@@ -64,7 +64,7 @@ struct WorkerSupervisorOptions {
 };
 
 class WorkerSupervisor {
-public:
+  public:
     explicit WorkerSupervisor(WorkerSupervisorOptions options);
     ~WorkerSupervisor();
 
@@ -76,7 +76,7 @@ public:
     void request_stop();
     void join();
 
-private:
+  private:
     void run();
     // (Re)arm the probe schedule for the executor the pool currently
     // hands out: clears the consecutive-failure streak and re-reads the
@@ -115,6 +115,6 @@ private:
     mutable std::mt19937 jitter_rng_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

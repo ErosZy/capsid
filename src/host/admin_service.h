@@ -28,7 +28,7 @@ struct AdminServiceOptions {
 // loop and removes only the socket inode the service itself created
 // (device/inode re-checked before the unlink).
 class AdminService {
-public:
+  public:
     AdminService(AdminServiceOptions options, AdminBackend* backend);
     ~AdminService();
 
@@ -39,7 +39,7 @@ public:
     void request_stop();
     bool wait(std::string* error);
 
-private:
+  private:
     void accept_loop();
     void finish_start() {
         {
@@ -72,6 +72,6 @@ private:
     ino_t socket_ino_ = 0;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

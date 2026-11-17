@@ -4,6 +4,7 @@
 Exercise the real collector and independently mutate raw samples, provenance,
 digests and history. No benchmark process or network service is required.
 """
+
 import argparse
 from contextlib import contextmanager, redirect_stdout
 import hashlib
@@ -19,7 +20,11 @@ import unittest
 
 
 parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument("--collector", type=Path, default=Path(__file__).resolve().parents[1] / "bench/collect-perf-point.py")
+parser.add_argument(
+    "--collector",
+    type=Path,
+    default=Path(__file__).resolve().parents[1] / "bench/collect-perf-point.py",
+)
 args, remaining = parser.parse_known_args()
 sys.argv[1:] = remaining
 sys.path.insert(0, str(args.collector.resolve().parent))
@@ -27,11 +32,15 @@ spec = importlib.util.spec_from_file_location("perf_collector", args.collector)
 collector = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(collector)
 import perf_evidence as contract
+
 sys.path.insert(0, str(Path(__file__).resolve().parent / "helpers"))
 from cold_measurement_fixture import synthetic_round
 from qps_measurement_fixture import synthetic_memory
 from density_measurement_fixture import synthetic_density
-site_spec = importlib.util.spec_from_file_location("perf_site", args.collector.with_name("prepare-perf-site.py"))
+
+site_spec = importlib.util.spec_from_file_location(
+    "perf_site", args.collector.with_name("prepare-perf-site.py")
+)
 site = importlib.util.module_from_spec(site_spec)
 site_spec.loader.exec_module(site)
 
@@ -46,28 +55,53 @@ def digest(data):
 
 class Fixture:
     """Every required cell has independent raw and correctness files."""
+
     def __init__(self, root):
         self.root = root
         self.paths = {}
         self.manifests = {}
         self.saved = None
-        origin = {"commit": "a" * 40, "tag": "v-test", "clean": True,
-                  "version": "test", "release": "v-test"}
-        machine = {"cpu": "fixture CPU", "kernel": "fixture kernel",
-                   "architecture": "x86_64", "logicalCpus": 4, "hostId": "fixture-host"}
+        origin = {
+            "commit": "a" * 40,
+            "tag": "v-test",
+            "clean": True,
+            "version": "test",
+            "release": "v-test",
+        }
+        machine = {
+            "cpu": "fixture CPU",
+            "kernel": "fixture kernel",
+            "architecture": "x86_64",
+            "logicalCpus": 4,
+            "hostId": "fixture-host",
+        }
         for offset, lane in enumerate(("cold-start", "qps", "density")):
             path = root / "bench/results" / lane
             path.mkdir(parents=True)
             self.paths[lane] = path
             start = f"2026-10-20T0{offset}:00:00Z"
-            m = {"schema": 1, "lane": lane, "session": "synthetic-test-session",
-                 "status": "complete", "startedAt": start,
-                 "completedAt": f"2026-10-20T0{offset}:10:00Z", "origin": dict(origin),
-                 "machine": dict(machine), "protocol": dict(contract.PROTOCOL[lane], sutCpuSet="0-3"),
-                 "posture": {"platform": "linux", "mode": "c-abi" if lane == "cold-start" else "managed",
-                             "sandbox": "strict"},
-                 "summary": "cells.txt", "isolation": "isolation.json", "binaries": {},
-                 "command": f"fixture-only {lane}", "fixtures": {}, "records": []}
+            m = {
+                "schema": 1,
+                "lane": lane,
+                "session": "synthetic-test-session",
+                "status": "complete",
+                "startedAt": start,
+                "completedAt": f"2026-10-20T0{offset}:10:00Z",
+                "origin": dict(origin),
+                "machine": dict(machine),
+                "protocol": dict(contract.PROTOCOL[lane], sutCpuSet="0-3"),
+                "posture": {
+                    "platform": "linux",
+                    "mode": "c-abi" if lane == "cold-start" else "managed",
+                    "sandbox": "strict",
+                },
+                "summary": "cells.txt",
+                "isolation": "isolation.json",
+                "binaries": {},
+                "command": f"fixture-only {lane}",
+                "fixtures": {},
+                "records": [],
+            }
             self.manifests[lane] = m
             if lane == "density":
                 m["protocol"]["caps"] = {"capsid": 2, "workerd": 2}
@@ -77,39 +111,81 @@ class Fixture:
             lines = []
             for index, key in enumerate(sorted(contract.expected_keys(lane))):
                 stack, value = key[:2]
-                record = {"stack": stack, "workload" if lane == "qps" else "size": value,
-                          "binaries": sorted(contract.required_binaries(lane, stack)),
-                          "fixtures": ["shared-app"], "samples": [], "correctness": []}
+                record = {
+                    "stack": stack,
+                    "workload" if lane == "qps" else "size": value,
+                    "binaries": sorted(contract.required_binaries(lane, stack)),
+                    "fixtures": ["shared-app"],
+                    "samples": [],
+                    "correctness": [],
+                }
                 for name in record["binaries"]:
                     binary = f"synthetic binary {name}".encode()
-                    m["binaries"][name] = {"sha256": digest(binary), "commit": "a" * 40,
-                                           "tag": "v-test", "version": "test",
-                                           "file": f"binaries/{name}.bin"}
+                    m["binaries"][name] = {
+                        "sha256": digest(binary),
+                        "commit": "a" * 40,
+                        "tag": "v-test",
+                        "version": "test",
+                        "file": f"binaries/{name}.bin",
+                    }
                     self.write(path / f"binaries/{name}.bin", binary)
                 if lane == "qps":
-                    synthetic_clients = synthetic_memory(stack, 'serving')['loadgenProcesses']
+                    synthetic_clients = synthetic_memory(stack, "serving")["loadgenProcesses"]
                     offset = contract.WORKLOADS.index(value) * 5
-                    record['clientProcesses'] = synthetic_clients[offset:offset+5]
-                    body = (b'b' * 341 + b'c' * 341 + b'd' * 342) if value == 'stream' else json.dumps(
-                        {'data': 'x' * ((1024 if value == 'matrix-json-1k' else 16384) - 11)},
-                        separators=(',', ':')).encode()
-                    payload = {'workload': value, 'response_validation': 'exact-bytes-v2',
-                               'payload_bytes': len(body), 'expected_body_sha256': digest(body)}
+                    record["clientProcesses"] = synthetic_clients[offset : offset + 5]
+                    body = (
+                        (b"b" * 341 + b"c" * 341 + b"d" * 342)
+                        if value == "stream"
+                        else json.dumps(
+                            {"data": "x" * ((1024 if value == "matrix-json-1k" else 16384) - 11)},
+                            separators=(",", ":"),
+                        ).encode()
+                    )
+                    payload = {
+                        "workload": value,
+                        "response_validation": "exact-bytes-v2",
+                        "payload_bytes": len(body),
+                        "expected_body_sha256": digest(body),
+                    }
                     lines.append(f"{stack} {value} qps_med=100.0 p50_ms=1.0 p95_ms=2.0")
                     for round_no in range(1, 6):
-                        rows = [dict(payload, **{"side": stack, "round": round_no, "phase": phase,
-                                 "qps": 100.0, "p50_ms": 1.0, "p95_ms": 2.0, "p99_ms": 3.0,
-                                 "duration_s": duration, "completed": duration * 100,
-                                 "requests_attempted": duration * 100, "responses_checked": duration * 100,
-                                 "errors": 0, "timeouts": 0, "connections": 64, "inflight": 64,
-                                 "request_timeout_ms": 30000})
-                                for phase, duration in (("warmup", 5), ("measured", 15))]
+                        rows = [
+                            dict(
+                                payload,
+                                **{
+                                    "side": stack,
+                                    "round": round_no,
+                                    "phase": phase,
+                                    "qps": 100.0,
+                                    "p50_ms": 1.0,
+                                    "p95_ms": 2.0,
+                                    "p99_ms": 3.0,
+                                    "duration_s": duration,
+                                    "completed": duration * 100,
+                                    "requests_attempted": duration * 100,
+                                    "responses_checked": duration * 100,
+                                    "errors": 0,
+                                    "timeouts": 0,
+                                    "connections": 64,
+                                    "inflight": 64,
+                                    "request_timeout_ms": 30000,
+                                },
+                            )
+                            for phase, duration in (("warmup", 5), ("measured", 15))
+                        ]
                         self.raw(path, record, f"raw.{index}.{round_no}.jsonl", rows)
-                        self.verdict(path, record, f"correctness.{index}.{round_no}.json", 2000,
-                                     dict(payload, requests_attempted=2000))
+                        self.verdict(
+                            path,
+                            record,
+                            f"correctness.{index}.{round_no}.json",
+                            2000,
+                            dict(payload, requests_attempted=2000),
+                        )
                 elif lane == "cold-start":
                     head = stack.replace("capsid-", "capsid ")
-                    lines.append(f"{head} {value} total_ms=100.00 ready_ms=80.00 warm_ms=1.000 pss_mb=1.0")
+                    lines.append(
+                        f"{head} {value} total_ms=100.00 ready_ms=80.00 warm_ms=1.000 pss_mb=1.0"
+                    )
                     rows = [synthetic_round(stack, value, r) for r in range(1, 6)]
                     self.raw(path, record, f"raw.{index}.jsonl", rows)
                     self.verdict(path, record, f"correctness.{index}.json", 255)
@@ -118,53 +194,144 @@ class Fixture:
                     record["discardedSamples"] = [discard]
                     record["discardedCorrectness"] = [correct_discard]
                     self.write(path / discard, encoded(synthetic_round(stack, value, 0)))
-                    self.write(path / correct_discard, encoded({"ok": True, "errors_as_success": False,
-                        "responses_checked": 51, "errors": 0, "timeouts": 0, "mismatches": 0}))
+                    self.write(
+                        path / correct_discard,
+                        encoded(
+                            {
+                                "ok": True,
+                                "errors_as_success": False,
+                                "responses_checked": 51,
+                                "errors": 0,
+                                "timeouts": 0,
+                                "mismatches": 0,
+                            }
+                        ),
+                    )
                 else:
                     record["phase"] = key[2]
                     unit = "workers" if stack == "capsid" else "cells"
-                    lines.append(f"{stack} {value} {unit}=2 pss_mb=1.0 phase={key[2]} note=cap-reached")
-                    directory = f'density-probe-{index}'
-                    row, verdict = synthetic_density(path, directory, stack, value, key[2], 2,
-                                                     probe_index=index+1, write=self.write)
-                    wrapper = directory + ('/runtime/apps/orders/v1/bundle.mjs' if stack=='capsid' else '/runtime/bundle.mjs')
-                    fixture_id = 'density-' + directory
-                    m['fixtures'][fixture_id] = {'file': wrapper, 'sha256': digest((path/wrapper).read_bytes())}
-                    record['fixtures'].append(fixture_id)
+                    lines.append(
+                        f"{stack} {value} {unit}=2 pss_mb=1.0 phase={key[2]} note=cap-reached"
+                    )
+                    directory = f"density-probe-{index}"
+                    row, verdict = synthetic_density(
+                        path,
+                        directory,
+                        stack,
+                        value,
+                        key[2],
+                        2,
+                        probe_index=index + 1,
+                        write=self.write,
+                    )
+                    wrapper = directory + (
+                        "/runtime/apps/orders/v1/bundle.mjs"
+                        if stack == "capsid"
+                        else "/runtime/bundle.mjs"
+                    )
+                    fixture_id = "density-" + directory
+                    m["fixtures"][fixture_id] = {
+                        "file": wrapper,
+                        "sha256": digest((path / wrapper).read_bytes()),
+                    }
+                    record["fixtures"].append(fixture_id)
                     self.raw(path, record, f"raw.{index}.jsonl", [row])
-                    self.verdict(path, record, f"correctness.{index}.json", verdict['responses_checked'], verdict)
+                    self.verdict(
+                        path,
+                        record,
+                        f"correctness.{index}.json",
+                        verdict["responses_checked"],
+                        verdict,
+                    )
                 m["records"].append(record)
             if lane == "qps":
                 memory = {}
                 for stack in contract.STACKS[lane]:
-                    memory[stack] = {phase: synthetic_memory(stack, phase) for phase in ('lowLoad', 'serving')}
-                    memory[stack]['serving']['records'] = [
-                        {'workload': record['workload'], 'round': number + 1, 'samples': sample,
-                         'correctness': record['correctness'][number], 'clientProcess': record['clientProcesses'][number],
-                         'measurement': json.loads((path/sample).read_text().splitlines()[1])}
-                        for record in m['records'] if record['stack'] == stack
-                        for number,sample in enumerate(record['samples'])]
-                    for phase in ('lowLoad', 'serving'):
-                        proof = f'memory-proofs/{stack}-{phase}.json'
-                        self.write(path/proof, encoded(memory[stack][phase]))
-                        memory[stack][phase]['resultFile'] = proof
+                    memory[stack] = {
+                        phase: synthetic_memory(stack, phase) for phase in ("lowLoad", "serving")
+                    }
+                    memory[stack]["serving"]["records"] = [
+                        {
+                            "workload": record["workload"],
+                            "round": number + 1,
+                            "samples": sample,
+                            "correctness": record["correctness"][number],
+                            "clientProcess": record["clientProcesses"][number],
+                            "measurement": json.loads((path / sample).read_text().splitlines()[1]),
+                        }
+                        for record in m["records"]
+                        if record["stack"] == stack
+                        for number, sample in enumerate(record["samples"])
+                    ]
+                    for phase in ("lowLoad", "serving"):
+                        proof = f"memory-proofs/{stack}-{phase}.json"
+                        self.write(path / proof, encoded(memory[stack][phase]))
+                        memory[stack][phase]["resultFile"] = proof
                     for kind, phase in (("serving", "serving"), ("lowqps", "lowLoad")):
-                        roles = ';'.join(f'{role}={kb/1024:.1f}' for role,kb in memory[stack][phase]['roles_kb'].items())
-                        lines.extend((f"{stack} {kind}_pss_mb=1.0", f"{stack} {kind}_pss_detail={roles}"))
+                        roles = ";".join(
+                            f"{role}={kb / 1024:.1f}"
+                            for role, kb in memory[stack][phase]["roles_kb"].items()
+                        )
+                        lines.extend(
+                            (f"{stack} {kind}_pss_mb=1.0", f"{stack} {kind}_pss_detail={roles}")
+                        )
                 m["memory"] = "memory.json"
                 self.write(path / "memory.json", encoded(memory))
-                m['runtimeDependencies'] = 'runtime-dependencies.json'
-                package_code=b'synthetic installed framework code; independent of shared app fixture'
-                self.write(path/'dependencies/python/synthetic-module',package_code)
-                self.write(path/'runtime-dependencies.json', encoded({'python': {
-                    'version': 'synthetic Python fixture', 'executableSHA256': m['binaries']['python']['sha256'],
-                    'packages': [{'name': name, 'version': 'synthetic'} for name in ('fastapi','uvicorn','starlette','flask','gunicorn')],
-                    'files': [{'package': name, 'logicalPath': 'synthetic-module', 'file': 'dependencies/python/synthetic-module', 'sha256': digest(package_code)}
-                              for name in ('fastapi','uvicorn','starlette','flask','gunicorn')]}}))
+                m["runtimeDependencies"] = "runtime-dependencies.json"
+                package_code = (
+                    b"synthetic installed framework code; independent of shared app fixture"
+                )
+                self.write(path / "dependencies/python/synthetic-module", package_code)
+                self.write(
+                    path / "runtime-dependencies.json",
+                    encoded(
+                        {
+                            "python": {
+                                "version": "synthetic Python fixture",
+                                "executableSHA256": m["binaries"]["python"]["sha256"],
+                                "packages": [
+                                    {"name": name, "version": "synthetic"}
+                                    for name in (
+                                        "fastapi",
+                                        "uvicorn",
+                                        "starlette",
+                                        "flask",
+                                        "gunicorn",
+                                    )
+                                ],
+                                "files": [
+                                    {
+                                        "package": name,
+                                        "logicalPath": "synthetic-module",
+                                        "file": "dependencies/python/synthetic-module",
+                                        "sha256": digest(package_code),
+                                    }
+                                    for name in (
+                                        "fastapi",
+                                        "uvicorn",
+                                        "starlette",
+                                        "flask",
+                                        "gunicorn",
+                                    )
+                                ],
+                            }
+                        }
+                    ),
+                )
             self.write(path / "cells.txt", ("\n".join(lines) + "\n").encode())
-            self.write(path / "isolation.json", encoded({"session": m["session"], "origin": origin,
-                       "machine": machine, "posture": m["posture"], "quietSession": True,
-                       "ownedPidsRemaining": 0}))
+            self.write(
+                path / "isolation.json",
+                encoded(
+                    {
+                        "session": m["session"],
+                        "origin": origin,
+                        "machine": machine,
+                        "posture": m["posture"],
+                        "quietSession": True,
+                        "ownedPidsRemaining": 0,
+                    }
+                ),
+            )
             self.manifest(lane)
 
     def write(self, path, data):
@@ -179,24 +346,53 @@ class Fixture:
 
     def verdict(self, path, record, name, count, extra=None):
         record["correctness"].append(name)
-        self.write(path / name, encoded(dict(extra or {}, **{"ok": True, "errors_as_success": False,
-                   "responses_checked": count, "mismatches": 0, "errors": 0, "timeouts": 0})))
+        self.write(
+            path / name,
+            encoded(
+                dict(
+                    extra or {},
+                    **{
+                        "ok": True,
+                        "errors_as_success": False,
+                        "responses_checked": count,
+                        "mismatches": 0,
+                        "errors": 0,
+                        "timeouts": 0,
+                    },
+                )
+            ),
+        )
 
     def seal(self, lane):
         path = self.paths[lane]
-        entries = [(file.relative_to(path).as_posix(), digest(file.read_bytes()))
-                   for file in path.rglob("*") if file.is_file() and file.name != "sha256sums.txt"]
-        self.write(path / "sha256sums.txt", "".join(f"{sha}  {name}\n" for name, sha in sorted(entries)).encode())
+        entries = [
+            (file.relative_to(path).as_posix(), digest(file.read_bytes()))
+            for file in path.rglob("*")
+            if file.is_file() and file.name != "sha256sums.txt"
+        ]
+        self.write(
+            path / "sha256sums.txt",
+            "".join(f"{sha}  {name}\n" for name, sha in sorted(entries)).encode(),
+        )
 
     def manifest(self, lane):
         m = self.manifests[lane]
         self.write(self.paths[lane] / "lane.json", encoded(m))
-        pairs = {"commit": m["origin"]["commit"], "tag": m["origin"]["tag"],
-                 "cpu": m["machine"]["cpu"], "uname": m["machine"]["kernel"],
-                 "nproc": m["machine"]["logicalCpus"], "generated_at": m["startedAt"], "command": m["command"]}
+        pairs = {
+            "commit": m["origin"]["commit"],
+            "tag": m["origin"]["tag"],
+            "cpu": m["machine"]["cpu"],
+            "uname": m["machine"]["kernel"],
+            "nproc": m["machine"]["logicalCpus"],
+            "generated_at": m["startedAt"],
+            "command": m["command"],
+        }
         pairs.update({f"binary.{k}.sha256": v["sha256"] for k, v in m["binaries"].items()})
         pairs.update({f"fixture.{k}.sha256": v["sha256"] for k, v in m["fixtures"].items()})
-        self.write(self.paths[lane] / "manifest.txt", "".join(f"{k}: {v}\n" for k, v in pairs.items()).encode())
+        self.write(
+            self.paths[lane] / "manifest.txt",
+            "".join(f"{k}: {v}\n" for k, v in pairs.items()).encode(),
+        )
         self.seal(lane)
 
     def mutate_json(self, lane, name, change):
@@ -215,9 +411,19 @@ class Fixture:
 
     def proof(self, lane):
         m = self.manifests[lane]
-        self.write(self.paths[lane] / "isolation.json", encoded({
-            "session": m["session"], "origin": m["origin"], "machine": m["machine"],
-            "posture": m["posture"], "quietSession": True, "ownedPidsRemaining": 0}))
+        self.write(
+            self.paths[lane] / "isolation.json",
+            encoded(
+                {
+                    "session": m["session"],
+                    "origin": m["origin"],
+                    "machine": m["machine"],
+                    "posture": m["posture"],
+                    "quietSession": True,
+                    "ownedPidsRemaining": 0,
+                }
+            ),
+        )
         self.manifest(lane)
 
     @contextmanager
@@ -236,9 +442,22 @@ class Fixture:
             self.manifests = previous
 
     def argv(self, density=True):
-        values = ["--repo", str(self.root), "--cold-start", str(self.paths["cold-start"]),
-                  "--qps", str(self.paths["qps"]), "--version", "test", "--release", "v-test",
-                  "--generated-at", "2026-10-20T04:00:00Z", "--data", str(self.root / "data.js")]
+        values = [
+            "--repo",
+            str(self.root),
+            "--cold-start",
+            str(self.paths["cold-start"]),
+            "--qps",
+            str(self.paths["qps"]),
+            "--version",
+            "test",
+            "--release",
+            "v-test",
+            "--generated-at",
+            "2026-10-20T04:00:00Z",
+            "--data",
+            str(self.root / "data.js"),
+        ]
         return values + (["--density", str(self.paths["density"])] if density else [])
 
 
@@ -286,7 +505,9 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.assertEqual(point["density"], {})
         self.assertNotIn("density", point["origins"])
         with self.fixture.transaction():
-            self.fixture.write(self.fixture.paths["density"] / "cells.txt", b"capsid 10k workers=2 pss_mb=fail\n")
+            self.fixture.write(
+                self.fixture.paths["density"] / "cells.txt", b"capsid 10k workers=2 pss_mb=fail\n"
+            )
             with self.assertRaisesRegex(contract.EvidenceError, "invalid number"):
                 self.collect()
 
@@ -297,9 +518,13 @@ class PerformanceEvidenceTests(unittest.TestCase):
         with f.transaction():
             file = f.paths["qps"] / "lane.json"
             f.write(file, file.read_bytes() + b" ")
-            result = subprocess.run([sys.executable, "-B", str(args.collector.resolve()), *f.argv()],
-                                    capture_output=True, text=True, timeout=15,
-                                    env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+            result = subprocess.run(
+                [sys.executable, "-B", str(args.collector.resolve()), *f.argv()],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+            )
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertIn("SHA-256 mismatch", result.stderr)
             self.assertNotIn("Traceback", result.stderr)
@@ -307,13 +532,19 @@ class PerformanceEvidenceTests(unittest.TestCase):
 
     def test_parser_boundaries_reject_duplicates_bad_numbers_and_rows(self):
         f = self.fixture
-        for lane, parse in (("cold-start", collector.parse_cold_start),
-                            ("qps", collector.parse_qps), ("density", collector.parse_density)):
+        for lane, parse in (
+            ("cold-start", collector.parse_cold_start),
+            ("qps", collector.parse_qps),
+            ("density", collector.parse_density),
+        ):
             original = (f.paths[lane] / "cells.txt").read_bytes()
-            for bad in (b"not a row\n", original.splitlines()[0] + b"\n" + original,
-                        original.replace(b"=1.0", b"=NaN", 1),
-                        original.replace(b"=1.0", b"=inf", 1),
-                        original.replace(b"=1.0", b"=-1", 1)):
+            for bad in (
+                b"not a row\n",
+                original.splitlines()[0] + b"\n" + original,
+                original.replace(b"=1.0", b"=NaN", 1),
+                original.replace(b"=1.0", b"=inf", 1),
+                original.replace(b"=1.0", b"=-1", 1),
+            ):
                 with self.subTest(lane=lane, bad=bad[:65]), f.transaction():
                     f.write(f.paths[lane] / "cells.txt", bad)
                     with self.assertRaises(contract.EvidenceError):
@@ -322,14 +553,22 @@ class PerformanceEvidenceTests(unittest.TestCase):
     def test_manifest_and_provenance_rejections(self):
         f = self.fixture
         cases = [
-            ("status", "running", "complete"), ("schema", 99, "manifest"),
-            ("lane", "cold-start", "manifest"), ("session", "", "session"),
+            ("status", "running", "complete"),
+            ("schema", 99, "manifest"),
+            ("lane", "cold-start", "manifest"),
+            ("session", "", "session"),
             ("posture", {}, "posture"),
-            ("posture", {"platform": "linux", "mode": "static-pool", "sandbox": "strict"}, "posture"),
+            (
+                "posture",
+                {"platform": "linux", "mode": "static-pool", "sandbox": "strict"},
+                "posture",
+            ),
             ("startedAt", "2026-10-20T01:00:00", "timezone"),
             ("completedAt", "2026-10-19T01:00:00Z", "interval"),
-            ("records", [], "missing raw records"), ("binaries", {}, "binary identities"),
-            ("fixtures", {}, "fixture identities"), ("memory", "missing.json", "SHA-256 entry"),
+            ("records", [], "missing raw records"),
+            ("binaries", {}, "binary identities"),
+            ("fixtures", {}, "fixture identities"),
+            ("memory", "missing.json", "SHA-256 entry"),
         ]
         for key, value, error in cases:
             with self.subTest(key=key, value=value), f.transaction():
@@ -338,14 +577,15 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(contract.EvidenceError, error):
                     self.collect()
         for section, key, value, error in [
-                ("origin", "commit", "bad", "source identity"),
-                ("origin", "clean", False, "source identity"),
-                ("origin", "version", "other", "source identity"),
-                ("origin", "release", "other", "source identity"),
-                ("machine", "cpu", "unknown", "identity"),
-                ("machine", "logicalCpus", True, "integer"),
-                ("protocol", "rounds", 3, "protocol"),
-                ("protocol", "connections", 63, "protocol")]:
+            ("origin", "commit", "bad", "source identity"),
+            ("origin", "clean", False, "source identity"),
+            ("origin", "version", "other", "source identity"),
+            ("origin", "release", "other", "source identity"),
+            ("machine", "cpu", "unknown", "identity"),
+            ("machine", "logicalCpus", True, "integer"),
+            ("protocol", "rounds", 3, "protocol"),
+            ("protocol", "connections", 63, "protocol"),
+        ]:
             with self.subTest(section=section, key=key), f.transaction():
                 f.manifests["qps"][section][key] = value
                 f.manifest("qps")
@@ -364,22 +604,37 @@ class PerformanceEvidenceTests(unittest.TestCase):
             ("qps", lambda rows: rows[1].update(p50_ms=9), "percentile"),
             ("cold-start", lambda rows: rows.pop(), "five distinct"),
             ("cold-start", lambda rows: rows[0].update(ok=False), "failed response"),
-            ("cold-start", lambda rows: rows[0].update(pss_readings_kb=[1024, 1025]), "stable positive"),
+            (
+                "cold-start",
+                lambda rows: rows[0].update(pss_readings_kb=[1024, 1025]),
+                "stable positive",
+            ),
             ("cold-start", lambda rows: rows[0].update(total_ms=10), "cold timing"),
             ("density", lambda rows: rows[0].update(status="error"), "final verification"),
             ("density", lambda rows: rows[0].update(finalVerification=False), "final verification"),
             ("density", lambda rows: rows[0].update(pss_readings_kb=[0, 0]), "PSS"),
-            ("density", lambda rows: rows[0].update(pss_readings_kb=[3 * 1024 * 1024] * 2), "exceeded budget"),
-            ("density", lambda rows: rows[0].update(requestsPerWorker={"only-one": 100}), "per-worker"),
+            (
+                "density",
+                lambda rows: rows[0].update(pss_readings_kb=[3 * 1024 * 1024] * 2),
+                "exceeded budget",
+            ),
+            (
+                "density",
+                lambda rows: rows[0].update(requestsPerWorker={"only-one": 100}),
+                "per-worker",
+            ),
         ]
         for lane, mutate, error in cases:
             with self.subTest(lane=lane, error=error), f.transaction():
                 f.mutate_raw(lane, 0, mutate)
                 with self.assertRaisesRegex(contract.EvidenceError, error):
                     self.collect()
-        for field, value, error in (("ok", False, "verdict"), ("mismatches", 1, "nonzero"),
-                                    ("errors_as_success", True, "verdict"),
-                                    ("responses_checked", 1, "correctness count")):
+        for field, value, error in (
+            ("ok", False, "verdict"),
+            ("mismatches", 1, "nonzero"),
+            ("errors_as_success", True, "verdict"),
+            ("responses_checked", 1, "correctness count"),
+        ):
             with self.subTest(field=field), f.transaction():
                 name = f.manifests["qps"]["records"][0]["correctness"][0]
                 f.mutate_json("qps", name, lambda d: d.update({field: value}))
@@ -388,17 +643,27 @@ class PerformanceEvidenceTests(unittest.TestCase):
 
     def test_density_warmup_policy_and_actual_wave_must_agree(self):
         f = self.fixture
-        for field, value in (("warmupConcurrencyLimit", 63), ("warmupConcurrencyLimit", True),
-                             ("warmupConcurrencyLimit", 128),
-                             ("maximumWaveRequests", 257), ("maximumWaveRequests", 0),
-                             ("maximumRequestsAllowed", 999999), ("coverageTimeoutSeconds", 301)):
+        for field, value in (
+            ("warmupConcurrencyLimit", 63),
+            ("warmupConcurrencyLimit", True),
+            ("warmupConcurrencyLimit", 128),
+            ("maximumWaveRequests", 257),
+            ("maximumWaveRequests", 0),
+            ("maximumRequestsAllowed", 999999),
+            ("coverageTimeoutSeconds", 301),
+        ):
             with self.subTest(field=field, value=value), f.transaction():
                 name = f.manifests["density"]["records"][0]["correctness"][0]
                 f.mutate_json("density", name, lambda row: row.update({field: value}))
                 with self.assertRaisesRegex(contract.EvidenceError, "warmup"):
                     self.collect()
-        for field in ("warmupConcurrencyPolicy", "warmupConcurrencyFactor", "requestsPerInstancePerWave",
-                      "capsidConditioning", "workerdConditioning"):
+        for field in (
+            "warmupConcurrencyPolicy",
+            "warmupConcurrencyFactor",
+            "requestsPerInstancePerWave",
+            "capsidConditioning",
+            "workerdConditioning",
+        ):
             with self.subTest(field=field), f.transaction():
                 del f.manifests["density"]["protocol"][field]
                 f.manifest("density")
@@ -412,318 +677,444 @@ class PerformanceEvidenceTests(unittest.TestCase):
 
     def test_density_producer_and_publication_conditioning_limits_agree(self):
         from density_probe import DensityProbe
+
         protocol = contract.PROTOCOL["density"]
         self.assertEqual(128, protocol["warmupConcurrencyFactor"])
-        probe = DensityProbe(host="unused", worker="unused", workerd="unused",
-                             apps=self.fixture.root, out=self.fixture.root, cpuset="0-3")
+        probe = DensityProbe(
+            host="unused",
+            worker="unused",
+            workerd="unused",
+            apps=self.fixture.root,
+            out=self.fixture.root,
+            cpuset="0-3",
+        )
         self.assertEqual(64, protocol["parallelRequests"])
         self.assertEqual(64, probe.parallel)
         for count, expected in ((1, 128), (2, 256), (65, 8320)):
             with self.subTest(count=count):
                 self.assertEqual(expected, probe.warmup_concurrency(count))
-                self.assertEqual(expected, max(protocol["parallelRequests"],
-                                              count * protocol["warmupConcurrencyFactor"]))
+                self.assertEqual(
+                    expected,
+                    max(protocol["parallelRequests"], count * protocol["warmupConcurrencyFactor"]),
+                )
 
-    def density_probe_record(self, stack='capsid', phase='cold'):
+    def density_probe_record(self, stack="capsid", phase="cold"):
         f = self.fixture
-        index, record = next((i,r) for i,r in enumerate(f.manifests['density']['records'])
-                             if r['stack']==stack and r['phase']==phase)
-        rows = [json.loads(line) for line in (f.paths['density']/record['samples'][0]).read_text().splitlines()]
+        index, record = next(
+            (i, r)
+            for i, r in enumerate(f.manifests["density"]["records"])
+            if r["stack"] == stack and r["phase"] == phase
+        )
+        rows = [
+            json.loads(line)
+            for line in (f.paths["density"] / record["samples"][0]).read_text().splitlines()
+        ]
         return index, record, rows[0]
 
     def mutate_density_jsonl(self, name, change):
         f = self.fixture
-        path = f.paths['density']/name
+        path = f.paths["density"] / name
         rows = [json.loads(line) for line in path.read_text().splitlines()]
         change(rows)
-        f.write(path,b''.join(encoded(row) for row in rows))
-        f.seal('density')
+        f.write(path, b"".join(encoded(row) for row in rows))
+        f.seal("density")
 
     def test_density_conditioning_summaries_cannot_replace_the_protocol(self):
         f = self.fixture
         _, record, _ = self.density_probe_record()
-        for field, value in (('conditioningMethod','old-burst'), ('conditioningWaves',True),
-                             ('conditioningWaves',2), ('conditioningSeconds',301),
-                             ('conditioningSeconds',0), ('externalWorkerExecutionBarrier',False),
-                             ('conditioningEvidence','../requests.jsonl'), ('barrierWaves',0),
-                             ('maximumWaveRequests',1)):
-            with self.subTest(field=field,value=value), f.transaction():
-                f.mutate_json('density',record['correctness'][0],lambda item:item.update({field:value}))
-                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+        for field, value in (
+            ("conditioningMethod", "old-burst"),
+            ("conditioningWaves", True),
+            ("conditioningWaves", 2),
+            ("conditioningSeconds", 301),
+            ("conditioningSeconds", 0),
+            ("externalWorkerExecutionBarrier", False),
+            ("conditioningEvidence", "../requests.jsonl"),
+            ("barrierWaves", 0),
+            ("maximumWaveRequests", 1),
+        ):
+            with self.subTest(field=field, value=value), f.transaction():
+                f.mutate_json(
+                    "density", record["correctness"][0], lambda item: item.update({field: value})
+                )
+                with self.assertRaisesRegex(contract.EvidenceError, "conditioning"):
                     self.collect()
 
     def test_density_resealed_response_rows_are_independently_checked(self):
         f = self.fixture
         _, _, row = self.density_probe_record()
-        name = row['probeDirectory']+'/requests.jsonl'
-        for field, value in (('status',503),('ok',False),('bodySHA256','0'*64),
-                             ('sequence',True),('waveRequests',1),('port',1),
-                             ('warmupConcurrencyLimit',True),('externalWorkerExecutionBarrier',False)):
+        name = row["probeDirectory"] + "/requests.jsonl"
+        for field, value in (
+            ("status", 503),
+            ("ok", False),
+            ("bodySHA256", "0" * 64),
+            ("sequence", True),
+            ("waveRequests", 1),
+            ("port", 1),
+            ("warmupConcurrencyLimit", True),
+            ("externalWorkerExecutionBarrier", False),
+        ):
             with self.subTest(field=field), f.transaction():
-                self.mutate_density_jsonl(name,lambda rows:rows[0].update({field:value}))
-                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                self.mutate_density_jsonl(name, lambda rows: rows[0].update({field: value}))
+                with self.assertRaisesRegex(contract.EvidenceError, "conditioning"):
                     self.collect()
         with f.transaction():
-            self.mutate_density_jsonl(name,lambda rows:rows.pop())
-            with self.assertRaisesRegex(contract.EvidenceError,'raw response count'):
+            self.mutate_density_jsonl(name, lambda rows: rows.pop())
+            with self.assertRaisesRegex(contract.EvidenceError, "raw response count"):
                 self.collect()
 
     def test_density_resealed_barriers_require_dispatch_and_every_resume(self):
         f = self.fixture
-        _, _, row = self.density_probe_record(phase='warm')
-        name = row['probeDirectory']+'/runtime/prewarm-barriers.jsonl'
+        _, _, row = self.density_probe_record(phase="warm")
+        name = row["probeDirectory"] + "/runtime/prewarm-barriers.jsonl"
         changes = [
             lambda rows: rows[0].update(rootPaused=True),
             lambda rows: rows[0].update(observedHttpInflightBeforeResume=1),
             lambda rows: rows[0].update(resumeSignalsIssued=1),
             lambda rows: rows[0].update(resumeSignalsAttempted=True),
-            lambda rows: rows[0].update(resumeFailures=[{'message':'failed'}]),
+            lambda rows: rows[0].update(resumeFailures=[{"message": "failed"}]),
             lambda rows: rows[0].update(pauseSeconds=5),
             lambda rows: rows[0].update(wave=2),
-            lambda rows: rows[0]['workers'][0].update(start=999999),
+            lambda rows: rows[0]["workers"][0].update(start=999999),
             lambda rows: rows.pop(),
         ]
         for position, change in enumerate(changes):
             with self.subTest(change=position), f.transaction():
-                self.mutate_density_jsonl(name,change)
-                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                self.mutate_density_jsonl(name, change)
+                with self.assertRaisesRegex(contract.EvidenceError, "conditioning"):
                     self.collect()
 
     def test_density_http_idle_admission_rechecks_every_raw_gauge_and_shared_deadline(self):
         f = self.fixture
-        _, _, row = self.density_probe_record(phase='warm')
-        name = row['probeDirectory']+'/runtime/prewarm-barriers.jsonl'
+        _, _, row = self.density_probe_record(phase="warm")
+        name = row["probeDirectory"] + "/runtime/prewarm-barriers.jsonl"
         changes = [
-            lambda rows: rows[0].pop('idleReadiness'),
-            lambda rows: rows[0]['idleReadiness'].update(readings=[]),
-            lambda rows: rows[0]['idleReadiness']['readings'][0].update(httpInflight=1),
-            lambda rows: rows[0]['idleReadiness']['readings'][0].update(rawGauge='capsid_channel_http_inflight{scope="service",listener=""} 1'),
-            lambda rows: rows[1]['idleReadiness'].update(deadlineMonotonic=700),
+            lambda rows: rows[0].pop("idleReadiness"),
+            lambda rows: rows[0]["idleReadiness"].update(readings=[]),
+            lambda rows: rows[0]["idleReadiness"]["readings"][0].update(httpInflight=1),
+            lambda rows: rows[0]["idleReadiness"]["readings"][0].update(
+                rawGauge='capsid_channel_http_inflight{scope="service",listener=""} 1'
+            ),
+            lambda rows: rows[1]["idleReadiness"].update(deadlineMonotonic=700),
             lambda rows: rows[0].update(pauseStartedMonotonic=99),
-            lambda rows: rows[0]['idleReadiness'].update(admittedMonotonic=401),
-            lambda rows: rows[0]['idleReadiness']['readings'][0].update(startedMonotonic=99),
+            lambda rows: rows[0]["idleReadiness"].update(admittedMonotonic=401),
+            lambda rows: rows[0]["idleReadiness"]["readings"][0].update(startedMonotonic=99),
         ]
         for position, change in enumerate(changes):
             with self.subTest(change=position), f.transaction():
-                self.mutate_density_jsonl(name,change)
-                with self.assertRaisesRegex(contract.EvidenceError,'HTTP idle'):
+                self.mutate_density_jsonl(name, change)
+                with self.assertRaisesRegex(contract.EvidenceError, "HTTP idle"):
                     self.collect()
 
     def test_density_resealed_pss_cannot_omit_processes_or_replace_the_samples(self):
         f = self.fixture
         index, _, _ = self.density_probe_record()
         changes = [
-            lambda row: row['pssSamples'][0]['processes'].pop(),
-            lambda row: row['pssSamples'][0]['processes'][0].update(start=999999),
-            lambda row: row['pssSamples'][0]['processes'][0].update(pss_kb=True),
-            lambda row: row['pssSamples'][0]['processes'][0].update(pss_kb=999999),
-            lambda row: row.update(pssSamples=row['pssSamples'][:1]),
-            lambda row: row['readyProcesses'].pop(),
-            lambda row: row['readyProcesses'][0].update(state=None),
+            lambda row: row["pssSamples"][0]["processes"].pop(),
+            lambda row: row["pssSamples"][0]["processes"][0].update(start=999999),
+            lambda row: row["pssSamples"][0]["processes"][0].update(pss_kb=True),
+            lambda row: row["pssSamples"][0]["processes"][0].update(pss_kb=999999),
+            lambda row: row.update(pssSamples=row["pssSamples"][:1]),
+            lambda row: row["readyProcesses"].pop(),
+            lambda row: row["readyProcesses"][0].update(state=None),
         ]
         for position, change in enumerate(changes):
             with self.subTest(change=position), f.transaction():
-                f.mutate_raw('density',index,lambda rows:change(rows[0]))
-                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                f.mutate_raw("density", index, lambda rows: change(rows[0]))
+                with self.assertRaisesRegex(contract.EvidenceError, "conditioning"):
                     self.collect()
 
     def test_density_business_logs_and_readiness_are_reparsed_after_resealing(self):
         f = self.fixture
         _, _, row = self.density_probe_record()
-        path = f.paths['density']/row['probeDirectory']/'stderr.log'
+        path = f.paths["density"] / row["probeDirectory"] / "stderr.log"
         original = path.read_text().splitlines()
+
         def wrong_nonce(lines):
-            value=json.loads(lines[-1].split('CAPSID_BENCH_DENSITY_V1 ',1)[1])
-            value['nonce']='f'*32
-            lines[-1]='CAPSID_BENCH_DENSITY_V1 '+json.dumps(value)
+            value = json.loads(lines[-1].split("CAPSID_BENCH_DENSITY_V1 ", 1)[1])
+            value["nonce"] = "f" * 32
+            lines[-1] = "CAPSID_BENCH_DENSITY_V1 " + json.dumps(value)
+
         def repeated_counter(lines):
-            lines[-1]=lines[-2]
+            lines[-1] = lines[-2]
+
         def early_request(lines):
-            lines.insert(1,lines.pop(2))
-        for name, change in [('wrong-nonce',wrong_nonce),('repeated-counter',repeated_counter),
-                             ('early-request',early_request),('missing-counter',lambda lines:lines.pop())]:
+            lines.insert(1, lines.pop(2))
+
+        for name, change in [
+            ("wrong-nonce", wrong_nonce),
+            ("repeated-counter", repeated_counter),
+            ("early-request", early_request),
+            ("missing-counter", lambda lines: lines.pop()),
+        ]:
             with self.subTest(change=name), f.transaction():
-                lines=list(original);change(lines)
-                f.write(path,('\n'.join(lines)+'\n').encode());f.seal('density')
-                with self.assertRaisesRegex(contract.EvidenceError,'conditioning'):
+                lines = list(original)
+                change(lines)
+                f.write(path, ("\n".join(lines) + "\n").encode())
+                f.seal("density")
+                with self.assertRaisesRegex(contract.EvidenceError, "conditioning"):
                     self.collect()
 
     def test_workerd_startup_control_events_are_independently_reparsed(self):
         f = self.fixture
-        index, _, row = self.density_probe_record(stack='workerd')
-        path = f.paths['density']/row['probeDirectory']/'stderr.log'
+        index, _, row = self.density_probe_record(stack="workerd")
+        path = f.paths["density"] / row["probeDirectory"] / "stderr.log"
         original = path.read_text().splitlines()
+
         def wrong_port(lines):
-            value = json.loads(lines[0]); value['port'] += 1
+            value = json.loads(lines[0])
+            value["port"] += 1
             lines[0] = json.dumps(value)
+
         def wrong_socket(lines):
-            value = json.loads(lines[0]); value['socket'] = 's999'
+            value = json.loads(lines[0])
+            value["socket"] = "s999"
             lines[0] = json.dumps(value)
+
         def early_business(lines):
             lines.insert(0, lines.pop(2))
-        changes = [('missing', lambda lines: lines.pop(0)),
-                   ('repeated', lambda lines: lines.insert(0, lines[0])),
-                   ('wrong-port', wrong_port), ('wrong-socket', wrong_socket),
-                   ('early-business', early_business)]
+
+        changes = [
+            ("missing", lambda lines: lines.pop(0)),
+            ("repeated", lambda lines: lines.insert(0, lines[0])),
+            ("wrong-port", wrong_port),
+            ("wrong-socket", wrong_socket),
+            ("early-business", early_business),
+        ]
         for name, change in changes:
             with self.subTest(change=name), f.transaction():
-                lines = list(original); change(lines)
-                f.write(path, ('\n'.join(lines)+'\n').encode()); f.seal('density')
-                with self.assertRaisesRegex(contract.EvidenceError, 'conditioning'):
+                lines = list(original)
+                change(lines)
+                f.write(path, ("\n".join(lines) + "\n").encode())
+                f.seal("density")
+                with self.assertRaisesRegex(contract.EvidenceError, "conditioning"):
                     self.collect()
         with f.transaction():
-            f.mutate_raw('density', index, lambda rows: rows[0]['readiness'].update(sockets=1))
-            with self.assertRaisesRegex(contract.EvidenceError, 'startup readiness'):
+            f.mutate_raw("density", index, lambda rows: rows[0]["readiness"].update(sockets=1))
+            with self.assertRaisesRegex(contract.EvidenceError, "startup readiness"):
                 self.collect()
 
     def test_runtime_snapshot_tar_and_index_are_reparsed_after_resealing(self):
         import tarfile
+
         f = self.fixture
         _, _, row = self.density_probe_record()
-        directory = row['probeDirectory']
-        index_path = f.paths['density']/directory/'runtime-nonportable.json'
-        tar_path = f.paths['density']/directory/'runtime-nonportable.tar'
-        for case in ('forged-hash', 'omitted-member', 'repeated-member', 'traversal',
-                     'drive-name', 'symlink', 'wrong-bytes', 'broken-tar'):
+        directory = row["probeDirectory"]
+        index_path = f.paths["density"] / directory / "runtime-nonportable.json"
+        tar_path = f.paths["density"] / directory / "runtime-nonportable.tar"
+        for case in (
+            "forged-hash",
+            "omitted-member",
+            "repeated-member",
+            "traversal",
+            "drive-name",
+            "symlink",
+            "wrong-bytes",
+            "broken-tar",
+        ):
             with self.subTest(case=case), f.transaction():
                 index = json.loads(index_path.read_text())
-                with tarfile.open(tar_path, 'r:') as tar:
+                with tarfile.open(tar_path, "r:") as tar:
                     name = tar.getnames()[0]
                     data = tar.extractfile(name).read()
-                if case == 'forged-hash':
-                    index['members'][0]['sha256'] = 'f'*64
-                elif case == 'traversal':
-                    name = '../'+name
-                    index['members'][0]['name'] = name
-                elif case == 'drive-name':
-                    name = 'C:/'+name
-                    index['members'][0]['name'] = name
-                elif case == 'wrong-bytes':
-                    data = b'X'*len(data)
+                if case == "forged-hash":
+                    index["members"][0]["sha256"] = "f" * 64
+                elif case == "traversal":
+                    name = "../" + name
+                    index["members"][0]["name"] = name
+                elif case == "drive-name":
+                    name = "C:/" + name
+                    index["members"][0]["name"] = name
+                elif case == "wrong-bytes":
+                    data = b"X" * len(data)
                 memory = io.BytesIO()
-                with tarfile.open(fileobj=memory, mode='w:') as tar:
-                    if case != 'omitted-member':
-                        info = tarfile.TarInfo(name); info.size = len(data)
-                        if case == 'symlink':
-                            info.type = tarfile.SYMTYPE; info.linkname = '../../foreign'
+                with tarfile.open(fileobj=memory, mode="w:") as tar:
+                    if case != "omitted-member":
+                        info = tarfile.TarInfo(name)
+                        info.size = len(data)
+                        if case == "symlink":
+                            info.type = tarfile.SYMTYPE
+                            info.linkname = "../../foreign"
                             tar.addfile(info)
                         else:
                             tar.addfile(info, io.BytesIO(data))
-                        if case == 'repeated-member':
+                        if case == "repeated-member":
                             tar.addfile(info, io.BytesIO(data))
                 f.write(index_path, encoded(index))
-                f.write(tar_path, b'invalid tar bytes' if case == 'broken-tar' else memory.getvalue())
-                f.seal('density')
-                with self.assertRaisesRegex(contract.EvidenceError, 'runtime snapshot'):
+                f.write(
+                    tar_path, b"invalid tar bytes" if case == "broken-tar" else memory.getvalue()
+                )
+                f.seal("density")
+                with self.assertRaisesRegex(contract.EvidenceError, "runtime snapshot"):
                     self.collect()
 
     def test_workerd_network_headroom_and_shared_deadline_are_reparsed(self):
         f = self.fixture
-        index, _, row = self.density_probe_record(stack='workerd')
-        directory = row['probeDirectory']
-        for case in ('missing-summary', 'unsafe-capacity', 'extended-deadline', 'early-launch',
-                     'late-service', 'missing-reading', 'forged-summary', 'wrong-admission'):
+        index, _, row = self.density_probe_record(stack="workerd")
+        directory = row["probeDirectory"]
+        for case in (
+            "missing-summary",
+            "unsafe-capacity",
+            "extended-deadline",
+            "early-launch",
+            "late-service",
+            "missing-reading",
+            "forged-summary",
+            "wrong-admission",
+        ):
             with self.subTest(case=case), f.transaction():
-                network = json.loads((f.paths['density']/directory/'network-startup.json').read_text())
-                readings = [json.loads(v) for v in (f.paths['density']/directory/'network-headroom.jsonl').read_text().splitlines()]
-                if case == 'unsafe-capacity':
-                    readings[0]['current'] = readings[0]['maximum']
-                elif case == 'extended-deadline':
-                    network['deadlineMonotonic'] = 240
-                elif case == 'early-launch':
-                    network['launchStartedMonotonic'] = 10
-                elif case == 'late-service':
-                    network['readyMonotonic'] = 131
-                elif case == 'missing-reading':
+                network = json.loads(
+                    (f.paths["density"] / directory / "network-startup.json").read_text()
+                )
+                readings = [
+                    json.loads(v)
+                    for v in (f.paths["density"] / directory / "network-headroom.jsonl")
+                    .read_text()
+                    .splitlines()
+                ]
+                if case == "unsafe-capacity":
+                    readings[0]["current"] = readings[0]["maximum"]
+                elif case == "extended-deadline":
+                    network["deadlineMonotonic"] = 240
+                elif case == "early-launch":
+                    network["launchStartedMonotonic"] = 10
+                elif case == "late-service":
+                    network["readyMonotonic"] = 131
+                elif case == "missing-reading":
                     readings.clear()
-                elif case == 'forged-summary':
-                    network['readings'] = 2
-                elif case == 'wrong-admission':
-                    network['admittedMonotonic'] = 10.005
-                f.write(f.paths['density']/directory/'network-startup.json', encoded(network))
-                f.write(f.paths['density']/directory/'network-headroom.jsonl', b''.join(encoded(v) for v in readings))
-                f.mutate_raw('density', index, lambda rows: rows[0].pop('startupNetworkReadiness') if case == 'missing-summary'
-                             else rows[0].update(startupNetworkReadiness=network))
-                with self.assertRaisesRegex(contract.EvidenceError, 'network'):
+                elif case == "forged-summary":
+                    network["readings"] = 2
+                elif case == "wrong-admission":
+                    network["admittedMonotonic"] = 10.005
+                f.write(f.paths["density"] / directory / "network-startup.json", encoded(network))
+                f.write(
+                    f.paths["density"] / directory / "network-headroom.jsonl",
+                    b"".join(encoded(v) for v in readings),
+                )
+                f.mutate_raw(
+                    "density",
+                    index,
+                    lambda rows: (
+                        rows[0].pop("startupNetworkReadiness")
+                        if case == "missing-summary"
+                        else rows[0].update(startupNetworkReadiness=network)
+                    ),
+                )
+                with self.assertRaisesRegex(contract.EvidenceError, "network"):
                     self.collect()
 
     def test_density_coupled_cleanup_forgery_still_needs_the_actual_resume_log(self):
         f = self.fixture
         index, _, row = self.density_probe_record()
-        name = row['probeDirectory']+'/cleanup.json'
+        name = row["probeDirectory"] + "/cleanup.json"
+
         def remove_resumes(cleanup):
-            cleanup['signals']=[s for s in cleanup['signals'] if s['signal']!='SIGCONT']
+            cleanup["signals"] = [s for s in cleanup["signals"] if s["signal"] != "SIGCONT"]
+
         with f.transaction():
-            f.mutate_json('density',name,remove_resumes)
-            changed=json.loads((f.paths['density']/name).read_text())
-            f.mutate_raw('density',index,lambda rows:rows[0].update(cleanup=changed))
-            with self.assertRaisesRegex(contract.EvidenceError,'actual signal log'):
+            f.mutate_json("density", name, remove_resumes)
+            changed = json.loads((f.paths["density"] / name).read_text())
+            f.mutate_raw("density", index, lambda rows: rows[0].update(cleanup=changed))
+            with self.assertRaisesRegex(contract.EvidenceError, "actual signal log"):
                 self.collect()
 
     def test_qps_payload_claims_cannot_be_omitted_or_swapped(self):
         f = self.fixture
-        claims = {'workload': 'stream', 'response_validation': 'three-position-check',
-                  'payload_bytes': 1, 'expected_body_sha256': '0' * 64}
-        for field, value in {**claims, 'request_timeout_ms': 1}.items():
+        claims = {
+            "workload": "stream",
+            "response_validation": "three-position-check",
+            "payload_bytes": 1,
+            "expected_body_sha256": "0" * 64,
+        }
+        for field, value in {**claims, "request_timeout_ms": 1}.items():
             for missing in (False, True):
-                with self.subTest(field=field, missing=missing, location='raw'), f.transaction():
+                with self.subTest(field=field, missing=missing, location="raw"), f.transaction():
+
                     def change(rows):
-                        if missing: rows[1].pop(field)
-                        else: rows[1][field] = value
-                    f.mutate_raw('qps', 0, change)
-                    with self.assertRaises(contract.EvidenceError): self.collect()
+                        if missing:
+                            rows[1].pop(field)
+                        else:
+                            rows[1][field] = value
+
+                    f.mutate_raw("qps", 0, change)
+                    with self.assertRaises(contract.EvidenceError):
+                        self.collect()
         for field, value in claims.items():
             for missing in (False, True):
-                with self.subTest(field=field, missing=missing, location='verdict'), f.transaction():
-                    name = f.manifests['qps']['records'][0]['correctness'][0]
+                with (
+                    self.subTest(field=field, missing=missing, location="verdict"),
+                    f.transaction(),
+                ):
+                    name = f.manifests["qps"]["records"][0]["correctness"][0]
+
                     def change(value_object):
-                        if missing: value_object.pop(field)
-                        else: value_object[field] = value
-                    f.mutate_json('qps', name, change)
-                    with self.assertRaises(contract.EvidenceError): self.collect()
+                        if missing:
+                            value_object.pop(field)
+                        else:
+                            value_object[field] = value
+
+                    f.mutate_json("qps", name, change)
+                    with self.assertRaises(contract.EvidenceError):
+                        self.collect()
 
     def test_qps_dispatched_and_checked_counts_must_equal_completed(self):
         f = self.fixture
         for index in (0, 1):
-            for field in ('requests_attempted', 'responses_checked'):
+            for field in ("requests_attempted", "responses_checked"):
                 for missing in (False, True):
                     with self.subTest(index=index, field=field, missing=missing), f.transaction():
+
                         def change(rows):
-                            if missing: rows[index].pop(field)
-                            else: rows[index][field] = 0
-                        f.mutate_raw('qps', 0, change)
-                        with self.assertRaises(contract.EvidenceError): self.collect()
+                            if missing:
+                                rows[index].pop(field)
+                            else:
+                                rows[index][field] = 0
+
+                        f.mutate_raw("qps", 0, change)
+                        with self.assertRaises(contract.EvidenceError):
+                            self.collect()
         for missing in (False, True):
-            with self.subTest(missing=missing, location='verdict'), f.transaction():
-                name = f.manifests['qps']['records'][0]['correctness'][0]
+            with self.subTest(missing=missing, location="verdict"), f.transaction():
+                name = f.manifests["qps"]["records"][0]["correctness"][0]
+
                 def change(value):
-                    if missing: value.pop('requests_attempted')
-                    else: value['requests_attempted'] = 0
-                f.mutate_json('qps', name, change)
-                with self.assertRaises(contract.EvidenceError): self.collect()
+                    if missing:
+                        value.pop("requests_attempted")
+                    else:
+                        value["requests_attempted"] = 0
+
+                f.mutate_json("qps", name, change)
+                with self.assertRaises(contract.EvidenceError):
+                    self.collect()
 
     def test_qps_memory_needs_complete_process_requests_cleanup_and_phase_evidence(self):
         f = self.fixture
-        mutations = [lambda d:d['capsid']['serving'].pop('measurementRoots'),
-            lambda d:d['capsid']['serving'].update(measurementProcesses=[]),
-            lambda d:d['capsid']['serving'].pop('pssSamples'),
-            lambda d:d['capsid']['serving'].update(pss_readings_kb=[1024,2048]),
-            lambda d:d['capsid']['serving']['cleanup'].update(ownedPidsRemaining=1),
-            lambda d:d['capsid']['serving']['cleanup']['trees'].pop(),
-            lambda d:d['capsid']['serving'].update(loadgenProcesses=[]),
-            lambda d:d['capsid']['lowLoad']['requests'][4].update(bodySHA256='0'*64),
-            lambda d:d['capsid']['lowLoad']['requests'].pop(),
-            lambda d:d['capsid']['lowLoad'].update(cleanupCompletedMonotonic=100)]
+        mutations = [
+            lambda d: d["capsid"]["serving"].pop("measurementRoots"),
+            lambda d: d["capsid"]["serving"].update(measurementProcesses=[]),
+            lambda d: d["capsid"]["serving"].pop("pssSamples"),
+            lambda d: d["capsid"]["serving"].update(pss_readings_kb=[1024, 2048]),
+            lambda d: d["capsid"]["serving"]["cleanup"].update(ownedPidsRemaining=1),
+            lambda d: d["capsid"]["serving"]["cleanup"]["trees"].pop(),
+            lambda d: d["capsid"]["serving"].update(loadgenProcesses=[]),
+            lambda d: d["capsid"]["lowLoad"]["requests"][4].update(bodySHA256="0" * 64),
+            lambda d: d["capsid"]["lowLoad"]["requests"].pop(),
+            lambda d: d["capsid"]["lowLoad"].update(cleanupCompletedMonotonic=100),
+        ]
         for number, mutate in enumerate(mutations):
             with self.subTest(number=number), f.transaction():
-                memory=json.loads((f.paths['qps']/'memory.json').read_text());mutate(memory)
+                memory = json.loads((f.paths["qps"] / "memory.json").read_text())
+                mutate(memory)
                 # Keep the sealed probe copy consistent too; rejection must
                 # check the semantics rather than just cross-file equality.
-                for phase in ('lowLoad','serving'):
-                    value=dict(memory['capsid'][phase]);proof=value.pop('resultFile')
-                    f.write(f.paths['qps']/proof,encoded(value))
-                f.write(f.paths['qps']/'memory.json',encoded(memory));f.seal('qps')
-                with self.assertRaises(contract.EvidenceError):self.collect()
+                for phase in ("lowLoad", "serving"):
+                    value = dict(memory["capsid"][phase])
+                    proof = value.pop("resultFile")
+                    f.write(f.paths["qps"] / proof, encoded(value))
+                f.write(f.paths["qps"] / "memory.json", encoded(memory))
+                f.seal("qps")
+                with self.assertRaises(contract.EvidenceError):
+                    self.collect()
 
     def test_cold_discarded_run_and_fresh_processes_are_required(self):
         f = self.fixture
@@ -732,29 +1123,46 @@ class PerformanceEvidenceTests(unittest.TestCase):
             with self.subTest(field=field), f.transaction():
                 f.manifests["cold-start"]["records"][0].pop(field)
                 f.manifest("cold-start")
-                with self.assertRaises(contract.EvidenceError): self.collect()
+                with self.assertRaises(contract.EvidenceError):
+                    self.collect()
         for field, value in (("round", 1), ("ok", False), ("warm_n", 49)):
             with self.subTest(field=field), f.transaction():
-                f.mutate_json("cold-start", record["discardedSamples"][0], lambda row: row.update({field: value}))
-                with self.assertRaises(contract.EvidenceError): self.collect()
+                f.mutate_json(
+                    "cold-start",
+                    record["discardedSamples"][0],
+                    lambda row: row.update({field: value}),
+                )
+                with self.assertRaises(contract.EvidenceError):
+                    self.collect()
         with f.transaction():
-            f.mutate_json("cold-start", record["discardedCorrectness"][0], lambda row: row.update(responses_checked=50))
-            with self.assertRaises(contract.EvidenceError): self.collect()
+            f.mutate_json(
+                "cold-start",
+                record["discardedCorrectness"][0],
+                lambda row: row.update(responses_checked=50),
+            )
+            with self.assertRaises(contract.EvidenceError):
+                self.collect()
         with f.transaction():
             f.write(f.paths["cold-start"] / "failed.json", encoded({"status": "error"}))
             f.seal("cold-start")
-            with self.assertRaisesRegex(contract.EvidenceError, "failed run"): self.collect()
+            with self.assertRaisesRegex(contract.EvidenceError, "failed run"):
+                self.collect()
         with f.transaction():
+
             def reused(rows):
                 previous = rows[0]
                 for key in ("measurementRoot", "measurementProcesses", "pssSamples", "worker_pid"):
-                    if key in previous: rows[1][key] = previous[key]
+                    if key in previous:
+                        rows[1][key] = previous[key]
+
             f.mutate_raw("cold-start", 0, reused)
-            with self.assertRaises(contract.EvidenceError): self.collect()
+            with self.assertRaises(contract.EvidenceError):
+                self.collect()
 
     def test_cold_process_members_and_warm_latencies_are_required(self):
         f = self.fixture
-        mutations = [lambda row: row.pop("measurementProcesses"),
+        mutations = [
+            lambda row: row.pop("measurementProcesses"),
             lambda row: row.update(probeProcess=dict(row["measurementRoot"])),
             lambda row: row["measurementProcesses"].append(dict(row["measurementRoot"])),
             lambda row: row["pssSamples"][0]["processes"][0].update(pss_kb=1025),
@@ -762,11 +1170,13 @@ class PerformanceEvidenceTests(unittest.TestCase):
             lambda row: row.update(warm_latencies_ms=[2] * 50),
             lambda row: row.update(warm_latencies_ms=[1] * 49),
             lambda row: row["cleanup"].update(ownedPidsRemaining=1),
-            lambda row: row["correctness"].update(responses_checked=50)]
+            lambda row: row["correctness"].update(responses_checked=50),
+        ]
         for index, mutate in enumerate(mutations):
             with self.subTest(index=index), f.transaction():
                 f.mutate_raw("cold-start", 0, lambda rows: mutate(rows[0]))
-                with self.assertRaises(contract.EvidenceError): self.collect()
+                with self.assertRaises(contract.EvidenceError):
+                    self.collect()
 
     def test_missing_rows_records_digests_and_conflicting_text(self):
         f = self.fixture
@@ -777,8 +1187,11 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 f.seal(lane)
                 with self.assertRaisesRegex(contract.EvidenceError, "summary rows"):
                     self.collect()
-        for name, expected in (("lane.json", "lane.json"), ("manifest.txt", "manifest.txt"),
-                               ("sha256sums.txt", "sha256sums")):
+        for name, expected in (
+            ("lane.json", "lane.json"),
+            ("manifest.txt", "manifest.txt"),
+            ("sha256sums.txt", "sha256sums"),
+        ):
             with self.subTest(name=name), f.transaction():
                 file = f.paths["qps"] / name
                 f.write(file, file.read_bytes())
@@ -810,8 +1223,12 @@ class PerformanceEvidenceTests(unittest.TestCase):
     def test_cross_lane_conflicts_include_density_and_binary_fixture_hashes(self):
         f = self.fixture
         for lane in ("qps", "density"):
-            for key, value in (("session", "other-session"), ("cpu", "other CPU"),
-                               ("kernel", "other kernel"), ("architecture", "other arch")):
+            for key, value in (
+                ("session", "other-session"),
+                ("cpu", "other CPU"),
+                ("kernel", "other kernel"),
+                ("architecture", "other arch"),
+            ):
                 with self.subTest(lane=lane, key=key), f.transaction():
                     m = f.manifests[lane]
                     if key == "session":
@@ -819,7 +1236,9 @@ class PerformanceEvidenceTests(unittest.TestCase):
                     else:
                         m["machine"][key] = value
                     f.proof(lane)
-                    with self.assertRaisesRegex(contract.EvidenceError, "conflicting (session|machine)"):
+                    with self.assertRaisesRegex(
+                        contract.EvidenceError, "conflicting (session|machine)"
+                    ):
                         self.collect()
             with self.subTest(lane=lane, key="binary"), f.transaction():
                 m = f.manifests[lane]
@@ -836,7 +1255,9 @@ class PerformanceEvidenceTests(unittest.TestCase):
                 m["fixtures"]["shared-app"]["sha256"] = digest(data)
                 f.write(f.paths[lane] / "fixtures/app.mjs", data)
                 f.manifest(lane)
-                with self.assertRaisesRegex(contract.EvidenceError, "conflicting shared-app fixture"):
+                with self.assertRaisesRegex(
+                    contract.EvidenceError, "conflicting shared-app fixture"
+                ):
                     self.collect()
         with f.transaction():
             m = f.manifests["qps"]
@@ -856,18 +1277,29 @@ class PerformanceEvidenceTests(unittest.TestCase):
         f = self.fixture
         file = f.paths["qps"] / "sha256sums.txt"
         original = file.read_bytes()
-        for data, error in ((original + original.splitlines()[0] + b"\n", "duplicate"),
-                            (b"\n".join(original.splitlines()[1:]) + b"\n", "inventory"),
-                            (b"not a checksum\n", "malformed"),
-                            (b"0" * 64 + b"  sha256sums.txt\n", "self-referencing")):
+        for data, error in (
+            (original + original.splitlines()[0] + b"\n", "duplicate"),
+            (b"\n".join(original.splitlines()[1:]) + b"\n", "inventory"),
+            (b"not a checksum\n", "malformed"),
+            (b"0" * 64 + b"  sha256sums.txt\n", "self-referencing"),
+        ):
             with self.subTest(error=error), f.transaction():
                 f.write(file, data)
                 with self.assertRaisesRegex(contract.EvidenceError, error):
                     self.collect()
-        for name in ("../outside.txt", "/tmp/outside.txt", "C:/outside.txt", "a\\b", "./cells.txt", "a//b"):
+        for name in (
+            "../outside.txt",
+            "/tmp/outside.txt",
+            "C:/outside.txt",
+            "a\\b",
+            "./cells.txt",
+            "a//b",
+        ):
             with self.subTest(name=name), f.transaction():
                 f.write(file, ("0" * 64 + "  " + name + "\n").encode())
-                with self.assertRaisesRegex(contract.EvidenceError, "invalid archive-relative path"):
+                with self.assertRaisesRegex(
+                    contract.EvidenceError, "invalid archive-relative path"
+                ):
                     self.collect()
         with f.transaction():
             f.write(f.paths["qps"] / "unsealed.log", b"a late writer is still active")
@@ -880,15 +1312,17 @@ class PerformanceEvidenceTests(unittest.TestCase):
 
     def test_json_and_memory_rejections(self):
         f = self.fixture
-        for content in (b'{"schema":1,"schema":1}\n', b'{"schema":NaN}\n', b'not json\n'):
+        for content in (b'{"schema":1,"schema":1}\n', b'{"schema":NaN}\n', b"not json\n"):
             with self.subTest(content=content), f.transaction():
                 f.write(f.paths["qps"] / "lane.json", content)
                 f.seal("qps")
                 with self.assertRaises(contract.EvidenceError):
                     self.collect()
-        for change, error in ((lambda d: d.pop("capsid"), "missing memory"),
-                              (lambda d: d["capsid"]["lowLoad"].update(beforeMeasuredLoad=False), "fresh low-load"),
-                              (lambda d: d["capsid"]["serving"].update(pss_kb=1), "role sum")):
+        for change, error in (
+            (lambda d: d.pop("capsid"), "missing memory"),
+            (lambda d: d["capsid"]["lowLoad"].update(beforeMeasuredLoad=False), "fresh low-load"),
+            (lambda d: d["capsid"]["serving"].update(pss_kb=1), "role sum"),
+        ):
             with self.subTest(error=error), f.transaction():
                 f.mutate_json("qps", "memory.json", change)
                 with self.assertRaisesRegex(contract.EvidenceError, error):
@@ -896,9 +1330,11 @@ class PerformanceEvidenceTests(unittest.TestCase):
 
     def test_archive_recheck_rejects_late_writers(self):
         f = self.fixture
-        for name, content in (("late.log", b"writer is not finished"),
-                              ("sha256sums.txt", b"changed digest inventory"),
-                              ("cells.txt", b"changed summary")):
+        for name, content in (
+            ("late.log", b"writer is not finished"),
+            ("sha256sums.txt", b"changed digest inventory"),
+            ("cells.txt", b"changed summary"),
+        ):
             with self.subTest(name=name), f.transaction():
                 archive = contract.Archive(f.paths["qps"], f.root)
                 f.write(f.paths["qps"] / name, content)
@@ -909,12 +1345,20 @@ class PerformanceEvidenceTests(unittest.TestCase):
             f.manifest("density")
             with self.assertRaisesRegex(contract.EvidenceError, "configured cap"):
                 self.collect()
+
     def test_append_keeps_older_points_and_replaces_only_requested_version(self):
         f = self.fixture
-        older = {"version": "old", "date": "2000-01-01", "notes": "unqualified historical observation",
-                 "git": {"commit": "c" * 40}, "qps": {"cells": [{"qps": 3.25}]}}
-        (f.root / "data.js").write_text("window.CAPSID_PERF_DATA = " + json.dumps(
-            {"schema": 1, "points": [older]}) + ";\n", encoding="utf-8")
+        older = {
+            "version": "old",
+            "date": "2000-01-01",
+            "notes": "unqualified historical observation",
+            "git": {"commit": "c" * 40},
+            "qps": {"cells": [{"qps": 3.25}]},
+        }
+        (f.root / "data.js").write_text(
+            "window.CAPSID_PERF_DATA = " + json.dumps({"schema": 1, "points": [older]}) + ";\n",
+            encoding="utf-8",
+        )
         first = self.collect()
         second = self.collect()
         self.assertEqual(first, second)
@@ -926,7 +1370,9 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.collect()
         source = f.root / "perf-site"
         source.mkdir(exist_ok=True)
-        (source / "index.html").write_text("<!doctype html><title>synthetic site fixture</title>", encoding="utf-8")
+        (source / "index.html").write_text(
+            "<!doctype html><title>synthetic site fixture</title>", encoding="utf-8"
+        )
         output = f.root / "site-complete"
         report = site.prepare_site(f.root, f.root / "data.js", output)
         self.assertEqual(report["qualifiedPoints"], 1)
@@ -957,9 +1403,19 @@ class PerformanceEvidenceTests(unittest.TestCase):
         f = self.fixture
         source = f.root / "perf-site"
         source.mkdir(exist_ok=True)
-        (source / "index.html").write_text("<!doctype html><title>synthetic site fixture</title>", encoding="utf-8")
-        legacy = {"schema": 1, "points": [{"version": "old", "date": "2000-01-01",
-                    "evidence": {"nonexistent-old-alias/file": "0" * 64}}]}
+        (source / "index.html").write_text(
+            "<!doctype html><title>synthetic site fixture</title>", encoding="utf-8"
+        )
+        legacy = {
+            "schema": 1,
+            "points": [
+                {
+                    "version": "old",
+                    "date": "2000-01-01",
+                    "evidence": {"nonexistent-old-alias/file": "0" * 64},
+                }
+            ],
+        }
         (f.root / "data.js").write_bytes(b"window.CAPSID_PERF_DATA = " + encoded(legacy) + b";\n")
         output = f.root / "site-legacy"
         report = site.prepare_site(f.root, f.root / "data.js", output)
@@ -974,20 +1430,35 @@ def run_isolated_complete_suite():
     from concurrent.futures import ThreadPoolExecutor
     import re
     import time
+
     names = unittest.defaultTestLoader.getTestCaseNames(PerformanceEvidenceTests)
     assert names, "complete suite must not become an empty selection"
     workers = min(4, os.cpu_count() or 1, len(names))
-    groups = [["PerformanceEvidenceTests." + name for name in names[index::workers]] for index in range(workers)]
+    groups = [
+        ["PerformanceEvidenceTests." + name for name in names[index::workers]]
+        for index in range(workers)
+    ]
     assert len({name for group in groups for name in group}) == len(names)
     started = time.monotonic()
     deadline = started + 90
+
     def run_group(group):
-        command = [sys.executable, "-B", str(Path(__file__).resolve()), "--collector", str(args.collector.resolve()), *group]
+        command = [
+            sys.executable,
+            "-B",
+            str(Path(__file__).resolve()),
+            "--collector",
+            str(args.collector.resolve()),
+            *group,
+        ]
         try:
-            result = subprocess.run(command, capture_output=True, timeout=max(.001, deadline-time.monotonic()))
+            result = subprocess.run(
+                command, capture_output=True, timeout=max(0.001, deadline - time.monotonic())
+            )
             return group, result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired as error:
             return group, None, error.stdout or b"", error.stderr or b""
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
         outcomes = list(pool.map(run_group, groups))
     passed = True
@@ -1000,10 +1471,26 @@ def run_isolated_complete_suite():
         passed = passed and code == 0 and executed == [str(len(group)).encode()]
     sys.stdout.flush()
     sys.stderr.flush()
-    print(json.dumps(dict(isolatedSuiteGroups=groups,originalSharedBudgetSeconds=90,
-                          everyOriginalTestAssignedExactlyOnce=True,skippedTests=skipped,complete=passed)))
+    print(
+        json.dumps(
+            dict(
+                isolatedSuiteGroups=groups,
+                originalSharedBudgetSeconds=90,
+                everyOriginalTestAssignedExactlyOnce=True,
+                skippedTests=skipped,
+                complete=passed,
+            )
+        )
+    )
     success = "OK" + (f" (skipped={skipped})" if skipped else "") + "\n"
-    sys.stderr.write(f"\nRan {len(names)} tests in {time.monotonic()-started:.3f}s\n\n" + (success if passed else "FAILED (isolated suite child failure or original shared deadline)\n"))
+    sys.stderr.write(
+        f"\nRan {len(names)} tests in {time.monotonic() - started:.3f}s\n\n"
+        + (
+            success
+            if passed
+            else "FAILED (isolated suite child failure or original shared deadline)\n"
+        )
+    )
     return 0 if passed else 1
 
 

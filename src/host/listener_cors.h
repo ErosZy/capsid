@@ -29,10 +29,10 @@ bool valid_cors_header_token(const std::string& value);
 
 // Classification of one request under a configured CORS policy.
 enum class CorsDecision {
-    kProceed,           // not a preflight; origin state recorded
-    kBadRequest,        // duplicate Origin header (caller sends 400)
-    kPreflightAllowed,  // OPTIONS preflight passes (caller sends 204)
-    kPreflightRejected  // OPTIONS preflight fails (caller sends 403)
+    kProceed,          // not a preflight; origin state recorded
+    kBadRequest,       // duplicate Origin header (caller sends 400)
+    kPreflightAllowed, // OPTIONS preflight passes (caller sends 204)
+    kPreflightRejected // OPTIONS preflight fails (caller sends 403)
 };
 
 // Per-request CORS engine. One instance per request classification; the
@@ -46,29 +46,25 @@ class ListenerCors {
     // Classifies the request and records the decision state used by
     // stamp()/filter_headers(). kBadRequest/kPreflight* short-circuit the
     // request: the caller must answer without routing.
-    CorsDecision prepare(
-        const boost::beast::http::request<
-            boost::beast::http::string_body>& request);
+    CorsDecision
+    prepare(const boost::beast::http::request<boost::beast::http::string_body>& request);
 
     // Fills the short-circuit response for a kPreflight* decision: 204
     // with the full allow set for an allowed preflight, 403 text/plain
     // with NO Access-Control-Allow-* fields for a rejected one. The
     // caller sets version/keep_alive and writes the response.
-    void build_preflight(
-        boost::beast::http::response<
-            boost::beast::http::string_body>& response) const;
+    void
+    build_preflight(boost::beast::http::response<boost::beast::http::string_body>& response) const;
 
     // Applies Host-authoritative CORS to the worker's response headers:
     // strips App-owned Access-Control-Allow-Origin, gates
     // Access-Control-Allow-Credentials to an exact allowed origin, stamps
     // the matching ACAO, and merges a Vary: Origin token.
-    void filter_headers(
-        std::vector<std::pair<std::string, std::string>>* headers) const;
+    void filter_headers(std::vector<std::pair<std::string, std::string>>* headers) const;
 
     // Stamps Vary: Origin on a Host-synthesized response when an Origin was
     // present, plus the recorded ACAO when that Origin was allowed.
-    void stamp(boost::beast::http::response<
-                   boost::beast::http::string_body>& response) const;
+    void stamp(boost::beast::http::response<boost::beast::http::string_body>& response) const;
 
   private:
     const ListenerCorsConfig& config_;
@@ -79,4 +75,4 @@ class ListenerCors {
     CorsDecision decision_ = CorsDecision::kProceed;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host

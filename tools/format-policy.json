@@ -1,0 +1,442 @@
+{
+  "schema": 1,
+  "versions": {
+    "clang-format": "23.1.5",
+    "prettier": "3.8.3",
+    "ruff": "0.17.5"
+  },
+  "sourceRoots": ["src", "include", "js", "tests", "tools", "bench", "soak", "examples", "scripts"],
+  "excludePrefixes": [
+    "vendor/",
+    "patches/",
+    "licenses/",
+    "docs/",
+    "perf-site/",
+    "bench/results/",
+    "bench/bench-apps/php-slim/vendor/",
+    "tests/fixtures/",
+    "tests/wpt/",
+    "js/encoding-data/"
+  ],
+  "excludeFiles": ["js/streams.js"],
+  "extensions": {
+    "cpp": [".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"],
+    "javascript": [".js", ".mjs", ".cjs"],
+    "python": [".py"]
+  },
+  "dataFiles": [
+    "package.json",
+    "package-lock.json",
+    ".prettierrc.json",
+    "tools/format-policy.json"
+  ],
+  "dataGlobs": ["examples/*/package.json", "examples/*/package-lock.json"],
+  "preservedInputs": {
+    "tests/compat/runtime_v7.h": {
+      "sha256": "e991b7b92aae43badbaefdb701f596402a49675a66021db8e2b006dfa7225e8e",
+      "references": ["tests/test_abi_v7_original_consumer.c"]
+    },
+    "tests/helpers/workerd_listener_control.mjs": {
+      "sha256": "addaf82e17ee86e81e3de68273cc0683c1c282571c7db62e3c676b1fa24399ba",
+      "references": [
+        "tests/fixtures/workerd-async-callback-report.json",
+        "tests/fixtures/workerd-cross-context-report.json",
+        "tests/fixtures/workerd-crypto-report.json",
+        "tests/fixtures/workerd-fetch-resource-report.json",
+        "tests/fixtures/workerd-fetch-upgrade-lifetime-report.json",
+        "tests/fixtures/workerd-owner-report.json",
+        "tests/fixtures/workerd-fetch-arguments-report.json.gz",
+        "tests/fixtures/workerd-fetch-boundary-report.json.gz",
+        "tests/fixtures/workerd-fetch-proxy-report.json.gz",
+        "tests/fixtures/workerd-fetch-reader-report.json.gz",
+        "tests/fixtures/workerd-fetch-transition-report.json.gz",
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-intrinsic-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tests/helpers/ws_fetch_arguments_peer.mjs": {
+      "sha256": "0c221829e5516c6eff00a501186e4f9356ad240a9655d6ad4b886c6b15bcd3fe",
+      "references": ["tests/fixtures/workerd-fetch-arguments-report.json.gz"]
+    },
+    "tests/helpers/ws_fetch_boundary_peer.mjs": {
+      "sha256": "f8dab028229cd8ba92cc87c5c06df4506ecb97eca90c11436f4dcef0cc5e1cb9",
+      "references": ["tests/fixtures/workerd-fetch-boundary-report.json.gz"]
+    },
+    "tests/helpers/ws_fetch_byob_peer.mjs": {
+      "sha256": "a80ee84271e2f9235b0183f648b72933b4db2bd5bac836266bed2bb537c4f591",
+      "references": ["tests/fixtures/workerd-fetch-byob-report.json.gz"]
+    },
+    "tests/helpers/ws_fetch_proxy_client.mjs": {
+      "sha256": "7aba0e3b3f9337b6832d9e4296f0426fbf6b6b159be540e7e2beff13e3da555f",
+      "references": [
+        "tests/fixtures/workerd-fetch-boundary-report.json.gz",
+        "tests/fixtures/workerd-fetch-proxy-report.json.gz",
+        "tests/fixtures/workerd-fetch-transition-report.json.gz"
+      ]
+    },
+    "tests/helpers/ws_fetch_proxy_peer.mjs": {
+      "sha256": "623066ce92780484aeb23d1f195176964ac1b0f7198e849b7bc8a6fe4b905ad5",
+      "references": ["tests/fixtures/workerd-fetch-proxy-report.json.gz"]
+    },
+    "tests/helpers/ws_fetch_reader_peer.mjs": {
+      "sha256": "e3b7407870dc258700e1df613f4d41a29b106adabd60a7af491ce91328be2a2e",
+      "references": ["tests/fixtures/workerd-fetch-reader-report.json.gz"]
+    },
+    "tests/helpers/ws_fetch_transition_peer.mjs": {
+      "sha256": "0c307f008d6b79025b5383b9d34cc7939fa5ca582340acbd897d64942f7c8f7b",
+      "references": [
+        "tests/fixtures/workerd-fetch-arguments-report.json.gz",
+        "tests/fixtures/workerd-fetch-byob-report.json.gz",
+        "tests/fixtures/workerd-fetch-reader-report.json.gz",
+        "tests/fixtures/workerd-fetch-transition-report.json.gz",
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tests/helpers/ws_fetch_upgrade_lifetime_peer.mjs": {
+      "sha256": "74a43ae18f6d91c1100daf44827605ec61c4a1727637fd413346951d4c9ec835",
+      "references": ["tests/fixtures/workerd-fetch-upgrade-lifetime-report.json"]
+    },
+    "tests/helpers/ws_fetch_upgrade_peer.mjs": {
+      "sha256": "492ce6fab27d0766317049aefe5b8f654b0ceaa55ffd27621cb9f3e98daddb6b",
+      "references": ["tests/fixtures/workerd-fetch-upgrade-report.json"]
+    },
+    "tests/helpers/ws_interop_node.mjs": {
+      "sha256": "f835d10fa89c77ae054c34ccfaa12b9e75df0903525dcd7fe00ed36fe42144c2",
+      "references": ["tests/fixtures/websocket-interop-report.json"]
+    },
+    "tests/helpers/ws_interop_node_peer.mjs": {
+      "sha256": "358404fd392900469dc3a408ed1ca4e46632124607e3573550188a6370e73831",
+      "references": ["tests/fixtures/websocket-interop-report.json"]
+    },
+    "tests/helpers/ws_interop_node_sdk.mjs": {
+      "sha256": "dafba2e5535b84e6dcf10b86e2a4bc01302984d7fcdef2c074be95bc2ff0a35a",
+      "references": [
+        "tests/fixtures/websocket-interop-report.json",
+        "tests/fixtures/workerd-fanout-report.json"
+      ]
+    },
+    "tests/helpers/ws_native_reader_lifecycle_peer.mjs": {
+      "sha256": "f5b0613d92381efecd99be2fc366ef3498aa5342fdc0dca742d970c7bd810c95",
+      "references": [
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tests/helpers/ws_response_client.mjs": {
+      "sha256": "85d56b5f6b044c2e0df4682d646357fa17903c789ebb434bcd8a24cd697fc6be",
+      "references": [
+        "tests/fixtures/workerd-async-budget-report.json",
+        "tests/fixtures/workerd-async-callback-report.json",
+        "tests/fixtures/workerd-cross-context-report.json",
+        "tests/fixtures/workerd-crypto-report.json",
+        "tests/fixtures/workerd-fetch-resource-report.json",
+        "tests/fixtures/workerd-fetch-upgrade-lifetime-report.json",
+        "tests/fixtures/workerd-fetch-upgrade-report.json",
+        "tests/fixtures/workerd-http-codec-report.json",
+        "tests/fixtures/workerd-ordinary-fetch-report.json",
+        "tests/fixtures/workerd-owner-report.json",
+        "tests/fixtures/workerd-fetch-arguments-report.json.gz",
+        "tests/fixtures/workerd-fetch-boundary-report.json.gz",
+        "tests/fixtures/workerd-fetch-byob-report.json.gz",
+        "tests/fixtures/workerd-fetch-reader-report.json.gz",
+        "tests/fixtures/workerd-fetch-transition-report.json.gz",
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-intrinsic-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tests/test_websocket_async_callbacks.mjs": {
+      "sha256": "ef03964acdf44883970d36eba49917f96f78b530b1565afd7867899555ebe38b",
+      "references": ["tests/fixtures/workerd-async-callback-report.json"]
+    },
+    "tests/test_websocket_cross_context.mjs": {
+      "sha256": "269c644d5d20a2b91aa8c082ea88a9bdd3c827e8d03cc61c70cb3b3236bda00e",
+      "references": ["tests/fixtures/workerd-cross-context-report.json"]
+    },
+    "tests/test_websocket_crypto.mjs": {
+      "sha256": "6154b8e7b631ed35551b605ae7c1275df17f3f5a2a31bcc722f074f559aed79e",
+      "references": ["tests/fixtures/workerd-crypto-report.json"]
+    },
+    "tests/test_websocket_fetch_arguments.mjs": {
+      "sha256": "27bb898b177b20ce02c2eb5e4d568e97ffa97a7f600673e250f7884f035be77c",
+      "references": ["tests/fixtures/workerd-fetch-arguments-report.json.gz"]
+    },
+    "tests/test_websocket_fetch_boundaries.mjs": {
+      "sha256": "245c4f8a3a19a768152ae92a0c0081174eab57077ae4e06117afccd34dc4fea1",
+      "references": ["tests/fixtures/workerd-fetch-boundary-report.json.gz"]
+    },
+    "tests/test_websocket_fetch_proxy.mjs": {
+      "sha256": "d557ef6d92d96d96092f0144e8b20524dafcd87cd906fceb8349545f83b41ae9",
+      "references": ["tests/fixtures/workerd-fetch-proxy-report.json.gz"]
+    },
+    "tests/test_websocket_fetch_readers.mjs": {
+      "sha256": "2cc4b5721c458ce371e7612939d9b727e404fc023100e700d03e45dd83e0ad80",
+      "references": ["tests/fixtures/workerd-fetch-reader-report.json.gz"]
+    },
+    "tests/test_websocket_fetch_transitions.mjs": {
+      "sha256": "f52325f91b9ea32c379d1b192d69ffdc3334da919dc25ebe9776ed000222e403",
+      "references": ["tests/fixtures/workerd-fetch-transition-report.json.gz"]
+    },
+    "tests/test_websocket_fetch_upgrade.mjs": {
+      "sha256": "3e8612cb17dc5aeb1f29582c92a766d1d32f37f8a3680bf385b96810338d8667",
+      "references": ["tests/fixtures/workerd-fetch-upgrade-report.json"]
+    },
+    "tests/test_websocket_fetch_upgrade_lifetime.mjs": {
+      "sha256": "02e747eaa215340175a9dad90c21b9cae19995706b0bb6aea437320bbae42e60",
+      "references": ["tests/fixtures/workerd-fetch-upgrade-lifetime-report.json"]
+    },
+    "tests/test_websocket_frame_boundaries.mjs": {
+      "sha256": "ad653ee21860c7cf7d8fed48bbdc15108e552659e789ea91046862459cd5f768",
+      "references": ["tests/fixtures/websocket-frame-report.json"]
+    },
+    "tests/test_websocket_native_reader_lifecycle.mjs": {
+      "sha256": "15430c43500c425078a9a32324ab471d6718e3a60c0e69ab2339dedf976921c5",
+      "references": ["tests/fixtures/workerd-native-reader-lifecycle-report.json.gz"]
+    },
+    "tests/test_websocket_owner_lifecycle.mjs": {
+      "sha256": "3e4dc9629be14cc6aa0185783891e71522909155949a76a8457c996431eb3bb4",
+      "references": ["tests/fixtures/workerd-owner-report.json"]
+    },
+    "tests/test_websocket_reader_intrinsics.mjs": {
+      "sha256": "6fa92a4bd3c0d086acedaa76dd5e9099cf73c784bb2e9361cc15007a66f88ff0",
+      "references": ["tests/fixtures/workerd-reader-intrinsic-report.json.gz"]
+    },
+    "tests/test_websocket_reader_scope.mjs": {
+      "sha256": "c92e657d2662a3490d9c8455c96217b23b8ba91251c3918d9978bde79236797d",
+      "references": ["tests/fixtures/workerd-reader-scope-report.json.gz"]
+    },
+    "tests/test_websocket_standard_readers.mjs": {
+      "sha256": "6fb7af8a08f75af732400095e9d952f2df6ec3440d3e973e19cd9d29089beb52",
+      "references": ["tests/fixtures/workerd-standard-reader-report.json.gz"]
+    },
+    "tests/test_workerd_ws_fixtures.mjs": {
+      "sha256": "d68e110adee4240e396045a68c76e29f96af0b20107aae306a60c8e05ffaebec",
+      "references": ["tools/workerd-mutation-contract.mjs"]
+    },
+    "tools/capture-native-fetch-branch-prefix-reference.mjs": {
+      "sha256": "d1e85487717451f767a3a047b5cf352e13c59ff722e5247f53f5a856638dd026",
+      "references": ["tests/fixtures/workerd-native-fetch-branch-prefix-report.json.br"]
+    },
+    "tools/capture-native-fetch-deadline-reference.mjs": {
+      "sha256": "19131474270b78bb342bc0d2b5ee8952389f2bd1784839e117d957c27b44a31b",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-deadline-report.json",
+        "tests/fixtures/workerd-native-fetch-deadline-report.json.gz"
+      ]
+    },
+    "tools/capture-native-fetch-intrinsic-reference.mjs": {
+      "sha256": "a417837071474be815e76a3b81417d13f9f001ce9d2b085cb39eb1a0a3970efa",
+      "references": ["tests/fixtures/workerd-native-fetch-intrinsic-report.json.gz"]
+    },
+    "tools/capture-native-fetch-pending-reference.mjs": {
+      "sha256": "58cee20f724ff28d2ae342147e4115765057900cf20f25a4589934644d990983",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-pending-report.json",
+        "tests/fixtures/workerd-native-fetch-pending-report.json.gz"
+      ]
+    },
+    "tools/native-fetch-branch-prefix-contract.mjs": {
+      "sha256": "dfb48807506867927c267c47f2de9d6815994f384e61ac30d063dcd8277c93d0",
+      "references": ["tests/fixtures/workerd-native-fetch-branch-prefix-report.json.br"]
+    },
+    "tools/native-fetch-branch-prefix-input.mjs": {
+      "sha256": "b8a2a6bd5ad9149eea4e2953f2bb26b0e6449c81bf9397188671ca3ed90d7cd5",
+      "references": ["tests/fixtures/workerd-native-fetch-branch-prefix-report.json.br"]
+    },
+    "tools/native-fetch-branch-prefix-peer.mjs": {
+      "sha256": "84380bc03d409b6b89c30ebf69be70a78cd9bb6bfa737e0df51c938c7f2bae4c",
+      "references": ["tests/fixtures/workerd-native-fetch-branch-prefix-report.json.br"]
+    },
+    "tools/native-fetch-deadline-contract.mjs": {
+      "sha256": "9dc1a82cd2b889af84406138983400e83c4d9a02212d2a8818555c2aa8a578b1",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-deadline-report.json",
+        "tests/fixtures/workerd-native-fetch-deadline-report.json.gz"
+      ]
+    },
+    "tools/native-fetch-deadline-input.mjs": {
+      "sha256": "0d41e9c66bb9186aa1989122fed79f16b96e8267b1e542fcd14cab2a2297686b",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-deadline-report.json",
+        "tests/fixtures/workerd-native-fetch-deadline-report.json.gz"
+      ]
+    },
+    "tools/native-fetch-deadline-peer.mjs": {
+      "sha256": "4db8dbc2e666a4cbbfb9875726a4cc198b00c936f302f9dd7489440263fbd384",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-deadline-report.json",
+        "tests/fixtures/workerd-native-fetch-deadline-report.json.gz"
+      ]
+    },
+    "tools/native-fetch-intrinsic-contract.mjs": {
+      "sha256": "62ad530183395d3a8777a893bf68754c22276add762470cb7491ea9229ee8e90",
+      "references": ["tests/fixtures/workerd-native-fetch-intrinsic-report.json.gz"]
+    },
+    "tools/native-fetch-intrinsic-input.mjs": {
+      "sha256": "b83a99d74fa4201837eeba8c752830776d38ccfb0a938afdf0355e9a480e90d4",
+      "references": ["tests/fixtures/workerd-native-fetch-intrinsic-report.json.gz"]
+    },
+    "tools/native-fetch-intrinsic-peer.mjs": {
+      "sha256": "36f2051de40ff5e4e8515ed0f31d4c13ec1bc5a8ee94e97dddfec820ac4eef49",
+      "references": ["tests/fixtures/workerd-native-fetch-intrinsic-report.json.gz"]
+    },
+    "tools/native-fetch-pending-input.mjs": {
+      "sha256": "58d22b856d15289e19592ee4abc839c8779a295c76f5db04cd150c1af45862cc",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-pending-report.json",
+        "tests/fixtures/workerd-native-fetch-pending-report.json.gz"
+      ]
+    },
+    "tools/native-fetch-pending-peer.mjs": {
+      "sha256": "d8194cb3b8cc1ce5e0958c6814e9f85e1679328af75aaf9a90b72a7e47b7b035",
+      "references": [
+        "tests/fixtures/workerd-native-fetch-pending-report.json",
+        "tests/fixtures/workerd-native-fetch-pending-report.json.gz"
+      ]
+    },
+    "tools/workerd-async-callback-contract.mjs": {
+      "sha256": "040c3299d958f6f6ee3f10f71a70ea791cf8a1f7c406001a15e9e1fa0e4e88e3",
+      "references": ["tests/fixtures/workerd-async-callback-report.json"]
+    },
+    "tools/workerd-cross-context-contract.mjs": {
+      "sha256": "2e7c8df8601d2fef66e711fecea2805912f34ed83b822cb06677d0d8923b2e72",
+      "references": ["tests/fixtures/workerd-cross-context-report.json"]
+    },
+    "tools/workerd-crypto-contract.mjs": {
+      "sha256": "01e9d155f2cd727c288e75aba61836f18201c8ac220ae8c9e2fc03ed19f3f956",
+      "references": ["tests/fixtures/workerd-crypto-report.json"]
+    },
+    "tools/workerd-fetch-arguments-contract.mjs": {
+      "sha256": "7db00a2ccbb12ff17d947f7675a3c02ca2f9326249d47a7376cc91946adfbbfb",
+      "references": ["tests/fixtures/workerd-fetch-arguments-report.json.gz"]
+    },
+    "tools/workerd-fetch-boundary-contract.mjs": {
+      "sha256": "04b9739933deee42f0923b7c6caf6b2007155e2e0f3a03936f5cccc6bf29057c",
+      "references": ["tests/fixtures/workerd-fetch-boundary-report.json.gz"]
+    },
+    "tools/workerd-fetch-byob-contract.mjs": {
+      "sha256": "51dc5d3584fcc3da591f115efefc79e6beefa91320253e5b7a3bc47fbd9a46f1",
+      "references": [
+        "tests/fixtures/workerd-async-callback-report.json",
+        "tests/fixtures/workerd-cross-context-report.json",
+        "tests/fixtures/workerd-crypto-report.json",
+        "tests/fixtures/workerd-fetch-resource-report.json",
+        "tests/fixtures/workerd-fetch-upgrade-lifetime-report.json",
+        "tests/fixtures/workerd-owner-report.json",
+        "tests/fixtures/workerd-fetch-arguments-report.json.gz",
+        "tests/fixtures/workerd-fetch-boundary-report.json.gz",
+        "tests/fixtures/workerd-fetch-proxy-report.json.gz",
+        "tests/fixtures/workerd-fetch-reader-report.json.gz",
+        "tests/fixtures/workerd-fetch-transition-report.json.gz",
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-intrinsic-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tools/workerd-fetch-proxy-contract.mjs": {
+      "sha256": "a081e0b38d5f2863871d4f3fbbdc1fc15c8dae01250f08b1190e82872cef2272",
+      "references": ["tests/fixtures/workerd-fetch-proxy-report.json.gz"]
+    },
+    "tools/workerd-fetch-reader-contract.mjs": {
+      "sha256": "eb53c58f907ec417bd6e67a76fd5771f4b351d164ba2639c99a748d2eac8ed5d",
+      "references": ["tests/fixtures/workerd-fetch-reader-report.json.gz"]
+    },
+    "tools/workerd-fetch-transition-contract.mjs": {
+      "sha256": "cf3bdf9a53da4fecefb9fbcfb73a5c59ad51c14fe9c884665f8b23328cf1bd90",
+      "references": [
+        "tests/fixtures/workerd-fetch-arguments-report.json.gz",
+        "tests/fixtures/workerd-fetch-reader-report.json.gz",
+        "tests/fixtures/workerd-fetch-transition-report.json.gz",
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz"
+      ]
+    },
+    "tools/workerd-fetch-upgrade-contract.mjs": {
+      "sha256": "f90b7a15fe1625783e044b76c9256ea4c17145fc6f55175a5113bbae0405303e",
+      "references": ["tests/fixtures/workerd-fetch-upgrade-report.json"]
+    },
+    "tools/workerd-fetch-upgrade-lifetime-contract.mjs": {
+      "sha256": "756fe677a4c7f7b82349e0ecd8fa889c834813b0074b5aa4a130b1e8790c58f9",
+      "references": ["tests/fixtures/workerd-fetch-upgrade-lifetime-report.json"]
+    },
+    "tools/workerd-native-fetch-contract.mjs": {
+      "sha256": "36946ff50505dedbdc3207b7ee989e8eef034a786b19ba3d8f03f7f9f6afb3e4",
+      "references": [
+        "tests/fixtures/workerd-fetch-arguments-report.json.gz",
+        "tests/fixtures/workerd-fetch-reader-report.json.gz",
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-intrinsic-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tools/workerd-native-reader-lifecycle-contract.mjs": {
+      "sha256": "2fbf645d646588c9623520005c53a04254db2096ca3f73a03144ebc2e672ec7e",
+      "references": [
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz"
+      ]
+    },
+    "tools/workerd-owner-contract.mjs": {
+      "sha256": "2b4e3b11ca162c5ea3c6e45d2e82e4be818f94587db52373082010ccac66920c",
+      "references": ["tests/fixtures/workerd-owner-report.json"]
+    },
+    "tools/workerd-platform.mjs": {
+      "sha256": "bd05eaaff4e60deaa46c8d5def7c2d69b5d440954a835d4500ba76a065afcc2f",
+      "references": [
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-intrinsic-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tools/workerd-reader-intrinsic-contract.mjs": {
+      "sha256": "ca009971d5a856e373194f38c169521d1d838d95369ae727fdfb84540eac7c96",
+      "references": ["tests/fixtures/workerd-reader-intrinsic-report.json.gz"]
+    },
+    "tools/workerd-reader-lifecycle-state.mjs": {
+      "sha256": "1ae12081c960770cc7375a45fc2074cc94bb7de8e1eb200a6edd97d3848e03eb",
+      "references": [
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tools/workerd-reader-scope-contract.mjs": {
+      "sha256": "5c0928ec9bf0d2d40b0d55259652830b6f72dc95efd07606c4acd280da01125d",
+      "references": ["tests/fixtures/workerd-reader-scope-report.json.gz"]
+    },
+    "tools/workerd-reader-scope-state.mjs": {
+      "sha256": "a71aa5f0bd6535c37afc7cd7ff8909284d026f5026f28f72d43c307554ef6b01",
+      "references": ["tests/fixtures/workerd-reader-scope-report.json.gz"]
+    },
+    "tools/workerd-reference.mjs": {
+      "sha256": "5bb503318a893ba0a83bcd7a3932210ed90a8bf815cde6939e85e4c14cfc73ec",
+      "references": [
+        "tests/fixtures/workerd-native-reader-lifecycle-report.json.gz",
+        "tests/fixtures/workerd-reader-intrinsic-report.json.gz",
+        "tests/fixtures/workerd-reader-scope-report.json.gz",
+        "tests/fixtures/workerd-standard-reader-report.json.gz"
+      ]
+    },
+    "tools/workerd-standard-close-contract.mjs": {
+      "sha256": "6afa2b413261a62060ff91718102d7b7c8dc82ee03beb20c7f3055cbe37a30cb",
+      "references": ["tests/fixtures/workerd-fetch-byob-report.json.gz"]
+    },
+    "tools/workerd-standard-reader-contract.mjs": {
+      "sha256": "8e476c3ce301bd8aafcb75a974486f89ca6d236fd02bdc1c9d4ea88bad1475a9",
+      "references": ["tests/fixtures/workerd-standard-reader-report.json.gz"]
+    },
+    "tools/workerd-standard-reader-state.mjs": {
+      "sha256": "0742ae7221cb234de626f99b0f9413b56c9f3fa67da6210acac54ebda7f1470b",
+      "references": ["tests/fixtures/workerd-standard-reader-report.json.gz"]
+    }
+  }
+}

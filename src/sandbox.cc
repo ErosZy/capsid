@@ -51,11 +51,8 @@ namespace capsid {
 
 uint32_t query_landlock_abi() {
 #if defined(__linux__) && defined(SYS_landlock_create_ruleset)
-    const int abi = static_cast<int>(syscall(
-        SYS_landlock_create_ruleset,
-        NULL,
-        0,
-        LANDLOCK_CREATE_RULESET_VERSION));
+    const int abi = static_cast<int>(
+        syscall(SYS_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION));
     return abi > 0 ? static_cast<uint32_t>(abi) : 0;
 #else
     return 0;
@@ -71,8 +68,7 @@ std::string network_namespace_identity(int descriptor) {
     if (fstat(descriptor, &status) != 0) {
         return {};
     }
-    return "net:[" + std::to_string(
-        static_cast<unsigned long long>(status.st_ino)) + "]";
+    return "net:[" + std::to_string(static_cast<unsigned long long>(status.st_ino)) + "]";
 #else
     (void)descriptor;
     return {};
@@ -82,13 +78,12 @@ std::string network_namespace_identity(int descriptor) {
 namespace {
 
 #if defined(_WIN32)
-bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
+bool install_windows_memory_limit(uint64_t limit_bytes, std::string* error) {
     // Windows job objects bound committed memory (JOB_OBJECT_LIMIT_PROCESS_MEMORY),
     // not the virtual address range RLIMIT_AS bounds on Linux and not the
     // working set. The enforcement is real but the semantics differ; see
     // docs/windows.md for the capability matrix.
-    if (limit_bytes > static_cast<uint64_t>(
-                          std::numeric_limits<SIZE_T>::max())) {
+    if (limit_bytes > static_cast<uint64_t>(std::numeric_limits<SIZE_T>::max())) {
         if (error) {
             *error = "process memory limit exceeds platform range";
         }
@@ -97,26 +92,19 @@ bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
     HANDLE job = CreateJobObjectW(NULL, NULL);
     if (job == NULL) {
         if (error) {
-            *error = std::string("CreateJobObject failed: ") +
-                std::to_string(GetLastError());
+            *error = std::string("CreateJobObject failed: ") + std::to_string(GetLastError());
         }
         return false;
     }
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
     std::memset(&info, 0, sizeof(info));
-    info.BasicLimitInformation.LimitFlags =
-        JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY;
     info.ProcessMemoryLimit = static_cast<SIZE_T>(limit_bytes);
-    if (!SetInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            &info,
-            sizeof(info))) {
+    if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info, sizeof(info))) {
         const DWORD saved_error = GetLastError();
         CloseHandle(job);
         if (error) {
-            *error = std::string("SetInformationJobObject failed: ") +
-                std::to_string(saved_error);
+            *error = std::string("SetInformationJobObject failed: ") + std::to_string(saved_error);
         }
         return false;
     }
@@ -124,8 +112,7 @@ bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
         const DWORD saved_error = GetLastError();
         CloseHandle(job);
         if (error) {
-            *error = std::string("AssignProcessToJobObject failed: ") +
-                std::to_string(saved_error);
+            *error = std::string("AssignProcessToJobObject failed: ") + std::to_string(saved_error);
         }
         return false;
     }
@@ -136,11 +123,7 @@ bool install_windows_memory_limit(uint64_t limit_bytes, std::string *error) {
 #endif
 
 #if !defined(_WIN32)
-bool set_limit(const char *name,
-               int resource,
-               rlim_t current,
-               rlim_t maximum,
-               std::string *error) {
+bool set_limit(const char* name, int resource, rlim_t current, rlim_t maximum, std::string* error) {
     struct rlimit limit;
     limit.rlim_cur = current;
     limit.rlim_max = maximum;
@@ -152,18 +135,18 @@ bool set_limit(const char *name,
     }
     return false;
 }
-#endif  // !defined(_WIN32)
+#endif // !defined(_WIN32)
 
 #if defined(__linux__)
 
-bool fail_errno(const char *operation, std::string *error) {
+bool fail_errno(const char* operation, std::string* error) {
     if (error) {
         *error = std::string(operation) + ": " + std::strerror(errno);
     }
     return false;
 }
 
-bool write_all(int fd, const char *data, size_t size) {
+bool write_all(int fd, const char* data, size_t size) {
     size_t offset = 0;
     while (offset < size) {
         const ssize_t count = write(fd, data + offset, size - offset);
@@ -178,10 +161,8 @@ bool write_all(int fd, const char *data, size_t size) {
     return true;
 }
 
-bool write_control_file(const char *path,
-                        const std::string &value,
-                        bool optional,
-                        std::string *error) {
+bool write_control_file(const char* path, const std::string& value, bool optional,
+                        std::string* error) {
     const int fd = open(path, O_WRONLY | O_CLOEXEC);
     if (fd < 0) {
         if (optional && errno == ENOENT) {
@@ -196,14 +177,10 @@ bool write_control_file(const char *path,
     return ok ? true : fail_errno(path, error);
 }
 
-bool install_namespaces(uint32_t required,
-                        uint32_t *features,
-                        std::string *error) {
+bool install_namespaces(uint32_t required, uint32_t* features, std::string* error) {
     const uint32_t namespace_mask =
-        CAPSID_SANDBOX_FEATURE_USER_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_MOUNT_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_IPC_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE;
+        CAPSID_SANDBOX_FEATURE_USER_NAMESPACE | CAPSID_SANDBOX_FEATURE_MOUNT_NAMESPACE |
+        CAPSID_SANDBOX_FEATURE_IPC_NAMESPACE | CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE;
     if ((required & namespace_mask) == 0) {
         return true;
     }
@@ -213,18 +190,11 @@ bool install_namespaces(uint32_t required,
     if (unshare(CLONE_NEWUSER) != 0) {
         return fail_errno("unshare(CLONE_NEWUSER)", error);
     }
-    if (!write_control_file(
-            "/proc/self/setgroups", "deny\n", true, error) ||
-        !write_control_file(
-            "/proc/self/uid_map",
-            std::string("0 ") + std::to_string(uid) + " 1\n",
-            false,
-            error) ||
-        !write_control_file(
-            "/proc/self/gid_map",
-            std::string("0 ") + std::to_string(gid) + " 1\n",
-            false,
-            error)) {
+    if (!write_control_file("/proc/self/setgroups", "deny\n", true, error) ||
+        !write_control_file("/proc/self/uid_map", std::string("0 ") + std::to_string(uid) + " 1\n",
+                            false, error) ||
+        !write_control_file("/proc/self/gid_map", std::string("0 ") + std::to_string(gid) + " 1\n",
+                            false, error)) {
         return false;
     }
     if (setresgid(0, 0, 0) != 0 || setresuid(0, 0, 0) != 0) {
@@ -260,19 +230,15 @@ bool install_namespaces(uint32_t required,
     return true;
 }
 
-bool install_network_namespace(int descriptor,
-                               uint32_t required,
-                               uint32_t *features,
-                               std::string *error) {
-    const bool expected =
-        (required & CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE) != 0;
+bool install_network_namespace(int descriptor, uint32_t required, uint32_t* features,
+                               std::string* error) {
+    const bool expected = (required & CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE) != 0;
     if (!expected && descriptor < 0) {
         return true;
     }
     if (!expected || descriptor < 0) {
         if (error) {
-            *error =
-                "network namespace descriptor/feature mismatch";
+            *error = "network namespace descriptor/feature mismatch";
         }
         if (descriptor >= 0) {
             close(descriptor);
@@ -292,19 +258,11 @@ bool install_network_namespace(int descriptor,
 
 uint64_t landlock_access_for_abi(int abi) {
     uint64_t access =
-        LANDLOCK_ACCESS_FS_EXECUTE |
-        LANDLOCK_ACCESS_FS_WRITE_FILE |
-        LANDLOCK_ACCESS_FS_READ_FILE |
-        LANDLOCK_ACCESS_FS_READ_DIR |
-        LANDLOCK_ACCESS_FS_REMOVE_DIR |
-        LANDLOCK_ACCESS_FS_REMOVE_FILE |
-        LANDLOCK_ACCESS_FS_MAKE_CHAR |
-        LANDLOCK_ACCESS_FS_MAKE_DIR |
-        LANDLOCK_ACCESS_FS_MAKE_REG |
-        LANDLOCK_ACCESS_FS_MAKE_SOCK |
-        LANDLOCK_ACCESS_FS_MAKE_FIFO |
-        LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-        LANDLOCK_ACCESS_FS_MAKE_SYM;
+        LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_READ_FILE |
+        LANDLOCK_ACCESS_FS_READ_DIR | LANDLOCK_ACCESS_FS_REMOVE_DIR |
+        LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_CHAR |
+        LANDLOCK_ACCESS_FS_MAKE_DIR | LANDLOCK_ACCESS_FS_MAKE_REG | LANDLOCK_ACCESS_FS_MAKE_SOCK |
+        LANDLOCK_ACCESS_FS_MAKE_FIFO | LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SYM;
 #ifdef LANDLOCK_ACCESS_FS_REFER
     if (abi >= 2) {
         access |= LANDLOCK_ACCESS_FS_REFER;
@@ -318,36 +276,27 @@ uint64_t landlock_access_for_abi(int abi) {
     return access;
 }
 
-bool add_landlock_path(int ruleset_fd,
-                       const std::string &path,
-                       bool optional,
-                       uint64_t allowed_access,
-                       std::string *error) {
-    int path_fd =
-        open(path.c_str(), O_PATH | O_CLOEXEC | O_NOFOLLOW);
+bool add_landlock_path(int ruleset_fd, const std::string& path, bool optional,
+                       uint64_t allowed_access, std::string* error) {
+    int path_fd = open(path.c_str(), O_PATH | O_CLOEXEC | O_NOFOLLOW);
     if (path_fd < 0) {
         if (optional && (errno == ENOENT || errno == ENOTDIR)) {
             return true;
         }
-        return fail_errno(
-            (std::string("open Landlock path ") + path).c_str(), error);
+        return fail_errno((std::string("open Landlock path ") + path).c_str(), error);
     }
     struct stat info;
     if (fstat(path_fd, &info) != 0) {
         const int saved_errno = errno;
         close(path_fd);
         errno = saved_errno;
-        return fail_errno(
-            (std::string("stat Landlock path ") + path).c_str(), error);
+        return fail_errno((std::string("stat Landlock path ") + path).c_str(), error);
     }
     if (S_ISLNK(info.st_mode)) {
         close(path_fd);
         if (!optional) {
             if (error) {
-                *error =
-                    std::string(
-                        "Landlock path must not be a symlink: ") +
-                    path;
+                *error = std::string("Landlock path must not be a symlink: ") + path;
             }
             return false;
         }
@@ -358,10 +307,7 @@ bool add_landlock_path(int ruleset_fd,
                 close(path_fd);
             }
             errno = saved_errno;
-            return fail_errno(
-                (std::string("open resolved Landlock path ") +
-                 path).c_str(),
-                error);
+            return fail_errno((std::string("open resolved Landlock path ") + path).c_str(), error);
         }
     }
     struct landlock_path_beneath_attr rule = {};
@@ -373,32 +319,21 @@ bool add_landlock_path(int ruleset_fd,
         }
     }
     rule.allowed_access = allowed_access;
-    const int result = static_cast<int>(syscall(
-        SYS_landlock_add_rule,
-        ruleset_fd,
-        LANDLOCK_RULE_PATH_BENEATH,
-        &rule,
-        0));
+    const int result = static_cast<int>(
+        syscall(SYS_landlock_add_rule, ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &rule, 0));
     const int saved_errno = errno;
     close(path_fd);
     errno = saved_errno;
-    return result == 0
-        ? true
-        : fail_errno(
-              (std::string("add Landlock rule ") + path).c_str(), error);
+    return result == 0 ? true
+                       : fail_errno((std::string("add Landlock rule ") + path).c_str(), error);
 }
 
-bool install_landlock(const std::vector<std::string> &required_paths,
-                      const std::vector<std::string> &write_paths,
-                      std::string *error) {
-#if defined(SYS_landlock_create_ruleset) && \
-    defined(SYS_landlock_add_rule) && \
+bool install_landlock(const std::vector<std::string>& required_paths,
+                      const std::vector<std::string>& write_paths, std::string* error) {
+#if defined(SYS_landlock_create_ruleset) && defined(SYS_landlock_add_rule) &&                      \
     defined(SYS_landlock_restrict_self)
-    const int abi = static_cast<int>(syscall(
-        SYS_landlock_create_ruleset,
-        NULL,
-        0,
-        LANDLOCK_CREATE_RULESET_VERSION));
+    const int abi = static_cast<int>(
+        syscall(SYS_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION));
     if (abi < 1) {
         return fail_errno("query Landlock ABI", error);
     }
@@ -413,13 +348,13 @@ bool install_landlock(const std::vector<std::string> &required_paths,
 
     struct landlock_ruleset_attr attr = {};
     attr.handled_access_fs = landlock_access_for_abi(abi);
-    const int ruleset_fd = static_cast<int>(syscall(
-        SYS_landlock_create_ruleset, &attr, sizeof(attr), 0));
+    const int ruleset_fd =
+        static_cast<int>(syscall(SYS_landlock_create_ruleset, &attr, sizeof(attr), 0));
     if (ruleset_fd < 0) {
         return fail_errno("create Landlock ruleset", error);
     }
 
-    static const char *const optional_paths[] = {
+    static const char* const optional_paths[] = {
         "/etc/resolv.conf",
         "/etc/hosts",
         "/etc/nsswitch.conf",
@@ -431,11 +366,8 @@ bool install_landlock(const std::vector<std::string> &required_paths,
         "/dev/urandom",
         "/dev/random",
     };
-    for (size_t i = 0;
-         i < sizeof(optional_paths) / sizeof(optional_paths[0]);
-         ++i) {
-        if (!add_landlock_path(
-                ruleset_fd, optional_paths[i], true, 0, error)) {
+    for (size_t i = 0; i < sizeof(optional_paths) / sizeof(optional_paths[0]); ++i) {
+        if (!add_landlock_path(ruleset_fd, optional_paths[i], true, 0, error)) {
             close(ruleset_fd);
             return false;
         }
@@ -444,26 +376,27 @@ bool install_landlock(const std::vector<std::string> &required_paths,
 #if defined(CAPSID_SANITIZER_SANDBOX)
     // Diagnostic builds need process introspection and the system symbolizer.
     if (!add_landlock_path(ruleset_fd, "/proc", true, 0, error) ||
-        !add_landlock_path(ruleset_fd, "/proc/self/exe", true,
-                           LANDLOCK_ACCESS_FS_READ_FILE, error)) {
+        !add_landlock_path(ruleset_fd, "/proc/self/exe", true, LANDLOCK_ACCESS_FS_READ_FILE,
+                           error)) {
         close(ruleset_fd);
         return false;
     }
-    static const char *const sanitizer_symbolizer_paths[] = {
-        "/usr/bin", "/usr/lib", "/lib", "/lib64",
+    static const char* const sanitizer_symbolizer_paths[] = {
+        "/usr/bin",
+        "/usr/lib",
+        "/lib",
+        "/lib64",
     };
-    for (const char *path : sanitizer_symbolizer_paths) {
+    for (const char* path : sanitizer_symbolizer_paths) {
         if (!add_landlock_path(ruleset_fd, path, true,
-                LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_EXECUTE,
-                error)) {
+                               LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_EXECUTE, error)) {
             close(ruleset_fd);
             return false;
         }
     }
 #endif
     for (size_t i = 0; i < required_paths.size(); ++i) {
-        if (!add_landlock_path(
-                ruleset_fd, required_paths[i], false, 0, error)) {
+        if (!add_landlock_path(ruleset_fd, required_paths[i], false, 0, error)) {
             close(ruleset_fd);
             return false;
         }
@@ -471,12 +404,9 @@ bool install_landlock(const std::vector<std::string> &required_paths,
     // Binding write paths: Landlock allows the file mutations the profile
     // promises (regular files, dirs, remove) but never devices, FIFOs or
     // sockets (MAKE_CHAR/MAKE_FIFO/MAKE_SOCK are not granted).
-    uint64_t write_access =
-        LANDLOCK_ACCESS_FS_WRITE_FILE |
-        LANDLOCK_ACCESS_FS_MAKE_REG |
-        LANDLOCK_ACCESS_FS_REMOVE_FILE |
-        LANDLOCK_ACCESS_FS_MAKE_DIR |
-        LANDLOCK_ACCESS_FS_REMOVE_DIR;
+    uint64_t write_access = LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_MAKE_REG |
+                            LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_DIR |
+                            LANDLOCK_ACCESS_FS_REMOVE_DIR;
 #ifdef LANDLOCK_ACCESS_FS_REFER
     if (abi >= 2) {
         write_access |= LANDLOCK_ACCESS_FS_REFER;
@@ -488,8 +418,7 @@ bool install_landlock(const std::vector<std::string> &required_paths,
     }
 #endif
     for (size_t i = 0; i < write_paths.size(); ++i) {
-        if (!add_landlock_path(
-                ruleset_fd, write_paths[i], false, write_access, error)) {
+        if (!add_landlock_path(ruleset_fd, write_paths[i], false, write_access, error)) {
             close(ruleset_fd);
             return false;
         }
@@ -512,20 +441,15 @@ bool install_landlock(const std::vector<std::string> &required_paths,
 #endif
 }
 
-void bpf_statement(std::vector<struct sock_filter> *filter,
-                   uint16_t code,
-                   uint32_t value) {
+void bpf_statement(std::vector<struct sock_filter>* filter, uint16_t code, uint32_t value) {
     struct sock_filter instruction = {};
     instruction.code = code;
     instruction.k = value;
     filter->push_back(instruction);
 }
 
-void bpf_jump(std::vector<struct sock_filter> *filter,
-              uint16_t code,
-              uint32_t value,
-              uint8_t jump_true,
-              uint8_t jump_false) {
+void bpf_jump(std::vector<struct sock_filter>* filter, uint16_t code, uint32_t value,
+              uint8_t jump_true, uint8_t jump_false) {
     struct sock_filter instruction = {};
     instruction.code = code;
     instruction.jt = jump_true;
@@ -535,27 +459,22 @@ void bpf_jump(std::vector<struct sock_filter> *filter,
 }
 
 uint32_t seccomp_errno_action() {
-    return SECCOMP_RET_ERRNO |
-        (static_cast<uint32_t>(EPERM) & SECCOMP_RET_DATA);
+    return SECCOMP_RET_ERRNO | (static_cast<uint32_t>(EPERM) & SECCOMP_RET_DATA);
 }
 
-void deny_syscall(std::vector<struct sock_filter> *filter, int number) {
-    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
-             static_cast<uint32_t>(number), 0, 1);
+void deny_syscall(std::vector<struct sock_filter>* filter, int number) {
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, static_cast<uint32_t>(number), 0, 1);
     bpf_statement(filter, BPF_RET | BPF_K, seccomp_errno_action());
 }
 
-void allow_syscall(std::vector<struct sock_filter> *filter, int number) {
-    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
-             static_cast<uint32_t>(number), 0, 1);
+void allow_syscall(std::vector<struct sock_filter>* filter, int number) {
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, static_cast<uint32_t>(number), 0, 1);
     bpf_statement(filter, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 }
 
-void filter_open_syscall(std::vector<struct sock_filter> *filter,
-                         int number,
+void filter_open_syscall(std::vector<struct sock_filter>* filter, int number,
                          size_t flags_argument) {
-    uint32_t forbidden =
-        O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
+    uint32_t forbidden = O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND;
 #ifdef O_TMPFILE
 #if defined(CAPSID_SANITIZER_SANDBOX)
     // O_TMPFILE includes O_DIRECTORY; LSan must read /proc task directories.
@@ -564,100 +483,64 @@ void filter_open_syscall(std::vector<struct sock_filter> *filter,
     forbidden |= O_TMPFILE;
 #endif
 #endif
-    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
-             static_cast<uint32_t>(number), 0, 4);
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        static_cast<uint32_t>(
-            offsetof(struct seccomp_data, args) +
-            flags_argument * sizeof(uint64_t)));
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, static_cast<uint32_t>(number), 0, 4);
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS,
+                  static_cast<uint32_t>(offsetof(struct seccomp_data, args) +
+                                        flags_argument * sizeof(uint64_t)));
     bpf_jump(filter, BPF_JMP | BPF_JSET | BPF_K, forbidden, 0, 1);
     bpf_statement(filter, BPF_RET | BPF_K, seccomp_errno_action());
     bpf_statement(filter, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        offsetof(struct seccomp_data, nr));
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 }
 
-void filter_executable_memory(std::vector<struct sock_filter> *filter,
-                              int number) {
-    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
-             static_cast<uint32_t>(number), 0, 4);
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        static_cast<uint32_t>(offsetof(struct seccomp_data, args[2])));
+void filter_executable_memory(std::vector<struct sock_filter>* filter, int number) {
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, static_cast<uint32_t>(number), 0, 4);
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS,
+                  static_cast<uint32_t>(offsetof(struct seccomp_data, args[2])));
     bpf_jump(filter, BPF_JMP | BPF_JSET | BPF_K, PROT_EXEC, 0, 1);
     bpf_statement(filter, BPF_RET | BPF_K, seccomp_errno_action());
     bpf_statement(filter, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        offsetof(struct seccomp_data, nr));
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 }
 
-void filter_socket_syscall(std::vector<struct sock_filter> *filter) {
+void filter_socket_syscall(std::vector<struct sock_filter>* filter) {
 #ifdef __NR_socket
-    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
-             static_cast<uint32_t>(__NR_socket), 0, 10);
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        static_cast<uint32_t>(offsetof(struct seccomp_data, args[0])));
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, static_cast<uint32_t>(__NR_socket), 0, 10);
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS,
+                  static_cast<uint32_t>(offsetof(struct seccomp_data, args[0])));
     bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, AF_INET, 2, 0);
     bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, AF_INET6, 1, 0);
     bpf_statement(filter, BPF_RET | BPF_K, seccomp_errno_action());
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        static_cast<uint32_t>(offsetof(struct seccomp_data, args[1])));
-    bpf_statement(
-        filter,
-        BPF_ALU | BPF_AND | BPF_K,
-        static_cast<uint32_t>(~(SOCK_NONBLOCK | SOCK_CLOEXEC)));
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS,
+                  static_cast<uint32_t>(offsetof(struct seccomp_data, args[1])));
+    bpf_statement(filter, BPF_ALU | BPF_AND | BPF_K,
+                  static_cast<uint32_t>(~(SOCK_NONBLOCK | SOCK_CLOEXEC)));
     bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, SOCK_STREAM, 1, 0);
     bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, SOCK_DGRAM, 0, 1);
     bpf_statement(filter, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
     bpf_statement(filter, BPF_RET | BPF_K, seccomp_errno_action());
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        offsetof(struct seccomp_data, nr));
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 #else
     (void)filter;
 #endif
 }
 
-void filter_prctl_syscall(std::vector<struct sock_filter> *filter) {
+void filter_prctl_syscall(std::vector<struct sock_filter>* filter) {
 #ifdef __NR_prctl
-    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K,
-             static_cast<uint32_t>(__NR_prctl), 0, 4);
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        static_cast<uint32_t>(offsetof(struct seccomp_data, args[0])));
-    bpf_jump(
-        filter,
-        BPF_JMP | BPF_JEQ | BPF_K,
-        PR_GET_NO_NEW_PRIVS,
-        0,
-        1);
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, static_cast<uint32_t>(__NR_prctl), 0, 4);
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS,
+                  static_cast<uint32_t>(offsetof(struct seccomp_data, args[0])));
+    bpf_jump(filter, BPF_JMP | BPF_JEQ | BPF_K, PR_GET_NO_NEW_PRIVS, 0, 1);
     bpf_statement(filter, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
     bpf_statement(filter, BPF_RET | BPF_K, seccomp_errno_action());
-    bpf_statement(
-        filter,
-        BPF_LD | BPF_W | BPF_ABS,
-        offsetof(struct seccomp_data, nr));
+    bpf_statement(filter, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 #else
     (void)filter;
 #endif
 }
 
-bool has_binding_profile(const std::vector<std::string> &profiles,
-                          const char *name) {
-    for (const std::string &profile : profiles) {
+bool has_binding_profile(const std::vector<std::string>& profiles, const char* name) {
+    for (const std::string& profile : profiles) {
         if (profile == name) {
             return true;
         }
@@ -665,24 +548,16 @@ bool has_binding_profile(const std::vector<std::string> &profiles,
     return false;
 }
 
-bool install_seccomp(const std::vector<std::string> &binding_profiles,
-                     std::string *error) {
-    const bool allow_fs_write =
-        has_binding_profile(binding_profiles, "filesystem-write");
-    const bool allow_fs_watch =
-        has_binding_profile(binding_profiles, "filesystem-watch");
-    const bool allow_sqlite =
-        has_binding_profile(binding_profiles, "sqlite");
+bool install_seccomp(const std::vector<std::string>& binding_profiles, std::string* error) {
+    const bool allow_fs_write = has_binding_profile(binding_profiles, "filesystem-write");
+    const bool allow_fs_watch = has_binding_profile(binding_profiles, "filesystem-watch");
+    const bool allow_sqlite = has_binding_profile(binding_profiles, "sqlite");
     std::vector<struct sock_filter> filter;
-    bpf_statement(
-        &filter, BPF_LD | BPF_W | BPF_ABS,
-        offsetof(struct seccomp_data, arch));
+    bpf_statement(&filter, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
 #if defined(__x86_64__)
-    bpf_jump(&filter, BPF_JMP | BPF_JEQ | BPF_K,
-             AUDIT_ARCH_X86_64, 1, 0);
+    bpf_jump(&filter, BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0);
 #elif defined(__aarch64__)
-    bpf_jump(&filter, BPF_JMP | BPF_JEQ | BPF_K,
-             AUDIT_ARCH_AARCH64, 1, 0);
+    bpf_jump(&filter, BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
 #else
     if (error) {
         *error = "seccomp policy supports Linux x86_64 and aarch64 only";
@@ -690,9 +565,7 @@ bool install_seccomp(const std::vector<std::string> &binding_profiles,
     return false;
 #endif
     bpf_statement(&filter, BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
-    bpf_statement(
-        &filter, BPF_LD | BPF_W | BPF_ABS,
-        offsetof(struct seccomp_data, nr));
+    bpf_statement(&filter, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 
 #if defined(CAPSID_SANITIZER_SANDBOX)
 // Diagnostic-only process operations required by sanitizer tracing and symbolization.
@@ -752,10 +625,10 @@ bool install_seccomp(const std::vector<std::string> &binding_profiles,
 #endif
 #endif
 
-#define CAPSID_DENY_SYSCALL(name) \
-    do { \
-        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
-        deny_syscall(&filter, __NR_##name); \
+#define CAPSID_DENY_SYSCALL(name)                                                                  \
+    do {                                                                                           \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                           \
+        deny_syscall(&filter, __NR_##name);                                                        \
     } while (0)
 #ifdef __NR_accept
     CAPSID_DENY_SYSCALL(accept);
@@ -853,38 +726,38 @@ bool install_seccomp(const std::vector<std::string> &binding_profiles,
 #ifdef __NR_io_uring_register
     CAPSID_DENY_SYSCALL(io_uring_register);
 #endif
-// Binding v1 §4.2: filesystem-write lifts the frozen deny set for the
-// exact mutation syscalls its profile promises. The permanent denies
-// above (exec, clone, ptrace, mount, raw sockets, io_uring, ...) stay.
-if (!allow_fs_write) {
+    // Binding v1 §4.2: filesystem-write lifts the frozen deny set for the
+    // exact mutation syscalls its profile promises. The permanent denies
+    // above (exec, clone, ptrace, mount, raw sockets, io_uring, ...) stay.
+    if (!allow_fs_write) {
 #ifdef __NR_creat
-    CAPSID_DENY_SYSCALL(creat);
+        CAPSID_DENY_SYSCALL(creat);
 #endif
 #ifdef __NR_unlink
-    CAPSID_DENY_SYSCALL(unlink);
+        CAPSID_DENY_SYSCALL(unlink);
 #endif
 #ifdef __NR_unlinkat
-    CAPSID_DENY_SYSCALL(unlinkat);
+        CAPSID_DENY_SYSCALL(unlinkat);
 #endif
 #ifdef __NR_rename
-    CAPSID_DENY_SYSCALL(rename);
+        CAPSID_DENY_SYSCALL(rename);
 #endif
 #ifdef __NR_renameat
-    CAPSID_DENY_SYSCALL(renameat);
+        CAPSID_DENY_SYSCALL(renameat);
 #endif
 #ifdef __NR_renameat2
-    CAPSID_DENY_SYSCALL(renameat2);
+        CAPSID_DENY_SYSCALL(renameat2);
 #endif
 #ifdef __NR_mkdir
-    CAPSID_DENY_SYSCALL(mkdir);
+        CAPSID_DENY_SYSCALL(mkdir);
 #endif
 #ifdef __NR_mkdirat
-    CAPSID_DENY_SYSCALL(mkdirat);
+        CAPSID_DENY_SYSCALL(mkdirat);
 #endif
 #ifdef __NR_rmdir
-    CAPSID_DENY_SYSCALL(rmdir);
+        CAPSID_DENY_SYSCALL(rmdir);
 #endif
-}
+    }
 #undef CAPSID_DENY_SYSCALL
 
 #ifdef __NR_open
@@ -919,8 +792,10 @@ if (!allow_fs_write) {
     filter_socket_syscall(&filter);
     filter_prctl_syscall(&filter);
 
-#define CAPSID_ALLOW_SYSCALL(name) \
-    do { allow_syscall(&filter, __NR_##name); } while (0)
+#define CAPSID_ALLOW_SYSCALL(name)                                                                 \
+    do {                                                                                           \
+        allow_syscall(&filter, __NR_##name);                                                       \
+    } while (0)
 #ifdef __NR_read
     CAPSID_ALLOW_SYSCALL(read);
 #endif
@@ -1205,8 +1080,10 @@ if (!allow_fs_write) {
 #endif
 #undef CAPSID_ALLOW_SYSCALL
 
-#define CAPSID_PROFILE_ALLOW_SYSCALL(name) \
-    do { allow_syscall(&filter, __NR_##name); } while (0)
+#define CAPSID_PROFILE_ALLOW_SYSCALL(name)                                                         \
+    do {                                                                                           \
+        allow_syscall(&filter, __NR_##name);                                                       \
+    } while (0)
     if (allow_fs_write) {
 #ifdef __NR_creat
         CAPSID_PROFILE_ALLOW_SYSCALL(creat);
@@ -1292,11 +1169,7 @@ if (!allow_fs_write) {
     struct sock_fprog program;
     program.len = static_cast<unsigned short>(filter.size());
     program.filter = &filter[0];
-    if (syscall(
-            SYS_seccomp,
-            SECCOMP_SET_MODE_FILTER,
-            SECCOMP_FILTER_FLAG_TSYNC,
-            &program) != 0) {
+    if (syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &program) != 0) {
         return fail_errno("install seccomp filter", error);
     }
     return true;
@@ -1304,13 +1177,10 @@ if (!allow_fs_write) {
 
 #endif
 
-}  // namespace
+} // namespace
 
-bool apply_sandbox(const SandboxConfig &config,
-                   uint32_t *applied_features,
-                   uint32_t *landlock_abi,
-                   uint32_t *seccomp_mode,
-                   std::string *error) {
+bool apply_sandbox(const SandboxConfig& config, uint32_t* applied_features, uint32_t* landlock_abi,
+                   uint32_t* seccomp_mode, std::string* error) {
     if (landlock_abi) {
         *landlock_abi = 0;
     }
@@ -1328,8 +1198,7 @@ bool apply_sandbox(const SandboxConfig &config,
     // rejected below, matching the non-Linux behavior of every other
     // platform.
     if (config.address_space_limit != 0) {
-        if (!install_windows_memory_limit(
-                config.address_space_limit, error)) {
+        if (!install_windows_memory_limit(config.address_space_limit, error)) {
             return false;
         }
         features |= CAPSID_SANDBOX_FEATURE_RLIMITS;
@@ -1339,8 +1208,7 @@ bool apply_sandbox(const SandboxConfig &config,
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     if (config.strict) {
         if (error) {
-            *error =
-                "strict sandbox is unavailable on this platform/build";
+            *error = "strict sandbox is unavailable on this platform/build";
         }
         return false;
     }
@@ -1352,29 +1220,23 @@ bool apply_sandbox(const SandboxConfig &config,
     if (!set_limit("RLIMIT_CORE", RLIMIT_CORE, 0, 0, error)) {
         return false;
     }
-    if (!set_limit("RLIMIT_NOFILE",
-                   RLIMIT_NOFILE,
+    if (!set_limit("RLIMIT_NOFILE", RLIMIT_NOFILE,
                    static_cast<rlim_t>(config.file_descriptor_limit),
-                   static_cast<rlim_t>(config.file_descriptor_limit),
-                   error)) {
+                   static_cast<rlim_t>(config.file_descriptor_limit), error)) {
         return false;
     }
 #if defined(__APPLE__)
     if (config.address_space_limit != 0) {
         if (error) {
-            *error =
-                "process memory limit is unsupported on Darwin; use 0 or "
-                "enforce a host-side resident-memory limit";
+            *error = "process memory limit is unsupported on Darwin; use 0 or "
+                     "enforce a host-side resident-memory limit";
         }
         return false;
     }
 #elif defined(RLIMIT_AS)
     if (config.address_space_limit &&
-        !set_limit("RLIMIT_AS",
-                   RLIMIT_AS,
-                   static_cast<rlim_t>(config.address_space_limit),
-                   static_cast<rlim_t>(config.address_space_limit),
-                   error)) {
+        !set_limit("RLIMIT_AS", RLIMIT_AS, static_cast<rlim_t>(config.address_space_limit),
+                   static_cast<rlim_t>(config.address_space_limit), error)) {
         return false;
     }
 #endif
@@ -1385,8 +1247,7 @@ bool apply_sandbox(const SandboxConfig &config,
         if (config.network_namespace_fd >= 0) {
             close(config.network_namespace_fd);
             if (error) {
-                *error =
-                    "network namespace requires strict sandbox mode";
+                *error = "network namespace requires strict sandbox mode";
             }
             return false;
         }
@@ -1398,11 +1259,8 @@ bool apply_sandbox(const SandboxConfig &config,
     }
 
 #if defined(__linux__)
-    if (!install_network_namespace(
-            config.network_namespace_fd,
-            config.required_features,
-            &features,
-            error)) {
+    if (!install_network_namespace(config.network_namespace_fd, config.required_features, &features,
+                                   error)) {
         return false;
     }
     if (!install_namespaces(config.required_features, &features, error)) {
@@ -1416,13 +1274,11 @@ bool apply_sandbox(const SandboxConfig &config,
     // WASM runtime's syscalls sit inside the frozen base allow list and
     // its file access is Landlock-read bounded, so the profile needs no
     // extra kernel surface.
-    std::vector<std::string> landlock_read_paths =
-        config.read_only_paths;
-    for (const std::string &path : config.binding_read_paths) {
+    std::vector<std::string> landlock_read_paths = config.read_only_paths;
+    for (const std::string& path : config.binding_read_paths) {
         landlock_read_paths.push_back(path);
     }
-    if (!install_landlock(landlock_read_paths,
-                          config.binding_write_paths, error)) {
+    if (!install_landlock(landlock_read_paths, config.binding_write_paths, error)) {
         return false;
     }
     features |= CAPSID_SANDBOX_FEATURE_LANDLOCK;
@@ -1444,8 +1300,7 @@ bool apply_sandbox(const SandboxConfig &config,
         if (error) {
             char value[11];
             std::snprintf(value, sizeof(value), "0x%08x", missing);
-            *error = std::string(
-                "required sandbox features unavailable: ") + value;
+            *error = std::string("required sandbox features unavailable: ") + value;
         }
         return false;
     }
@@ -1456,12 +1311,11 @@ bool apply_sandbox(const SandboxConfig &config,
 #else
     (void)config;
     if (error) {
-        *error =
-            "strict sandbox is unavailable on this platform/build";
+        *error = "strict sandbox is unavailable on this platform/build";
     }
     return false;
 #endif
-#endif  // !defined(_WIN32)
+#endif // !defined(_WIN32)
 }
 
-}  // namespace capsid
+} // namespace capsid

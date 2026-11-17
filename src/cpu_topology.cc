@@ -38,8 +38,7 @@ std::vector<uint32_t> available_cpus() {
     // enumerated; see docs/windows.md.
     DWORD_PTR process_mask = 0;
     DWORD_PTR system_mask = 0;
-    if (!GetProcessAffinityMask(
-            GetCurrentProcess(), &process_mask, &system_mask)) {
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &process_mask, &system_mask)) {
         return output;
     }
     const uint32_t width = sizeof(DWORD_PTR) * 8;
@@ -55,8 +54,8 @@ std::vector<uint32_t> available_cpus() {
     // result on Linux.
     int cpu_count = 0;
     std::size_t size = sizeof(cpu_count);
-    if (sysctlbyname("hw.ncpu", &cpu_count, &size, nullptr, 0) != 0 ||
-        size != sizeof(cpu_count) || cpu_count <= 0) {
+    if (sysctlbyname("hw.ncpu", &cpu_count, &size, nullptr, 0) != 0 || size != sizeof(cpu_count) ||
+        cpu_count <= 0) {
         return output;
     }
     for (int cpu = 0; cpu < cpu_count; ++cpu) {
@@ -66,25 +65,21 @@ std::vector<uint32_t> available_cpus() {
     return output;
 }
 
-double parse_cpu_max(const std::string &value) {
+double parse_cpu_max(const std::string& value) {
     std::istringstream input(value);
     std::string quota_text;
     uint64_t period = 0;
     std::string trailing;
-    if (!(input >> quota_text >> period) ||
-        period == 0 ||
-        (input >> trailing) ||
+    if (!(input >> quota_text >> period) || period == 0 || (input >> trailing) ||
         quota_text == "max") {
         return 0.0;
     }
     std::istringstream quota_input(quota_text);
     uint64_t quota = 0;
-    if (!(quota_input >> quota) || quota == 0 ||
-        (quota_input >> trailing)) {
+    if (!(quota_input >> quota) || quota == 0 || (quota_input >> trailing)) {
         return 0.0;
     }
-    return static_cast<double>(quota) /
-        static_cast<double>(period);
+    return static_cast<double>(quota) / static_cast<double>(period);
 }
 
 double cgroup_v2_cpu_quota() {
@@ -106,10 +101,8 @@ double cgroup_v2_cpu_quota() {
     if (relative.empty() || relative.find("..") != std::string::npos) {
         return 0.0;
     }
-    const std::string path =
-        std::string("/sys/fs/cgroup") + relative +
-        (relative[relative.size() - 1] == '/' ? "" : "/") +
-        "cpu.max";
+    const std::string path = std::string("/sys/fs/cgroup") + relative +
+                             (relative[relative.size() - 1] == '/' ? "" : "/") + "cpu.max";
     std::ifstream input(path.c_str());
     if (!input) {
         return 0.0;
@@ -120,22 +113,15 @@ double cgroup_v2_cpu_quota() {
 #endif
 }
 
-uint32_t recommended_worker_count(
-    size_t available,
-    double quota_cores) {
-    uint32_t count = available == 0
-        ? 1
-        : available > UINT32_MAX
-            ? UINT32_MAX
-            : static_cast<uint32_t>(available);
+uint32_t recommended_worker_count(size_t available, double quota_cores) {
+    uint32_t count = available == 0           ? 1
+                     : available > UINT32_MAX ? UINT32_MAX
+                                              : static_cast<uint32_t>(available);
     if (quota_cores > 0.0) {
         const double rounded = std::ceil(quota_cores);
-        const uint32_t quota_workers =
-            rounded > static_cast<double>(UINT32_MAX)
-                ? UINT32_MAX
-                : rounded < 1.0
-                    ? 1
-                    : static_cast<uint32_t>(rounded);
+        const uint32_t quota_workers = rounded > static_cast<double>(UINT32_MAX) ? UINT32_MAX
+                                       : rounded < 1.0 ? 1
+                                                       : static_cast<uint32_t>(rounded);
         if (quota_workers < count) {
             count = quota_workers;
         }
@@ -143,5 +129,5 @@ uint32_t recommended_worker_count(
     return count == 0 ? 1 : count;
 }
 
-}  // namespace topology
-}  // namespace capsid
+} // namespace topology
+} // namespace capsid

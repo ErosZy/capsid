@@ -39,8 +39,7 @@ void require(bool condition, const std::string& message) {
     }
 }
 
-void require_workers(std::vector<PoolWorkerId> actual,
-                     std::vector<PoolWorkerId> expected,
+void require_workers(std::vector<PoolWorkerId> actual, std::vector<PoolWorkerId> expected,
                      const std::string& message) {
     std::sort(actual.begin(), actual.end());
     std::sort(expected.begin(), expected.end());
@@ -49,8 +48,7 @@ void require_workers(std::vector<PoolWorkerId> actual,
 
 void test_activates_only_when_all_ready() {
     StaticPoolState empty(0);
-    require(!empty.can_activate(),
-            "zero-target pool claimed it could activate");
+    require(!empty.can_activate(), "zero-target pool claimed it could activate");
     require(!empty.activate(), "zero-target pool activated");
     require(!empty.active(), "invalid zero-target activation changed state");
 
@@ -62,8 +60,7 @@ void test_activates_only_when_all_ready() {
     require(pool.register_starting(101, 0), "worker 101 was not registered");
     require(pool.register_starting(102, 1), "worker 102 was not registered");
     require(pool.register_starting(103, 0), "worker 103 was not registered");
-    require(!pool.register_starting(104, 1),
-            "pool accepted more workers than its fixed target");
+    require(!pool.register_starting(104, 1), "pool accepted more workers than its fixed target");
     require(pool.registered_workers() == 3,
             "registered worker count did not reach the fixed target");
 
@@ -76,8 +73,7 @@ void test_activates_only_when_all_ready() {
 
     require(!pool.mark_ready(999), "unknown worker was accepted as READY");
     require(!pool.mark_ready(102), "duplicate READY transition was accepted");
-    require(pool.ready_workers() == 2,
-            "invalid READY transitions changed the READY count");
+    require(pool.ready_workers() == 2, "invalid READY transitions changed the READY count");
 
     require(pool.mark_ready(103), "final worker did not become READY");
     require(pool.can_activate(), "fully READY fixed pool cannot activate");
@@ -119,7 +115,7 @@ void test_preserves_owner_shard() {
 
 #endif
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
 #if !CAPSID_HAS_STATIC_POOL

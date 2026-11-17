@@ -11,8 +11,7 @@
 
 namespace capsid::host {
 
-inline constexpr std::string_view kBindingRuntimeCompatibilityVersion =
-    "capsid-binding-runtime-v1";
+inline constexpr std::string_view kBindingRuntimeCompatibilityVersion = "capsid-binding-runtime-v1";
 
 // "sha256:" plus the lowercase hex SHA-256 of `bytes`. Shared by the
 // generation digest, the binding manifest digest and the binding registry
@@ -71,12 +70,11 @@ struct BindingSetDigestEntry {
     std::string permission_digest;
     std::string profile_digest;
     std::string binding_runtime_compatibility;
-    std::vector<std::string> secret_key_ids;  // sorted
+    std::vector<std::string> secret_key_ids; // sorted
     std::string secret_revision;
 };
 
-std::string compute_binding_set_digest(
-    const std::vector<BindingSetDigestEntry> &entries);
+std::string compute_binding_set_digest(const std::vector<BindingSetDigestEntry>& entries);
 
 // Returns "sha256:" plus lowercase SHA-256 of this binary record:
 // "capsid-generation-v1\0", followed by every field above in declaration
@@ -91,10 +89,9 @@ std::string compute_generation_digest(const GenerationIdentityInput& input);
 // defaulted config and an explicitly-default config are the same
 // identity). Embedders feed the result into
 // GenerationIdentityInput::protocol_limits_digest.
-std::string compute_protocol_limits_digest(
-    std::uint16_t wire_version,
-    const capsid::protocol::ChannelLimits& limits);
+std::string compute_protocol_limits_digest(std::uint16_t wire_version,
+                                           const capsid::protocol::ChannelLimits& limits);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

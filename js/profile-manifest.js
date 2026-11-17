@@ -2,7 +2,8 @@
 // profile. Additions and removals are observable profile changes.
 export const profileId = 'CAPSID-MIN-2025-subset-v0';
 
-export const profileGlobalNames = Object.freeze([
+export const profileGlobalNames = Object.freeze(
+  [
     'AbortController',
     'AbortSignal',
     'AggregateError',
@@ -130,4 +131,5 @@ export const profileGlobalNames = Object.freeze([
     'structuredClone',
     'undefined',
     'unescape',
-].sort());
+  ].sort(),
+);

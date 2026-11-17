@@ -11,7 +11,7 @@
 #include <vector>
 
 namespace {
-void require(bool condition, const std::string &message) {
+void require(bool condition, const std::string& message) {
     if (!condition)
         throw std::runtime_error(message);
 }
@@ -51,13 +51,13 @@ std::uint16_t read_port(int fd) {
 }
 } // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     try {
         require(argc == 2, "expected actual Worker path");
         ReadyPair ready;
         capsid::host::StaticPoolServerOptions options;
         options.workers = 2;
-        auto &worker = options.worker_options;
+        auto& worker = options.worker_options;
         worker.worker_path = argv[1];
         worker.source_bundle_path = "static-pool-faults-inline";
         worker.source_name = "file://orders/v1/bundle.mjs";
@@ -129,7 +129,7 @@ export default {fetch(request) {
         require(pool.active_workers() == 0, "zero capacity after wait");
         std::cout << "{\"stage\":\"stopped\",\"active\":0}" << std::endl;
         return 0;
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
         std::cerr << "static pool fixture: " << error.what() << std::endl;
         return 1;
     }

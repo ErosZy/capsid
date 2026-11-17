@@ -14,6 +14,7 @@ fixture and binds 127.0.0.1:18992.
 
 Usage: python3 bench/gen-cold-start-apps.py <outdir>
 """
+
 import os
 import sys
 
@@ -82,8 +83,8 @@ def capsid_entry():
         "  async fetch(req) {\n"
         '    const q = fn00000(parseInt(req.headers.get("x-seed") || "7", 10));\n'
         "    return new Response(\n"
-        "      JSON.stringify({ status: \"ok\", total: q.total, count: q.count }),\n"
-        "      { headers: { \"content-type\": \"application/json\" } },\n"
+        '      JSON.stringify({ status: "ok", total: q.total, count: q.count }),\n'
+        '      { headers: { "content-type": "application/json" } },\n'
         "    );\n"
         "  },\n"
         "};\n"
@@ -92,28 +93,28 @@ def capsid_entry():
 
 def node_entry():
     return (
-        "import { createServer } from \"node:http\";\n"
+        'import { createServer } from "node:http";\n'
         "const server = createServer((req, res) => {\n"
         "  const q = fn00000(7);\n"
-        "  res.setHeader(\"content-type\", \"application/json\");\n"
-        "  res.end(JSON.stringify({ status: \"ok\", total: q.total, count: q.count }));\n"
+        '  res.setHeader("content-type", "application/json");\n'
+        '  res.end(JSON.stringify({ status: "ok", total: q.total, count: q.count }));\n'
         "});\n"
-        "server.listen(18990, \"127.0.0.1\", () => console.log(\"READY\"));\n"
+        'server.listen(18990, "127.0.0.1", () => console.log("READY"));\n'
     )
 
 
 def deno_entry():
     return (
-        "const server = Deno.serve({ port: 18991, hostname: \"127.0.0.1\" },\n"
+        'const server = Deno.serve({ port: 18991, hostname: "127.0.0.1" },\n'
         "  (req) => {\n"
         "    const q = fn00000(7);\n"
         "    return new Response(\n"
-        "      JSON.stringify({ status: \"ok\", total: q.total, count: q.count }),\n"
-        "      { headers: { \"content-type\": \"application/json\" } },\n"
+        '      JSON.stringify({ status: "ok", total: q.total, count: q.count }),\n'
+        '      { headers: { "content-type": "application/json" } },\n'
         "    );\n"
         "  },\n"
         ");\n"
-        "console.log(\"READY\");\n"
+        'console.log("READY");\n'
     )
 
 
@@ -123,8 +124,8 @@ def workerd_entry():
         "  async fetch(request, env, ctx) {\n"
         "    const q = fn00000(7);\n"
         "    return new Response(\n"
-        "      JSON.stringify({ status: \"ok\", total: q.total, count: q.count }),\n"
-        "      { headers: { \"content-type\": \"application/json\" } },\n"
+        '      JSON.stringify({ status: "ok", total: q.total, count: q.count }),\n'
+        '      { headers: { "content-type": "application/json" } },\n'
         "    );\n"
         "  },\n"
         "};\n"
@@ -133,19 +134,19 @@ def workerd_entry():
 
 def workerd_config(fixture_name):
     return (
-        "using Workerd = import \"/workerd/workerd.capnp\";\n"
+        'using Workerd = import "/workerd/workerd.capnp";\n'
         "\n"
         "const config :Workerd.Config = (\n"
-        "  services = [ (name = \"main\", worker = .mainWorker) ],\n"
+        '  services = [ (name = "main", worker = .mainWorker) ],\n'
         "  sockets = [\n"
-        "    (name = \"http\", address = \"127.0.0.1:18992\", http = (),\n"
-        "     service = \"main\"),\n"
+        '    (name = "http", address = "127.0.0.1:18992", http = (),\n'
+        '     service = "main"),\n'
         "  ],\n"
         ");\n"
         "\n"
         "const mainWorker :Workerd.Worker = (\n"
-        "  compatibilityDate = \"2026-08-20\",\n"
-        "  modules = [ (name = \"main\", esModule = embed \"%s\") ],\n"
+        '  compatibilityDate = "2026-08-20",\n'
+        '  modules = [ (name = "main", esModule = embed "%s") ],\n'
         ");\n" % fixture_name
     )
 
@@ -170,11 +171,18 @@ def main():
         p2 = write(outdir, "app-node-%s.mjs" % label, node)
         p3 = write(outdir, "app-deno-%s.mjs" % label, deno)
         p4 = write(outdir, "app-workerd-%s.mjs" % label, workerd)
-        p5 = write(outdir, "workerd-%s.capnp" % label,
-                   workerd_config("app-workerd-%s.mjs" % label))
-        print("%s: %d top-level units, capsid=%d node=%d deno=%d workerd=%d bytes" %
-              (label, count, os.path.getsize(p1), os.path.getsize(p2),
-               os.path.getsize(p3), os.path.getsize(p4)))
+        p5 = write(outdir, "workerd-%s.capnp" % label, workerd_config("app-workerd-%s.mjs" % label))
+        print(
+            "%s: %d top-level units, capsid=%d node=%d deno=%d workerd=%d bytes"
+            % (
+                label,
+                count,
+                os.path.getsize(p1),
+                os.path.getsize(p2),
+                os.path.getsize(p3),
+                os.path.getsize(p4),
+            )
+        )
 
 
 if __name__ == "__main__":

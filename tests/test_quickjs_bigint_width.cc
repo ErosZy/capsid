@@ -4,17 +4,18 @@
 #include <cstring>
 
 int main() {
-    JSRuntime *runtime = JS_NewRuntime();
-    if (!runtime) return 1;
+    JSRuntime* runtime = JS_NewRuntime();
+    if (!runtime)
+        return 1;
     JS_SetMemoryLimit(runtime, 64U * 1024U * 1024U);
-    JSContext *context = JS_NewContext(runtime);
+    JSContext* context = JS_NewContext(runtime);
     if (!context) {
         JS_FreeRuntime(runtime);
         return 1;
     }
     // Arithmetic modulo is independent of the builtins' limb masking and
     // sign-extension shortcuts. Exercise both short and heap BigInts.
-    const char *source = R"JS((() => {
+    const char* source = R"JS((() => {
         let checks = 0, failed = 0;
         const examples = [];
         const check = (condition, label) => {
@@ -88,20 +89,22 @@ int main() {
         if (failed) throw new Error(JSON.stringify({checks, failed, examples}));
         return checks;
     })())JS";
-    JSValue result = JS_Eval(context, source, std::strlen(source),
-        "bigint-width-regression.js", JS_EVAL_TYPE_GLOBAL);
+    JSValue result = JS_Eval(context, source, std::strlen(source), "bigint-width-regression.js",
+                             JS_EVAL_TYPE_GLOBAL);
     int status = 0;
     if (JS_IsException(result)) {
         JSValue error = JS_GetException(context);
-        const char *message = JS_ToCString(context, error);
+        const char* message = JS_ToCString(context, error);
         std::fprintf(stderr, "FAIL: %s\n", message ? message : "BigInt evaluation failed");
         JS_FreeCString(context, message);
         JS_FreeValue(context, error);
         status = 1;
     } else {
         int checks = 0;
-        if (JS_ToInt32(context, &checks, result) < 0 || checks != 16014) status = 1;
-        std::printf("%s: %d BigInt width, conversion and allocation checks\n", status ? "FAIL" : "PASS", checks);
+        if (JS_ToInt32(context, &checks, result) < 0 || checks != 16014)
+            status = 1;
+        std::printf("%s: %d BigInt width, conversion and allocation checks\n",
+                    status ? "FAIL" : "PASS", checks);
     }
     JS_FreeValue(context, result);
     JS_RunGC(runtime);

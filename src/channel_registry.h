@@ -30,7 +30,7 @@ namespace capsid {
 //   * after a terminal phase the entry releases all reservations and
 //     counters return to their pre-open values.
 class ChannelRegistry {
-public:
+  public:
     struct Options {
         ChannelSide local_side = ChannelSide::Host;
         uint32_t max_channels = 128;
@@ -50,7 +50,7 @@ public:
         ApplyResult& operator=(const ApplyResult&) = default;
 
         bool accepted = false;
-        std::string error{""};         // exact contract string
+        std::string error{""}; // exact contract string
         // Dial policy output for the host: OPEN was legal, but the
         // budgets refuse an ACCEPT; the host answers kChannelReject.
         bool dial_should_reject = false;
@@ -64,14 +64,14 @@ public:
         bool resource_exhausted = false;
     };
 
-    ChannelRegistry();                    // Options() defaults
-    explicit ChannelRegistry(const Options &options);
+    ChannelRegistry(); // Options() defaults
+    explicit ChannelRegistry(const Options& options);
 
     // ---- wire stream ------------------------------------------------
     // `from` is the side that emitted the frame. HELLO must be the
     // first host frame; READY the first worker frame; versions never
     // mix on one connection.
-    ApplyResult apply(ChannelSide from, const protocol::Frame &frame);
+    ApplyResult apply(ChannelSide from, const protocol::Frame& frame);
 
     // ---- lifecycle (embedder-driven, off-wire) ----------------------
     // Marks every live channel terminal with the given reason and
@@ -89,8 +89,8 @@ public:
     bool advance_time(uint64_t elapsed_ms);
 
     // ---- queries -----------------------------------------------------
-    bool find(uint32_t channel_id, ChannelEntry *out) const;
-    bool register_authority(uint32_t channel_id, const ChannelAuthority &authority);
+    bool find(uint32_t channel_id, ChannelEntry* out) const;
+    bool register_authority(uint32_t channel_id, const ChannelAuthority& authority);
     size_t live_count() const;
     size_t retained_owner_count() const { return retained_owners_.size(); }
     uint64_t reassembly_reserved() const { return reassembly_reserved_; }
@@ -101,39 +101,34 @@ public:
     uint64_t messages_completed() const { return messages_completed_; }
     uint64_t bytes_reassembled() const { return bytes_reassembled_; }
     size_t pending_dial_count() const { return pending_dials_.size(); }
-    bool pending_dial(uint64_t dial_id, ChannelEntry *entry = nullptr,
-                      bool *cancelled = nullptr, bool *unresolved = nullptr) const;
-    bool dial_must_reject(uint64_t dial_id, uint32_t *reason) const;
+    bool pending_dial(uint64_t dial_id, ChannelEntry* entry = nullptr, bool* cancelled = nullptr,
+                      bool* unresolved = nullptr) const;
+    bool dial_must_reject(uint64_t dial_id, uint32_t* reason) const;
 
-private:
-    ApplyResult apply_hello(const protocol::Frame &frame);
-    ApplyResult apply_ready(const protocol::Frame &frame);
-    ApplyResult apply_open(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_accept(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_reject(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_data(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_credit(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_half_close(ChannelSide from,
-                                 const protocol::Frame &f);
-    ApplyResult apply_close(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_cancel(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_ack(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_connection_lifetime(ChannelSide from, const protocol::Frame &f);
-    ApplyResult apply_request_head(ChannelSide from,
-                                   const protocol::Frame &f);
-    ApplyResult apply_response_head(ChannelSide from,
-                                    const protocol::Frame &f);
+  private:
+    ApplyResult apply_hello(const protocol::Frame& frame);
+    ApplyResult apply_ready(const protocol::Frame& frame);
+    ApplyResult apply_open(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_accept(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_reject(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_data(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_credit(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_half_close(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_close(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_cancel(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_ack(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_connection_lifetime(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_request_head(ChannelSide from, const protocol::Frame& f);
+    ApplyResult apply_response_head(ChannelSide from, const protocol::Frame& f);
 
-    bool has_capability(uint32_t bit) const {
-        return (effective_caps_ & bit) != 0;
-    }
-    ChannelEntry *live_entry(uint32_t channel_id, std::string *error);
+    bool has_capability(uint32_t bit) const { return (effective_caps_ & bit) != 0; }
+    ChannelEntry* live_entry(uint32_t channel_id, std::string* error);
     // Releases every reservation the entry holds; called exactly once
     // per terminal transition.
-    void release_entry_reservations(const ChannelEntry &entry);
-    void mark_terminal(ChannelEntry *entry, ChannelPhase phase);
-    void release_direction(ChannelEntry *entry, int side);
-    bool terminal_complete(const ChannelEntry &entry) const;
+    void release_entry_reservations(const ChannelEntry& entry);
+    void mark_terminal(ChannelEntry* entry, ChannelPhase phase);
+    void release_direction(ChannelEntry* entry, int side);
+    bool terminal_complete(const ChannelEntry& entry) const;
 
     Options options_;
     uint32_t announced_[2] = {0, 0};
@@ -166,6 +161,6 @@ private:
     std::map<uint32_t, uint64_t> terminal_deadlines_;
 };
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

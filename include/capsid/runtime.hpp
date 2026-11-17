@@ -10,9 +10,7 @@
 
 namespace capsid {
 
-inline uint32_t recommended_worker_count() {
-    return capsid_recommended_worker_count();
-}
+inline uint32_t recommended_worker_count() { return capsid_recommended_worker_count(); }
 
 inline std::vector<uint32_t> available_cpus() {
     const uint32_t count = capsid_available_cpu_count();
@@ -29,79 +27,45 @@ inline std::vector<uint32_t> available_cpus() {
 }
 
 class CapabilityPolicyBuilder {
-public:
-    CapabilityPolicyBuilder()
-        : net_default_(CAPSID_EGRESS_DENY),
-          has_net_policy_(false) {
+  public:
+    CapabilityPolicyBuilder() : net_default_(CAPSID_EGRESS_DENY), has_net_policy_(false) {
         capsid_capability_policy_init(&descriptor_);
         capsid_egress_policy_init(&net_descriptor_);
     }
 
-    CapabilityPolicyBuilder &application_identity(
-        const std::string &identity) {
+    CapabilityPolicyBuilder& application_identity(const std::string& identity) {
         application_identity_ = identity;
         return *this;
     }
 
-    CapabilityPolicyBuilder &allow_module(
-        const std::string &module) {
+    CapabilityPolicyBuilder& allow_module(const std::string& module) {
         modules_.push_back(module);
         return *this;
     }
 
-    CapabilityPolicyBuilder &allow(
-        capsid_permission_name permission,
-        const std::string &resource,
-        uint32_t rule_id) {
-        add_rule(
-            CAPSID_PERMISSION_ALLOW,
-            permission,
-            resource,
-            true,
-            rule_id);
+    CapabilityPolicyBuilder& allow(capsid_permission_name permission, const std::string& resource,
+                                   uint32_t rule_id) {
+        add_rule(CAPSID_PERMISSION_ALLOW, permission, resource, true, rule_id);
         return *this;
     }
 
-    CapabilityPolicyBuilder &deny(
-        capsid_permission_name permission,
-        const std::string &resource,
-        uint32_t rule_id) {
-        add_rule(
-            CAPSID_PERMISSION_DENY,
-            permission,
-            resource,
-            true,
-            rule_id);
+    CapabilityPolicyBuilder& deny(capsid_permission_name permission, const std::string& resource,
+                                  uint32_t rule_id) {
+        add_rule(CAPSID_PERMISSION_DENY, permission, resource, true, rule_id);
         return *this;
     }
 
-    CapabilityPolicyBuilder &allow(
-        capsid_permission_name permission,
-        uint32_t rule_id) {
-        add_rule(
-            CAPSID_PERMISSION_ALLOW,
-            permission,
-            std::string(),
-            false,
-            rule_id);
+    CapabilityPolicyBuilder& allow(capsid_permission_name permission, uint32_t rule_id) {
+        add_rule(CAPSID_PERMISSION_ALLOW, permission, std::string(), false, rule_id);
         return *this;
     }
 
-    CapabilityPolicyBuilder &deny(
-        capsid_permission_name permission,
-        uint32_t rule_id) {
-        add_rule(
-            CAPSID_PERMISSION_DENY,
-            permission,
-            std::string(),
-            false,
-            rule_id);
+    CapabilityPolicyBuilder& deny(capsid_permission_name permission, uint32_t rule_id) {
+        add_rule(CAPSID_PERMISSION_DENY, permission, std::string(), false, rule_id);
         return *this;
     }
 
-    CapabilityPolicyBuilder &environment(
-        const std::string &name,
-        const std::string &value) {
+    CapabilityPolicyBuilder& environment(const std::string& name, const std::string& value) {
         EnvSpec spec;
         spec.name = name;
         spec.value = value;
@@ -109,19 +73,14 @@ public:
         return *this;
     }
 
-    CapabilityPolicyBuilder &net_default(
-        capsid_egress_action action) {
+    CapabilityPolicyBuilder& net_default(capsid_egress_action action) {
         net_default_ = action;
         has_net_policy_ = true;
         return *this;
     }
 
-    CapabilityPolicyBuilder &net(
-        capsid_egress_action action,
-        const std::string &target,
-        uint16_t port_start,
-        uint16_t port_end,
-        uint32_t rule_id) {
+    CapabilityPolicyBuilder& net(capsid_egress_action action, const std::string& target,
+                                 uint16_t port_start, uint16_t port_end, uint32_t rule_id) {
         NetSpec spec;
         spec.action = action;
         spec.target = target;
@@ -133,16 +92,15 @@ public:
         return *this;
     }
 
-    const capsid_capability_policy &descriptor() const {
+    const capsid_capability_policy& descriptor() const {
         rebuild();
         return descriptor_;
     }
 
-    CapabilityPolicyBuilder(const CapabilityPolicyBuilder &) = delete;
-    CapabilityPolicyBuilder &operator=(
-        const CapabilityPolicyBuilder &) = delete;
+    CapabilityPolicyBuilder(const CapabilityPolicyBuilder&) = delete;
+    CapabilityPolicyBuilder& operator=(const CapabilityPolicyBuilder&) = delete;
 
-private:
+  private:
     struct RuleSpec {
         capsid_permission_action action;
         capsid_permission_name permission;
@@ -164,11 +122,8 @@ private:
         std::string value;
     };
 
-    void add_rule(capsid_permission_action action,
-                  capsid_permission_name permission,
-                  const std::string &resource,
-                  bool has_resource,
-                  uint32_t rule_id) {
+    void add_rule(capsid_permission_action action, capsid_permission_name permission,
+                  const std::string& resource, bool has_resource, uint32_t rule_id) {
         RuleSpec spec;
         spec.action = action;
         spec.permission = permission;
@@ -185,84 +140,44 @@ private:
         }
         rule_descriptors_.resize(rules_.size());
         for (size_t index = 0; index < rules_.size(); ++index) {
-            capsid_permission_rule_init(
-                &rule_descriptors_[index]);
-            rule_descriptors_[index].action =
-                rules_[index].action;
-            rule_descriptors_[index].permission =
-                rules_[index].permission;
+            capsid_permission_rule_init(&rule_descriptors_[index]);
+            rule_descriptors_[index].action = rules_[index].action;
+            rule_descriptors_[index].permission = rules_[index].permission;
             rule_descriptors_[index].resource =
-                rules_[index].has_resource
-                    ? rules_[index].resource.c_str()
-                    : NULL;
-            rule_descriptors_[index].rule_id =
-                rules_[index].rule_id;
+                rules_[index].has_resource ? rules_[index].resource.c_str() : NULL;
+            rule_descriptors_[index].rule_id = rules_[index].rule_id;
         }
         net_rule_descriptors_.resize(net_rules_.size());
-        for (size_t index = 0;
-             index < net_rules_.size();
-             ++index) {
-            capsid_egress_rule_init(
-                &net_rule_descriptors_[index]);
-            net_rule_descriptors_[index].action =
-                net_rules_[index].action;
-            net_rule_descriptors_[index].target =
-                net_rules_[index].target.c_str();
-            net_rule_descriptors_[index].port_start =
-                net_rules_[index].port_start;
-            net_rule_descriptors_[index].port_end =
-                net_rules_[index].port_end;
-            net_rule_descriptors_[index].rule_id =
-                net_rules_[index].rule_id;
+        for (size_t index = 0; index < net_rules_.size(); ++index) {
+            capsid_egress_rule_init(&net_rule_descriptors_[index]);
+            net_rule_descriptors_[index].action = net_rules_[index].action;
+            net_rule_descriptors_[index].target = net_rules_[index].target.c_str();
+            net_rule_descriptors_[index].port_start = net_rules_[index].port_start;
+            net_rule_descriptors_[index].port_end = net_rules_[index].port_end;
+            net_rule_descriptors_[index].rule_id = net_rules_[index].rule_id;
         }
 
         capsid_egress_policy_init(&net_descriptor_);
         net_descriptor_.default_action = net_default_;
-        net_descriptor_.rules =
-            net_rule_descriptors_.empty()
-                ? NULL
-                : &net_rule_descriptors_[0];
-        net_descriptor_.rule_count =
-            static_cast<uint32_t>(
-                net_rule_descriptors_.size());
+        net_descriptor_.rules = net_rule_descriptors_.empty() ? NULL : &net_rule_descriptors_[0];
+        net_descriptor_.rule_count = static_cast<uint32_t>(net_rule_descriptors_.size());
 
         capsid_capability_policy_init(&descriptor_);
         descriptor_.application_identity =
-            application_identity_.empty()
-                ? NULL
-                : application_identity_.c_str();
-        descriptor_.allowed_modules =
-            module_pointers_.empty()
-                ? NULL
-                : &module_pointers_[0];
-        descriptor_.allowed_module_count =
-            static_cast<uint32_t>(module_pointers_.size());
-        descriptor_.rules =
-            rule_descriptors_.empty()
-                ? NULL
-                : &rule_descriptors_[0];
-        descriptor_.rule_count =
-            static_cast<uint32_t>(
-                rule_descriptors_.size());
-        descriptor_.net_policy =
-            has_net_policy_ ? &net_descriptor_ : NULL;
+            application_identity_.empty() ? NULL : application_identity_.c_str();
+        descriptor_.allowed_modules = module_pointers_.empty() ? NULL : &module_pointers_[0];
+        descriptor_.allowed_module_count = static_cast<uint32_t>(module_pointers_.size());
+        descriptor_.rules = rule_descriptors_.empty() ? NULL : &rule_descriptors_[0];
+        descriptor_.rule_count = static_cast<uint32_t>(rule_descriptors_.size());
+        descriptor_.net_policy = has_net_policy_ ? &net_descriptor_ : NULL;
         env_descriptors_.resize(environment_.size());
-        for (size_t index = 0;
-             index < environment_.size();
-             ++index) {
+        for (size_t index = 0; index < environment_.size(); ++index) {
             capsid_env_entry_init(&env_descriptors_[index]);
-            env_descriptors_[index].name =
-                environment_[index].name.c_str();
-            env_descriptors_[index].value =
-                environment_[index].value.c_str();
+            env_descriptors_[index].name = environment_[index].name.c_str();
+            env_descriptors_[index].value = environment_[index].value.c_str();
         }
-        descriptor_.env_entries =
-            env_descriptors_.empty()
-                ? NULL
-                : &env_descriptors_[0];
-        descriptor_.env_entry_count =
-            static_cast<uint32_t>(
-                env_descriptors_.size());
+        descriptor_.env_entries = env_descriptors_.empty() ? NULL : &env_descriptors_[0];
+        descriptor_.env_entry_count = static_cast<uint32_t>(env_descriptors_.size());
     }
 
     std::string application_identity_;
@@ -273,46 +188,46 @@ private:
     bool has_net_policy_;
     std::vector<EnvSpec> environment_;
 
-    mutable std::vector<const char *> module_pointers_;
-    mutable std::vector<capsid_permission_rule>
-        rule_descriptors_;
-    mutable std::vector<capsid_egress_rule>
-        net_rule_descriptors_;
-    mutable std::vector<capsid_env_entry>
-        env_descriptors_;
+    mutable std::vector<const char*> module_pointers_;
+    mutable std::vector<capsid_permission_rule> rule_descriptors_;
+    mutable std::vector<capsid_egress_rule> net_rule_descriptors_;
+    mutable std::vector<capsid_env_entry> env_descriptors_;
     mutable capsid_egress_policy net_descriptor_;
     mutable capsid_capability_policy descriptor_;
 };
 
 class Error : public std::runtime_error {
-public:
+  public:
     explicit Error(capsid_result result)
         : std::runtime_error(capsid_result_string(result)), result_(result) {}
 
     capsid_result result() const { return result_; }
 
-private:
+  private:
     capsid_result result_;
 };
 
 class Worker {
-public:
-    explicit Worker(const capsid_worker_config &config) : handle_(NULL) {
+  public:
+    explicit Worker(const capsid_worker_config& config) : handle_(NULL) {
         const capsid_result result = capsid_worker_spawn(&config, &handle_);
         if (result != CAPSID_OK) {
             throw Error(result);
         }
     }
 
-    Worker(const capsid_worker_config &config, const capsid_protocol_options &options) : handle_(NULL) {
+    Worker(const capsid_worker_config& config, const capsid_protocol_options& options)
+        : handle_(NULL) {
         const capsid_result result = capsid_worker_spawn_ex(&config, &options, &handle_);
-        if (result != CAPSID_OK) throw Error(result);
+        if (result != CAPSID_OK)
+            throw Error(result);
     }
 
     capsid_protocol_info protocol_info() const {
         capsid_protocol_info info;
         const capsid_result result = capsid_worker_get_protocol_info(handle_, &info, sizeof(info));
-        if (result != CAPSID_OK) throw Error(result);
+        if (result != CAPSID_OK)
+            throw Error(result);
         return info;
     }
     // Pressure consumes nothing; callers integrate WOULD_BLOCK with their
@@ -320,13 +235,13 @@ public:
     capsid_result upgrade(uint64_t request, uint32_t channel, uint64_t maximum) {
         return capsid_worker_upgrade_begin(handle_, request, channel, maximum);
     }
-    capsid_result send(uint32_t channel, const uint8_t *data, size_t size, uint32_t flags) {
+    capsid_result send(uint32_t channel, const uint8_t* data, size_t size, uint32_t flags) {
         return capsid_worker_channel_send(handle_, channel, data, size, flags);
     }
     capsid_result grant(uint32_t channel, uint64_t credit) {
         return capsid_worker_channel_grant(handle_, channel, credit);
     }
-    capsid_result close(uint32_t channel, uint16_t code = 0, const char *reason = "") {
+    capsid_result close(uint32_t channel, uint16_t code = 0, const char* reason = "") {
         return capsid_worker_channel_close(handle_, channel, code, reason);
     }
     capsid_result cancel(uint32_t channel, uint32_t reason = CAPSID_CANCEL_REASON_LOCAL) {
@@ -342,9 +257,9 @@ public:
         }
     }
 
-    Worker(Worker &&other) noexcept : handle_(other.handle_) { other.handle_ = NULL; }
+    Worker(Worker&& other) noexcept : handle_(other.handle_) { other.handle_ = NULL; }
 
-    Worker &operator=(Worker &&other) noexcept {
+    Worker& operator=(Worker&& other) noexcept {
         if (this != &other) {
             if (handle_) {
                 capsid_worker_destroy(handle_);
@@ -355,24 +270,23 @@ public:
         return *this;
     }
 
-    Worker(const Worker &) = delete;
-    Worker &operator=(const Worker &) = delete;
+    Worker(const Worker&) = delete;
+    Worker& operator=(const Worker&) = delete;
 
     int fd() const { return capsid_worker_fd(handle_); }
     int64_t pid() const { return capsid_worker_pid(handle_); }
-    capsid_worker *get() const { return handle_; }
+    capsid_worker* get() const { return handle_; }
     void set_cpu_affinity(uint32_t cpu) {
-        const capsid_result result =
-            capsid_worker_set_cpu_affinity(handle_, cpu);
+        const capsid_result result = capsid_worker_set_cpu_affinity(handle_, cpu);
         if (result != CAPSID_OK) {
             throw Error(result);
         }
     }
 
-private:
-    capsid_worker *handle_;
+  private:
+    capsid_worker* handle_;
 };
 
-}  // namespace capsid
+} // namespace capsid
 
 #endif

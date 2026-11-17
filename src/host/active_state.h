@@ -10,8 +10,7 @@ namespace capsid::host {
 inline constexpr std::size_t kMaxActiveStateBytes = 16U * 1024U;
 inline constexpr std::size_t kMaxActiveOperationIdBytes = 64U;
 inline constexpr std::string_view kActiveStateSchema = "capsid-active-v1";
-inline constexpr std::string_view kCrashBudgetExceededReason =
-    "CRASH_BUDGET_EXCEEDED";
+inline constexpr std::string_view kCrashBudgetExceededReason = "CRASH_BUDGET_EXCEEDED";
 
 enum class ActiveServiceState {
     kActive,
@@ -68,14 +67,12 @@ struct ActiveStateDocumentResult {
 // [A-Za-z0-9][A-Za-z0-9._-]{0,127}; generation is sha256: plus 64 lowercase
 // hex digits. Unknown/duplicate fields and state-inapplicable fields fail
 // closed. expected_application must match the document exactly.
-ActiveStateDocumentResult parse_active_state_json(
-    std::string_view expected_application,
-    std::string_view json);
+ActiveStateDocumentResult parse_active_state_json(std::string_view expected_application,
+                                                  std::string_view json);
 
 // Validates the same contract and returns its canonical JSON. It never emits
 // a partially valid document.
-ActiveStateDocumentResult encode_active_state_json(
-    const ActiveStateDocument& document);
+ActiveStateDocumentResult encode_active_state_json(const ActiveStateDocument& document);
 
 enum class ActiveStateIoStatus {
     kOk,
@@ -100,23 +97,18 @@ enum class GenerationCompleteness {
 // directory. The POSIX adapter lands later; M0 uses this interface for
 // deterministic ordering and crash/failure injection.
 class ActiveStateFilesystem {
-public:
+  public:
     virtual ~ActiveStateFilesystem() = default;
 
     virtual ActiveStateIoStatus cleanup_stale_active_temps() = 0;
     virtual ActiveStateReadResult read_active_file() = 0;
-    virtual GenerationCompleteness inspect_generation(
-        std::string_view generation) = 0;
+    virtual GenerationCompleteness inspect_generation(std::string_view generation) = 0;
 
-    virtual ActiveStateIoStatus create_active_temp_exclusive(
-        std::string_view temp_name) = 0;
-    virtual ActiveStateIoStatus write_active_temp(
-        std::string_view temp_name,
-        std::string_view bytes) = 0;
-    virtual ActiveStateIoStatus sync_active_temp(
-        std::string_view temp_name) = 0;
-    virtual ActiveStateIoStatus rename_temp_over_active(
-        std::string_view temp_name) = 0;
+    virtual ActiveStateIoStatus create_active_temp_exclusive(std::string_view temp_name) = 0;
+    virtual ActiveStateIoStatus write_active_temp(std::string_view temp_name,
+                                                  std::string_view bytes) = 0;
+    virtual ActiveStateIoStatus sync_active_temp(std::string_view temp_name) = 0;
+    virtual ActiveStateIoStatus rename_temp_over_active(std::string_view temp_name) = 0;
     virtual ActiveStateIoStatus sync_app_directory() = 0;
 };
 
@@ -134,10 +126,9 @@ struct ActiveStatePersistResult {
 // written only if inspect_generation() reports kComplete. The fixed order is:
 // create exclusive temp -> write all -> sync temp -> rename over active.json
 // -> sync App directory. Success is returned only after the final sync.
-ActiveStatePersistResult persist_active_state(
-    const ActiveStateDocument& document,
-    std::string_view operation_id,
-    ActiveStateFilesystem& filesystem);
+ActiveStatePersistResult persist_active_state(const ActiveStateDocument& document,
+                                              std::string_view operation_id,
+                                              ActiveStateFilesystem& filesystem);
 
 enum class ActiveStateRecoveryAction {
     kNone,
@@ -161,10 +152,9 @@ struct ActiveStateRecoveryResult {
 // Retired/quarantined states never inspect or start a generation. The
 // filesystem interface intentionally exposes no generation listing API, so
 // recovery cannot scan for or guess a "latest" generation.
-ActiveStateRecoveryResult recover_active_state(
-    std::string_view expected_application,
-    ActiveStateFilesystem& filesystem);
+ActiveStateRecoveryResult recover_active_state(std::string_view expected_application,
+                                               ActiveStateFilesystem& filesystem);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

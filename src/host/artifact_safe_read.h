@@ -32,8 +32,7 @@ inline constexpr std::size_t kMaxAttestationFileBytes = 64U * 1024U;
 inline constexpr std::size_t kBytecodeSignatureBytes = 64U;
 inline constexpr std::size_t kMaxBundleFileBytes = 16U * 1024U * 1024U;
 inline constexpr std::size_t kMaxArtifactFileBytes = kMaxBundleFileBytes;
-inline constexpr std::size_t kMaxVersionArtifactTotalBytes =
-    64U * 1024U * 1024U;
+inline constexpr std::size_t kMaxVersionArtifactTotalBytes = 64U * 1024U * 1024U;
 
 struct FileIdentity {
     std::uint64_t dev = 0;
@@ -45,14 +44,11 @@ struct FileIdentity {
     std::int64_t ctime_nsec = 0;
 
     bool operator==(const FileIdentity& other) const {
-        return dev == other.dev && inode == other.inode &&
-               size == other.size && mtime_sec == other.mtime_sec &&
-               mtime_nsec == other.mtime_nsec &&
+        return dev == other.dev && inode == other.inode && size == other.size &&
+               mtime_sec == other.mtime_sec && mtime_nsec == other.mtime_nsec &&
                ctime_sec == other.ctime_sec && ctime_nsec == other.ctime_nsec;
     }
-    bool operator!=(const FileIdentity& other) const {
-        return !(*this == other);
-    }
+    bool operator!=(const FileIdentity& other) const { return !(*this == other); }
 };
 
 struct SafeFile {
@@ -87,7 +83,7 @@ struct SafeReadResult {
     // Static text only; never contains file content or paths from the
     // deployment tree.
     std::string message;
-    SafeFile file;  // empty on failure
+    SafeFile file; // empty on failure
     // Populated by safe_read_version_artifacts; empty otherwise.
     VersionArtifacts artifacts;
 };
@@ -95,15 +91,13 @@ struct SafeReadResult {
 // Reads one regular file beneath root_fd. relative_path is the deployment
 // relative path (e.g. "orders/2026-07-31-002/bundle.mjs"); the caller's
 // root_fd must be a pre-opened, trusted directory descriptor.
-SafeReadResult safe_read_regular_file(int root_fd,
-                                      std::string_view relative_path,
+SafeReadResult safe_read_regular_file(int root_fd, std::string_view relative_path,
                                       std::size_t max_bytes);
 
 // Formal identifier grammar (M1D audit): App and Version are single
 // identifiers of [A-Za-z0-9][A-Za-z0-9._-]* with no empty or ".."
 // components — a value like "foo/bar" must never become a nested path.
-bool valid_app_version_id(std::string_view value,
-                          std::size_t max_length);
+bool valid_app_version_id(std::string_view value, std::size_t max_length);
 
 // The frozen version layout (M1D):
 //
@@ -115,12 +109,9 @@ bool valid_app_version_id(std::string_view value,
 //     bytecode.sig         optional group
 //
 // All-or-none: a partial bytecode group is a missing-artifact failure.
-SafeReadResult safe_read_version_artifacts(
-    int root_fd,
-    std::string_view app,
-    std::string_view version,
-    std::size_t max_total_bytes);
+SafeReadResult safe_read_version_artifacts(int root_fd, std::string_view app,
+                                           std::string_view version, std::size_t max_total_bytes);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

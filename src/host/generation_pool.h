@@ -162,7 +162,7 @@ struct GenerationPoolOptions {
 
 // See the file comment for the full contract.
 class GenerationPool : public std::enable_shared_from_this<GenerationPool> {
-public:
+  public:
     enum class State { kPrepared, kActive, kDraining, kDead };
 
     // N→READY barrier: spawns N workers through the factory, installs the
@@ -181,12 +181,11 @@ public:
     // warmed worker is destroyed, including the unvisited suffix after a
     // failed adopt (adopted ones through their executors), and nullptr is
     // returned — ownership never transfers back to the caller on failure.
-    static std::shared_ptr<GenerationPool> create_adopted(
-        GenerationPoolOptions options,
-        std::vector<capsid_worker*> warmed,
-        std::string* error);
+    static std::shared_ptr<GenerationPool> create_adopted(GenerationPoolOptions options,
+                                                          std::vector<capsid_worker*> warmed,
+                                                          std::string* error);
 
-    ~GenerationPool();  // request_drain() + wait()
+    ~GenerationPool(); // request_drain() + wait()
 
     GenerationPool(const GenerationPool&) = delete;
     GenerationPool& operator=(const GenerationPool&) = delete;
@@ -249,8 +248,7 @@ public:
     // Precondition: the pool has NO in-flight requests (a request pinned
     // before wiring would lose its response events and hang) — wire before
     // the pool starts serving traffic.
-    void set_event_sink(
-        std::function<void(const WorkerExecutor*, WorkerEvent)> sink);
+    void set_event_sink(std::function<void(const WorkerExecutor*, WorkerEvent)> sink);
 
     // ---- diagnostics / load signal -------------------------------------
 
@@ -263,12 +261,12 @@ public:
     // One live READY process for render-time metrics, or zero. Copies
     // only cached identity while the slot is pinned under mutex_.
     std::int64_t worker_process_id() const;
-    std::shared_ptr<WorkerPoolCapacityLease> capacity_lease() const { return options_.capacity_lease; }
+    std::shared_ptr<WorkerPoolCapacityLease> capacity_lease() const {
+        return options_.capacity_lease;
+    }
     // The generation's immutable per-worker inflight ceiling (0 = the
     // session layer imposes no cap beyond the worker's own limit).
-    std::uint64_t max_inflight_per_worker() const {
-        return options_.max_inflight_per_worker;
-    }
+    std::uint64_t max_inflight_per_worker() const { return options_.max_inflight_per_worker; }
     // The configured fleet size (the count the ledger reserved for this
     // pool; distinct from ready_workers(), which can drop below it while
     // the generation is reaping). PR-10 §9.4.
@@ -278,7 +276,7 @@ public:
     std::string_view version() const;
     std::string_view generation_digest() const;
 
-private:
+  private:
     explicit GenerationPool(GenerationPoolOptions options);
     // Direction A: the crash budget ran out. Emit the quarantine log and
     // metrics, fire the on_quarantine observer (the Host writes the
@@ -291,8 +289,7 @@ private:
     // is armed. Shared by handle_executor_exit and recycle_worker.
     // Caller holds mutex_. `reason` names the replacement for the
     // kWorkerReplaced log ("crashed" / "unhealthy").
-    void record_instability(std::size_t slot,
-                            WorkerInstabilityObservation observation,
+    void record_instability(std::size_t slot, WorkerInstabilityObservation observation,
                             const char* reason);
 
     void pump_loop();
@@ -306,26 +303,25 @@ private:
     // slot swap). Runs on its own thread so the pump never blocks.
     void run_replacement(std::size_t slot);
     // Swap a READY replacement into `slot` (pump or replacement thread).
-    void install_replacement(std::size_t slot,
-                             std::shared_ptr<WorkerExecutor> replacement);
+    void install_replacement(std::size_t slot, std::shared_ptr<WorkerExecutor> replacement);
     // kDead + reap everything (slots and retired executors), outside the
     // pool mutex. Pump-only; called with the mutex released.
     void finalize_drain();
-    bool fleet_exited() const;  // slots + retired, under mutex_
+    bool fleet_exited() const; // slots + retired, under mutex_
     // Any replacement scheduled (a due present) — the pump's no-deadline
     // wait predicate, under mutex_.
     bool due_pending_locked() const;
 
     GenerationPoolOptions options_;
-    WorkerRecoveryPolicy policy_;          // validated copy
+    WorkerRecoveryPolicy policy_; // validated copy
     GenerationRecoveryState recovery_state_;
-    ServiceLifecycleState lifecycle_;      // kActive for the pool's life
+    ServiceLifecycleState lifecycle_; // kActive for the pool's life
 
     mutable std::mutex mutex_;
     std::condition_variable cv_;
     struct Slot {
         std::shared_ptr<WorkerExecutor> executor;
-        bool ready = false;                // READY set membership (§8.3)
+        bool ready = false; // READY set membership (§8.3)
         bool replacement_in_flight = false;
         // True once the pool itself requested this worker's shutdown: its
         // later EXIT is an expected lifecycle event (no crash budget, no
@@ -360,13 +356,13 @@ private:
 
     State state_ = State::kPrepared;
     std::optional<std::chrono::steady_clock::time_point> drain_until_;
-    std::uint64_t stable_since_ms_ = 0;   // continuous-READY base
-    std::uint32_t ready_workers_locked() const;  // caller holds mutex_
+    std::uint64_t stable_since_ms_ = 0;         // continuous-READY base
+    std::uint32_t ready_workers_locked() const; // caller holds mutex_
     std::thread pump_thread_;
     std::vector<std::thread> replacement_threads_;
     std::once_flag wait_once_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

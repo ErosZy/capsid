@@ -28,14 +28,11 @@ std::string admin_operation_id() {
     return out.str();
 }
 
-}  // namespace
+} // namespace
 
-AsyncAdminBackend::AsyncAdminBackend(
-    AdminBackend* inner, const AsyncAdminBackendOptions& options)
+AsyncAdminBackend::AsyncAdminBackend(AdminBackend* inner, const AsyncAdminBackendOptions& options)
     : inner_(inner),
-      max_pending_(options.max_pending_operations == 0
-                       ? 1
-                       : options.max_pending_operations),
+      max_pending_(options.max_pending_operations == 0 ? 1 : options.max_pending_operations),
       external_stop_(options.external_stop) {
     worker_ = std::thread(&AsyncAdminBackend::worker_loop, this);
 }
@@ -49,15 +46,13 @@ AsyncAdminBackend::~AsyncAdminBackend() {
     worker_.join();
 }
 
-DeployOutcome AsyncAdminBackend::submit(
-    bool retire, const std::string& application, const std::string& version,
-    OperationStatus* status) {
+DeployOutcome AsyncAdminBackend::submit(bool retire, const std::string& application,
+                                        const std::string& version, OperationStatus* status) {
     DeployOutcome outcome;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         // After a stop the executor rejects submissions synchronously.
-        if (stopping_ || (external_stop_ != nullptr &&
-                          external_stop_->load())) {
+        if (stopping_ || (external_stop_ != nullptr && external_stop_->load())) {
             outcome.error = "admin operation rejected during shutdown";
             if (status != nullptr) {
                 status->state = OperationState::kFailed;
@@ -108,14 +103,12 @@ void AsyncAdminBackend::worker_loop() {
             std::unique_lock<std::mutex> lock(mutex_);
             condition_.wait(lock, [&]() {
                 return stopping_ || !queue_.empty() ||
-                       (external_stop_ != nullptr &&
-                        external_stop_->load());
+                       (external_stop_ != nullptr && external_stop_->load());
             });
             // Re-check the stop condition after the wake-up: the signal
             // may have arrived while this thread was waiting.
             const bool stop_requested =
-                stopping_ || (external_stop_ != nullptr &&
-                              external_stop_->load());
+                stopping_ || (external_stop_ != nullptr && external_stop_->load());
             if (stop_requested) {
                 // Cancel path: queued operations are recorded as redacted
                 // Failed and dropped, the capacity slots they held are
@@ -124,8 +117,7 @@ void AsyncAdminBackend::worker_loop() {
                 for (PendingOperation& queued : queue_) {
                     OperationStatus& entry = registry_[queued.operation_id];
                     entry.state = OperationState::kFailed;
-                    entry.error = queued.retire ? "operation failed"
-                                                : "deployment failed";
+                    entry.error = queued.retire ? "operation failed" : "deployment failed";
                 }
                 pending_count_ -= queue_.size();
                 queue_.clear();
@@ -149,8 +141,7 @@ void AsyncAdminBackend::worker_loop() {
                 outcome = inner_->retire(pending.application, &recorded);
                 succeeded = outcome.ok;
             } else {
-                outcome = inner_->deploy(pending.application,
-                                         pending.version, &recorded);
+                outcome = inner_->deploy(pending.application, pending.version, &recorded);
                 succeeded = outcome.ok;
                 if (succeeded && !outcome.workers.empty()) {
                     // A successful deploy whose outcome still carries
@@ -193,25 +184,21 @@ void AsyncAdminBackend::worker_loop() {
         } else {
             entry.state = OperationState::kFailed;
             // Static redaction: inner errors never enter the registry.
-            entry.error = pending.retire ? "operation failed"
-                                         : "deployment failed";
+            entry.error = pending.retire ? "operation failed" : "deployment failed";
         }
     }
 }
 
-DeployOutcome AsyncAdminBackend::deploy(const std::string& application,
-                                        const std::string& version,
+DeployOutcome AsyncAdminBackend::deploy(const std::string& application, const std::string& version,
                                         OperationStatus* status) {
     return submit(false, application, version, status);
 }
 
-DeployOutcome AsyncAdminBackend::retire(const std::string& application,
-                                        OperationStatus* status) {
+DeployOutcome AsyncAdminBackend::retire(const std::string& application, OperationStatus* status) {
     return submit(true, application, std::string(), status);
 }
 
-OperationStatus AsyncAdminBackend::operation_status(
-    const std::string& operation_id) {
+OperationStatus AsyncAdminBackend::operation_status(const std::string& operation_id) {
     std::lock_guard<std::mutex> lock(mutex_);
     const std::map<std::string, OperationStatus>::const_iterator found =
         registry_.find(operation_id);
@@ -232,12 +219,10 @@ std::string AsyncAdminBackend::app_status(const std::string& application) {
     return inner_->app_status(application);
 }
 
-ManagedAdminBackend::ManagedAdminBackend(
-    const std::vector<ManagedHostOptions*>& applications)
+ManagedAdminBackend::ManagedAdminBackend(const std::vector<ManagedHostOptions*>& applications)
     : applications_(applications) {}
 
-ManagedHostOptions* ManagedAdminBackend::find_application(
-    const std::string& application) {
+ManagedHostOptions* ManagedAdminBackend::find_application(const std::string& application) {
     for (ManagedHostOptions* options : applications_) {
         if (options != nullptr && options->application == application) {
             return options;
@@ -247,8 +232,7 @@ ManagedHostOptions* ManagedAdminBackend::find_application(
 }
 
 DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
-                                          const std::string& version,
-                                          OperationStatus* status) {
+                                          const std::string& version, OperationStatus* status) {
     ManagedHostOptions* options = find_application(application);
     if (options == nullptr) {
         DeployOutcome outcome;
@@ -286,10 +270,8 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
     bool grant_held = false;
     if (startup_permits != nullptr) {
         std::string generation(kStartupPermitProbeGeneration);
-        const ManagedLifecycleSnapshot snapshot =
-            managed_read_lifecycle(options);
-        if (snapshot.ok &&
-            snapshot.state.phase == ServiceLifecyclePhase::kActive) {
+        const ManagedLifecycleSnapshot snapshot = managed_read_lifecycle(options);
+        if (snapshot.ok && snapshot.state.phase == ServiceLifecyclePhase::kActive) {
             generation = snapshot.state.document->generation;
         }
         StartupPermitRequest request;
@@ -333,8 +315,7 @@ DeployOutcome ManagedAdminBackend::deploy(const std::string& application,
     return outcome;
 }
 
-DeployOutcome ManagedAdminBackend::retire(const std::string& application,
-                                          OperationStatus* status) {
+DeployOutcome ManagedAdminBackend::retire(const std::string& application, OperationStatus* status) {
     ManagedHostOptions* options = find_application(application);
     if (options == nullptr) {
         DeployOutcome outcome;
@@ -352,8 +333,7 @@ DeployOutcome ManagedAdminBackend::retire(const std::string& application,
     return outcome;
 }
 
-OperationStatus ManagedAdminBackend::operation_status(
-    const std::string& operation_id) {
+OperationStatus ManagedAdminBackend::operation_status(const std::string& operation_id) {
     if (applications_.empty() || applications_.front() == nullptr) {
         OperationStatus status;
         status.operation_id = operation_id;
@@ -377,4 +357,4 @@ std::string ManagedAdminBackend::app_status(const std::string& application) {
     return managed_app_status(*options);
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

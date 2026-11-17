@@ -50,39 +50,34 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-void require_clean_worker_shutdown(
-    capsid_worker *worker,
-    const char *context) {
-    const capsid_test::GracefulWorkerExit result =
-        capsid_test::shutdown_and_wait(worker, 2000);
+void require_clean_worker_shutdown(capsid_worker* worker, const char* context) {
+    const capsid_test::GracefulWorkerExit result = capsid_test::shutdown_and_wait(worker, 2000);
     capsid_worker_destroy(worker);
 
     if (result.shutdown_result != CAPSID_OK) {
-        fail(std::string(context) + " could not queue graceful shutdown: " +
-             capsid_result_string(result.shutdown_result));
+        fail(std::string(context) +
+             " could not queue graceful shutdown: " + capsid_result_string(result.shutdown_result));
     }
     if (result.flush_result != CAPSID_OK) {
-        fail(std::string(context) + " could not flush graceful shutdown: " +
-             capsid_result_string(result.flush_result));
+        fail(std::string(context) +
+             " could not flush graceful shutdown: " + capsid_result_string(result.flush_result));
     }
     if (result.wait_error != 0) {
-        fail(std::string(context) + " waitpid failed: " +
-             std::strerror(result.wait_error));
+        fail(std::string(context) + " waitpid failed: " + std::strerror(result.wait_error));
     }
     if (!result.reaped) {
-        fail(std::string(context) +
-             " did not exit within the graceful shutdown deadline");
+        fail(std::string(context) + " did not exit within the graceful shutdown deadline");
     }
     if (WIFSIGNALED(result.status)) {
         fail(std::string(context) + " terminated by signal " +
@@ -94,13 +89,12 @@ void require_clean_worker_shutdown(
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot open TLS fixture: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 uint16_t unused_port() {
@@ -112,13 +106,14 @@ uint16_t unused_port() {
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    if (capsid::win32::bind_fd(fd, reinterpret_cast<const struct sockaddr *>(&address),
-             sizeof(address)) != 0) {
+    if (capsid::win32::bind_fd(fd, reinterpret_cast<const struct sockaddr*>(&address),
+                               sizeof(address)) != 0) {
         close(fd);
         fail("cannot bind TLS port socket");
     }
     socklen_t size = sizeof(address);
-    if (capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr *>(&address), &size) != 0) {
+    if (capsid::win32::getsockname_fd(fd, reinterpret_cast<struct sockaddr*>(&address), &size) !=
+        0) {
         close(fd);
         fail("cannot resolve TLS test port");
     }
@@ -128,10 +123,8 @@ uint16_t unused_port() {
 }
 
 class OpenSslRsaPssServer {
-public:
-    OpenSslRsaPssServer(const char *openssl_path,
-                        const char *certificate,
-                        const char *private_key,
+  public:
+    OpenSslRsaPssServer(const char* openssl_path, const char* certificate, const char* private_key,
                         uint16_t port)
         : pid_(-1)
 #if defined(_WIN32)
@@ -144,9 +137,7 @@ public:
         // CreateProcess launches the same s_server CLI surface and keeps
         // the process handle for exit-code probing.
         std::vector<std::string> arg_storage;
-        auto push_arg = [&arg_storage](const std::string& value) {
-            arg_storage.push_back(value);
-        };
+        auto push_arg = [&arg_storage](const std::string& value) { arg_storage.push_back(value); };
         push_arg(openssl_path);
         push_arg("s_server");
         push_arg("-accept");
@@ -169,9 +160,8 @@ public:
         startup.cb = sizeof(startup);
         PROCESS_INFORMATION process;
         std::memset(&process, 0, sizeof(process));
-        if (!CreateProcessA(
-                NULL, &command_line[0], NULL, NULL, TRUE, 0, NULL, NULL,
-                &startup, &process)) {
+        if (!CreateProcessA(NULL, &command_line[0], NULL, NULL, TRUE, 0, NULL, NULL, &startup,
+                            &process)) {
             fail(std::string("cannot launch OpenSSL TLS test server: ") +
                  std::to_string(GetLastError()));
         }
@@ -181,27 +171,13 @@ public:
 #else
         pid_ = fork();
         if (pid_ == 0) {
-            execl(openssl_path,
-                  openssl_path,
-                  "s_server",
-                  "-accept",
-                  port_text.c_str(),
-                  "-cert",
-                  certificate,
-                  "-key",
-                  private_key,
-                  "-tls1_2",
-                  "-sigalgs",
-                  "rsa_pss_rsae_sha256",
-                  "-www",
-                  "-quiet",
-                  "-no_ign_eof",
-                  static_cast<char *>(nullptr));
+            execl(openssl_path, openssl_path, "s_server", "-accept", port_text.c_str(), "-cert",
+                  certificate, "-key", private_key, "-tls1_2", "-sigalgs", "rsa_pss_rsae_sha256",
+                  "-www", "-quiet", "-no_ign_eof", static_cast<char*>(nullptr));
             _exit(127);
         }
         if (pid_ < 0) {
-            fail(std::string("cannot launch OpenSSL TLS test server: ") +
-                 std::strerror(errno));
+            fail(std::string("cannot launch OpenSSL TLS test server: ") + std::strerror(errno));
         }
 #endif
 
@@ -218,13 +194,10 @@ public:
                 address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
                 address.sin_port = htons(port);
                 const int connected = capsid::win32::connect_fd(
-                    probe,
-                    reinterpret_cast<const struct sockaddr *>(&address),
-                    sizeof(address));
+                    probe, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address));
                 close(probe);
                 if (connected == 0) {
-                    std::this_thread::sleep_for(
-                        std::chrono::milliseconds(50));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
                     return;
                 }
             }
@@ -237,7 +210,7 @@ public:
 
     ~OpenSslRsaPssServer() { stop(); }
 
-private:
+  private:
 #if defined(_WIN32)
     DWORD child_exit_code() {
         DWORD exit_code = 0;
@@ -245,9 +218,7 @@ private:
         return exit_code;
     }
 #else
-    int child_exit_code() {
-        return 0;
-    }
+    int child_exit_code() { return 0; }
 #endif
 
     bool server_exited_early() {
@@ -288,10 +259,8 @@ private:
 };
 
 class MbedTlsServer {
-public:
-    MbedTlsServer(const char *certificate,
-                  const char *private_key,
-                  uint16_t port)
+  public:
+    MbedTlsServer(const char* certificate, const char* private_key, uint16_t port)
         : stopping_(false), accepts_(0) {
         mbedtls_net_init(&listener_);
         mbedtls_ssl_config_init(&config_);
@@ -300,46 +269,29 @@ public:
         mbedtls_entropy_init(&entropy_);
         mbedtls_ctr_drbg_init(&random_);
 
-        static const unsigned char personalization[] =
-            "capsid-runtime-direct-fetch-tls";
-        int result = mbedtls_ctr_drbg_seed(
-            &random_,
-            mbedtls_entropy_func,
-            &entropy_,
-            personalization,
-            sizeof(personalization) - 1);
+        static const unsigned char personalization[] = "capsid-runtime-direct-fetch-tls";
+        int result = mbedtls_ctr_drbg_seed(&random_, mbedtls_entropy_func, &entropy_,
+                                           personalization, sizeof(personalization) - 1);
         if (result == 0) {
-            result = mbedtls_x509_crt_parse_file(
-                &certificate_, certificate);
+            result = mbedtls_x509_crt_parse_file(&certificate_, certificate);
         }
         if (result == 0) {
-            result = mbedtls_pk_parse_keyfile(
-                &private_key_,
-                private_key,
-                NULL,
-                mbedtls_ctr_drbg_random,
-                &random_);
+            result = mbedtls_pk_parse_keyfile(&private_key_, private_key, NULL,
+                                              mbedtls_ctr_drbg_random, &random_);
         }
         if (result == 0) {
-            result = mbedtls_ssl_config_defaults(
-                &config_,
-                MBEDTLS_SSL_IS_SERVER,
-                MBEDTLS_SSL_TRANSPORT_STREAM,
-                MBEDTLS_SSL_PRESET_DEFAULT);
+            result = mbedtls_ssl_config_defaults(&config_, MBEDTLS_SSL_IS_SERVER,
+                                                 MBEDTLS_SSL_TRANSPORT_STREAM,
+                                                 MBEDTLS_SSL_PRESET_DEFAULT);
         }
         if (result == 0) {
-            mbedtls_ssl_conf_rng(
-                &config_, mbedtls_ctr_drbg_random, &random_);
-            result = mbedtls_ssl_conf_own_cert(
-                &config_, &certificate_, &private_key_);
+            mbedtls_ssl_conf_rng(&config_, mbedtls_ctr_drbg_random, &random_);
+            result = mbedtls_ssl_conf_own_cert(&config_, &certificate_, &private_key_);
         }
         const std::string port_text = std::to_string(port);
         if (result == 0) {
-            result = mbedtls_net_bind(
-                &listener_,
-                "127.0.0.1",
-                port_text.c_str(),
-                MBEDTLS_NET_PROTO_TCP);
+            result =
+                mbedtls_net_bind(&listener_, "127.0.0.1", port_text.c_str(), MBEDTLS_NET_PROTO_TCP);
         }
         if (result == 0) {
             // Poll accept so teardown can join the sole owner before it
@@ -347,8 +299,7 @@ public:
             result = mbedtls_net_set_nonblock(&listener_);
         }
         if (result != 0) {
-            fail(std::string("cannot initialize mbedTLS test server: ") +
-                 std::to_string(result));
+            fail(std::string("cannot initialize mbedTLS test server: ") + std::to_string(result));
         }
         thread_ = std::thread(&MbedTlsServer::serve, this);
     }
@@ -368,23 +319,17 @@ public:
         mbedtls_entropy_free(&entropy_);
     }
 
-private:
+  private:
     static bool retryable(int result) {
-        return result == MBEDTLS_ERR_SSL_WANT_READ ||
-               result == MBEDTLS_ERR_SSL_WANT_WRITE;
+        return result == MBEDTLS_ERR_SSL_WANT_READ || result == MBEDTLS_ERR_SSL_WANT_WRITE;
     }
 
-    void serve_client(mbedtls_net_context *client) {
+    void serve_client(mbedtls_net_context* client) {
         mbedtls_ssl_context ssl;
         mbedtls_ssl_init(&ssl);
         int result = mbedtls_ssl_setup(&ssl, &config_);
         if (result == 0) {
-            mbedtls_ssl_set_bio(
-                &ssl,
-                client,
-                mbedtls_net_send,
-                mbedtls_net_recv,
-                NULL);
+            mbedtls_ssl_set_bio(&ssl, client, mbedtls_net_send, mbedtls_net_recv, NULL);
             do {
                 result = mbedtls_ssl_handshake(&ssl);
             } while (retryable(result));
@@ -398,12 +343,10 @@ private:
                 size_t used = 0;
                 while (used < sizeof(request) &&
                        (used < 4 ||
-                        std::string(request, used).find("\r\n\r\n") ==
-                            std::string::npos)) {
-                    result = mbedtls_ssl_read(
-                        &ssl,
-                        reinterpret_cast<unsigned char *>(request) + used,
-                        sizeof(request) - used);
+                        std::string(request, used).find("\r\n\r\n") == std::string::npos)) {
+                    result =
+                        mbedtls_ssl_read(&ssl, reinterpret_cast<unsigned char*>(request) + used,
+                                         sizeof(request) - used);
                     if (result > 0) {
                         used += static_cast<size_t>(result);
                         continue;
@@ -419,37 +362,31 @@ private:
                 }
                 const std::string head(request, used);
                 const size_t first_space = head.find(' ');
-                const size_t last_space =
-                    first_space == std::string::npos
-                        ? std::string::npos
-                        : head.find(' ', first_space + 1);
-                const std::string target = head.substr(
-                    first_space == std::string::npos ? 0 : first_space + 1,
-                    last_space == std::string::npos
-                        ? std::string::npos
-                        : last_space - first_space - 1);
+                const size_t last_space = first_space == std::string::npos
+                                              ? std::string::npos
+                                              : head.find(' ', first_space + 1);
+                const std::string target =
+                    head.substr(first_space == std::string::npos ? 0 : first_space + 1,
+                                last_space == std::string::npos ? std::string::npos
+                                                                : last_space - first_space - 1);
                 std::string body;
                 if (target == "/with-custom-ca") {
                     body = "capsid tls ok";
                 } else if (target == "/accept-count") {
                     body = std::to_string(accepts_);
                 }
-                const std::string response =
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: text/plain\r\n"
-                    "Content-Length: " +
-                    std::to_string(body.size()) +
-                    "\r\n"
-                    "Connection: keep-alive\r\n"
-                    "\r\n" +
-                    body;
+                const std::string response = "HTTP/1.1 200 OK\r\n"
+                                             "Content-Type: text/plain\r\n"
+                                             "Content-Length: " +
+                                             std::to_string(body.size()) +
+                                             "\r\n"
+                                             "Connection: keep-alive\r\n"
+                                             "\r\n" +
+                                             body;
                 size_t offset = 0;
                 while (offset < response.size()) {
                     result = mbedtls_ssl_write(
-                        &ssl,
-                        reinterpret_cast<const unsigned char *>(
-                            response.data()) +
-                            offset,
+                        &ssl, reinterpret_cast<const unsigned char*>(response.data()) + offset,
                         response.size() - offset);
                     if (result > 0) {
                         offset += static_cast<size_t>(result);
@@ -467,8 +404,7 @@ private:
         while (!stopping_) {
             mbedtls_net_context client;
             mbedtls_net_init(&client);
-            int result =
-                mbedtls_net_accept(&listener_, &client, NULL, 0, NULL);
+            int result = mbedtls_net_accept(&listener_, &client, NULL, 0, NULL);
             if (result == 0) {
                 result = mbedtls_net_set_block(&client);
             }
@@ -478,8 +414,7 @@ private:
             }
             mbedtls_net_free(&client);
             if (result != 0 && !stopping_) {
-                std::this_thread::sleep_for(
-                    std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         }
     }
@@ -495,7 +430,7 @@ private:
     std::thread thread_;
 };
 
-uint32_t wait_for_ready(capsid_worker *worker) {
+uint32_t wait_for_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
@@ -512,17 +447,15 @@ uint32_t wait_for_ready(capsid_worker *worker) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("TLS worker startup error: ") +
-                     std::string(
-                         reinterpret_cast<const char *>(event.payload.data),
-                         event.payload.size));
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
+                                 event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("TLS worker exited before READY");
             }
             continue;
         }
-        if (result != CAPSID_WOULD_BLOCK ||
-            std::chrono::steady_clock::now() >= deadline) {
+        if (result != CAPSID_WOULD_BLOCK || std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for TLS worker READY");
         }
         capsid_pollfd descriptor = {};
@@ -537,10 +470,9 @@ struct Result {
     std::string body;
 };
 
-Result run_request(capsid_worker *worker, uint64_t id, const std::string &url) {
-    require_result(
-        capsid_worker_begin_request(worker, id, "GET", url.c_str(), NULL, 0),
-        "begin TLS request");
+Result run_request(capsid_worker* worker, uint64_t id, const std::string& url) {
+    require_result(capsid_worker_begin_request(worker, id, "GET", url.c_str(), NULL, 0),
+                   "begin TLS request");
     require_result(capsid_worker_end_request(worker, id), "end TLS request");
 
     Result output = {};
@@ -555,8 +487,7 @@ Result run_request(capsid_worker *worker, uint64_t id, const std::string &url) {
         event.struct_size = sizeof(event);
         const capsid_result result = capsid_worker_next_event(worker, &event);
         if (result == CAPSID_OK) {
-            if (event.type == CAPSID_EVENT_REQUEST_CREDIT ||
-                event.type == CAPSID_EVENT_LOG) {
+            if (event.type == CAPSID_EVENT_REQUEST_CREDIT || event.type == CAPSID_EVENT_LOG) {
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_HEAD) {
@@ -564,28 +495,23 @@ Result run_request(capsid_worker *worker, uint64_t id, const std::string &url) {
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_BODY) {
-                output.body.append(
-                    reinterpret_cast<const char *>(event.payload.data),
-                    event.payload.size);
-                require_result(
-                    capsid_worker_grant_response_credit(
-                        worker, id,
-                        static_cast<uint32_t>(event.payload.size)),
-                    "grant TLS response credit");
+                output.body.append(reinterpret_cast<const char*>(event.payload.data),
+                                   event.payload.size);
+                require_result(capsid_worker_grant_response_credit(
+                                   worker, id, static_cast<uint32_t>(event.payload.size)),
+                               "grant TLS response credit");
                 continue;
             }
             if (event.type == CAPSID_EVENT_RESPONSE_END) {
                 return output;
             }
-            if (event.type == CAPSID_EVENT_ERROR ||
-                event.type == CAPSID_EVENT_REQUEST_TIMEOUT ||
+            if (event.type == CAPSID_EVENT_ERROR || event.type == CAPSID_EVENT_REQUEST_TIMEOUT ||
                 event.type == CAPSID_EVENT_EXIT) {
                 fail("TLS worker failed during request");
             }
             continue;
         }
-        if (result != CAPSID_WOULD_BLOCK ||
-            std::chrono::steady_clock::now() >= deadline) {
+        if (result != CAPSID_WOULD_BLOCK || std::chrono::steady_clock::now() >= deadline) {
             fail("timed out waiting for TLS response");
         }
         capsid_pollfd descriptor = {};
@@ -595,14 +521,8 @@ Result run_request(capsid_worker *worker, uint64_t id, const std::string &url) {
     }
 }
 
-Result run_case(const char *worker_path,
-                const std::string &bundle,
-                const char *ca_bundle,
-                uint16_t port,
-                bool trusted,
-                bool rsa_pss,
-                uint64_t id,
-                bool strict) {
+Result run_case(const char* worker_path, const std::string& bundle, const char* ca_bundle,
+                uint16_t port, bool trusted, bool rsa_pss, uint64_t id, bool strict) {
     capsid_worker_config config;
     capsid_worker_config_init(&config);
     config.worker_path = worker_path;
@@ -611,24 +531,19 @@ Result run_case(const char *worker_path,
     LoopbackEgressPolicy egress_policy;
     egress_policy.attach(&config);
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn TLS worker");
-    require_result(
-        capsid_worker_load_bundle(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size()),
-        "load TLS bundle");
+    require_result(capsid_worker_load_bundle(
+                       worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()),
+                   "load TLS bundle");
     const uint32_t sandbox_features = wait_for_ready(worker);
-    if (strict &&
-        (sandbox_features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) !=
-            CAPSID_SANDBOX_FEATURE_STRICT_BASE) {
+    if (strict && (sandbox_features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) !=
+                      CAPSID_SANDBOX_FEATURE_STRICT_BASE) {
         fail("strict TLS worker did not report mandatory sandbox features");
     }
-    const std::string url =
-        "https://example.test/direct-fetch-tls?port=" +
-        std::to_string(port) + "&trusted=" + (trusted ? "1" : "0") +
-        "&rsaPss=" + (rsa_pss ? "1" : "0");
+    const std::string url = "https://example.test/direct-fetch-tls?port=" + std::to_string(port) +
+                            "&trusted=" + (trusted ? "1" : "0") +
+                            "&rsaPss=" + (rsa_pss ? "1" : "0");
     const Result result = run_request(worker, id, url);
     if (strict) {
         require_clean_worker_shutdown(worker, "strict TLS worker");
@@ -638,30 +553,27 @@ Result run_case(const char *worker_path,
     return result;
 }
 
-void require_passed(const Result &result, const char *mode) {
-    if (result.status != 200 ||
-        result.body.find("\"passed\":true") == std::string::npos ||
-        result.body.find(std::string("\"mode\":\"") + mode + "\"") ==
-            std::string::npos) {
+void require_passed(const Result& result, const char* mode) {
+    if (result.status != 200 || result.body.find("\"passed\":true") == std::string::npos ||
+        result.body.find(std::string("\"mode\":\"") + mode + "\"") == std::string::npos) {
         fail(std::string("TLS ") + mode + " case failed with status " +
              std::to_string(result.status) + ": " + result.body);
     }
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc < 6) {
         fail("expected worker, fixture, certificate, key, CA and options");
     }
     bool strict = false;
-    const char *openssl_path = NULL;
+    const char* openssl_path = NULL;
     for (int index = 6; index < argc; ++index) {
         const std::string option(argv[index]);
         if (option == "--strict" && !strict) {
             strict = true;
-        } else if (option == "--openssl" && !openssl_path &&
-                   index + 1 < argc) {
+        } else if (option == "--openssl" && !openssl_path && index + 1 < argc) {
             openssl_path = argv[++index];
         } else {
             fail(std::string("unknown TLS test option: ") + option);
@@ -671,26 +583,13 @@ int main(int argc, char **argv) {
     MbedTlsServer server(argv[3], argv[4], port);
     const std::string bundle = read_file(argv[2]);
 
-    require_passed(
-        run_case(argv[1], bundle, NULL, port, false, false, 71, strict),
-        "untrusted");
-    require_passed(
-        run_case(argv[1], bundle, argv[5], port, true, false, 72, strict),
-        "trusted");
+    require_passed(run_case(argv[1], bundle, NULL, port, false, false, 71, strict), "untrusted");
+    require_passed(run_case(argv[1], bundle, argv[5], port, true, false, 72, strict), "trusted");
     if (openssl_path) {
         const uint16_t rsa_pss_port = unused_port();
-        OpenSslRsaPssServer rsa_pss_server(
-            openssl_path, argv[3], argv[4], rsa_pss_port);
-        require_passed(
-            run_case(argv[1],
-                     bundle,
-                     argv[5],
-                     rsa_pss_port,
-                     true,
-                     true,
-                     73,
-                     strict),
-            "rsa-pss");
+        OpenSslRsaPssServer rsa_pss_server(openssl_path, argv[3], argv[4], rsa_pss_port);
+        require_passed(run_case(argv[1], bundle, argv[5], rsa_pss_port, true, true, 73, strict),
+                       "rsa-pss");
     }
     return 0;
 }

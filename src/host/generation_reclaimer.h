@@ -13,17 +13,19 @@ namespace capsid::host {
 // including the last retired generation when no further admin work arrives.
 // The host must join all producers before stop_and_join().
 class GenerationReclaimer {
-public:
+  public:
     GenerationReclaimer() : thread_([this] { run(); }) {}
     ~GenerationReclaimer() { stop_and_join(); }
     GenerationReclaimer(const GenerationReclaimer&) = delete;
     GenerationReclaimer& operator=(const GenerationReclaimer&) = delete;
 
     void enqueue(std::shared_ptr<GenerationPool> pool) {
-        if (!pool) return;
+        if (!pool)
+            return;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (stopping_) std::terminate(); // producer lifetime contract
+            if (stopping_)
+                std::terminate(); // producer lifetime contract
             pending_.push_back(std::move(pool));
         }
         cv_.notify_one();
@@ -40,14 +42,15 @@ public:
         });
     }
 
-private:
+  private:
     void run() {
         for (;;) {
             std::shared_ptr<GenerationPool> pool;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 cv_.wait(lock, [this] { return stopping_ || !pending_.empty(); });
-                if (pending_.empty()) return;
+                if (pending_.empty())
+                    return;
                 pool = std::move(pending_.front());
                 pending_.pop_front();
             }

@@ -3,9 +3,9 @@
 
 #include "win32_compat.h"
 #if defined(_WIN32)
-extern "C" BOOL WINAPI capsid_test_rollback_create(
-    LPCSTR, LPSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-    BOOL, DWORD, LPVOID, LPCSTR, LPSTARTUPINFOA, LPPROCESS_INFORMATION);
+extern "C" BOOL WINAPI capsid_test_rollback_create(LPCSTR, LPSTR, LPSECURITY_ATTRIBUTES,
+                                                   LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID,
+                                                   LPCSTR, LPSTARTUPINFOA, LPPROCESS_INFORMATION);
 extern "C" BOOL WINAPI capsid_test_rollback_terminate(HANDLE, UINT);
 #if defined(CAPSID_TEST_SPAWN_ROLLBACK_RENAME)
 #define CreateProcessA capsid_test_rollback_create
@@ -15,9 +15,8 @@ extern "C" BOOL WINAPI capsid_test_rollback_terminate(HANDLE, UINT);
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
-extern "C" int capsid_test_rollback_spawn(
-    pid_t*, const char*, const posix_spawn_file_actions_t*,
-    const posix_spawnattr_t*, char* const[], char* const[]);
+extern "C" int capsid_test_rollback_spawn(pid_t*, const char*, const posix_spawn_file_actions_t*,
+                                          const posix_spawnattr_t*, char* const[], char* const[]);
 extern "C" int capsid_test_rollback_kill(pid_t, int);
 extern "C" pid_t capsid_test_rollback_wait(pid_t, int*, int);
 #if defined(CAPSID_TEST_SPAWN_ROLLBACK_RENAME)

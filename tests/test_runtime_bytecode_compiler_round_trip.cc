@@ -77,8 +77,7 @@ std::string read_file(const char* path) {
     if (!input) {
         fail(std::string("cannot open file: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 std::vector<std::uint8_t> read_bytes(const char* path) {
@@ -173,8 +172,7 @@ int run_compiler_sync(const std::vector<std::string>& argv) {
         args.push_back(const_cast<char*>(argument.c_str()));
     }
     args.push_back(nullptr);
-    return static_cast<int>(
-        _spawnv(_P_WAIT, argv[0].c_str(), args.data()));
+    return static_cast<int>(_spawnv(_P_WAIT, argv[0].c_str(), args.data()));
 #else
     std::vector<char*> args;
     for (const std::string& argument : argv) {
@@ -236,10 +234,9 @@ void wait_for_ready(capsid_worker* worker) {
 }
 
 std::string run_request(capsid_worker* worker) {
-    require_result(
-        capsid_worker_begin_bodyless_request(
-            worker, 1, "GET", "https://example.test/sync", NULL, 0),
-        "begin bodyless request");
+    require_result(capsid_worker_begin_bodyless_request(worker, 1, "GET",
+                                                        "https://example.test/sync", NULL, 0),
+                   "begin bodyless request");
     bool received_head = false;
     std::string body;
     const std::chrono::steady_clock::time_point deadline =
@@ -267,12 +264,10 @@ std::string run_request(capsid_worker* worker) {
                 if (!received_head || event.request_id != 1) {
                     fail("response body arrived before its head");
                 }
-                body.append(reinterpret_cast<const char*>(event.payload.data),
-                            event.payload.size);
+                body.append(reinterpret_cast<const char*>(event.payload.data), event.payload.size);
                 require_result(
                     capsid_worker_grant_response_credit(
-                        worker, event.request_id,
-                        static_cast<std::uint32_t>(event.payload.size)),
+                        worker, event.request_id, static_cast<std::uint32_t>(event.payload.size)),
                     "replenish response credit");
                 continue;
             }
@@ -325,14 +320,13 @@ TestKey generate_test_key() {
     TestKey key;
     key.private_key.resize(32);
     key.public_key.resize(32);
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
+    EVP_PKEY* pkey =
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
     if (pkey == nullptr) {
         fail("cannot create Ed25519 key");
     }
     std::size_t public_size = 32;
-    if (EVP_PKEY_get_raw_public_key(pkey, key.public_key.data(), &public_size) !=
-        1) {
+    if (EVP_PKEY_get_raw_public_key(pkey, key.public_key.data(), &public_size) != 1) {
         fail("cannot extract public key");
     }
     EVP_PKEY_free(pkey);
@@ -341,24 +335,22 @@ TestKey generate_test_key() {
 
 std::vector<std::uint8_t> sign_message(const TestKey& key,
                                        const std::vector<std::uint8_t>& message) {
-    EVP_PKEY* pkey = EVP_PKEY_new_raw_private_key(
-        EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
+    EVP_PKEY* pkey =
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, key.private_key.data(), 32);
     if (pkey == nullptr) {
         fail("cannot recreate Ed25519 key");
     }
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    if (ctx == nullptr ||
-        EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey) != 1) {
+    if (ctx == nullptr || EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, pkey) != 1) {
         fail("cannot init signing");
     }
     std::size_t signature_size = 64;
-    if (EVP_DigestSign(ctx, nullptr, &signature_size, message.data(),
-                       message.size()) != 1) {
+    if (EVP_DigestSign(ctx, nullptr, &signature_size, message.data(), message.size()) != 1) {
         fail("cannot size signature");
     }
     std::vector<std::uint8_t> signature(signature_size);
-    if (EVP_DigestSign(ctx, signature.data(), &signature_size, message.data(),
-                       message.size()) != 1) {
+    if (EVP_DigestSign(ctx, signature.data(), &signature_size, message.data(), message.size()) !=
+        1) {
         fail("cannot sign");
     }
     signature.resize(signature_size);
@@ -384,13 +376,12 @@ AttestationJson parse_attestation(const std::string& json) {
         fail("cannot parse attestation");
     }
     AttestationJson claims;
-    const char* names[] = { "application",    "version",       "sourceName",
-                            "sourceSha256",   "bytecodeSha256", "compatibilityId",
-                            "keyId" };
-    std::string* targets[] = { &claims.application,      &claims.version,
-                               &claims.source_name,      &claims.source_sha256,
-                               &claims.bytecode_sha256,  &claims.compatibility_id,
-                               &claims.key_id };
+    const char* names[] = {"application",    "version",         "sourceName", "sourceSha256",
+                           "bytecodeSha256", "compatibilityId", "keyId"};
+    std::string* targets[] = {&claims.application,     &claims.version,
+                              &claims.source_name,     &claims.source_sha256,
+                              &claims.bytecode_sha256, &claims.compatibility_id,
+                              &claims.key_id};
     for (std::size_t index = 0; index < 7; ++index) {
         json_t* value = json_object_get(root, names[index]);
         if (!json_is_string(value)) {
@@ -403,37 +394,32 @@ AttestationJson parse_attestation(const std::string& json) {
     return claims;
 }
 
-capsid::host::BytecodeAttestationResult verify(
-    const std::vector<std::uint8_t>& source,
-    const std::vector<std::uint8_t>& bytecode,
-    const std::string& attestation_json,
-    const std::vector<std::uint8_t>& signature,
-    const TestKey& key) {
+capsid::host::BytecodeAttestationResult verify(const std::vector<std::uint8_t>& source,
+                                               const std::vector<std::uint8_t>& bytecode,
+                                               const std::string& attestation_json,
+                                               const std::vector<std::uint8_t>& signature,
+                                               const TestKey& key) {
     const AttestationJson claims = parse_attestation(attestation_json);
     const capsid::host::TrustedBytecodeKey trusted_key = {
         claims.key_id,
-        std::span<const std::uint8_t>(key.public_key.data(),
-                                      key.public_key.size()),
+        std::span<const std::uint8_t>(key.public_key.data(), key.public_key.size()),
     };
     capsid::host::BytecodeAttestationInput input;
     input.source = std::span<const std::uint8_t>(source.data(), source.size());
-    input.bytecode =
-        std::optional<std::span<const std::uint8_t>>(
-            std::span<const std::uint8_t>(bytecode.data(), bytecode.size()));
+    input.bytecode = std::optional<std::span<const std::uint8_t>>(
+        std::span<const std::uint8_t>(bytecode.data(), bytecode.size()));
     input.attestation_json = std::string_view(attestation_json);
-    input.signature =
-        std::optional<std::span<const std::uint8_t>>(
-            std::span<const std::uint8_t>(signature.data(), signature.size()));
+    input.signature = std::optional<std::span<const std::uint8_t>>(
+        std::span<const std::uint8_t>(signature.data(), signature.size()));
     input.expected_application = claims.application;
     input.expected_version = claims.version;
     input.expected_source_name = claims.source_name;
     input.runtime_compatibility_id = claims.compatibility_id;
-    input.trusted_keys =
-        std::span<const capsid::host::TrustedBytecodeKey>(&trusted_key, 1);
+    input.trusted_keys = std::span<const capsid::host::TrustedBytecodeKey>(&trusted_key, 1);
     return capsid::host::verify_bytecode_attestation(input);
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc < 4) {
@@ -454,8 +440,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(work_dir);
 #else
     work_dir = "/tmp/capsid-roundtrip";
-    const std::string command =
-        std::string("rm -rf ") + work_dir + " && mkdir -p " + work_dir;
+    const std::string command = std::string("rm -rf ") + work_dir + " && mkdir -p " + work_dir;
     if (system(command.c_str()) != 0) {
         fail("cannot prepare work dir");
     }
@@ -468,14 +453,22 @@ int main(int argc, char** argv) {
     const std::string message_out = work_dir + "/message.bin";
     run_command({
         compiler_tool,
-        "--source", fixture_path,
-        "--source-name", source_name,
-        "--application", "orders",
-        "--version", "2026-08-03-001",
-        "--key-id", "test-key-1",
-        "--bytecode-out", bytecode_out,
-        "--attestation-out", attestation_out,
-        "--signing-message-out", message_out,
+        "--source",
+        fixture_path,
+        "--source-name",
+        source_name,
+        "--application",
+        "orders",
+        "--version",
+        "2026-08-03-001",
+        "--key-id",
+        "test-key-1",
+        "--bytecode-out",
+        bytecode_out,
+        "--attestation-out",
+        attestation_out,
+        "--signing-message-out",
+        message_out,
     });
 
     const std::vector<std::uint8_t> source = read_bytes(fixture_path);
@@ -485,7 +478,7 @@ int main(int argc, char** argv) {
     const AttestationJson claims = parse_attestation(attestation);
 
     // 2. Compatibility identity: compiler == library == worker.
-    const std::string tool_id = run_command({ compiler_tool, "--print-compatibility-id" });
+    const std::string tool_id = run_command({compiler_tool, "--print-compatibility-id"});
     std::string tool_id_trimmed = tool_id;
     while (!tool_id_trimmed.empty() &&
            (tool_id_trimmed.back() == '\n' || tool_id_trimmed.back() == '\r')) {
@@ -504,14 +497,22 @@ int main(int argc, char** argv) {
     const std::string message_out2 = work_dir + "/message2.bin";
     run_command({
         compiler_tool,
-        "--source", fixture_path,
-        "--source-name", source_name,
-        "--application", "orders",
-        "--version", "2026-08-03-001",
-        "--key-id", "test-key-1",
-        "--bytecode-out", bytecode_out2,
-        "--attestation-out", attestation_out2,
-        "--signing-message-out", message_out2,
+        "--source",
+        fixture_path,
+        "--source-name",
+        source_name,
+        "--application",
+        "orders",
+        "--version",
+        "2026-08-03-001",
+        "--key-id",
+        "test-key-1",
+        "--bytecode-out",
+        bytecode_out2,
+        "--attestation-out",
+        attestation_out2,
+        "--signing-message-out",
+        message_out2,
     });
     if (read_bytes(bytecode_out2.c_str()) != bytecode ||
         read_file(attestation_out2.c_str()) != attestation ||
@@ -522,12 +523,11 @@ int main(int argc, char** argv) {
     // 4. Offline signing with a test key, then the host verifier accepts.
     const TestKey key = generate_test_key();
     const std::vector<std::uint8_t> signature = sign_message(key, message);
-    const capsid::host::BytecodeAttestationResult verified = verify(
-        source, bytecode, attestation, signature, key);
+    const capsid::host::BytecodeAttestationResult verified =
+        verify(source, bytecode, attestation, signature, key);
     if (verified.selection != capsid::host::BytecodeArtifactSelection::kTrustedBytecode ||
         verified.code != capsid::host::BytecodeAttestationErrorCode::kNone) {
-        fail("verified artifact did not select trusted bytecode: " +
-             verified.message);
+        fail("verified artifact did not select trusted bytecode: " + verified.message);
     }
 
     // 5. Trusted worker loads the bytecode and returns the same result as
@@ -535,10 +535,9 @@ int main(int argc, char** argv) {
     std::string trusted_body;
     {
         capsid_worker* worker = spawn_worker(worker_path);
-        require_result(
-            capsid_worker_load_trusted_bytecode_named(
-                worker, bytecode.data(), bytecode.size(), source_name.c_str()),
-            "load trusted bytecode");
+        require_result(capsid_worker_load_trusted_bytecode_named(
+                           worker, bytecode.data(), bytecode.size(), source_name.c_str()),
+                       "load trusted bytecode");
         wait_for_ready(worker);
         trusted_body = run_request(worker);
         capsid_worker_destroy(worker);
@@ -546,17 +545,16 @@ int main(int argc, char** argv) {
     std::string source_body;
     {
         capsid_worker* worker = spawn_worker(worker_path);
-        require_result(
-            capsid_worker_load_bundle_named(
-                worker, source.data(), source.size(), source_name.c_str()),
-            "load source bundle");
+        require_result(capsid_worker_load_bundle_named(worker, source.data(), source.size(),
+                                                       source_name.c_str()),
+                       "load source bundle");
         wait_for_ready(worker);
         source_body = run_request(worker);
         capsid_worker_destroy(worker);
     }
     if (trusted_body != source_body) {
-        fail("trusted bytecode result differs from the source result: '" +
-             trusted_body + "' vs '" + source_body + "'");
+        fail("trusted bytecode result differs from the source result: '" + trusted_body + "' vs '" +
+             source_body + "'");
     }
 
     // 6. Tamper matrix: every single-bit-class tamper fails closed.
@@ -583,8 +581,7 @@ int main(int argc, char** argv) {
     //    c. sourceName tamper without re-signing -> invalid signature.
     {
         std::string bad_attestation = attestation;
-        const std::string::size_type pos =
-            bad_attestation.find(source_name);
+        const std::string::size_type pos = bad_attestation.find(source_name);
         if (pos == std::string::npos) {
             fail("cannot locate sourceName in attestation");
         }
@@ -601,8 +598,7 @@ int main(int argc, char** argv) {
     //    mismatch on the artifact hash.
     {
         std::string bad_attestation = attestation;
-        const std::string::size_type pos =
-            bad_attestation.find("\"sourceSha256\":\"sha256:");
+        const std::string::size_type pos = bad_attestation.find("\"sourceSha256\":\"sha256:");
         if (pos == std::string::npos) {
             fail("cannot locate sourceSha256 in attestation");
         }
@@ -611,12 +607,10 @@ int main(int argc, char** argv) {
         // digit (a blind write could be a no-op when the digit already
         // matches, silently skipping the tamper).
         const char first_digit = bad_attestation.at(pos + 23);
-        bad_attestation.replace(pos + 23, 1,
-                                first_digit == '0' ? "1" : "0");
-        const capsid::host::BytecodeAttestationResult unsigned_result = verify(
-            source, bytecode, bad_attestation, signature, key);
-        if (unsigned_result.code !=
-            capsid::host::BytecodeAttestationErrorCode::kInvalidSignature) {
+        bad_attestation.replace(pos + 23, 1, first_digit == '0' ? "1" : "0");
+        const capsid::host::BytecodeAttestationResult unsigned_result =
+            verify(source, bytecode, bad_attestation, signature, key);
+        if (unsigned_result.code != capsid::host::BytecodeAttestationErrorCode::kInvalidSignature) {
             fail(std::string("tampered digest claim was not rejected: ") +
                  std::to_string(static_cast<int>(unsigned_result.code)) +
                  " claim=" + parse_attestation(attestation).source_sha256 +
@@ -626,11 +620,10 @@ int main(int argc, char** argv) {
         // produce without a recompiled message; the artifact-hash path is
         // covered by case (b). Assert the tampered attestation is rejected
         // under the same key regardless of signing.
-        const capsid::host::BytecodeAttestationResult re_signed = verify(
-            source, bytecode, bad_attestation,
-            sign_message(key, read_bytes(message_out.c_str())), key);
-        if (re_signed.code !=
-            capsid::host::BytecodeAttestationErrorCode::kInvalidSignature) {
+        const capsid::host::BytecodeAttestationResult re_signed =
+            verify(source, bytecode, bad_attestation,
+                   sign_message(key, read_bytes(message_out.c_str())), key);
+        if (re_signed.code != capsid::host::BytecodeAttestationErrorCode::kInvalidSignature) {
             fail("digest tamper path did not fail closed");
         }
     }
@@ -641,30 +634,38 @@ int main(int argc, char** argv) {
     {
         // Duplicate argument.
         require(run_compiler_sync({
-                    compiler_tool,
-                    "--source", fixture_path,
-                    "--source-name", source_name,
-                    "--application", "orders",
-                    "--version", "2026-08-03-001",
-                    "--key-id", "test-key-1",
-                    "--bytecode-out", bytecode_out,
-                    "--bytecode-out", bytecode_out,
-                    "--attestation-out", attestation_out,
-                    "--signing-message-out", message_out,
+                    compiler_tool,    "--source",
+                    fixture_path,     "--source-name",
+                    source_name,      "--application",
+                    "orders",         "--version",
+                    "2026-08-03-001", "--key-id",
+                    "test-key-1",     "--bytecode-out",
+                    bytecode_out,     "--bytecode-out",
+                    bytecode_out,     "--attestation-out",
+                    attestation_out,  "--signing-message-out",
+                    message_out,
                 }) == 2,
                 "duplicate argument not rejected");
 
         // Aliased output paths.
         require(run_compiler_sync({
                     compiler_tool,
-                    "--source", fixture_path,
-                    "--source-name", source_name,
-                    "--application", "orders",
-                    "--version", "2026-08-03-001",
-                    "--key-id", "test-key-1",
-                    "--bytecode-out", bytecode_out,
-                    "--attestation-out", bytecode_out,
-                    "--signing-message-out", message_out,
+                    "--source",
+                    fixture_path,
+                    "--source-name",
+                    source_name,
+                    "--application",
+                    "orders",
+                    "--version",
+                    "2026-08-03-001",
+                    "--key-id",
+                    "test-key-1",
+                    "--bytecode-out",
+                    bytecode_out,
+                    "--attestation-out",
+                    bytecode_out,
+                    "--signing-message-out",
+                    message_out,
                 }) == 2,
                 "aliased output paths not rejected");
 
@@ -673,18 +674,25 @@ int main(int argc, char** argv) {
         const std::string kept = read_file(attestation_out.c_str());
         require(run_compiler_sync({
                     compiler_tool,
-                    "--source", fixture_path,
-                    "--source-name", source_name,
-                    "--application", "orders",
-                    "--version", "2026-08-03-001",
-                    "--key-id", "test-key-1",
-                    "--bytecode-out", bytecode_out,
-                    "--attestation-out", attestation_out,
-                    "--signing-message-out", message_out,
+                    "--source",
+                    fixture_path,
+                    "--source-name",
+                    source_name,
+                    "--application",
+                    "orders",
+                    "--version",
+                    "2026-08-03-001",
+                    "--key-id",
+                    "test-key-1",
+                    "--bytecode-out",
+                    bytecode_out,
+                    "--attestation-out",
+                    attestation_out,
+                    "--signing-message-out",
+                    message_out,
                 }) != 0,
                 "pre-existing target was overwritten");
-        require(read_file(attestation_out.c_str()) == kept,
-                "pre-existing target content changed");
+        require(read_file(attestation_out.c_str()) == kept, "pre-existing target content changed");
 
 #if !defined(_WIN32)
         // Pre-placed temp symlink: the child's temp path is
@@ -695,20 +703,13 @@ int main(int argc, char** argv) {
         const pid_t temp_symlink = fork();
         if (temp_symlink == 0) {
             const std::string symlink_path =
-                bytecode_out + ".tmp." +
-                std::to_string(static_cast<long long>(getpid()));
-            require(symlink("target", symlink_path.c_str()) == 0,
-                    "cannot pre-place temp symlink");
-            execl(compiler_tool, compiler_tool,
-                  "--source", fixture_path,
-                  "--source-name", source_name.c_str(),
-                  "--application", "orders",
-                  "--version", "2026-08-03-001",
-                  "--key-id", "test-key-1",
-                  "--bytecode-out", bytecode_out.c_str(),
-                  "--attestation-out", attestation_out.c_str(),
-                  "--signing-message-out", message_out.c_str(),
-                  nullptr);
+                bytecode_out + ".tmp." + std::to_string(static_cast<long long>(getpid()));
+            require(symlink("target", symlink_path.c_str()) == 0, "cannot pre-place temp symlink");
+            execl(compiler_tool, compiler_tool, "--source", fixture_path, "--source-name",
+                  source_name.c_str(), "--application", "orders", "--version", "2026-08-03-001",
+                  "--key-id", "test-key-1", "--bytecode-out", bytecode_out.c_str(),
+                  "--attestation-out", attestation_out.c_str(), "--signing-message-out",
+                  message_out.c_str(), nullptr);
             _exit(127);
         }
         int status = 0;

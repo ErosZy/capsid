@@ -68,34 +68,22 @@ int mode_encode_line_json() {
     require(contains(line, "{\"timestamp\":\"1700000000123\""),
             "encode omitted the timestamp: " + line);
     require(contains(line, "\"level\":\"warn\""), "encode omitted level");
-    require(contains(line, "\"event\":\"recovery_decision\""),
-            "encode omitted event");
+    require(contains(line, "\"event\":\"recovery_decision\""), "encode omitted event");
     require(contains(line, "\"app\":\"orders\""), "encode omitted app");
-    require(contains(line, "\"generation\":\"sha256:ab\""),
-            "encode omitted generation");
-    require(contains(line, "\"binding\":\"mongo\""),
-            "encode omitted Binding identity");
-    require(contains(line, "\"request_id\":\"108\""),
-            "encode omitted request identity");
-    require(contains(
-                line,
-                "\"fields\":{\"safe\":\"visible\","
-                "\"password\":\"[REDACTED]\"}"),
+    require(contains(line, "\"generation\":\"sha256:ab\""), "encode omitted generation");
+    require(contains(line, "\"binding\":\"mongo\""), "encode omitted Binding identity");
+    require(contains(line, "\"request_id\":\"108\""), "encode omitted request identity");
+    require(contains(line, "\"fields\":{\"safe\":\"visible\","
+                           "\"password\":\"[REDACTED]\"}"),
             "encode did not preserve structured fields: " + line);
-    require(!contains(line, "\"fields\":\"{"),
-            "encode double-encoded structured fields");
-    require(contains(line, "\"result\":\"quarantine\""),
-            "encode omitted result");
-    require(contains(line, "\"duration_ms\":42"),
-            "encode omitted duration_ms");
+    require(!contains(line, "\"fields\":\"{"), "encode double-encoded structured fields");
+    require(contains(line, "\"result\":\"quarantine\""), "encode omitted result");
+    require(contains(line, "\"duration_ms\":42"), "encode omitted duration_ms");
     require(contains(line, "\"message\":\"line one\\n\\\"quoted\\\" \\\\ tail\""),
             "encode did not escape the message: " + line);
-    require(line.find('\n') == std::string::npos,
-            "encode emitted a multi-line record");
-    require(!contains(line, "\"version\""),
-            "encode emitted an empty version field");
-    require(!contains(line, "\"worker_id\""),
-            "encode emitted an empty worker_id field");
+    require(line.find('\n') == std::string::npos, "encode emitted a multi-line record");
+    require(!contains(line, "\"version\""), "encode emitted an empty version field");
+    require(!contains(line, "\"worker_id\""), "encode emitted an empty worker_id field");
     std::cout << "PASS" << std::endl;
     return 0;
 }
@@ -129,14 +117,11 @@ int mode_app_lane_drops_and_counts() {
         std::lock_guard<std::mutex> lock(sink_mutex);
         delivered = received.size();
     }
-    require(log.accepted_events() == kTotal,
-            "accepted count mismatches submitted events");
+    require(log.accepted_events() == kTotal, "accepted count mismatches submitted events");
     require(delivered + log.dropped_app_events() == kTotal,
-            "app lane lost events without counting them: delivered=" +
-                std::to_string(delivered) +
+            "app lane lost events without counting them: delivered=" + std::to_string(delivered) +
                 " dropped=" + std::to_string(log.dropped_app_events()));
-    require(log.dropped_app_events() > 0,
-            "app lane overflow was never counted");
+    require(log.dropped_app_events() > 0, "app lane overflow was never counted");
     std::cout << "PASS" << std::endl;
     return 0;
 }
@@ -171,13 +156,10 @@ int mode_control_lane_never_drops() {
         delivered = received.size();
     }
     require(delivered == kTotal,
-            "control lane dropped an event: delivered=" +
-                std::to_string(delivered) +
+            "control lane dropped an event: delivered=" + std::to_string(delivered) +
                 " expected=" + std::to_string(kTotal));
-    require(log.dropped_app_events() == 0,
-            "control overflow was wrongly counted as an app drop");
-    require(log.accepted_events() == kTotal,
-            "control accepted count mismatches submitted events");
+    require(log.dropped_app_events() == 0, "control overflow was wrongly counted as an app drop");
+    require(log.accepted_events() == kTotal, "control accepted count mismatches submitted events");
     std::cout << "PASS" << std::endl;
     return 0;
 }
@@ -209,8 +191,7 @@ int mode_control_precedes_app_backlog() {
     control_fields.app = "orders";
     control_fields.result = "denied";
     log.log(LogLane::kControl, control_fields);
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::milliseconds(100);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
     bool control_landed = false;
     for (;;) {
         {
@@ -258,9 +239,8 @@ int mode_app_lane_is_fifo() {
 
 int mode_flush_idle_writer() {
     for (unsigned round = 0; round < 256; ++round) {
-        StructuredLog log([](const std::string&) {
-            fail("an idle logger must not fabricate an event");
-        });
+        StructuredLog log(
+            [](const std::string&) { fail("an idle logger must not fabricate an event"); });
         std::this_thread::yield();
         log.flush();
         log.flush();
@@ -333,12 +313,14 @@ int mode_concurrent_flush_joins_writer() {
         std::unique_lock<std::mutex> lock(gate);
         require(ready.wait_for(lock, std::chrono::seconds(2), [&] { return flush_entered == 2; }),
                 "both concurrent flush callers must start");
-        require(!ready.wait_for(lock, std::chrono::milliseconds(50), [&] { return flush_returned != 0; }),
+        require(!ready.wait_for(lock, std::chrono::milliseconds(50),
+                                [&] { return flush_returned != 0; }),
                 "every flush must wait for the writer, including concurrent callers");
         release_sink = true;
         ready.notify_all();
     }
-    first.join(); second.join();
+    first.join();
+    second.join();
     require(flush_returned == 2 && delivered == 3 && log.accepted_events() == 3,
             "both flush calls must join the writer after both lanes drain");
     log.flush();
@@ -346,9 +328,9 @@ int mode_concurrent_flush_joins_writer() {
     return 0;
 }
 
-#endif  // CAPSID_HAS_STRUCTURED_LOG
+#endif // CAPSID_HAS_STRUCTURED_LOG
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -372,16 +354,18 @@ int main(int argc, char** argv) {
     if (mode == "structured_log_app_lane_is_fifo") {
         return mode_app_lane_is_fifo();
     }
-    if (mode == "structured_log_flush_idle_writer") return mode_flush_idle_writer();
-    if (mode == "structured_log_flush_after_final_event") return mode_flush_after_final_event();
-    if (mode == "structured_log_concurrent_flush_joins_writer") return mode_concurrent_flush_joins_writer();
+    if (mode == "structured_log_flush_idle_writer")
+        return mode_flush_idle_writer();
+    if (mode == "structured_log_flush_after_final_event")
+        return mode_flush_after_final_event();
+    if (mode == "structured_log_concurrent_flush_joins_writer")
+        return mode_concurrent_flush_joins_writer();
 #else
     if (mode == "structured_log_emits_single_line_json" ||
         mode == "structured_log_app_lane_drops_and_counts" ||
         mode == "structured_log_control_lane_never_drops" ||
         mode == "structured_log_control_precedes_app_backlog" ||
-        mode == "structured_log_app_lane_is_fifo" ||
-        mode == "structured_log_flush_idle_writer" ||
+        mode == "structured_log_app_lane_is_fifo" || mode == "structured_log_flush_idle_writer" ||
         mode == "structured_log_flush_after_final_event" ||
         mode == "structured_log_concurrent_flush_joins_writer") {
         fail("structured log component is not implemented");

@@ -23,8 +23,7 @@ namespace {
 using capsid::host::WorkerCapacityLedger;
 
 [[noreturn]] void fail(const std::string& message) {
-    std::cerr << "test-host-worker-capacity-ledger: " << message
-              << std::endl;
+    std::cerr << "test-host-worker-capacity-ledger: " << message << std::endl;
     std::exit(1);
 }
 
@@ -34,7 +33,7 @@ void require(bool condition, const std::string& message) {
     }
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -44,11 +43,14 @@ int main(int argc, char** argv) {
     if (mode == "ledger_retired_headroom") {
         WorkerCapacityLedger ledger(4, 0);
         require(ledger.reserve_fresh("orders", 4), "reserve old actual capacity");
-        ledger.commit_fresh("orders"); ledger.begin_retire("orders", 4);
-        require(!ledger.reserve_fresh("invoices", 1), "retired workers still occupy the absolute ceiling until reap");
+        ledger.commit_fresh("orders");
+        ledger.begin_retire("orders", 4);
+        require(!ledger.reserve_fresh("invoices", 1),
+                "retired workers still occupy the absolute ceiling until reap");
         ledger.release_drained("orders", 4);
         require(ledger.reserve_fresh("invoices", 1), "actual reaped capacity becomes reusable");
-        std::cout << "PASS" << std::endl; return 0;
+        std::cout << "PASS" << std::endl;
+        return 0;
     }
     if (mode == "ledger_overflow_limits") {
         WorkerCapacityLedger ledger(4, 2);
@@ -57,8 +59,10 @@ int main(int argc, char** argv) {
                 "large pool size must not wrap the steady-capacity check");
         require(!ledger.reserve_replace("orders", std::numeric_limits<std::uint64_t>::max()),
                 "large replacement must not wrap the steady/surge checks");
-        require(ledger.steady_used() == 1 && ledger.surge_used() == 0, "rejected inputs cannot change held counts");
-        std::cout << "PASS" << std::endl; return 0;
+        require(ledger.steady_used() == 1 && ledger.surge_used() == 0,
+                "rejected inputs cannot change held counts");
+        std::cout << "PASS" << std::endl;
+        return 0;
     }
 
     if (mode == "ledger_fresh_budget") {
@@ -67,16 +71,15 @@ int main(int argc, char** argv) {
         WorkerCapacityLedger ledger(4, 0);
         require(ledger.reserve_fresh("orders", 3),
                 "3-worker fresh deploy did not fit workersTotal 4");
-        require(ledger.steady_used() == 3 &&
-                    ledger.steady_of("orders") == 3 && ledger.holds("orders"),
+        require(ledger.steady_used() == 3 && ledger.steady_of("orders") == 3 &&
+                    ledger.holds("orders"),
                 "fresh reserve did not hold the steady count");
         require(!ledger.reserve_fresh("payments", 2),
                 "2-worker fresh deploy exceeded the steady budget");
         require(!ledger.reserve_fresh("orders", 2),
                 "fresh reserve over the held count was not refused");
         ledger.commit_fresh("orders");
-        require(ledger.steady_used() == 3,
-                "fresh commit changed the held steady count");
+        require(ledger.steady_used() == 3, "fresh commit changed the held steady count");
 
         // A failed fresh deploy rolls its reserve back.
         require(ledger.reserve_fresh("billing", 1),
@@ -89,8 +92,7 @@ int main(int argc, char** argv) {
         require(ledger.reserve_fresh("payments", 1),
                 "1-worker fresh deploy did not fit after the abort");
         ledger.commit_fresh("payments");
-        require(ledger.steady_used() == 4,
-                "steady budget was not fully consumed");
+        require(ledger.steady_used() == 4, "steady budget was not fully consumed");
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -99,13 +101,10 @@ int main(int argc, char** argv) {
         // workers_total=4, surge=3: a 3→3 replace needs the surge budget
         // for the overlap; the steady state after the swap still fits.
         WorkerCapacityLedger ledger(4, 3);
-        require(ledger.reserve_fresh("orders", 3),
-                "serving pool did not fit the steady budget");
+        require(ledger.reserve_fresh("orders", 3), "serving pool did not fit the steady budget");
         ledger.commit_fresh("orders");
-        require(ledger.reserve_replace("orders", 3),
-                "3→3 replace did not fit surge 3");
-        require(ledger.surge_used() == 3 &&
-                    ledger.surge_of("orders") == 3 &&
+        require(ledger.reserve_replace("orders", 3), "3→3 replace did not fit surge 3");
+        require(ledger.surge_used() == 3 && ledger.surge_of("orders") == 3 &&
                     ledger.steady_of("orders") == 3,
                 "replacement reserve did not hold the new pool under "
                 "surge");
@@ -113,10 +112,8 @@ int main(int argc, char** argv) {
                 "overlap exceeded the absolute ceiling "
                 "(workersTotal + surge)");
         ledger.commit_replace("orders", /*new=*/3, /*old=*/3);
-        require(ledger.steady_of("orders") == 3 &&
-                    ledger.steady_used() == 3 &&
-                    ledger.surge_of("orders") == 3 &&
-                    ledger.surge_used() == 3,
+        require(ledger.steady_of("orders") == 3 && ledger.steady_used() == 3 &&
+                    ledger.surge_of("orders") == 3 && ledger.surge_used() == 3,
                 "commit_replace did not switch the categories "
                 "(new→steady, old→surge)");
 
@@ -133,10 +130,8 @@ int main(int argc, char** argv) {
         require(ledger.surge_used() == 1 && ledger.steady_used() == 3,
                 "3→1 reserve held the new pool under surge");
         ledger.commit_replace("orders", /*new=*/1, /*old=*/3);
-        require(ledger.steady_of("orders") == 1 &&
-                    ledger.steady_used() == 1 &&
-                    ledger.surge_of("orders") == 3 &&
-                    ledger.surge_used() == 3,
+        require(ledger.steady_of("orders") == 1 && ledger.steady_used() == 1 &&
+                    ledger.surge_of("orders") == 3 && ledger.surge_used() == 3,
                 "3→1 commit did not move the old pool into surge");
 
         // The old pool is still draining (surge 3): a second replacement
@@ -152,42 +147,35 @@ int main(int argc, char** argv) {
         ledger.release_drained("orders", 3);
         require(ledger.surge_used() == 0 && ledger.steady_used() == 1,
                 "release_drained did not free the surge budget");
-        require(ledger.reserve_fresh("payments", 3),
-                "freed budget did not serve a fresh deploy");
+        require(ledger.reserve_fresh("payments", 3), "freed budget did not serve a fresh deploy");
         ledger.commit_fresh("payments");
-        require(ledger.steady_used() == 4,
-                "steady budget was not fully consumed after the drain");
+        require(ledger.steady_used() == 4, "steady budget was not fully consumed after the drain");
         std::cout << "PASS" << std::endl;
         return 0;
     }
 
     if (mode == "ledger_retire_drain_release") {
         WorkerCapacityLedger ledger(6, 2);
-        require(ledger.reserve_fresh("orders", 4),
-                "serving pool did not fit the steady budget");
+        require(ledger.reserve_fresh("orders", 4), "serving pool did not fit the steady budget");
         ledger.commit_fresh("orders");
 
         // Retire: the serving pool leaves steady for surge (draining).
         // No budget gate: the process count only shrinks.
         ledger.begin_retire("orders", 4);
-        require(ledger.steady_of("orders") == 0 &&
-                    ledger.steady_used() == 0 &&
-                    ledger.surge_of("orders") == 4 &&
-                    ledger.surge_used() == 4 && !ledger.holds("orders"),
+        require(ledger.steady_of("orders") == 0 && ledger.steady_used() == 0 &&
+                    ledger.surge_of("orders") == 4 && ledger.surge_used() == 4 &&
+                    !ledger.holds("orders"),
                 "begin_retire did not move the pool into surge");
 
         // The reaper finishes: only now the count is released.
         ledger.release_drained("orders", 4);
-        require(ledger.surge_of("orders") == 0 &&
-                    ledger.surge_used() == 0,
+        require(ledger.surge_of("orders") == 0 && ledger.surge_used() == 0,
                 "release_drained did not return the surge count");
 
         // The released budget serves a fresh deploy again.
-        require(ledger.reserve_fresh("payments", 5),
-                "released budget did not become available");
+        require(ledger.reserve_fresh("payments", 5), "released budget did not become available");
         ledger.commit_fresh("payments");
-        require(ledger.steady_used() == 5,
-                "fresh deploy after retire did not settle");
+        require(ledger.steady_used() == 5, "fresh deploy after retire did not settle");
         std::cout << "PASS" << std::endl;
         return 0;
     }
@@ -196,21 +184,18 @@ int main(int argc, char** argv) {
         // v1 default surge = 0: a replace of a serving pool is refused —
         // the zero-downtime overlap cannot exist — and nothing is held.
         WorkerCapacityLedger ledger(4, 0);
-        require(ledger.reserve_fresh("orders", 2),
-                "serving pool did not fit the steady budget");
+        require(ledger.reserve_fresh("orders", 2), "serving pool did not fit the steady budget");
         ledger.commit_fresh("orders");
         require(!ledger.reserve_replace("orders", 2),
                 "replace without any surge budget was not refused");
         require(ledger.steady_used() == 2 && ledger.surge_used() == 0,
                 "refused replace held a count");
-        require(ledger.steady_of("orders") == 2,
-                "refused replace disturbed the serving pool");
+        require(ledger.steady_of("orders") == 2, "refused replace disturbed the serving pool");
 
         // A replace whose steady swap fits but whose peak does not is
         // also refused (surge 1: peak 2 > 1).
         WorkerCapacityLedger tight(4, 1);
-        require(tight.reserve_fresh("orders", 2),
-                "serving pool did not fit the tight budget");
+        require(tight.reserve_fresh("orders", 2), "serving pool did not fit the tight budget");
         tight.commit_fresh("orders");
         require(!tight.reserve_replace("orders", 2),
                 "replace whose overlap peak exceeded surge was not "

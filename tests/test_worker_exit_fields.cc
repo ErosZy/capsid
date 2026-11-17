@@ -34,27 +34,26 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot open fixture: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-void wait_for_ready(capsid_worker *worker) {
+void wait_for_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(15);
     for (;;) {
@@ -72,7 +71,7 @@ void wait_for_ready(capsid_worker *worker) {
             }
             if (event.type == CAPSID_EVENT_ERROR) {
                 fail(std::string("worker startup error: ") +
-                     std::string(reinterpret_cast<const char *>(event.payload.data),
+                     std::string(reinterpret_cast<const char*>(event.payload.data),
                                  event.payload.size));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
@@ -94,9 +93,9 @@ void wait_for_ready(capsid_worker *worker) {
     }
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc != 3) {
         fail("expected worker path and JavaScript fixture path");
     }
@@ -106,14 +105,11 @@ int main(int argc, char **argv) {
     capsid_worker_config_init(&config);
     config.worker_path = argv[1];
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
-    require_result(
-        capsid_worker_load_bundle(
-            worker,
-            reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size()),
-        "load bundle");
+    require_result(capsid_worker_load_bundle(
+                       worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()),
+                   "load bundle");
     wait_for_ready(worker);
 
     // A realistic reuser polls events into one struct; prime the fields the
@@ -132,8 +128,7 @@ int main(int argc, char **argv) {
         fail("worker pid unavailable");
     }
 #if defined(_WIN32)
-    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE,
-                                 static_cast<DWORD>(worker_pid));
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, static_cast<DWORD>(worker_pid));
     if (process == NULL || !TerminateProcess(process, 1)) {
         if (process != NULL) {
             CloseHandle(process);
@@ -151,8 +146,7 @@ int main(int argc, char **argv) {
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
-            fail(std::string("post-kill flush: ") +
-                 capsid_result_string(flush));
+            fail(std::string("post-kill flush: ") + capsid_result_string(flush));
         }
         const capsid_result result = capsid_worker_next_event(worker, &event);
         if (result == CAPSID_OK) {
@@ -190,14 +184,15 @@ int main(int argc, char **argv) {
         fail("abnormal Worker was accepted as a clean exit");
     }
 #if defined(_WIN32)
-    if (exited.status != 1) fail("lost actual TerminateProcess exit code");
+    if (exited.status != 1)
+        fail("lost actual TerminateProcess exit code");
 #else
     if (!WIFSIGNALED(exited.status) || WTERMSIG(exited.status) != SIGKILL)
         fail("lost actual SIGKILL termination status");
 #endif
     std::cout << "WORKER_EXIT_NEGATIVE {\"status\":" << exited.status
-              << ",\"ipcStatus\":" << event.status
-              << ",\"clean\":false,\"observed\":true}" << std::endl;
+              << ",\"ipcStatus\":" << event.status << ",\"clean\":false,\"observed\":true}"
+              << std::endl;
     std::cout << "PASS" << std::endl;
     return 0;
 }

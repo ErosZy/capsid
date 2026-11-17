@@ -20,8 +20,7 @@ namespace capsid::host {
 inline constexpr std::size_t kResponseBodyWriteBatchLimit = 64u * 1024u;
 
 template <typename QueuedBody>
-QueuedBody take_coalesced_response_body(std::deque<QueuedBody>* queue,
-                                        std::size_t* queued_bytes,
+QueuedBody take_coalesced_response_body(std::deque<QueuedBody>* queue, std::size_t* queued_bytes,
                                         std::size_t limit) {
     assert(queue != nullptr);
     assert(queued_bytes != nullptr);
@@ -35,8 +34,7 @@ QueuedBody take_coalesced_response_body(std::deque<QueuedBody>* queue,
     std::size_t combined_size = result.bytes.size();
     std::size_t combine_count = 0;
     for (auto it = queue->begin(); it != queue->end(); ++it) {
-        if (it->credit_returned_early != result.credit_returned_early ||
-            combined_size > limit ||
+        if (it->credit_returned_early != result.credit_returned_early || combined_size > limit ||
             it->bytes.size() > limit - combined_size) {
             break;
         }
@@ -52,15 +50,13 @@ QueuedBody take_coalesced_response_body(std::deque<QueuedBody>* queue,
         QueuedBody& next = queue->front();
         assert(*queued_bytes >= next.bytes.size());
         *queued_bytes -= next.bytes.size();
-        result.bytes.insert(
-            result.bytes.end(),
-            std::make_move_iterator(next.bytes.begin()),
-            std::make_move_iterator(next.bytes.end()));
+        result.bytes.insert(result.bytes.end(), std::make_move_iterator(next.bytes.begin()),
+                            std::make_move_iterator(next.bytes.end()));
         queue->pop_front();
     }
     return result;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
-#endif  // CAPSID_SRC_HOST_RESPONSE_BODY_BATCH_H_
+#endif // CAPSID_SRC_HOST_RESPONSE_BODY_BATCH_H_

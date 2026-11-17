@@ -5,6 +5,15 @@ execution diary. The [machine-readable status](current-status.json) is generated
 from committed source locks, the captured GitHub release metadata and validated
 measurement archives. Historical reviews retain their original dates and values.
 
+## Formatted Development Checkout
+
+The development line now includes repository-wide source formatting and pinned
+development tools after the published beta baseline. The machine status keeps
+qualified-release hashes separate from the reviewed formatting snapshot under
+checkout. `releaseQualificationInherited:false` is explicit: the new checkout
+is not a newly qualified binary, bytecode identity or performance result.
+See [source formatting](formatting.md) for scope and exact-byte exclusions.
+
 ## Release and Development Channels
 
 | Item | Current recorded value | Boundary |

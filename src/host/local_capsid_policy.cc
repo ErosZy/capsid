@@ -47,8 +47,7 @@ bool valid_local_secret_key_id(const std::string& key_id) {
     }
     for (const unsigned char c : key_id) {
         const bool alnum =
-            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9');
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
         if (!alnum && c != '.' && c != '_' && c != '-') {
             return false;
         }
@@ -65,8 +64,7 @@ bool valid_local_secret_value(const std::vector<std::uint8_t>& value) {
     if (value.size() > kMaxLocalSecretBytes) {
         return false;
     }
-    const std::string_view bytes(
-        reinterpret_cast<const char*>(value.data()), value.size());
+    const std::string_view bytes(reinterpret_cast<const char*>(value.data()), value.size());
     if (bytes.find('\0') != std::string_view::npos) {
         return false;
     }
@@ -95,19 +93,16 @@ bool valid_local_secret_value(const std::vector<std::uint8_t>& value) {
             return false;
         }
         for (std::size_t step = 1; step <= continuation; ++step) {
-            const unsigned char ch =
-                static_cast<unsigned char>(bytes[index + step]);
+            const unsigned char ch = static_cast<unsigned char>(bytes[index + step]);
             if ((ch & 0xc0) != 0x80) {
                 return false;
             }
             code_point = (code_point << 6) | (ch & 0x3f);
         }
-        const bool overlong =
-            (continuation == 1 && code_point < 0x80) ||
-            (continuation == 2 && code_point < 0x800) ||
-            (continuation == 3 && code_point < 0x10000);
-        if (overlong || code_point > 0x10ffff ||
-            (code_point >= 0xd800 && code_point <= 0xdfff)) {
+        const bool overlong = (continuation == 1 && code_point < 0x80) ||
+                              (continuation == 2 && code_point < 0x800) ||
+                              (continuation == 3 && code_point < 0x10000);
+        if (overlong || code_point > 0x10ffff || (code_point >= 0xd800 && code_point <= 0xdfff)) {
             return false;
         }
         index += continuation + 1;
@@ -120,11 +115,9 @@ bool valid_local_secret_value(const std::vector<std::uint8_t>& value) {
 // path, or a directory component. The local data plane resolves it against
 // the capsid.json directory, so the grammar is the containment boundary.
 bool valid_local_entry_name(const std::string& entry) {
-    if (entry.empty() || entry.size() > 255 || entry == "." ||
-        entry == ".." || entry.find('/') != std::string::npos ||
-        entry.find('\\') != std::string::npos ||
-        entry.find(':') != std::string::npos ||
-        entry.find('\0') != std::string::npos) {
+    if (entry.empty() || entry.size() > 255 || entry == "." || entry == ".." ||
+        entry.find('/') != std::string::npos || entry.find('\\') != std::string::npos ||
+        entry.find(':') != std::string::npos || entry.find('\0') != std::string::npos) {
         return false;
     }
     return entry.find("..") == std::string::npos;
@@ -150,16 +143,13 @@ enum class ReadOutcome { kOk, kMissing, kFailed };
 #define CAPSID_LOCAL_CTIME_NSEC(st) ((st).st_ctim.tv_nsec)
 #endif
 
-template <typename Stat>
-bool same_identity(const Stat& before, const Stat& after) {
+template <typename Stat> bool same_identity(const Stat& before, const Stat& after) {
     return before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
            before.st_size == after.st_size &&
            CAPSID_LOCAL_MTIME_SEC(before) == CAPSID_LOCAL_MTIME_SEC(after) &&
-           CAPSID_LOCAL_MTIME_NSEC(before) ==
-               CAPSID_LOCAL_MTIME_NSEC(after) &&
+           CAPSID_LOCAL_MTIME_NSEC(before) == CAPSID_LOCAL_MTIME_NSEC(after) &&
            CAPSID_LOCAL_CTIME_SEC(before) == CAPSID_LOCAL_CTIME_SEC(after) &&
-           CAPSID_LOCAL_CTIME_NSEC(before) ==
-               CAPSID_LOCAL_CTIME_NSEC(after);
+           CAPSID_LOCAL_CTIME_NSEC(before) == CAPSID_LOCAL_CTIME_NSEC(after);
 }
 
 // Reads the file through a descriptor opened without following symlinks:
@@ -170,32 +160,28 @@ bool same_identity(const Stat& before, const Stat& after) {
 // user. The managed 1 MiB document cap still applies. A missing file is
 // distinguished from every other failure: the default ./capsid.json is
 // allowed to be absent, an explicit --capsid-json is not.
-ReadOutcome read_local_config_file(const std::string& path,
-                                   std::vector<std::uint8_t>* out,
+ReadOutcome read_local_config_file(const std::string& path, std::vector<std::uint8_t>* out,
                                    std::string* error) {
     int fd = -1;
 #if defined(_WIN32)
     // UTF-8 -> UTF-16 for CreateFileW, opened with
     // FILE_FLAG_OPEN_REPARSE_POINT so a symlink/junction is inspected
     // (and rejected) instead of followed.
-    const int wide_size = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0);
+    const int wide_size =
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, nullptr, 0);
     if (wide_size <= 0) {
         *error = "cannot encode " + path;
         return ReadOutcome::kFailed;
     }
     std::wstring wide_path(static_cast<std::size_t>(wide_size - 1), L'\0');
-    if (MultiByteToWideChar(
-            CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1,
-            &wide_path[0], wide_size) <= 0) {
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path.c_str(), -1, &wide_path[0],
+                            wide_size) <= 0) {
         *error = "cannot encode " + path;
         return ReadOutcome::kFailed;
     }
     const HANDLE handle = CreateFileW(
-        wide_path.c_str(), GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        wide_path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
         const DWORD saved = GetLastError();
         if (saved == ERROR_FILE_NOT_FOUND || saved == ERROR_PATH_NOT_FOUND) {
@@ -205,9 +191,8 @@ ReadOutcome read_local_config_file(const std::string& path,
         return ReadOutcome::kFailed;
     }
     FILE_ATTRIBUTE_TAG_INFO attributes = {};
-    if (!GetFileInformationByHandleEx(
-            handle, FileAttributeTagInfo, &attributes,
-            sizeof(attributes))) {
+    if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes,
+                                      sizeof(attributes))) {
         CloseHandle(handle);
         *error = "cannot inspect " + path;
         return ReadOutcome::kFailed;
@@ -217,8 +202,7 @@ ReadOutcome read_local_config_file(const std::string& path,
         *error = path + " is not a regular file";
         return ReadOutcome::kFailed;
     }
-    fd = _open_osfhandle(
-        reinterpret_cast<intptr_t>(handle), _O_RDONLY | _O_BINARY);
+    fd = _open_osfhandle(reinterpret_cast<intptr_t>(handle), _O_RDONLY | _O_BINARY);
     if (fd < 0) {
         CloseHandle(handle);
         *error = "cannot open " + path;
@@ -232,9 +216,7 @@ ReadOutcome read_local_config_file(const std::string& path,
         if (errno == ENOENT || errno == ENOTDIR) {
             return ReadOutcome::kMissing;
         }
-        *error = (errno == ELOOP)
-                     ? path + " is not a regular file"
-                     : "cannot open " + path;
+        *error = (errno == ELOOP) ? path + " is not a regular file" : "cannot open " + path;
         return ReadOutcome::kFailed;
     }
 #endif
@@ -267,8 +249,7 @@ ReadOutcome read_local_config_file(const std::string& path,
     }
 #endif
     if (before.st_size < 0 ||
-        static_cast<std::uint64_t>(before.st_size) >
-            kMaxLocalCapsidJsonBytes) {
+        static_cast<std::uint64_t>(before.st_size) > kMaxLocalCapsidJsonBytes) {
         close(fd);
         *error = path + " exceeds the 1 MiB capsid.json cap";
         return ReadOutcome::kFailed;
@@ -280,12 +261,10 @@ ReadOutcome read_local_config_file(const std::string& path,
 #if defined(_WIN32)
         // MSVC read() takes an unsigned int count; the 1 MiB cap keeps the
         // cast lossless.
-        const ssize_t count = read(
-            fd, out->data() + offset,
-            static_cast<unsigned int>(out->size() - offset));
+        const ssize_t count =
+            read(fd, out->data() + offset, static_cast<unsigned int>(out->size() - offset));
 #else
-        const ssize_t count = read(
-            fd, out->data() + offset, out->size() - offset);
+        const ssize_t count = read(fd, out->data() + offset, out->size() - offset);
 #endif
         if (count < 0) {
             if (errno == EINTR) {
@@ -296,7 +275,7 @@ ReadOutcome read_local_config_file(const std::string& path,
             return ReadOutcome::kFailed;
         }
         if (count == 0) {
-            break;  // truncated mid-read; the identity check below rejects it
+            break; // truncated mid-read; the identity check below rejects it
         }
         offset += static_cast<std::size_t>(count);
     }
@@ -344,13 +323,11 @@ HostPolicy permissive_host(const AppRequest& app) {
     return host;
 }
 
-}  // namespace
+} // namespace
 
-bool load_local_capsid_policy(const std::string& path,
-                              bool required,
+bool load_local_capsid_policy(const std::string& path, bool required,
                               const BindingRegistrySnapshot* binding_registry,
-                              const std::string& secrets_root,
-                              LocalCapsidPolicy* out,
+                              const std::string& secrets_root, LocalCapsidPolicy* out,
                               std::string* error) {
     if (out == nullptr || error == nullptr) {
         return false;
@@ -380,8 +357,7 @@ bool load_local_capsid_policy(const std::string& path,
     const ConfigValidationResult validated =
         validate_config_json(ConfigDocument::kApplication, text);
     if (!validated.ok) {
-        *error = path + " rejected at " + validated.error.path + ": " +
-                 validated.error.message;
+        *error = path + " rejected at " + validated.error.path + ": " + validated.error.message;
         return false;
     }
 
@@ -392,9 +368,8 @@ bool load_local_capsid_policy(const std::string& path,
     // loudly instead of being silently ignored.
     {
         json_error_t parse_error;
-        json_t* root = json_loadb(
-            reinterpret_cast<const char*>(bytes.data()), bytes.size(),
-            JSON_REJECT_DUPLICATES, &parse_error);
+        json_t* root = json_loadb(reinterpret_cast<const char*>(bytes.data()), bytes.size(),
+                                  JSON_REJECT_DUPLICATES, &parse_error);
         if (root == nullptr || !json_is_object(root)) {
             if (root) {
                 json_decref(root);
@@ -407,7 +382,7 @@ bool load_local_capsid_policy(const std::string& path,
             const std::string value = json_string_value(entry);
             if (!valid_local_entry_name(value)) {
                 *error = path + ": entry must be a plain file name "
-                         "inside the capsid.json directory";
+                                "inside the capsid.json directory";
                 json_decref(root);
                 return false;
             }
@@ -419,8 +394,7 @@ bool load_local_capsid_policy(const std::string& path,
             json_t* timeout = json_object_get(request, "timeout");
             if (json_is_string(timeout)) {
                 std::uint64_t timeout_ms = 0;
-                if (!parse_duration_ms(json_string_value(timeout),
-                                       &timeout_ms) ||
+                if (!parse_duration_ms(json_string_value(timeout), &timeout_ms) ||
                     timeout_ms == 0) {
                     *error = path + ": invalid capsid.json request.timeout";
                     json_decref(root);
@@ -435,12 +409,10 @@ bool load_local_capsid_policy(const std::string& path,
         // the CLI or the document owns the knob.
         json_t* pool = json_object_get(root, "pool");
         if (pool != nullptr && json_is_object(pool)) {
-            out->settings.has_queue_requests =
-                json_object_get(pool, "queueRequests") != nullptr;
+            out->settings.has_queue_requests = json_object_get(pool, "queueRequests") != nullptr;
             out->settings.has_queue_header_bytes =
                 json_object_get(pool, "queueHeaderBytes") != nullptr;
-            out->settings.has_queue_timeout_ms =
-                json_object_get(pool, "queueTimeout") != nullptr;
+            out->settings.has_queue_timeout_ms = json_object_get(pool, "queueTimeout") != nullptr;
         }
         json_decref(root);
     }
@@ -461,13 +433,10 @@ bool load_local_capsid_policy(const std::string& path,
     {
         out->settings.max_inflight_per_worker = app.requests_per_worker;
         out->settings.has_max_inflight = app.requests_per_worker > 0;
-        out->settings.max_streaming_inflight_per_worker =
-            app.max_streaming_inflight_per_worker;
-        out->settings.has_max_streaming_inflight =
-            app.max_streaming_inflight_per_worker > 0;
+        out->settings.max_streaming_inflight_per_worker = app.max_streaming_inflight_per_worker;
+        out->settings.has_max_streaming_inflight = app.max_streaming_inflight_per_worker > 0;
         out->settings.stream_idle_timeout_ms = app.stream_idle_timeout_ms;
-        out->settings.has_stream_idle_timeout_ms =
-            app.stream_idle_timeout_ms > 0;
+        out->settings.has_stream_idle_timeout_ms = app.stream_idle_timeout_ms > 0;
         out->settings.write_timeout_ms = app.write_timeout_ms;
         out->settings.has_write_timeout_ms = app.write_timeout_ms > 0;
         out->settings.queue_requests = app.queue_requests;
@@ -483,8 +452,7 @@ bool load_local_capsid_policy(const std::string& path,
         // to, so accepting it would silently drop the capacity the
         // operator asked for.  Fail closed instead.
         if (app.memory_bytes > 0) {
-            *error = path +
-                     ": worker.memoryMax is not applicable in local mode";
+            *error = path + ": worker.memoryMax is not applicable in local mode";
             return false;
         }
     }
@@ -503,23 +471,19 @@ bool load_local_capsid_policy(const std::string& path,
             }
             std::vector<std::uint8_t> secret_bytes;
             const ReadOutcome secret_outcome = read_local_config_file(
-                secrets_root + "/" + request.secret_key_id, &secret_bytes,
-                error);
+                secrets_root + "/" + request.secret_key_id, &secret_bytes, error);
             if (secret_outcome != ReadOutcome::kOk) {
-                *error = path + ": env valueFrom \"" +
-                         request.secret_key_id + "\": " + *error;
+                *error = path + ": env valueFrom \"" + request.secret_key_id + "\": " + *error;
                 return false;
             }
             if (!valid_local_secret_value(secret_bytes)) {
-                *error = path + ": env valueFrom \"" +
-                         request.secret_key_id +
+                *error = path + ": env valueFrom \"" + request.secret_key_id +
                          "\": value must be at most 16384 bytes of NUL-free "
                          "UTF-8 text";
                 return false;
             }
-            request.literal.assign(
-                reinterpret_cast<const char*>(secret_bytes.data()),
-                secret_bytes.size());
+            request.literal.assign(reinterpret_cast<const char*>(secret_bytes.data()),
+                                   secret_bytes.size());
             request.from_secret = false;
         }
     } else {
@@ -544,15 +508,15 @@ bool load_local_capsid_policy(const std::string& path,
     }
     if (!binding_requests.empty()) {
         if (binding_registry == nullptr) {
-            *error = path +
-                     ": bindings require an explicit Host Registry "
-                     "(--bindings-root)";
+            *error = path + ": bindings require an explicit Host Registry "
+                            "(--bindings-root)";
             return false;
         }
         for (const AppBindingRequest& request : binding_requests) {
             if (!request.secrets.empty()) {
-                *error = path + ": binding secrets are unavailable in "
-                                "local mode (no secret provider): " +
+                *error = path +
+                         ": binding secrets are unavailable in "
+                         "local mode (no secret provider): " +
                          request.id;
                 return false;
             }
@@ -576,8 +540,7 @@ bool load_local_capsid_policy(const std::string& path,
         entry.literal = request.literal;
         resolved.push_back(entry);
     }
-    const PolicyCompileResult compiled =
-        compile_policy(permissive_host(app), app, resolved);
+    const PolicyCompileResult compiled = compile_policy(permissive_host(app), app, resolved);
     if (!compiled.ok) {
         *error = path + ": " + compiled.error;
         return false;
@@ -590,8 +553,7 @@ bool load_local_capsid_policy(const std::string& path,
         env_values.emplace_back(entry.name, entry.literal);
     }
     out->policy = RuntimePolicy();
-    if (!build_runtime_policy(compiled.effective, env_values, &out->policy,
-                              error)) {
+    if (!build_runtime_policy(compiled.effective, env_values, &out->policy, error)) {
         *error = path + ": " + *error;
         return false;
     }
@@ -599,4 +561,4 @@ bool load_local_capsid_policy(const std::string& path,
     return true;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

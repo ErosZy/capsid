@@ -18,9 +18,8 @@ using PoolWorkerId = std::uint32_t;
 // Runtime calls and the SSE permit are deliberately out of scope (later M2
 // batches).
 class StaticPoolState {
-public:
-    explicit StaticPoolState(std::uint32_t target_workers)
-        : target_workers_(target_workers) {}
+  public:
+    explicit StaticPoolState(std::uint32_t target_workers) : target_workers_(target_workers) {}
 
     std::uint32_t target_workers() const { return target_workers_; }
 
@@ -43,15 +42,13 @@ public:
     // READY workers of exactly one shard, in stable id order. An empty (or
     // unknown) shard returns an empty set: a shard never borrows a worker
     // owned by another shard.
-    std::vector<PoolWorkerId> ready_workers_for_shard(
-        std::uint32_t shard) const;
+    std::vector<PoolWorkerId> ready_workers_for_shard(std::uint32_t shard) const;
 
     // Activation gate: a positive target, every target worker registered
     // and READY, and the pool not already active. A zero-target pool never
     // activates, and activation is a one-shot transition.
     bool can_activate() const {
-        return target_workers_ > 0 && !active_ &&
-               workers_.size() == target_workers_ &&
+        return target_workers_ > 0 && !active_ && workers_.size() == target_workers_ &&
                ready_count_ == target_workers_;
     }
 
@@ -67,7 +64,7 @@ public:
         return true;
     }
 
-private:
+  private:
     struct Worker {
         std::uint32_t shard;
         bool ready = false;
@@ -81,6 +78,6 @@ private:
     bool active_ = false;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

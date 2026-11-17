@@ -60,7 +60,7 @@ struct ActivationPlan {
 // retired — commit drains it and the ledger moves its count to surge.
 struct RetirePlan {
     std::string application;
-    std::shared_ptr<GenerationPool> pool;  // may be null (already retired)
+    std::shared_ptr<GenerationPool> pool; // may be null (already retired)
     std::uint64_t workers = 0;
     // The tombstone snapshot (the retired route removed), built at
     // prepare time so commit_retire is a single atomic snapshot swap.
@@ -72,6 +72,6 @@ struct RetirePlan {
     bool view_mutated = false;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

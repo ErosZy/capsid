@@ -53,24 +53,20 @@ struct AsyncAdminBackendOptions {
 // failures and exceptions are recorded as redacted Failed states; the
 // destructor stops the worker and joins it (never detaches).
 class AsyncAdminBackend final : public AdminBackend {
-public:
-    AsyncAdminBackend(AdminBackend* inner,
-                      const AsyncAdminBackendOptions& options);
+  public:
+    AsyncAdminBackend(AdminBackend* inner, const AsyncAdminBackendOptions& options);
     ~AsyncAdminBackend() override;
 
     AsyncAdminBackend(const AsyncAdminBackend&) = delete;
     AsyncAdminBackend& operator=(const AsyncAdminBackend&) = delete;
 
-    DeployOutcome deploy(const std::string& application,
-                         const std::string& version,
+    DeployOutcome deploy(const std::string& application, const std::string& version,
                          OperationStatus* status) override;
-    DeployOutcome retire(const std::string& application,
-                         OperationStatus* status) override;
-    OperationStatus operation_status(
-        const std::string& operation_id) override;
+    DeployOutcome retire(const std::string& application, OperationStatus* status) override;
+    OperationStatus operation_status(const std::string& operation_id) override;
     std::string app_status(const std::string& application) override;
 
-private:
+  private:
     struct PendingOperation {
         bool retire = false;
         std::string application;
@@ -78,8 +74,7 @@ private:
         std::string operation_id;
     };
     void worker_loop();
-    DeployOutcome submit(bool retire, const std::string& application,
-                         const std::string& version,
+    DeployOutcome submit(bool retire, const std::string& application, const std::string& version,
                          OperationStatus* status);
 
     AdminBackend* inner_;
@@ -103,7 +98,7 @@ private:
 // old holder's slot untouched, and only a newly acquired permit is
 // returned when the deploy settles without a live worker.
 class WorkerCapacityPermit {
-public:
+  public:
     explicit WorkerCapacityPermit(int capacity) : remaining_(capacity) {}
 
     // Acquires the permit for `application`. Returns true when the permit
@@ -114,15 +109,13 @@ public:
     bool acquire(const std::string& application) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (holders_.find(application) != holders_.end()) {
-            return false;  // replacement of an existing slot
+            return false; // replacement of an existing slot
         }
         int remaining = remaining_.load();
-        while (remaining > 0 &&
-               !remaining_.compare_exchange_weak(remaining,
-                                                 remaining - 1)) {
+        while (remaining > 0 && !remaining_.compare_exchange_weak(remaining, remaining - 1)) {
         }
         if (remaining <= 0) {
-            return false;  // capacity exhausted
+            return false; // capacity exhausted
         }
         holders_.insert(application);
         return true;
@@ -149,7 +142,7 @@ public:
         return holders_.find(application) != holders_.end();
     }
 
-private:
+  private:
     std::atomic<int> remaining_;
     std::mutex mutex_;
     std::set<std::string> holders_;
@@ -177,7 +170,7 @@ inline constexpr std::string_view kStartupPermitProbeGeneration =
 // consumed by a single spawn/READY window (the holder releases it when
 // the operation settles).
 class StartupPermitCoordinator {
-public:
+  public:
     // Abort predicate for enqueue_and_wait (direction A): checked every
     // poll slice while waiting. When it fires the wait is interrupted and
     // the request withdrawn — the caller (GenerationPool) passes a check
@@ -186,10 +179,8 @@ public:
     // replacements_in_flight_ == 0 before finalizing).
     using AbortPredicate = std::function<bool()>;
 
-    StartupPermitCoordinator(const std::atomic<bool>* stop_requested,
-                             std::size_t maximum_queued)
-        : maximum_queued_(maximum_queued),
-          stop_requested_(stop_requested) {}
+    StartupPermitCoordinator(const std::atomic<bool>* stop_requested, std::size_t maximum_queued)
+        : maximum_queued_(maximum_queued), stop_requested_(stop_requested) {}
 
     // Enqueues the request and blocks until its grant is awarded. The
     // first request while the queue is idle is granted immediately.
@@ -198,15 +189,14 @@ public:
     // already queued (singleflight), the stop signal fired while
     // waiting, or the abort predicate fired (the request is withdrawn
     // from the queue in both interrupt cases).
-    bool enqueue_and_wait(const StartupPermitRequest& request,
-                          const AbortPredicate& abort = {}) {
+    bool enqueue_and_wait(const StartupPermitRequest& request, const AbortPredicate& abort = {}) {
         std::unique_lock<std::mutex> lock(mutex_);
         StartupPermitRequest mine = request;
         mine.ticket = next_ticket_++;
         const StartupPermitQueueResult queued =
             enqueue_startup_permit_request(queue_, mine, maximum_queued_);
         if (!queued.ok) {
-            return false;  // queue full or invalid request: fail closed
+            return false; // queue full or invalid request: fail closed
         }
         queue_ = queued.queue;
         if (queued.joined_existing) {
@@ -218,8 +208,7 @@ public:
         const std::uint64_t my_ticket = mine.ticket;
         if (!granted_ticket_.has_value()) {
             // Queue idle: the first request is granted immediately.
-            const StartupPermitGrantResult granted =
-                grant_next_startup_permit(queue_, true);
+            const StartupPermitGrantResult granted = grant_next_startup_permit(queue_, true);
             if (granted.ok && granted.granted.has_value()) {
                 queue_ = granted.queue;
                 granted_ticket_ = granted.granted->ticket;
@@ -232,8 +221,7 @@ public:
             if (abort && abort()) {
                 break;
             }
-            if (stop_requested_ != nullptr &&
-                stop_requested_->load(std::memory_order_relaxed)) {
+            if (stop_requested_ != nullptr && stop_requested_->load(std::memory_order_relaxed)) {
                 break;
             }
             condition_.wait_for(lock, std::chrono::milliseconds(100));
@@ -241,13 +229,11 @@ public:
         if (granted_ticket_ != my_ticket) {
             // Stop or abort fired while waiting: withdraw the request so
             // the queue is not left holding a waiter nobody will service.
-            queue_.queued.erase(
-                std::remove_if(
-                    queue_.queued.begin(), queue_.queued.end(),
-                    [&](const StartupPermitRequest& item) {
-                        return item.ticket == my_ticket;
-                    }),
-                queue_.queued.end());
+            queue_.queued.erase(std::remove_if(queue_.queued.begin(), queue_.queued.end(),
+                                               [&](const StartupPermitRequest& item) {
+                                                   return item.ticket == my_ticket;
+                                               }),
+                                queue_.queued.end());
             return false;
         }
         // The permit stays marked as granted to THIS request until
@@ -261,19 +247,16 @@ public:
     // wakes. Must be called exactly once per successful enqueue_and_wait.
     void release_grant() {
         std::lock_guard<std::mutex> lock(mutex_);
-        const StartupPermitGrantResult next =
-            grant_next_startup_permit(queue_, true);
+        const StartupPermitGrantResult next = grant_next_startup_permit(queue_, true);
         if (next.ok) {
             queue_ = next.queue;
-            granted_ticket_ = next.granted.has_value()
-                                  ? std::make_optional(
-                                        next.granted->ticket)
-                                  : std::nullopt;
+            granted_ticket_ =
+                next.granted.has_value() ? std::make_optional(next.granted->ticket) : std::nullopt;
         }
         condition_.notify_all();
     }
 
-private:
+  private:
     std::uint64_t next_ticket_ = 1;
     std::size_t maximum_queued_;
     const std::atomic<bool>* stop_requested_;
@@ -293,25 +276,21 @@ private:
 class MetricsRegistry;
 
 class ManagedAdminBackend final : public AdminBackend {
-public:
-    explicit ManagedAdminBackend(
-        const std::vector<ManagedHostOptions*>& applications);
+  public:
+    explicit ManagedAdminBackend(const std::vector<ManagedHostOptions*>& applications);
 
-    DeployOutcome deploy(const std::string& application,
-                         const std::string& version,
+    DeployOutcome deploy(const std::string& application, const std::string& version,
                          OperationStatus* status) override;
-    DeployOutcome retire(const std::string& application,
-                         OperationStatus* status) override;
-    OperationStatus operation_status(
-        const std::string& operation_id) override;
+    DeployOutcome retire(const std::string& application, OperationStatus* status) override;
+    OperationStatus operation_status(const std::string& operation_id) override;
     std::string app_status(const std::string& application) override;
 
-private:
+  private:
     ManagedHostOptions* find_application(const std::string& application);
 
     std::vector<ManagedHostOptions*> applications_;
 
-public:
+  public:
     // Optional process-global worker permit (capacity.workersTotal). A
     // deploy consumes the App's slot BEFORE any spawn or durable
     // activation; the slot stays bound to the active worker until its
@@ -328,6 +307,6 @@ public:
     MetricsRegistry* metrics = nullptr;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

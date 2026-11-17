@@ -1,0 +1,10 @@
+{
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "singleQuote": true,
+  "quoteProps": "preserve",
+  "trailingComma": "all",
+  "endOfLine": "lf",
+  "embeddedLanguageFormatting": "off"
+}

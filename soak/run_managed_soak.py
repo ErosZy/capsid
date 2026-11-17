@@ -75,10 +75,8 @@ class AdminClient:
     def request(self, method, target, body=None):
         headers = "Host: local\r\n"
         if body is not None:
-            headers += ("Content-Type: application/json\r\n"
-                        "Content-Length: {}\r\n".format(len(body)))
-        raw = ("{} {} HTTP/1.1\r\n{}Connection: close\r\n\r\n").format(
-            method, target, headers)
+            headers += "Content-Type: application/json\r\nContent-Length: {}\r\n".format(len(body))
+        raw = ("{} {} HTTP/1.1\r\n{}Connection: close\r\n\r\n").format(method, target, headers)
         if body is not None:
             raw += body
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -98,8 +96,8 @@ class AdminClient:
 
     def deploy(self, version):
         status, body = self.request(
-            "POST", "/v1/deploy",
-            json.dumps({"app": APP, "version": version}))
+            "POST", "/v1/deploy", json.dumps({"app": APP, "version": version})
+        )
         if status != 202:
             fail("deploy {}: HTTP {}: {}".format(version, status, body))
         return json.loads(body)["operationId"]
@@ -107,8 +105,7 @@ class AdminClient:
     def wait_terminal(self, operation):
         deadline = time.monotonic() + ADMIN_TIMEOUT_S
         while True:
-            status, body = self.request(
-                "GET", "/v1/operations/" + operation)
+            status, body = self.request("GET", "/v1/operations/" + operation)
             if status != 200:
                 fail("operation {}: HTTP {}".format(operation, status))
             state = json.loads(body).get("state")
@@ -131,8 +128,8 @@ def http_get(port, path, timeout=10.0):
     """Returns (status, body bytes)."""
     try:
         with urllib.request.urlopen(
-                "http://127.0.0.1:{}{}".format(port, path),
-                timeout=timeout) as response:
+            "http://127.0.0.1:{}{}".format(port, path), timeout=timeout
+        ) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.read()
@@ -140,8 +137,8 @@ def http_get(port, path, timeout=10.0):
 
 def http_post(port, path, body, timeout=10.0):
     request = urllib.request.Request(
-        "http://127.0.0.1:{}{}".format(port, path),
-        data=body.encode("utf-8"))
+        "http://127.0.0.1:{}{}".format(port, path), data=body.encode("utf-8")
+    )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, response.read()
@@ -154,7 +151,10 @@ def worker_pids(host_pid):
     try:
         output = subprocess.run(
             ["ps", "-o", "pid=,ppid=", "--ppid", str(host_pid)],
-            capture_output=True, text=True, timeout=5).stdout
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout
     except subprocess.SubprocessError:
         return []
     pids = []
@@ -194,13 +194,11 @@ class Soak:
         """Creates a new applications/soak/vN tree and deploys it."""
         version = "v{}".format(self.next_version)
         self.next_version += 1
-        version_dir = os.path.join(
-            self.args.applications_dir, APP, version)
+        version_dir = os.path.join(self.args.applications_dir, APP, version)
         os.makedirs(version_dir, mode=0o700, exist_ok=True)
         with open(os.path.join(version_dir, "capsid.json"), "w") as handle:
             json.dump(self.args.capsid_json, handle)
-        shutil.copyfile(self.args.fixture,
-                        os.path.join(version_dir, "bundle.mjs"))
+        shutil.copyfile(self.args.fixture, os.path.join(version_dir, "bundle.mjs"))
         operation = self.admin.deploy(version)
         if not self.admin.wait_terminal(operation):
             fail("deploy {} failed".format(version))
@@ -213,11 +211,12 @@ class Soak:
         # survive and keep serving.
         for _ in range(4):
             try:
-                sock = socket.create_connection(
-                    ("127.0.0.1", self.port), timeout=5)
+                sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
                 sock.sendall(
-                    ("GET {}/slow?ms=3000 HTTP/1.1\r\nHost: local\r\n\r\n"
-                     .format(DATA_PREFIX)).encode())
+                    (
+                        "GET {}/slow?ms=3000 HTTP/1.1\r\nHost: local\r\n\r\n".format(DATA_PREFIX)
+                    ).encode()
+                )
                 time.sleep(0.05)
                 sock.close()  # abort mid-flight
             except OSError:
@@ -225,8 +224,11 @@ class Soak:
             self.count("cancel_aborted")
         status, body = http_post(self.port, DATA_PREFIX + "/echo", "probe")
         if status != 200 or body != b"echo:probe":
-            fail("cancel: server did not survive aborts "
-                 "(POST /echo -> {} {!r})".format(status, body[:32]))
+            fail(
+                "cancel: server did not survive aborts (POST /echo -> {} {!r})".format(
+                    status, body[:32]
+                )
+            )
         self.count("cancel_survive_check")
 
     def dim_sse(self):
@@ -234,8 +236,9 @@ class Soak:
         # must end cleanly.
         try:
             sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
-            sock.sendall(("GET {}/sse HTTP/1.1\r\nHost: local\r\n\r\n"
-                          .format(DATA_PREFIX)).encode())
+            sock.sendall(
+                ("GET {}/sse HTTP/1.1\r\nHost: local\r\n\r\n".format(DATA_PREFIX)).encode()
+            )
             data = b""
             sock.settimeout(15)
             deadline = time.monotonic() + 15
@@ -267,9 +270,13 @@ class Soak:
         deadline = time.monotonic() + 30
         try:
             sock = socket.create_connection(("127.0.0.1", self.port), timeout=5)
-            sock.sendall(("GET {}/big HTTP/1.1\r\nHost: local\r\n"
-                          "Connection: close\r\n\r\n"
-                          .format(DATA_PREFIX)).encode())
+            sock.sendall(
+                (
+                    "GET {}/big HTTP/1.1\r\nHost: local\r\nConnection: close\r\n\r\n".format(
+                        DATA_PREFIX
+                    )
+                ).encode()
+            )
             sock.settimeout(10)
             while time.monotonic() < deadline:
                 chunk = sock.recv(65536)
@@ -284,15 +291,17 @@ class Soak:
         except OSError as error:
             fail("slow-client: transport error: {}".format(error))
         if not terminal_seen:
-            fail("slow-client: response did not reach its terminal chunk "
-                 "({} wire bytes)".format(len(wire)))
+            fail(
+                "slow-client: response did not reach its terminal chunk ({} wire bytes)".format(
+                    len(wire)
+                )
+            )
         head_end = wire.find(b"\r\n\r\n")
         if head_end == -1:
             fail("slow-client: no response head received")
         head = wire[:head_end].lower()
         if b"\r\ntransfer-encoding: chunked" not in head:
-            fail("slow-client: expected a chunked response, got {!r}".format(
-                head[:120]))
+            fail("slow-client: expected a chunked response, got {!r}".format(head[:120]))
         payload = b""
         pos = head_end + 4
         wire_len = len(wire)
@@ -304,19 +313,16 @@ class Soak:
             try:
                 size = int(size_field, 16)
             except ValueError:
-                fail("slow-client: bad chunk size line {!r}".format(
-                    size_field[:64]))
+                fail("slow-client: bad chunk size line {!r}".format(size_field[:64]))
             if size == 0:
                 break
             if line_end + 2 + size > wire_len:
-                fail("slow-client: chunk body truncated (at {} of {})".format(
-                    len(payload), size))
-            payload += wire[line_end + 2: line_end + 2 + size]
+                fail("slow-client: chunk body truncated (at {} of {})".format(len(payload), size))
+            payload += wire[line_end + 2 : line_end + 2 + size]
             pos = line_end + 2 + size + 2
         expected = 4 * 1024 * 1024
         if len(payload) != expected or payload != b"\x53" * expected:
-            fail("slow-client: body {}/{} bytes or pattern wrong".format(
-                len(payload), expected))
+            fail("slow-client: body {}/{} bytes or pattern wrong".format(len(payload), expected))
         self.count("slow_client_bytes", len(payload))
 
     def dim_replacement(self, cycle):
@@ -325,8 +331,7 @@ class Soak:
         version = self.publish_fresh_version()
         status = self.admin.app_status()
         if not status.get("active") or status.get("version") != version:
-            fail("replacement: status did not publish {}: {!r}".format(
-                version, status))
+            fail("replacement: status did not publish {}: {!r}".format(version, status))
         pids = worker_pids(self.host_pid)
         if not pids:
             fail("replacement: no worker children visible")
@@ -339,8 +344,7 @@ class Soak:
         ok = False
         while time.monotonic() < deadline:
             try:
-                status, body = http_post(self.port, DATA_PREFIX + "/echo",
-                                         "postkill")
+                status, body = http_post(self.port, DATA_PREFIX + "/echo", "postkill")
                 if status == 200 and body == b"echo:postkill":
                     ok = True
                     break
@@ -352,8 +356,7 @@ class Soak:
         self.count("replacement_cycles")
 
     def dim_queue_fairness(self):
-        urls = ["http://127.0.0.1:{}{}/slow?ms=150".format(
-            self.port, DATA_PREFIX)] * 32
+        urls = ["http://127.0.0.1:{}{}/slow?ms=150".format(self.port, DATA_PREFIX)] * 32
 
         def one(url):
             try:
@@ -366,11 +369,13 @@ class Soak:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
             results = list(pool.map(one, urls))
-        ok = all(status == 200 and body == b"slow-ok"
-                 for status, body in results)
+        ok = all(status == 200 and body == b"slow-ok" for status, body in results)
         if not ok:
-            fail("queue fairness: {} of 32 concurrent /slow failed".format(
-                sum(1 for status, _ in results if status != 200)))
+            fail(
+                "queue fairness: {} of 32 concurrent /slow failed".format(
+                    sum(1 for status, _ in results if status != 200)
+                )
+            )
         self.count("fairness_requests", 32)
 
     def dim_secret_rotation(self, cycle):
@@ -378,45 +383,43 @@ class Soak:
         # committed generation of any older version is pinned to the
         # earlier secret revision and cannot be re-published).
         value = "rotated-{}".format(cycle)
-        secret_path = os.path.join(
-            self.args.secrets_dir, APP, "APP_SOAK_MARKER")
+        secret_path = os.path.join(self.args.secrets_dir, APP, "APP_SOAK_MARKER")
         with open(secret_path, "w") as handle:
             handle.write(value)
         version = self.publish_fresh_version()
         status = self.admin.app_status()
         if not status.get("active") or status.get("version") != version:
-            fail("secret rotation: status did not publish {}: {!r}".format(
-                version, status))
-        http_status, body = http_get(self.port, DATA_PREFIX + "/marker",
-                                     timeout=10)
+            fail("secret rotation: status did not publish {}: {!r}".format(version, status))
+        http_status, body = http_get(self.port, DATA_PREFIX + "/marker", timeout=10)
         if http_status != 200 or body.decode("utf-8", "replace") != value:
-            fail("secret rotation: served marker {!r} != {!r}".format(
-                body[:32], value))
+            fail("secret rotation: served marker {!r} != {!r}".format(body[:32], value))
         self.count("secret_rotations")
 
     def dim_memory_waves(self):
         result = subprocess.run(
-            [self.args.memory_waves, self.args.worker,
-             self.args.fixture, "6", "200"],
-            capture_output=True, text=True, timeout=120)
+            [self.args.memory_waves, self.args.worker, self.args.fixture, "6", "200"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
         try:
             report = json.loads(result.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
-            fail("memory waves: unparseable output: {}".format(
-                result.stdout[-300:]))
+            fail("memory waves: unparseable output: {}".format(result.stdout[-300:]))
         self.memory_waves.append(report)
         if not report.get("converged"):
-            fail("memory waves: heap did not converge: {}".format(
-                report.get("reason")))
+            fail("memory waves: heap did not converge: {}".format(report.get("reason")))
         self.count("memory_waves")
 
     # ---- evidence ----
 
     def snapshot_rss(self):
-        self.rss_series.append({
-            "host": rss_bytes(self.host_pid),
-            "workers": [rss_bytes(pid) for pid in worker_pids(self.host_pid)],
-        })
+        self.rss_series.append(
+            {
+                "host": rss_bytes(self.host_pid),
+                "workers": [rss_bytes(pid) for pid in worker_pids(self.host_pid)],
+            }
+        )
 
     def evidence(self):
         return {
@@ -466,8 +469,7 @@ def write_host_json(work_dir, port, admin_sock):
         "apiVersion": "capsid/host-v1",
         "applicationsRoot": os.path.join(work_dir, "applications"),
         "stateRoot": os.path.join(work_dir, "state"),
-        "secretRootTemplate": os.path.join(work_dir, "secrets",
-                                           "{application}"),
+        "secretRootTemplate": os.path.join(work_dir, "secrets", "{application}"),
         "admin": {"unix": admin_sock, "mode": "0600"},
         "permissions": {
             "modules": ["capsid:env"],
@@ -484,20 +486,21 @@ def write_host_json(work_dir, port, admin_sock):
                 "maxInflightPerWorker": 10000,
             },
         },
-        "listeners": [{
-            "name": "soak",
-            "tcp": "127.0.0.1:{}".format(port),
-            "publicScheme": "http",
-            "publicAuthority": "127.0.0.1:{}".format(port),
-            "trusted": False,
-            "routing": {"mode": "path", "suffix": "/"},
-            "limits": {},
-        }],
+        "listeners": [
+            {
+                "name": "soak",
+                "tcp": "127.0.0.1:{}".format(port),
+                "publicScheme": "http",
+                "publicAuthority": "127.0.0.1:{}".format(port),
+                "trusted": False,
+                "routing": {"mode": "path", "suffix": "/"},
+                "limits": {},
+            }
+        ],
         # §9.4: a zero-downtime replace (secret rotation, SIGKILL
         # replacement) warms the new pool while the old one still serves —
         # the ledger refuses the reserve without explicit surge headroom.
-        "capacity": {"workersTotal": 1, "startupsConcurrent": 1,
-                     "activationSurgeWorkers": 1},
+        "capacity": {"workersTotal": 1, "startupsConcurrent": 1, "activationSurgeWorkers": 1},
     }
     path = os.path.join(work_dir, "host.json")
     with open(path, "w") as handle:
@@ -510,13 +513,15 @@ def main():
     parser.add_argument("--host", required=True, help="capsid-host binary")
     parser.add_argument("--worker", required=True, help="capsid-worker binary")
     parser.add_argument("--fixture", required=True, help="soak-app.js path")
-    parser.add_argument("--memory-waves", required=True,
-                        help="soak-memory-waves binary")
+    parser.add_argument("--memory-waves", required=True, help="soak-memory-waves binary")
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--listen-port", type=int, required=True)
-    parser.add_argument("--minutes", type=int, default=1,
-                        help="soak duration in minutes (1 = smoke, "
-                             "1440 = 24h, 4320 = 72h)")
+    parser.add_argument(
+        "--minutes",
+        type=int,
+        default=1,
+        help="soak duration in minutes (1 = smoke, 1440 = 24h, 4320 = 72h)",
+    )
     args = parser.parse_args()
 
     for binary in (args.host, args.worker, args.fixture, args.memory_waves):
@@ -524,8 +529,7 @@ def main():
             fail("missing input: {}".format(binary))
     os.makedirs(args.work_dir, mode=0o700, exist_ok=True)
 
-    applications, secrets, state, run = build_fixture_tree(
-        args.work_dir, args.fixture)
+    applications, secrets, state, run = build_fixture_tree(args.work_dir, args.fixture)
     args.applications_dir = applications
     args.secrets_dir = secrets
     args.capsid_json = CAPSID_JSON
@@ -535,16 +539,16 @@ def main():
     stderr_path = os.path.join(args.work_dir, "host.stderr")
     with open(stderr_path, "wb") as stderr:
         host = subprocess.Popen(
-            [args.host, "--mode", "managed",
-             "--host-config", host_config, "--worker", args.worker],
-            stdout=subprocess.DEVNULL, stderr=stderr)
+            [args.host, "--mode", "managed", "--host-config", host_config, "--worker", args.worker],
+            stdout=subprocess.DEVNULL,
+            stderr=stderr,
+        )
 
     try:
         deadline = time.monotonic() + ADMIN_TIMEOUT_S
         while not os.path.exists(admin_sock):
             if host.poll() is not None:
-                fail("capsid-host exited during startup (see {})".format(
-                    stderr_path))
+                fail("capsid-host exited during startup (see {})".format(stderr_path))
             if time.monotonic() > deadline:
                 fail("admin socket never appeared (see {})".format(stderr_path))
             time.sleep(0.1)
@@ -568,15 +572,18 @@ def main():
             soak.dim_memory_waves()
             soak.snapshot_rss()
             soak.counts["cycles"] = cycle
-            print("cycle {} ok: {}".format(
-                cycle, json.dumps(soak.counts)), flush=True)
+            print("cycle {} ok: {}".format(cycle, json.dumps(soak.counts)), flush=True)
 
         evidence = soak.evidence()
         evidence_path = os.path.join(args.work_dir, "soak-evidence.json")
         with open(evidence_path, "w") as handle:
             json.dump(evidence, handle, indent=2)
-        print("SOAK PASS: {} cycles in {}s; evidence: {}".format(
-            cycle, args.minutes * 60, evidence_path), flush=True)
+        print(
+            "SOAK PASS: {} cycles in {}s; evidence: {}".format(
+                cycle, args.minutes * 60, evidence_path
+            ),
+            flush=True,
+        )
     finally:
         host.send_signal(signal.SIGKILL)
         host.wait(timeout=10)

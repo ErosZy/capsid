@@ -39,27 +39,26 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require_result(capsid_result result, const char *operation) {
+void require_result(capsid_result result, const char* operation) {
     if (result != CAPSID_OK) {
         fail(std::string(operation) + ": " + capsid_result_string(result));
     }
 }
 
-std::string read_file(const char *path) {
+std::string read_file(const char* path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         fail(std::string("cannot open fixture: ") + path);
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
-void wait_for_ready(capsid_worker *worker) {
+void wait_for_ready(capsid_worker* worker) {
     const std::chrono::steady_clock::time_point deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(20);
     for (;;) {
@@ -77,11 +76,9 @@ void wait_for_ready(capsid_worker *worker) {
             if (event.type == CAPSID_EVENT_ERROR) {
                 // Same decode as managed_host.cc: the payload is the
                 // worker's ASCII failure reason.
-                const std::string detail(
-                    reinterpret_cast<const char*>(event.payload.data),
-                    event.payload.size);
-                fail("worker error before READY: " +
-                     (detail.empty() ? "(no detail)" : detail));
+                const std::string detail(reinterpret_cast<const char*>(event.payload.data),
+                                         event.payload.size);
+                fail("worker error before READY: " + (detail.empty() ? "(no detail)" : detail));
             }
             if (event.type == CAPSID_EVENT_EXIT) {
                 fail("worker exited before READY");
@@ -103,11 +100,9 @@ void wait_for_ready(capsid_worker *worker) {
 
 // Sends the memory-metrics request and reads the next events until the
 // metrics snapshot arrives (or an error/exit ends the channel).
-bool request_metrics(capsid_worker *worker, capsid_memory_metrics *out,
-                     const char *stage,
-                     const std::chrono::steady_clock::time_point &deadline) {
-    require_result(capsid_worker_request_memory_metrics(worker),
-                   "request memory metrics");
+bool request_metrics(capsid_worker* worker, capsid_memory_metrics* out, const char* stage,
+                     const std::chrono::steady_clock::time_point& deadline) {
+    require_result(capsid_worker_request_memory_metrics(worker), "request memory metrics");
     for (;;) {
         const capsid_result flush = capsid_worker_flush(worker);
         if (flush != CAPSID_OK && flush != CAPSID_WOULD_BLOCK) {
@@ -120,9 +115,8 @@ bool request_metrics(capsid_worker *worker, capsid_memory_metrics *out,
             if (event.type == CAPSID_EVENT_MEMORY_METRICS) {
                 // CAPSID_OK is 0; a bare `!` test would fire on success.
                 if (capsid_memory_metrics_decode(&event, out) != CAPSID_OK) {
-                    fail(std::string("cannot decode memory metrics [") +
-                         stage + "] (payload=" +
-                         std::to_string(event.payload.size) + ")");
+                    fail(std::string("cannot decode memory metrics [") + stage +
+                         "] (payload=" + std::to_string(event.payload.size) + ")");
                 }
                 return true;
             }
@@ -151,7 +145,7 @@ struct Snapshot {
     uint64_t atoms = 0;
 };
 
-Snapshot snapshot_of(const capsid_memory_metrics &metrics) {
+Snapshot snapshot_of(const capsid_memory_metrics& metrics) {
     Snapshot snapshot;
     snapshot.used = metrics.memory_used_size;
     snapshot.objects = metrics.object_count;
@@ -174,18 +168,15 @@ static constexpr std::uint64_t kWaveBatch = 64;
 // acknowledge cancellation or its later reclaim tick. The subsequent metrics
 // request crosses any already-scheduled reclaim round on the worker's own loop.
 // An EXIT here fails fast.
-void run_wave(capsid_worker *worker, std::uint64_t first_id,
-              std::uint64_t count) {
+void run_wave(capsid_worker* worker, std::uint64_t first_id, std::uint64_t count) {
     std::uint64_t remaining = count;
     std::uint64_t base = first_id;
     while (remaining > 0) {
         const std::uint64_t chunk = std::min(remaining, kWaveBatch);
         for (std::uint64_t i = 0; i < chunk; ++i) {
-            require_result(
-                capsid_worker_begin_bodyless_request(
-                    worker, base + i, "GET", "https://soak.test/slow?ms=200",
-                    NULL, 0),
-                "begin soak request");
+            require_result(capsid_worker_begin_bodyless_request(
+                               worker, base + i, "GET", "https://soak.test/slow?ms=200", NULL, 0),
+                           "begin soak request");
         }
         require_result(capsid_worker_flush(worker), "flush wave");
         for (std::uint64_t i = 0; i < chunk; ++i) {
@@ -201,10 +192,10 @@ void run_wave(capsid_worker *worker, std::uint64_t first_id,
             const capsid_result result = capsid_worker_next_event(worker, &event);
             if (result == CAPSID_OK) {
                 switch (event.type) {
-                    case CAPSID_EVENT_EXIT:
-                        fail("worker exited mid-wave");
-                    default:
-                        continue;
+                case CAPSID_EVENT_EXIT:
+                    fail("worker exited mid-wave");
+                default:
+                    continue;
                 }
             }
             if (result != CAPSID_WOULD_BLOCK) {
@@ -217,7 +208,7 @@ void run_wave(capsid_worker *worker, std::uint64_t first_id,
             if (ready == 0) {
                 quiet_rounds += 1;
                 if (quiet_rounds >= 2) {
-                    break;  // input idle; request_metrics still crosses pending reclaim
+                    break; // input idle; request_metrics still crosses pending reclaim
                 }
             } else {
                 quiet_rounds = 0;
@@ -230,14 +221,14 @@ void run_wave(capsid_worker *worker, std::uint64_t first_id,
 
 // Convergence: no monotonic growth over the final three waves and the
 // last wave within 2% slack of the warm-up level.
-bool converged(const std::vector<Snapshot> &snapshots, std::string *reason) {
+bool converged(const std::vector<Snapshot>& snapshots, std::string* reason) {
     if (snapshots.size() < 4) {
         *reason = "too few waves";
         return false;
     }
     const std::size_t n = snapshots.size();
-    const Snapshot &warm = snapshots[1];  // after the first full wave
-    const Snapshot &last = snapshots[n - 1];
+    const Snapshot& warm = snapshots[1]; // after the first full wave
+    const Snapshot& last = snapshots[n - 1];
     for (std::size_t i = n - 3; i <= n - 2; ++i) {
         if (snapshots[i + 1].objects > snapshots[i].objects ||
             snapshots[i + 1].used > snapshots[i].used) {
@@ -245,21 +236,18 @@ bool converged(const std::vector<Snapshot> &snapshots, std::string *reason) {
             return false;
         }
     }
-    if (last.objects > warm.objects * 102 / 100 ||
-        last.used > warm.used * 102 / 100) {
+    if (last.objects > warm.objects * 102 / 100 || last.used > warm.used * 102 / 100) {
         *reason = "last wave exceeded the warm-up level by more than 2%";
         return false;
     }
     return true;
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
-    const unsigned long waves =
-        argc >= 4 ? std::strtoul(argv[3], nullptr, 10) : 6;
-    const unsigned long per_wave =
-        argc >= 5 ? std::strtoul(argv[4], nullptr, 10) : 200;
+int main(int argc, char** argv) {
+    const unsigned long waves = argc >= 4 ? std::strtoul(argv[3], nullptr, 10) : 6;
+    const unsigned long per_wave = argc >= 5 ? std::strtoul(argv[4], nullptr, 10) : 200;
     if (argc < 3 || waves < 4 || per_wave < 1) {
         fail("usage: soak-memory-waves <worker> <fixture.js> [waves>=4] "
              "[per-wave>=1]");
@@ -293,13 +281,11 @@ int main(int argc, char **argv) {
     config.strict_sandbox = 0;
     config.request_timeout_ms = 5000;
 
-    capsid_worker *worker = NULL;
+    capsid_worker* worker = NULL;
     require_result(capsid_worker_spawn(&config, &worker), "spawn worker");
-    require_result(
-        capsid_worker_load_bundle(
-            worker, reinterpret_cast<const uint8_t *>(bundle.data()),
-            bundle.size()),
-        "load bundle");
+    require_result(capsid_worker_load_bundle(
+                       worker, reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()),
+                   "load bundle");
     wait_for_ready(worker);
 
     const std::chrono::steady_clock::time_point deadline =
@@ -346,7 +332,6 @@ int main(int argc, char **argv) {
                     static_cast<unsigned long long>(snapshots[i].objects),
                     static_cast<unsigned long long>(snapshots[i].properties));
     }
-    std::printf("],\"converged\":%s,\"reason\":\"%s\"}\n",
-                ok ? "true" : "false", reason.c_str());
+    std::printf("],\"converged\":%s,\"reason\":\"%s\"}\n", ok ? "true" : "false", reason.c_str());
     return ok ? 0 : 1;
 }

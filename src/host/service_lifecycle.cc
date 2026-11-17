@@ -20,9 +20,7 @@ namespace {
 
 using ErrorCode = ServiceLifecycleErrorCode;
 
-void set_error(ServiceLifecycleError &error,
-               ErrorCode code,
-               std::string path,
+void set_error(ServiceLifecycleError& error, ErrorCode code, std::string path,
                std::string message) {
     error.code = code;
     error.path = std::move(path);
@@ -34,13 +32,12 @@ void set_error(ServiceLifecycleError &error,
 // encode_active_state_json) so a malformed identifier can never route,
 // replace or start a pool. Malformed combinations fail closed everywhere.
 bool document_matches_phase(ServiceLifecyclePhase phase,
-                            const std::optional<ActiveStateDocument> &document) {
+                            const std::optional<ActiveStateDocument>& document) {
     if (!document.has_value()) {
         return phase == ServiceLifecyclePhase::kAbsent ||
                phase == ServiceLifecyclePhase::kFailedClosed;
     }
-    const ActiveStateDocumentResult validated =
-        encode_active_state_json(*document);
+    const ActiveStateDocumentResult validated = encode_active_state_json(*document);
     if (!validated.ok) {
         return false;
     }
@@ -70,7 +67,7 @@ bool document_matches_phase(ServiceLifecyclePhase phase,
     return false;
 }
 
-ActiveStateDocument retired_tombstone(const ActiveStateDocument &source) {
+ActiveStateDocument retired_tombstone(const ActiveStateDocument& source) {
     ActiveStateDocument document;
     document.state = ActiveServiceState::kRetired;
     document.application = source.application;
@@ -79,7 +76,7 @@ ActiveStateDocument retired_tombstone(const ActiveStateDocument &source) {
     return document;
 }
 
-ActiveStateDocument quarantined_document(const ActiveStateDocument &source) {
+ActiveStateDocument quarantined_document(const ActiveStateDocument& source) {
     ActiveStateDocument document;
     document.state = ActiveServiceState::kQuarantined;
     document.application = source.application;
@@ -89,10 +86,9 @@ ActiveStateDocument quarantined_document(const ActiveStateDocument &source) {
     return document;
 }
 
-}  // namespace
+} // namespace
 
-ServiceRouteDisposition service_route_disposition(
-    const ServiceLifecycleState &state) {
+ServiceRouteDisposition service_route_disposition(const ServiceLifecycleState& state) {
     if (!document_matches_phase(state.phase, state.document)) {
         return ServiceRouteDisposition::kUnavailable;
     }
@@ -118,14 +114,13 @@ ServiceRouteDisposition service_route_disposition(
     return ServiceRouteDisposition::kUnavailable;
 }
 
-bool service_allows_automatic_replacement(const ServiceLifecycleState &state) {
+bool service_allows_automatic_replacement(const ServiceLifecycleState& state) {
     // Only a complete, routable active state may be replaced automatically.
     return document_matches_phase(state.phase, state.document) &&
            state.phase == ServiceLifecyclePhase::kActive;
 }
 
-ServiceRecoveryPlan plan_service_recovery(
-    const ActiveStateRecoveryResult &recovery) {
+ServiceRecoveryPlan plan_service_recovery(const ActiveStateRecoveryResult& recovery) {
     ServiceRecoveryPlan plan;
     // The stale-temp cleanup warning is copied at the entry and propagates
     // on every return path: a stale temp file is administrative debt whether
@@ -141,8 +136,8 @@ ServiceRecoveryPlan plan_service_recovery(
     // A successful recovery must be completely clean: any error fields
     // contradict the ok flag and fail closed as kInvalidRecovery. A
     // contradictory success must never start a pool.
-    if (recovery.error.code != ActiveStateErrorCode::kNone ||
-        !recovery.error.path.empty() || !recovery.error.message.empty()) {
+    if (recovery.error.code != ActiveStateErrorCode::kNone || !recovery.error.path.empty() ||
+        !recovery.error.message.empty()) {
         plan.error.code = ErrorCode::kInvalidRecovery;
         plan.error.path = "/recovery";
         plan.error.message = "recovery success carries a contradictory error";
@@ -153,12 +148,10 @@ ServiceRecoveryPlan plan_service_recovery(
     case ActiveStateRecoveryAction::kNone: {
         // A kNone action must carry a fully default document; hidden fields
         // must not be silently dropped.
-        const ActiveStateDocument &document = recovery.document;
-        if (document.state != ActiveServiceState::kActive ||
-            !document.application.empty() || !document.version.empty() ||
-            !document.generation.empty() ||
-            !document.previous_version.empty() ||
-            !document.previous_generation.empty() ||
+        const ActiveStateDocument& document = recovery.document;
+        if (document.state != ActiveServiceState::kActive || !document.application.empty() ||
+            !document.version.empty() || !document.generation.empty() ||
+            !document.previous_version.empty() || !document.previous_generation.empty() ||
             !document.reason.empty()) {
             plan.error.code = ErrorCode::kInvalidRecovery;
             plan.error.path = "/recovery";
@@ -219,8 +212,7 @@ ServiceRecoveryPlan plan_service_recovery(
     return plan;
 }
 
-ServiceLifecycleTransition request_service_retire(
-    const ServiceLifecycleState &state) {
+ServiceLifecycleTransition request_service_retire(const ServiceLifecycleState& state) {
     ServiceLifecycleTransition transition;
     if (!document_matches_phase(state.phase, state.document)) {
         set_error(transition.error, ErrorCode::kInvalidState, "/state",
@@ -234,8 +226,7 @@ ServiceLifecycleTransition request_service_retire(
         transition.effects.idempotent = true;
         return transition;
     case ServiceLifecyclePhase::kAbsent:
-        set_error(transition.error, ErrorCode::kNotFound, "/state",
-                  "cannot retire an absent App");
+        set_error(transition.error, ErrorCode::kNotFound, "/state", "cannot retire an absent App");
         return transition;
     case ServiceLifecyclePhase::kActive:
     case ServiceLifecyclePhase::kQuarantined: {
@@ -243,8 +234,7 @@ ServiceLifecycleTransition request_service_retire(
         transition.state.document = state.document;
         transition.effects.persist_required = true;
         transition.effects.stop_new_requests = true;
-        transition.effects.persist_document =
-            retired_tombstone(*state.document);
+        transition.effects.persist_document = retired_tombstone(*state.document);
         transition.ok = true;
         return transition;
     }
@@ -262,13 +252,11 @@ ServiceLifecycleTransition request_service_retire(
                   "cannot mutate a fail-closed service");
         return transition;
     }
-    set_error(transition.error, ErrorCode::kInvalidState, "/state",
-              "unknown lifecycle phase");
+    set_error(transition.error, ErrorCode::kInvalidState, "/state", "unknown lifecycle phase");
     return transition;
 }
 
-ServiceLifecycleTransition enter_service_quarantine(
-    const ServiceLifecycleState &state) {
+ServiceLifecycleTransition enter_service_quarantine(const ServiceLifecycleState& state) {
     ServiceLifecycleTransition transition;
     if (state.phase != ServiceLifecyclePhase::kActive ||
         !document_matches_phase(state.phase, state.document)) {
@@ -285,9 +273,9 @@ ServiceLifecycleTransition enter_service_quarantine(
     return transition;
 }
 
-ServiceLifecycleTransition resolve_service_state_persistence(
-    const ServiceLifecycleState &state,
-    const ActiveStatePersistResult &persistence) {
+ServiceLifecycleTransition
+resolve_service_state_persistence(const ServiceLifecycleState& state,
+                                  const ActiveStatePersistResult& persistence) {
     ServiceLifecycleTransition transition;
     // Only a pending mutation may be resolved, and its source document must
     // pass the full active-state contract first (document_matches_phase runs
@@ -316,10 +304,9 @@ ServiceLifecycleTransition resolve_service_state_persistence(
     //   pre-rename failure: !ok && !replaced && ordinary error
     //   durability unknown: !ok && replaced && kDurabilityUncertain
     // Every other combination fails closed into the durability incident.
-    const bool clean_success =
-        persistence.ok && persistence.active_name_replaced &&
-        persistence.error.code == ActiveStateErrorCode::kNone &&
-        persistence.error.path.empty() && persistence.error.message.empty();
+    const bool clean_success = persistence.ok && persistence.active_name_replaced &&
+                               persistence.error.code == ActiveStateErrorCode::kNone &&
+                               persistence.error.path.empty() && persistence.error.message.empty();
     const bool pre_rename_failure =
         !persistence.ok && !persistence.active_name_replaced &&
         persistence.error.code != ActiveStateErrorCode::kNone &&
@@ -334,8 +321,7 @@ ServiceLifecycleTransition resolve_service_state_persistence(
         transition.state.document = state.document;
         transition.effects.block_state_writes = true;
         transition.effects.stop_new_requests = true;
-        set_error(transition.error, ErrorCode::kInvalidPersistenceResult,
-                  "/persistence",
+        set_error(transition.error, ErrorCode::kInvalidPersistenceResult, "/persistence",
                   "persistence result is self-contradictory");
         return transition;
     }
@@ -359,8 +345,7 @@ ServiceLifecycleTransition resolve_service_state_persistence(
         transition.state.document = state.document;
         transition.effects.block_state_writes = true;
         transition.effects.stop_new_requests = true;
-        set_error(transition.error, ErrorCode::kDurabilityUncertain,
-                  "/persistence",
+        set_error(transition.error, ErrorCode::kDurabilityUncertain, "/persistence",
                   "active.json may have been replaced without durable sync");
         return transition;
     }
@@ -368,11 +353,10 @@ ServiceLifecycleTransition resolve_service_state_persistence(
     // Pre-rename failure.
     if (state.phase == ServiceLifecyclePhase::kRetiring) {
         // Restore the source service exactly as it was before retire.
-        const ActiveStateDocument &source = *state.document;
-        transition.state.phase =
-            source.state == ActiveServiceState::kQuarantined
-                ? ServiceLifecyclePhase::kQuarantined
-                : ServiceLifecyclePhase::kActive;
+        const ActiveStateDocument& source = *state.document;
+        transition.state.phase = source.state == ActiveServiceState::kQuarantined
+                                     ? ServiceLifecyclePhase::kQuarantined
+                                     : ServiceLifecyclePhase::kActive;
         transition.state.document = state.document;
     } else {
         // Quarantine stays fail-closed and retries persistence; it never
@@ -382,16 +366,14 @@ ServiceLifecycleTransition resolve_service_state_persistence(
         transition.effects.retry_persistence = true;
         transition.effects.persist_required = true;
         transition.effects.stop_new_requests = true;
-        transition.effects.persist_document =
-            quarantined_document(*state.document);
+        transition.effects.persist_document = quarantined_document(*state.document);
     }
     set_error(transition.error, ErrorCode::kPersistenceFailed, "/persistence",
               "active state persistence failed before the rename");
     return transition;
 }
 
-ServiceLifecycleTransition complete_service_retire_drain(
-    const ServiceLifecycleState &state) {
+ServiceLifecycleTransition complete_service_retire_drain(const ServiceLifecycleState& state) {
     ServiceLifecycleTransition transition;
     if (state.phase == ServiceLifecyclePhase::kRetired &&
         document_matches_phase(state.phase, state.document)) {
@@ -416,11 +398,10 @@ ServiceLifecycleTransition complete_service_retire_drain(
     return transition;
 }
 
-ExplicitDeployPlan plan_explicit_service_deploy(
-    const ServiceLifecycleState &state,
-    std::string_view application,
-    std::string_view version,
-    std::string_view generation) {
+ExplicitDeployPlan plan_explicit_service_deploy(const ServiceLifecycleState& state,
+                                                std::string_view application,
+                                                std::string_view version,
+                                                std::string_view generation) {
     ExplicitDeployPlan plan;
 
     // The current lifecycle state is validated first; a malformed phase or
@@ -450,8 +431,7 @@ ExplicitDeployPlan plan_explicit_service_deploy(
         plan.action = ExplicitDeployAction::kRejectInvalidState;
         return plan;
     }
-    if (state.document.has_value() &&
-        state.document->application != application) {
+    if (state.document.has_value() && state.document->application != application) {
         set_error(plan.error, ErrorCode::kInvalidDeployTarget, "/app",
                   "deploy application differs from the service application");
         plan.action = ExplicitDeployAction::kRejectInvalidState;
@@ -464,16 +444,14 @@ ExplicitDeployPlan plan_explicit_service_deploy(
         plan.action = ExplicitDeployAction::kWarmAndActivate;
         return plan;
     case ServiceLifecyclePhase::kActive:
-        if (state.document->version == version &&
-            state.document->generation == generation) {
+        if (state.document->version == version && state.document->generation == generation) {
             plan.ok = true;
             plan.action = ExplicitDeployAction::kAlreadyActive;
             return plan;
         }
         if (state.document->version == version) {
             // The same Version ID cannot be remapped to new content.
-            set_error(plan.error, ErrorCode::kVersionImmutabilityConflict,
-                      "/version",
+            set_error(plan.error, ErrorCode::kVersionImmutabilityConflict, "/version",
                       "Version ID is already mapped to another generation");
             plan.action = ExplicitDeployAction::kVersionImmutabilityConflict;
             return plan;
@@ -486,8 +464,7 @@ ExplicitDeployPlan plan_explicit_service_deploy(
         // previous generation, but the Version mapping stays immutable.
         if (state.document->previous_version == version &&
             state.document->previous_generation != generation) {
-            set_error(plan.error, ErrorCode::kVersionImmutabilityConflict,
-                      "/version",
+            set_error(plan.error, ErrorCode::kVersionImmutabilityConflict, "/version",
                       "Version ID is already mapped to another generation");
             plan.action = ExplicitDeployAction::kVersionImmutabilityConflict;
             return plan;
@@ -498,10 +475,8 @@ ExplicitDeployPlan plan_explicit_service_deploy(
     case ServiceLifecyclePhase::kQuarantined:
         // Same-generation redeploy must still prewarm; the instability
         // budget resets only after successful activation.
-        if (state.document->version == version &&
-            state.document->generation != generation) {
-            set_error(plan.error, ErrorCode::kVersionImmutabilityConflict,
-                      "/version",
+        if (state.document->version == version && state.document->generation != generation) {
+            set_error(plan.error, ErrorCode::kVersionImmutabilityConflict, "/version",
                       "Version ID is already mapped to another generation");
             plan.action = ExplicitDeployAction::kVersionImmutabilityConflict;
             return plan;
@@ -527,10 +502,9 @@ ExplicitDeployPlan plan_explicit_service_deploy(
         plan.action = ExplicitDeployAction::kRejectInvalidState;
         return plan;
     }
-    set_error(plan.error, ErrorCode::kInvalidState, "/state",
-              "unknown lifecycle phase");
+    set_error(plan.error, ErrorCode::kInvalidState, "/state", "unknown lifecycle phase");
     plan.action = ExplicitDeployAction::kRejectInvalidState;
     return plan;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

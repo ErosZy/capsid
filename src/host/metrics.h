@@ -47,46 +47,37 @@ struct ProcessMetricsSnapshot {
 };
 
 class MetricsRegistry {
-public:
-    using ProcessSnapshotProvider =
-        std::function<ProcessMetricsSnapshot()>;
+  public:
+    using ProcessSnapshotProvider = std::function<ProcessMetricsSnapshot()>;
 
     void set_process_snapshot_provider(ProcessSnapshotProvider provider);
     // One service provider plus configured listener providers. Weak
     // ownership keeps metrics from extending a retired service's lifetime.
     // Re-registering the same shared budget is allowed for pool shards.
     void observe_channel_budget(std::shared_ptr<ServiceChannelBudget> budget,
-                                const std::string &listener = {});
+                                const std::string& listener = {});
 
-    void count_worker_event(const std::string& event,
-                            const std::string& app,
+    void count_worker_event(const std::string& event, const std::string& app,
                             const std::string& generation);
-    void set_recovery_instability_budget_remaining(const std::string& app,
-                                                   std::uint64_t value);
+    void set_recovery_instability_budget_remaining(const std::string& app, std::uint64_t value);
     void set_recovery_backoff_ms(const std::string& app, std::uint64_t value);
     void count_recovery_startup_permit_grant(const std::string& app);
     void count_recovery_quarantine(const std::string& app);
     void count_recovery_retire(const std::string& app);
-    void count_deploy_stage(const std::string& stage,
-                            const std::string& result,
+    void count_deploy_stage(const std::string& stage, const std::string& result,
                             const std::string& app);
-    void count_deploy_operation(const std::string& result,
-                                const std::string& app);
-    void set_isolation_required_features(const std::string& app,
-                                         std::uint64_t value);
-    void set_isolation_applied_features(const std::string& app,
-                                        std::uint64_t value);
-    void count_isolation_failure(const std::string& kind,
-                                 const std::string& app);
+    void count_deploy_operation(const std::string& result, const std::string& app);
+    void set_isolation_required_features(const std::string& app, std::uint64_t value);
+    void set_isolation_applied_features(const std::string& app, std::uint64_t value);
+    void count_isolation_failure(const std::string& kind, const std::string& app);
     void set_log_dropped(const std::string& app, std::uint64_t value);
 
     // Prometheus text format, families in a fixed order, series sorted
     // within a family (deterministic output for scrapers and tests).
     std::string render_prometheus_text() const;
 
-private:
-    std::string render_counters(
-        const std::map<std::string, std::uint64_t>& series) const;
+  private:
+    std::string render_counters(const std::map<std::string, std::uint64_t>& series) const;
 
     ProcessSnapshotProvider process_snapshot_;
     mutable std::mutex mutex_;
@@ -95,6 +86,6 @@ private:
     std::map<std::string, std::weak_ptr<ServiceChannelBudget>> channel_budgets_;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

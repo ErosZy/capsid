@@ -14,36 +14,31 @@
 
 static int g_checks = 0;
 
-#define CHECK(condition)                                          \
-    do {                                                          \
-        if (!(condition)) {                                       \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__,         \
-                    __LINE__, #condition);                        \
-            return 1;                                             \
-        }                                                         \
-        ++g_checks;                                               \
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #condition);                   \
+            return 1;                                                                              \
+        }                                                                                          \
+        ++g_checks;                                                                                \
     } while (0)
 
-int main(int argc, char **argv) {
-    const char *worker_path = argc > 1 ? argv[1] : NULL;
+int main(int argc, char** argv) {
+    const char* worker_path = argc > 1 ? argv[1] : NULL;
 
     /* Result strings cover the WP-06 enumerators and unknown values. */
     CHECK(capsid_result_string(CAPSID_OK) != NULL);
-    CHECK(strcmp(capsid_result_string(CAPSID_OUT_OF_MEMORY),
-                 "out of memory") == 0);
-    CHECK(strcmp(capsid_result_string(CAPSID_INTERNAL_ERROR),
-                 "internal error") == 0);
-    CHECK(strcmp(capsid_result_string((capsid_result)99),
-                 "unknown result") == 0);
+    CHECK(strcmp(capsid_result_string(CAPSID_OUT_OF_MEMORY), "out of memory") == 0);
+    CHECK(strcmp(capsid_result_string(CAPSID_INTERNAL_ERROR), "internal error") == 0);
+    CHECK(strcmp(capsid_result_string((capsid_result)99), "unknown result") == 0);
 
     /* Fresh thread: no error recorded. */
     CHECK(capsid_last_error() == NULL);
 
     /* Invalid argument is a return code; the guard clears the error slot. */
     {
-        capsid_worker *null_worker = (capsid_worker *)1;
-        CHECK(capsid_worker_spawn(NULL, &null_worker) ==
-              CAPSID_INVALID_ARGUMENT);
+        capsid_worker* null_worker = (capsid_worker*)1;
+        CHECK(capsid_worker_spawn(NULL, &null_worker) == CAPSID_INVALID_ARGUMENT);
         CHECK(capsid_last_error() == NULL);
     }
 
@@ -52,16 +47,15 @@ int main(int argc, char **argv) {
         capsid_worker_config config;
         capsid_worker_config_init(&config);
         config.worker_path = worker_path;
-        capsid_worker *worker = NULL;
+        capsid_worker* worker = NULL;
         CHECK(capsid_worker_spawn(&config, &worker) == CAPSID_OK);
         CHECK(worker != NULL);
         CHECK(capsid_worker_pid(worker) > 0);
         CHECK(capsid_worker_fd(worker) >= 0);
         CHECK(capsid_last_error() == NULL);
 
-        CHECK(capsid_worker_begin_request(
-                  worker, 1, "GET", "http://example.test/",
-                  NULL, 0) == CAPSID_OK);
+        CHECK(capsid_worker_begin_request(worker, 1, "GET", "http://example.test/", NULL, 0) ==
+              CAPSID_OK);
         CHECK(capsid_worker_end_request(worker, 1) == CAPSID_OK);
         CHECK(capsid_last_error() == NULL);
 

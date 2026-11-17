@@ -102,9 +102,8 @@ typedef unsigned int gid_t;
 
 // mkdtemp for test scaffolding: replaces the XXXXXX suffix with unique
 // characters and creates the directory (the POSIX contract).
-inline char *mkdtemp(char *path_template) {
-    const errno_t err =
-        _mktemp_s(path_template, std::strlen(path_template) + 1);
+inline char* mkdtemp(char* path_template) {
+    const errno_t err = _mktemp_s(path_template, std::strlen(path_template) + 1);
     if (err != 0) {
         errno = err;
         return nullptr;
@@ -145,15 +144,11 @@ inline bool ensure_winsock() {
 // CRT opens default to text mode on Windows; binary mode makes open()/
 // fopen() byte-transparent so IPC frames and artifacts are never subject
 // to CRLF translation.
-inline void set_binary_file_defaults() {
-    _set_fmode(_O_BINARY);
-}
+inline void set_binary_file_defaults() { _set_fmode(_O_BINARY); }
 
-inline int getpid() {
-    return static_cast<int>(_getpid());
-}
+inline int getpid() { return static_cast<int>(_getpid()); }
 
-inline int setenv(const char *name, const char *value, int overwrite) {
+inline int setenv(const char* name, const char* value, int overwrite) {
     if (!overwrite && std::getenv(name) != nullptr) {
         return 0;
     }
@@ -162,9 +157,7 @@ inline int setenv(const char *name, const char *value, int overwrite) {
 
 // _putenv with a bare NAME (no '=') removes the variable — the CRT's
 // documented removal form.
-inline int unsetenv(const char *name) {
-    return _putenv(name) == 0 ? 0 : -1;
-}
+inline int unsetenv(const char* name) { return _putenv(name) == 0 ? 0 : -1; }
 
 // usleep: millisecond-resolution sleep (test scaffolding; the ceiling
 // round matches POSIX "sleep at least this long").
@@ -175,7 +168,7 @@ inline int usleep(unsigned long usec) {
 
 // gettimeofday via the precision file-time clock (struct timeval comes
 // from winsock2.h above). The timezone argument is ignored.
-inline int gettimeofday(struct timeval *tv, void * /*timezone*/) {
+inline int gettimeofday(struct timeval* tv, void* /*timezone*/) {
     if (tv == NULL) {
         errno = EINVAL;
         return -1;
@@ -186,8 +179,7 @@ inline int gettimeofday(struct timeval *tv, void * /*timezone*/) {
     value.LowPart = file_time.dwLowDateTime;
     value.HighPart = file_time.dwHighDateTime;
     const unsigned long long unix_epoch_offset = 116444736000000000ull;
-    const unsigned long long usecs =
-        (value.QuadPart - unix_epoch_offset) / 10ull;
+    const unsigned long long usecs = (value.QuadPart - unix_epoch_offset) / 10ull;
     tv->tv_sec = static_cast<long>(usecs / 1000000ull);
     tv->tv_usec = static_cast<long>(usecs % 1000000ull);
     return 0;
@@ -196,9 +188,7 @@ inline int gettimeofday(struct timeval *tv, void * /*timezone*/) {
 // Process-identity checks are uid-based on POSIX; Windows has no uid
 // namespace for AF_UNIX peers and relies on the socket directory's NTFS
 // ACLs instead (see docs/windows.md).
-inline unsigned long long geteuid() {
-    return 0ull;
-}
+inline unsigned long long geteuid() { return 0ull; }
 
 // Non-blocking mode for a CRT fd backed by a socket handle.
 inline bool set_socket_nonblocking(int fd) {
@@ -219,23 +209,38 @@ inline bool set_socket_nonblocking(int fd) {
 inline void map_winsock_errno() {
     const int error = WSAGetLastError();
     switch (error) {
-        case WSAEINTR: errno = EINTR; break;
-        case WSAEWOULDBLOCK: errno = EAGAIN; break;
-        case WSAENOTSOCK: errno = EBADF; break;
-        case WSAEADDRINUSE: errno = EADDRINUSE; break;
-        case WSAECONNREFUSED: errno = ECONNREFUSED; break;
-        case WSAEACCES: errno = EACCES; break;
-        case WSAEADDRNOTAVAIL: errno = EADDRNOTAVAIL; break;
-        case WSAEINVAL: errno = EINVAL; break;
-        default: errno = EIO; break;
+    case WSAEINTR:
+        errno = EINTR;
+        break;
+    case WSAEWOULDBLOCK:
+        errno = EAGAIN;
+        break;
+    case WSAENOTSOCK:
+        errno = EBADF;
+        break;
+    case WSAEADDRINUSE:
+        errno = EADDRINUSE;
+        break;
+    case WSAECONNREFUSED:
+        errno = ECONNREFUSED;
+        break;
+    case WSAEACCES:
+        errno = EACCES;
+        break;
+    case WSAEADDRNOTAVAIL:
+        errno = EADDRNOTAVAIL;
+        break;
+    case WSAEINVAL:
+        errno = EINVAL;
+        break;
+    default:
+        errno = EIO;
+        break;
     }
 }
 
 // send() on a CRT fd (the fd must wrap a socket).
-inline ssize_t send_fd(int fd,
-                       const void *data,
-                       size_t size,
-                       int flags) {
+inline ssize_t send_fd(int fd, const void* data, size_t size, int flags) {
     if (!ensure_winsock()) {
         errno = EIO;
         return -1;
@@ -245,11 +250,8 @@ inline ssize_t send_fd(int fd,
         errno = EBADF;
         return -1;
     }
-    const int sent = send(
-        socket_handle,
-        static_cast<const char *>(data),
-        static_cast<int>(size),
-        flags);
+    const int sent =
+        send(socket_handle, static_cast<const char*>(data), static_cast<int>(size), flags);
     if (sent == SOCKET_ERROR) {
         map_winsock_errno();
         return -1;
@@ -261,7 +263,7 @@ inline ssize_t send_fd(int fd,
 // channels are socketpairs) or a real pipe (a harness may pass a stdio
 // pipe as the READY fd). Winsock send() rejects pipe handles with
 // WSAENOTSOCK (mapped to EBADF); fall back to the CRT for those.
-inline ssize_t write_any_fd(int fd, const void *data, size_t size) {
+inline ssize_t write_any_fd(int fd, const void* data, size_t size) {
     const ssize_t via_socket = send_fd(fd, data, size, 0);
     if (via_socket >= 0 || errno != EBADF) {
         return via_socket;
@@ -275,8 +277,7 @@ inline int accept_fd(int listener) {
         errno = EIO;
         return -1;
     }
-    const SOCKET listener_socket =
-        static_cast<SOCKET>(_get_osfhandle(listener));
+    const SOCKET listener_socket = static_cast<SOCKET>(_get_osfhandle(listener));
     if (listener_socket == INVALID_SOCKET) {
         errno = EBADF;
         return -1;
@@ -287,8 +288,7 @@ inline int accept_fd(int listener) {
         return -1;
     }
     // SOCKET is an integer handle type: integer-to-integer cast.
-    return _open_osfhandle(
-        static_cast<intptr_t>(accepted), _O_RDWR | _O_BINARY);
+    return _open_osfhandle(static_cast<intptr_t>(accepted), _O_RDWR | _O_BINARY);
 }
 
 // shutdown(SHUT_RDWR) on a CRT fd.
@@ -329,26 +329,18 @@ inline bool create_socket_pair(int fds[2]) {
     address.sin_port = 0;
     socklen_t address_size = sizeof(address);
     const bool ok =
-        bind(listener,
-             reinterpret_cast<const struct sockaddr *>(&address),
-             sizeof(address)) == 0 &&
+        bind(listener, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address)) == 0 &&
         listen(listener, 1) == 0 &&
-        getsockname(listener,
-                    reinterpret_cast<struct sockaddr *>(&address),
-                    &address_size) == 0 &&
-        (child = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) !=
-            INVALID_SOCKET &&
-        connect(child,
-                reinterpret_cast<const struct sockaddr *>(&address),
-                sizeof(address)) == 0 &&
+        getsockname(listener, reinterpret_cast<struct sockaddr*>(&address), &address_size) == 0 &&
+        (child = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) != INVALID_SOCKET &&
+        connect(child, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address)) == 0 &&
         (parent = accept(listener, NULL, NULL)) != INVALID_SOCKET;
     // The accepted socket must be re-bound to the listener's context
     // before the listener closes: AFD otherwise recycles the listener's
     // endpoint name and the accepted socket's I/O collides with it
     // (ERROR_ALREADY_EXISTS) once the teardown lands.
     setsockopt(parent, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
-               reinterpret_cast<const char *>(&listener),
-               sizeof(listener));
+               reinterpret_cast<const char*>(&listener), sizeof(listener));
     closesocket(listener);
     if (!ok) {
         if (child != INVALID_SOCKET) {
@@ -359,10 +351,8 @@ inline bool create_socket_pair(int fds[2]) {
         }
         return false;
     }
-    fds[0] = _open_osfhandle(
-        static_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
-    fds[1] = _open_osfhandle(
-        static_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
+    fds[0] = _open_osfhandle(static_cast<intptr_t>(parent), _O_RDWR | _O_BINARY);
+    fds[1] = _open_osfhandle(static_cast<intptr_t>(child), _O_RDWR | _O_BINARY);
     if (fds[0] < 0 || fds[1] < 0) {
         if (fds[0] >= 0) {
             close(fds[0]);
@@ -375,10 +365,10 @@ inline bool create_socket_pair(int fds[2]) {
     return true;
 }
 
-}  // namespace win32
-}  // namespace capsid
+} // namespace win32
+} // namespace capsid
 
-#endif  // _WIN32
+#endif // _WIN32
 
 // ---- socket-fd wrappers (both platforms) ---------------------------------
 // Tests and host sources drive sockets through CRT fds; these wrappers
@@ -401,8 +391,7 @@ inline int create_socket_fd(int family) {
         map_winsock_errno();
         return -1;
     }
-    return _open_osfhandle(
-        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+    return _open_osfhandle(static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
 }
 
 // socket(AF_INET, SOCK_STREAM, 0) as a CRT fd.
@@ -416,12 +405,10 @@ inline int create_tcp_socket_fd() {
         map_winsock_errno();
         return -1;
     }
-    return _open_osfhandle(
-        static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
+    return _open_osfhandle(static_cast<intptr_t>(handle), _O_RDWR | _O_BINARY);
 }
 
-inline int connect_fd(int fd, const struct sockaddr *address,
-                      socklen_t address_size) {
+inline int connect_fd(int fd, const struct sockaddr* address, socklen_t address_size) {
     if (!ensure_winsock()) {
         errno = EIO;
         return -1;
@@ -438,8 +425,7 @@ inline int connect_fd(int fd, const struct sockaddr *address,
     return result;
 }
 
-inline int bind_fd(int fd, const struct sockaddr *address,
-                   socklen_t address_size) {
+inline int bind_fd(int fd, const struct sockaddr* address, socklen_t address_size) {
     if (!ensure_winsock()) {
         errno = EIO;
         return -1;
@@ -473,8 +459,7 @@ inline int listen_fd(int fd, int backlog) {
     return result;
 }
 
-inline int getsockname_fd(int fd, struct sockaddr *address,
-                          socklen_t *address_size) {
+inline int getsockname_fd(int fd, struct sockaddr* address, socklen_t* address_size) {
     if (!ensure_winsock()) {
         errno = EIO;
         return -1;
@@ -491,7 +476,7 @@ inline int getsockname_fd(int fd, struct sockaddr *address,
     return result;
 }
 
-inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
+inline ssize_t recv_fd(int fd, void* buffer, size_t size, int flags) {
     if (!ensure_winsock()) {
         errno = EIO;
         return -1;
@@ -501,18 +486,14 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
         errno = EBADF;
         return -1;
     }
-    const int received = recv(
-        socket_handle,
-        static_cast<char *>(buffer),
-        static_cast<int>(size),
-        flags);
+    const int received =
+        recv(socket_handle, static_cast<char*>(buffer), static_cast<int>(size), flags);
     if (received == SOCKET_ERROR) {
         const int error = WSAGetLastError();
         // A hard peer death surfaces as RST on Windows (POSIX read()
         // reports EOF for the same event); the IPC channel and the HTTP
         // test clients treat it as a closed stream.
-        if (error == WSAECONNRESET || error == WSAENOTCONN ||
-            error == WSAESHUTDOWN) {
+        if (error == WSAECONNRESET || error == WSAENOTCONN || error == WSAESHUTDOWN) {
             return 0;
         }
         map_winsock_errno();
@@ -523,7 +504,7 @@ inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
 
 // read() on a CRT fd: Winsock sockets must go through recv — the CRT's
 // own read() does not handle _open_osfhandle socket fds (EINVAL).
-inline ssize_t read_fd(int fd, void *buffer, size_t size) {
+inline ssize_t read_fd(int fd, void* buffer, size_t size) {
     if (!ensure_winsock()) {
         errno = EIO;
         return -1;
@@ -534,18 +515,13 @@ inline ssize_t read_fd(int fd, void *buffer, size_t size) {
         return -1;
     }
     const SOCKET socket_handle = static_cast<SOCKET>(osfhandle);
-    const int received = recv(
-        socket_handle,
-        static_cast<char *>(buffer),
-        static_cast<int>(size),
-        0);
+    const int received = recv(socket_handle, static_cast<char*>(buffer), static_cast<int>(size), 0);
     if (received == SOCKET_ERROR) {
         const int error = WSAGetLastError();
         // A hard peer death surfaces as RST on Windows (POSIX read()
         // reports EOF for the same event); the IPC channel and the HTTP
         // test clients treat it as a closed stream.
-        if (error == WSAECONNRESET || error == WSAENOTCONN ||
-            error == WSAESHUTDOWN) {
+        if (error == WSAECONNRESET || error == WSAENOTCONN || error == WSAESHUTDOWN) {
             return 0;
         }
         map_winsock_errno();
@@ -567,9 +543,8 @@ inline int setsockopt_reuseaddr_fd(int fd) {
         return -1;
     }
     const int reuse = 1;
-    const int result = setsockopt(
-        socket_handle, SOL_SOCKET, SO_REUSEADDR,
-        reinterpret_cast<const char *>(&reuse), sizeof(reuse));
+    const int result = setsockopt(socket_handle, SOL_SOCKET, SO_REUSEADDR,
+                                  reinterpret_cast<const char*>(&reuse), sizeof(reuse));
     if (result != 0) {
         map_winsock_errno();
     }
@@ -589,19 +564,18 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
         return -1;
     }
     const DWORD ms = static_cast<DWORD>(timeout_ms);
-    const int result = setsockopt(
-        socket_handle, SOL_SOCKET, SO_RCVTIMEO,
-        reinterpret_cast<const char *>(&ms), sizeof(ms));
+    const int result = setsockopt(socket_handle, SOL_SOCKET, SO_RCVTIMEO,
+                                  reinterpret_cast<const char*>(&ms), sizeof(ms));
     if (result != 0) {
         map_winsock_errno();
     }
     return result;
 }
 
-}  // namespace win32
-}  // namespace capsid
+} // namespace win32
+} // namespace capsid
 
-#else  // POSIX passthroughs
+#else // POSIX passthroughs
 
 // The passthroughs below call the socket/process APIs directly, and this
 // header is included first by tests and host sources on every platform;
@@ -625,70 +599,52 @@ inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
 namespace capsid {
 namespace win32 {
 
-inline bool create_socket_pair(int fds[2]) {
-    return socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0;
-}
+inline bool create_socket_pair(int fds[2]) { return socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0; }
 
-inline int create_socket_fd(int family) {
-    return socket(family, SOCK_STREAM | SOCK_CLOEXEC, 0);
-}
+inline int create_socket_fd(int family) { return socket(family, SOCK_STREAM | SOCK_CLOEXEC, 0); }
 
-inline int create_tcp_socket_fd() {
-    return socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-}
+inline int create_tcp_socket_fd() { return socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0); }
 
-inline int connect_fd(int fd, const struct sockaddr *address,
-                      socklen_t address_size) {
+inline int connect_fd(int fd, const struct sockaddr* address, socklen_t address_size) {
     return connect(fd, address, address_size);
 }
 
-inline int bind_fd(int fd, const struct sockaddr *address,
-                   socklen_t address_size) {
+inline int bind_fd(int fd, const struct sockaddr* address, socklen_t address_size) {
     return bind(fd, address, address_size);
 }
 
-inline int listen_fd(int fd, int backlog) {
-    return listen(fd, backlog);
-}
+inline int listen_fd(int fd, int backlog) { return listen(fd, backlog); }
 
-inline int getsockname_fd(int fd, struct sockaddr *address,
-                          socklen_t *address_size) {
+inline int getsockname_fd(int fd, struct sockaddr* address, socklen_t* address_size) {
     return getsockname(fd, address, address_size);
 }
 
-inline ssize_t recv_fd(int fd, void *buffer, size_t size, int flags) {
+inline ssize_t recv_fd(int fd, void* buffer, size_t size, int flags) {
     return recv(fd, buffer, size, flags);
 }
 
-inline ssize_t read_fd(int fd, void *buffer, size_t size) {
-    return read(fd, buffer, size);
-}
+inline ssize_t read_fd(int fd, void* buffer, size_t size) { return read(fd, buffer, size); }
 
 inline int setsockopt_reuseaddr_fd(int fd) {
     const int reuse = 1;
-    return setsockopt(
-        fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 }
 
 inline int setsockopt_recv_timeout_fd(int fd, unsigned timeout_ms) {
     struct timeval timeout = {};
     timeout.tv_sec = static_cast<time_t>(timeout_ms / 1000u);
     timeout.tv_usec = static_cast<suseconds_t>((timeout_ms % 1000u) * 1000u);
-    return setsockopt(
-        fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 }
 
 // Remaining Windows-shim passthroughs used by shared call sites. The
 // POSIX side implements them with the native equivalents so ported code
 // can call the shims unconditionally.
-inline bool ensure_winsock() {
-    return true;
-}
+inline bool ensure_winsock() { return true; }
 
-inline void set_binary_file_defaults() {
-}
+inline void set_binary_file_defaults() {}
 
-inline ssize_t send_fd(int fd, const void *data, size_t size, int flags) {
+inline ssize_t send_fd(int fd, const void* data, size_t size, int flags) {
 #ifdef MSG_NOSIGNAL
     // The pre-port call sites always sent with MSG_NOSIGNAL: a peer that
     // closes mid-write must yield EPIPE, not a process-killing SIGPIPE.
@@ -697,59 +653,39 @@ inline ssize_t send_fd(int fd, const void *data, size_t size, int flags) {
     return send(fd, data, size, flags);
 }
 
-inline ssize_t write_any_fd(int fd, const void *data, size_t size) {
-    return write(fd, data, size);
-}
+inline ssize_t write_any_fd(int fd, const void* data, size_t size) { return write(fd, data, size); }
 
-inline int accept_fd(int listener) {
-    return accept(listener, NULL, NULL);
-}
+inline int accept_fd(int listener) { return accept(listener, NULL, NULL); }
 
-inline int shutdown_fd(int fd) {
-    return shutdown(fd, SHUT_RDWR);
-}
+inline int shutdown_fd(int fd) { return shutdown(fd, SHUT_RDWR); }
 
 inline bool set_socket_nonblocking(int fd) {
     const int status_flags = fcntl(fd, F_GETFL, 0);
-    return status_flags >= 0 &&
-           fcntl(fd, F_SETFL, status_flags | O_NONBLOCK) == 0;
+    return status_flags >= 0 && fcntl(fd, F_SETFL, status_flags | O_NONBLOCK) == 0;
 }
 
-inline void map_winsock_errno() {
-}
+inline void map_winsock_errno() {}
 
-inline int getpid() {
-    return ::getpid();
-}
+inline int getpid() { return ::getpid(); }
 
-inline uid_t geteuid() {
-    return ::geteuid();
-}
+inline uid_t geteuid() { return ::geteuid(); }
 
-inline int setenv(const char *name, const char *value, int overwrite) {
+inline int setenv(const char* name, const char* value, int overwrite) {
     return ::setenv(name, value, overwrite);
 }
 
-inline int unsetenv(const char *name) {
-    return ::unsetenv(name);
-}
+inline int unsetenv(const char* name) { return ::unsetenv(name); }
 
-inline int usleep(unsigned long usec) {
-    return ::usleep(usec);
-}
+inline int usleep(unsigned long usec) { return ::usleep(usec); }
 
-inline int gettimeofday(struct timeval *tv, void *timezone) {
-    return ::gettimeofday(tv, timezone);
-}
+inline int gettimeofday(struct timeval* tv, void* timezone) { return ::gettimeofday(tv, timezone); }
 
-inline char *mkdtemp(char *templ) {
-    return ::mkdtemp(templ);
-}
+inline char* mkdtemp(char* templ) { return ::mkdtemp(templ); }
 
-}  // namespace win32
-}  // namespace capsid
+} // namespace win32
+} // namespace capsid
 
-#endif  // _WIN32
+#endif // _WIN32
 
 // ---- poll() compatibility ------------------------------------------------
 // Shared call sites use capsid_poll/capsid_pollfd. On Windows the shim is
@@ -765,20 +701,16 @@ struct capsid_pollfd {
 };
 namespace capsid {
 namespace win32 {
-inline int capsid_poll(capsid_pollfd *fds,
-                       size_t count,
-                       int timeout_ms) {
+inline int capsid_poll(capsid_pollfd* fds, size_t count, int timeout_ms) {
     std::vector<WSAPOLLFD> descriptors(count);
     for (size_t index = 0; index < count; ++index) {
-        descriptors[index].fd = static_cast<SOCKET>(
-            _get_osfhandle(static_cast<int>(fds[index].fd)));
+        descriptors[index].fd =
+            static_cast<SOCKET>(_get_osfhandle(static_cast<int>(fds[index].fd)));
         descriptors[index].events = fds[index].events;
         descriptors[index].revents = 0;
     }
-    const int result = WSAPoll(
-        descriptors.empty() ? NULL : &descriptors[0],
-        static_cast<ULONG>(count),
-        timeout_ms);
+    const int result = WSAPoll(descriptors.empty() ? NULL : &descriptors[0],
+                               static_cast<ULONG>(count), timeout_ms);
     if (result == SOCKET_ERROR) {
         map_winsock_errno();
         return -1;
@@ -788,8 +720,8 @@ inline int capsid_poll(capsid_pollfd *fds,
     }
     return result;
 }
-}  // namespace win32
-}  // namespace capsid
+} // namespace win32
+} // namespace capsid
 #else
 #include <poll.h>
 #include <sys/socket.h>
@@ -797,13 +729,11 @@ inline int capsid_poll(capsid_pollfd *fds,
 typedef struct pollfd capsid_pollfd;
 namespace capsid {
 namespace win32 {
-inline int capsid_poll(capsid_pollfd *fds,
-                       size_t count,
-                       int timeout_ms) {
+inline int capsid_poll(capsid_pollfd* fds, size_t count, int timeout_ms) {
     return poll(fds, static_cast<nfds_t>(count), timeout_ms);
 }
-}  // namespace win32
-}  // namespace capsid
+} // namespace win32
+} // namespace capsid
 #endif
 
-#endif  // CAPSID_SRC_WIN32_COMPAT_H
+#endif // CAPSID_SRC_WIN32_COMPAT_H

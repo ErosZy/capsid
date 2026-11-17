@@ -20,8 +20,10 @@ std::vector<FetchTarget> canonical_fetch_targets(const std::vector<FetchTarget>&
         const auto inserted = merged.emplace(target.host, target);
         FetchTarget& entry = inserted.first->second;
         if (!inserted.second) {
-            if (entry.ports.empty() || target.ports.empty()) entry.ports.clear();
-            else entry.ports.insert(entry.ports.end(), target.ports.begin(), target.ports.end());
+            if (entry.ports.empty() || target.ports.empty())
+                entry.ports.clear();
+            else
+                entry.ports.insert(entry.ports.end(), target.ports.begin(), target.ports.end());
         }
     }
     std::vector<FetchTarget> result;
@@ -37,8 +39,7 @@ std::vector<FetchTarget> canonical_fetch_targets(const std::vector<FetchTarget>&
 std::string sha256_hex(const std::string& data) {
     unsigned char digest[EVP_MAX_MD_SIZE];
     unsigned int digest_size = 0;
-    if (EVP_Digest(data.data(), data.size(), digest, &digest_size,
-                   EVP_sha256(), nullptr) != 1 ||
+    if (EVP_Digest(data.data(), data.size(), digest, &digest_size, EVP_sha256(), nullptr) != 1 ||
         digest_size != 32) {
         return "";
     }
@@ -75,12 +76,10 @@ bool normalize_path(const std::string& path, std::string* out) {
     std::size_t begin = 1;
     bool windows_drive = false;
 #if defined(_WIN32)
-    if (path.size() >= 3 &&
-        std::isalpha(static_cast<unsigned char>(path[0])) &&
-        path[1] == ':' && (path[2] == '/' || path[2] == '\\')) {
+    if (path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':' &&
+        (path[2] == '/' || path[2] == '\\')) {
         root.clear();
-        root.push_back(static_cast<char>(
-            std::toupper(static_cast<unsigned char>(path[0]))));
+        root.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(path[0]))));
         root += ":/";
         begin = 3;
         windows_drive = true;
@@ -91,16 +90,13 @@ bool normalize_path(const std::string& path, std::string* out) {
     }
     std::vector<std::string> components;
     while (begin <= path.size()) {
-        const std::size_t end = windows_drive
-            ? path.find_first_of("/\\", begin)
-            : path.find('/', begin);
-        const std::size_t component_end =
-            end == std::string::npos ? path.size() : end;
-        const std::string component =
-            path.substr(begin, component_end - begin);
+        const std::size_t end =
+            windows_drive ? path.find_first_of("/\\", begin) : path.find('/', begin);
+        const std::size_t component_end = end == std::string::npos ? path.size() : end;
+        const std::string component = path.substr(begin, component_end - begin);
         if (component == "..") {
             if (components.empty()) {
-                return false;  // escapes the root
+                return false; // escapes the root
             }
             components.pop_back();
         } else if (!component.empty() && component != ".") {
@@ -141,12 +137,10 @@ bool env_pattern_matches(const std::string& pattern, const std::string& name) {
     }
     const std::string::size_type star = pattern.find('*');
     if (star != std::string::npos) {
-        if (star != pattern.size() - 1 || pattern.find('*', star + 1) !=
-                                              std::string::npos) {
-            return false;  // only a single trailing wildcard is valid
+        if (star != pattern.size() - 1 || pattern.find('*', star + 1) != std::string::npos) {
+            return false; // only a single trailing wildcard is valid
         }
-        return name.compare(0, pattern.size() - 1, pattern, 0,
-                            pattern.size() - 1) == 0;
+        return name.compare(0, pattern.size() - 1, pattern, 0, pattern.size() - 1) == 0;
     }
     return name == pattern;
 }
@@ -159,19 +153,28 @@ bool valid_env_pattern(const std::string& pattern) {
     if (star == std::string::npos) {
         return !pattern.empty();
     }
-    return star == pattern.size() - 1 &&
-           pattern.find('*', star + 1) == std::string::npos;
+    return star == pattern.size() - 1 && pattern.find('*', star + 1) == std::string::npos;
 }
 
 std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (const char c : value) {
         switch (c) {
-        case '"': out << "\\\""; break;
-        case '\\': out << "\\\\"; break;
-        case '\n': out << "\\n"; break;
-        case '\r': out << "\\r"; break;
-        case '\t': out << "\\t"; break;
+        case '"':
+            out << "\\\"";
+            break;
+        case '\\':
+            out << "\\\\";
+            break;
+        case '\n':
+            out << "\\n";
+            break;
+        case '\r':
+            out << "\\r";
+            break;
+        case '\t':
+            out << "\\t";
+            break;
         default:
             if (static_cast<unsigned char>(c) < 0x20) {
                 char buffer[8];
@@ -185,12 +188,10 @@ std::string json_escape(const std::string& value) {
     return out.str();
 }
 
-}  // namespace
+} // namespace
 
-PolicyCompileResult compile_policy(
-    const HostPolicy& host,
-    const AppRequest& app,
-    const std::vector<EffectiveEnvEntry>& resolved_secrets) {
+PolicyCompileResult compile_policy(const HostPolicy& host, const AppRequest& app,
+                                   const std::vector<EffectiveEnvEntry>& resolved_secrets) {
     PolicyCompileResult result;
 
     // Pool: a fixed N/N static pool within the Host worker ceiling. The App
@@ -220,8 +221,7 @@ PolicyCompileResult compile_policy(
     // Modules: app request must be inside the host allowlist; duplicates
     // in the request reject.
     {
-        std::set<std::string> allowed(host.module_allowlist.begin(),
-                                      host.module_allowlist.end());
+        std::set<std::string> allowed(host.module_allowlist.begin(), host.module_allowlist.end());
         std::set<std::string> requested;
         for (const std::string& module : app.modules) {
             if (!requested.insert(module).second) {
@@ -262,8 +262,7 @@ PolicyCompileResult compile_policy(
                 result.error = "duplicate resolved secret";
                 return result;
             }
-            if (requested_env_names.find(entry.name) ==
-                requested_env_names.end()) {
+            if (requested_env_names.find(entry.name) == requested_env_names.end()) {
                 result.error = "resolved secret not requested";
                 return result;
             }
@@ -382,8 +381,8 @@ PolicyCompileResult compile_policy(
             }
             bool all_covered = true;
             for (const std::uint16_t port : target.ports) {
-                if (std::find(allowed.ports.begin(), allowed.ports.end(),
-                              port) == allowed.ports.end()) {
+                if (std::find(allowed.ports.begin(), allowed.ports.end(), port) ==
+                    allowed.ports.end()) {
                     all_covered = false;
                     break;
                 }
@@ -430,26 +429,23 @@ PolicyCompileResult compile_policy(
                 return result;
             }
         }
-        result.effective.storage_namespaces.assign(
-            requested_namespaces.begin(), requested_namespaces.end());
+        result.effective.storage_namespaces.assign(requested_namespaces.begin(),
+                                                   requested_namespaces.end());
     }
     if (app.stdio) {
-        std::set<std::string> requested_streams(app.stdio_streams.begin(),
-                                                app.stdio_streams.end());
+        std::set<std::string> requested_streams(app.stdio_streams.begin(), app.stdio_streams.end());
         if (requested_streams.size() != app.stdio_streams.size()) {
             result.error = "duplicate stdio stream";
             return result;
         }
-        const std::set<std::string> allowed(host.stdio_streams.begin(),
-                                            host.stdio_streams.end());
+        const std::set<std::string> allowed(host.stdio_streams.begin(), host.stdio_streams.end());
         for (const std::string& stream : requested_streams) {
             if (allowed.find(stream) == allowed.end()) {
                 result.error = "stdio stream not allowed by the Host";
                 return result;
             }
         }
-        result.effective.stdio_streams.assign(requested_streams.begin(),
-                                              requested_streams.end());
+        result.effective.stdio_streams.assign(requested_streams.begin(), requested_streams.end());
     }
 
     // worker/request/resource: app must not exceed host maximums; a Host
@@ -472,21 +468,18 @@ PolicyCompileResult compile_policy(
         result.error = "default request timeout exceeds the Host maximum";
         return result;
     }
-    std::uint64_t request_timeout = app.request_timeout_ms != 0
-        ? app.request_timeout_ms : host.default_request_timeout_ms;
+    std::uint64_t request_timeout =
+        app.request_timeout_ms != 0 ? app.request_timeout_ms : host.default_request_timeout_ms;
     if (request_timeout == 0 && host.max_request_timeout_ms != 0) {
         // capsid_worker_config_init's documented 30s default must also
         // respect a Host ceiling when neither document states a default.
-        request_timeout = std::min<std::uint64_t>(30000,
-                                                host.max_request_timeout_ms);
+        request_timeout = std::min<std::uint64_t>(30000, host.max_request_timeout_ms);
     }
-    if (request_timeout > static_cast<std::uint64_t>(
-            std::numeric_limits<std::int64_t>::max())) {
+    if (request_timeout > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         result.error = "request timeout exceeds the worker limit";
         return result;
     }
-    if (host.max_request_timeout_ms != 0 &&
-        request_timeout > host.max_request_timeout_ms) {
+    if (host.max_request_timeout_ms != 0 && request_timeout > host.max_request_timeout_ms) {
         result.error = "request timeout exceeds the Host maximum";
         return result;
     }
@@ -494,18 +487,15 @@ PolicyCompileResult compile_policy(
     // E-1 admission-queue maximums (§10.3): the same intersection shape as
     // requests_per_worker — the App queue must not exceed the Host caps,
     // and a Host maximum of 0 means no cap (queueing stays App-decided).
-    if (host.max_queue_requests != 0 &&
-        app.queue_requests > host.max_queue_requests) {
+    if (host.max_queue_requests != 0 && app.queue_requests > host.max_queue_requests) {
         result.error = "queue depth exceeds the Host maximum";
         return result;
     }
-    if (host.max_queue_header_bytes != 0 &&
-        app.queue_header_bytes > host.max_queue_header_bytes) {
+    if (host.max_queue_header_bytes != 0 && app.queue_header_bytes > host.max_queue_header_bytes) {
         result.error = "queue header bytes exceed the Host maximum";
         return result;
     }
-    if (host.max_queue_timeout_ms != 0 &&
-        app.queue_timeout_ms > host.max_queue_timeout_ms) {
+    if (host.max_queue_timeout_ms != 0 && app.queue_timeout_ms > host.max_queue_timeout_ms) {
         result.error = "queue timeout exceeds the Host maximum";
         return result;
     }
@@ -516,8 +506,7 @@ PolicyCompileResult compile_policy(
     // queue maximums — a Host maximum of 0 imposes no ceiling; the 1/1
     // boundary rule is enforced at the shard, not here.
     if (host.max_streaming_inflight_per_worker != 0 &&
-        app.max_streaming_inflight_per_worker >
-            host.max_streaming_inflight_per_worker) {
+        app.max_streaming_inflight_per_worker > host.max_streaming_inflight_per_worker) {
         result.error = "streaming permit exceeds the Host maximum";
         return result;
     }
@@ -528,21 +517,18 @@ PolicyCompileResult compile_policy(
     }
     // E-3 slow-client write deadline (§9.2): cap-only, like the maximums
     // above; 0 imposes no ceiling.
-    if (host.max_write_timeout_ms != 0 &&
-        app.write_timeout_ms > host.max_write_timeout_ms) {
+    if (host.max_write_timeout_ms != 0 && app.write_timeout_ms > host.max_write_timeout_ms) {
         result.error = "write timeout exceeds the Host maximum";
         return result;
     }
-    result.effective.max_streaming_inflight_per_worker =
-        app.max_streaming_inflight_per_worker;
+    result.effective.max_streaming_inflight_per_worker = app.max_streaming_inflight_per_worker;
     result.effective.stream_idle_timeout_ms = app.stream_idle_timeout_ms;
     result.effective.write_timeout_ms = app.write_timeout_ms;
     result.effective.js_heap_bytes = app.js_heap_bytes;
     result.effective.process_address_bytes = app.process_address_bytes;
     result.effective.file_descriptors = app.file_descriptors;
-    result.effective.memory_bytes = std::max(
-        app.memory_bytes,
-        std::max(app.js_heap_bytes, app.process_address_bytes));
+    result.effective.memory_bytes =
+        std::max(app.memory_bytes, std::max(app.js_heap_bytes, app.process_address_bytes));
     if (host.max_worker_memory_bytes != 0 &&
         result.effective.memory_bytes > host.max_worker_memory_bytes) {
         result.error = "worker memory exceeds the Host maximum";
@@ -555,8 +541,7 @@ PolicyCompileResult compile_policy(
     // applies the same rule before staging so an invalid worker
     // configuration can never start.
     const std::uint64_t process_ceiling =
-        std::min(result.effective.process_address_bytes,
-                 result.effective.memory_bytes);
+        std::min(result.effective.process_address_bytes, result.effective.memory_bytes);
     if (result.effective.js_heap_bytes > 0 && process_ceiling > 0 &&
         process_ceiling < result.effective.js_heap_bytes) {
         result.error = "process memory ceiling below the JS heap limit";
@@ -576,20 +561,16 @@ PolicyCompileResult compile_policy(
 #endif
     // Canonical fetch ordering.
     std::sort(result.effective.fetch.begin(), result.effective.fetch.end(),
-              [](const FetchTarget& a, const FetchTarget& b) {
-                  return a.host < b.host;
-              });
+              [](const FetchTarget& a, const FetchTarget& b) { return a.host < b.host; });
     // Canonical fs ordering.
     std::sort(result.effective.fs_read.begin(), result.effective.fs_read.end());
-    std::sort(result.effective.fs_read_deny.begin(),
-              result.effective.fs_read_deny.end());
+    std::sort(result.effective.fs_read_deny.begin(), result.effective.fs_read_deny.end());
 
     // Canonical ordering: semantically identical inputs in any order must
     // produce the same effective config, JSON and digests.
     std::vector<AppRequest::EnvRequest> ordered_env = app.env;
     std::sort(ordered_env.begin(), ordered_env.end(),
-              [](const AppRequest::EnvRequest& a,
-                 const AppRequest::EnvRequest& b) {
+              [](const AppRequest::EnvRequest& a, const AppRequest::EnvRequest& b) {
                   return a.name < b.name;
               });
 
@@ -627,7 +608,7 @@ PolicyCompileResult compile_policy(
             result.error = "rule id collision";
             return false;
         }
-        result.effective.rule_ids.push_back({ id, label });
+        result.effective.rule_ids.push_back({id, label});
         return true;
     };
     for (const std::string& module : result.effective.modules) {
@@ -636,16 +617,15 @@ PolicyCompileResult compile_policy(
         }
     }
     for (EffectiveEnvEntry& entry : result.effective.env) {
-        const std::string label =
-            std::string("env:") + entry.name + ":" +
-            (entry.from_secret ? "secret:" + entry.secret_key_id : "literal");
+        const std::string label = std::string("env:") + entry.name + ":" +
+                                  (entry.from_secret ? "secret:" + entry.secret_key_id : "literal");
         const std::uint32_t id = rule_id(label);
         if (!seen.insert(id).second) {
             result.error = "rule id collision";
             return result;
         }
         entry.rule_id = id;
-        result.effective.rule_ids.push_back({ id, label });
+        result.effective.rule_ids.push_back({id, label});
     }
     for (const std::string& path : result.effective.fs_read) {
         if (!add_rule("fs:" + path)) {
@@ -660,22 +640,19 @@ PolicyCompileResult compile_policy(
         if (!add_rule("fs-deny:" + path)) {
             return result;
         }
-        result.effective.fs_deny_rule_ids.push_back(
-            rule_id("fs-deny:" + path));
+        result.effective.fs_deny_rule_ids.push_back(rule_id("fs-deny:" + path));
     }
     for (const FetchTarget& target : result.effective.fetch) {
         if (!add_rule("fetch:" + target.host)) {
             return result;
         }
-        result.effective.fetch_rule_ids.push_back(
-            rule_id("fetch:" + target.host));
+        result.effective.fetch_rule_ids.push_back(rule_id("fetch:" + target.host));
     }
     for (const std::string& namespace_name : result.effective.storage_namespaces) {
         if (!add_rule("storage:" + namespace_name)) {
             return result;
         }
-        result.effective.storage_rule_ids.push_back(
-            rule_id("storage:" + namespace_name));
+        result.effective.storage_rule_ids.push_back(rule_id("storage:" + namespace_name));
     }
     for (const std::string& stream : result.effective.stdio_streams) {
         if (!add_rule("stdio:" + stream)) {
@@ -692,12 +669,9 @@ PolicyCompileResult compile_policy(
 
     // Canonical effective.json (no secret values) + digests. rule_ids are
     // sorted by id so the reverse lookup is order-independent.
-    std::sort(result.effective.rule_ids.begin(),
-              result.effective.rule_ids.end(),
+    std::sort(result.effective.rule_ids.begin(), result.effective.rule_ids.end(),
               [](const std::pair<std::uint32_t, std::string>& a,
-                 const std::pair<std::uint32_t, std::string>& b) {
-                  return a.first < b.first;
-              });
+                 const std::pair<std::uint32_t, std::string>& b) { return a.first < b.first; });
     std::ostringstream json;
     json << "{\"modules\":[";
     for (std::size_t index = 0; index < result.effective.modules.size(); ++index) {
@@ -714,18 +688,15 @@ PolicyCompileResult compile_policy(
         }
         json << "{\"name\":\"" << json_escape(entry.name) << "\",\"source\":\"";
         if (entry.from_secret) {
-            json << "secret\",\"secretKeyId\":\""
-                 << json_escape(entry.secret_key_id)
-                 << "\",\"revision\":\"" << json_escape(entry.secret_revision)
-                 << '"';
+            json << "secret\",\"secretKeyId\":\"" << json_escape(entry.secret_key_id)
+                 << "\",\"revision\":\"" << json_escape(entry.secret_revision) << '"';
         } else {
             json << "literal\"";
         }
         json << ",\"ruleId\":" << entry.rule_id << '}';
     }
     std::map<std::string, std::uint32_t> id_by_label;
-    for (const std::pair<std::uint32_t, std::string>& pair :
-         result.effective.rule_ids) {
+    for (const std::pair<std::uint32_t, std::string>& pair : result.effective.rule_ids) {
         id_by_label[pair.second] = pair.first;
     }
     json << "],\"fsRead\":[";
@@ -739,13 +710,11 @@ PolicyCompileResult compile_policy(
             result.error = "missing fs rule id";
             return result;
         }
-        json << "{\"path\":\""
-             << json_escape(result.effective.fs_read[index])
+        json << "{\"path\":\"" << json_escape(result.effective.fs_read[index])
              << "\",\"ruleId\":" << id->second << '}';
     }
     json << "],\"fsDeny\":[";
-    for (std::size_t index = 0;
-         index < result.effective.fs_read_deny.size(); ++index) {
+    for (std::size_t index = 0; index < result.effective.fs_read_deny.size(); ++index) {
         if (index > 0) {
             json << ',';
         }
@@ -755,8 +724,7 @@ PolicyCompileResult compile_policy(
             result.error = "missing fs deny rule id";
             return result;
         }
-        json << "{\"path\":\""
-             << json_escape(result.effective.fs_read_deny[index])
+        json << "{\"path\":\"" << json_escape(result.effective.fs_read_deny[index])
              << "\",\"ruleId\":" << id->second << '}';
     }
     json << "],\"fetch\":[";
@@ -770,11 +738,9 @@ PolicyCompileResult compile_policy(
             result.error = "missing fetch rule id";
             return result;
         }
-        json << "{\"host\":\""
-             << json_escape(result.effective.fetch[index].host)
+        json << "{\"host\":\"" << json_escape(result.effective.fetch[index].host)
              << "\",\"ports\":[";
-        const std::vector<std::uint16_t>& ports =
-            result.effective.fetch[index].ports;
+        const std::vector<std::uint16_t>& ports = result.effective.fetch[index].ports;
         for (std::size_t port_index = 0; port_index < ports.size(); ++port_index) {
             if (port_index > 0) {
                 json << ',';
@@ -785,23 +751,18 @@ PolicyCompileResult compile_policy(
     }
     json << "],\"storage\":" << (result.effective.storage ? "true" : "false")
          << ",\"storageNamespaces\":[";
-    for (std::size_t index = 0;
-         index < result.effective.storage_namespaces.size(); ++index) {
+    for (std::size_t index = 0; index < result.effective.storage_namespaces.size(); ++index) {
         if (index > 0) {
             json << ',';
         }
-        json << '"' << json_escape(result.effective.storage_namespaces[index])
-             << '"';
+        json << '"' << json_escape(result.effective.storage_namespaces[index]) << '"';
     }
-    json << "],\"stdio\":" << (result.effective.stdio ? "true" : "false")
-         << ",\"stdioStreams\":[";
-    for (std::size_t index = 0; index < result.effective.stdio_streams.size();
-         ++index) {
+    json << "],\"stdio\":" << (result.effective.stdio ? "true" : "false") << ",\"stdioStreams\":[";
+    for (std::size_t index = 0; index < result.effective.stdio_streams.size(); ++index) {
         if (index > 0) {
             json << ',';
         }
-        json << '"' << json_escape(result.effective.stdio_streams[index])
-             << '"';
+        json << '"' << json_escape(result.effective.stdio_streams[index]) << '"';
     }
     json << "],\"requestsPerWorker\":" << result.effective.requests_per_worker;
     if (result.effective.request_timeout_ms != 0) {
@@ -812,18 +773,15 @@ PolicyCompileResult compile_policy(
          << ",\"queueTimeoutMs\":" << result.effective.queue_timeout_ms
          << ",\"maxStreamingInflightPerWorker\":"
          << result.effective.max_streaming_inflight_per_worker
-         << ",\"streamIdleTimeoutMs\":"
-         << result.effective.stream_idle_timeout_ms
-         << ",\"writeTimeoutMs\":"
-         << result.effective.write_timeout_ms
+         << ",\"streamIdleTimeoutMs\":" << result.effective.stream_idle_timeout_ms
+         << ",\"writeTimeoutMs\":" << result.effective.write_timeout_ms
          << ",\"memoryBytes\":" << result.effective.memory_bytes
          << ",\"jsHeapBytes\":" << result.effective.js_heap_bytes
          << ",\"processAddressBytes\":" << result.effective.process_address_bytes
          << ",\"fileDescriptors\":" << result.effective.file_descriptors
          << ",\"workers\":" << result.effective.workers
          << ",\"minReady\":" << result.effective.min_ready
-         << ",\"strictSandbox\":" << (result.effective.strict_sandbox ? "true" : "false")
-         << "}";
+         << ",\"strictSandbox\":" << (result.effective.strict_sandbox ? "true" : "false") << "}";
     result.effective.effective_json = json.str();
 
     // App digest: the normalized request the operator approved.
@@ -833,8 +791,7 @@ PolicyCompileResult compile_policy(
     }
     for (const AppRequest::EnvRequest& entry : app.env) {
         app_stream << "e:" << entry.name << ':'
-                   << (entry.from_secret ? "s:" + entry.secret_key_id
-                                         : "l:" + entry.literal)
+                   << (entry.from_secret ? "s:" + entry.secret_key_id : "l:" + entry.literal)
                    << ';';
     }
     for (const std::string& path : app.fs_read) {
@@ -862,19 +819,14 @@ PolicyCompileResult compile_policy(
     if (app.request_timeout_ms != 0) {
         app_stream << ";timeout:" << app.request_timeout_ms;
     }
-    app_stream << ";qreq:" << app.queue_requests
-               << ";qbytes:" << app.queue_header_bytes
+    app_stream << ";qreq:" << app.queue_requests << ";qbytes:" << app.queue_header_bytes
                << ";qtimeout:" << app.queue_timeout_ms
                << ";streaming:" << app.max_streaming_inflight_per_worker
-               << ";idle:" << app.stream_idle_timeout_ms
-               << ";wtimeout:" << app.write_timeout_ms
-               << ";mem:" << app.memory_bytes
-               << ";heap:" << app.js_heap_bytes
-               << ";addr:" << app.process_address_bytes
-               << ";fds:" << app.file_descriptors;
+               << ";idle:" << app.stream_idle_timeout_ms << ";wtimeout:" << app.write_timeout_ms
+               << ";mem:" << app.memory_bytes << ";heap:" << app.js_heap_bytes
+               << ";addr:" << app.process_address_bytes << ";fds:" << app.file_descriptors;
     result.effective.app_config_digest = sha256_hex(app_stream.str());
-    result.effective.effective_digest =
-        sha256_hex(result.effective.effective_json);
+    result.effective.effective_digest = sha256_hex(result.effective.effective_json);
 
     result.ok = true;
     return result;
@@ -888,11 +840,9 @@ void RuntimePolicy::apply(capsid_worker_config* config) const {
     config->egress_policy = has_egress ? &egress : nullptr;
 }
 
-bool build_runtime_policy(
-    const EffectiveConfig& effective,
-    const std::vector<std::pair<std::string, std::string>>& env_values,
-    RuntimePolicy* out,
-    std::string* error) {
+bool build_runtime_policy(const EffectiveConfig& effective,
+                          const std::vector<std::pair<std::string, std::string>>& env_values,
+                          RuntimePolicy* out, std::string* error) {
     // Two-phase descriptor build: every owning vector is fully populated
     // before any pointer into it is taken. A c_str() taken after one
     // push_back and read after a later push_back dangles when the vector
@@ -904,11 +854,9 @@ bool build_runtime_policy(
         out->module_names.push_back(module);
     }
     out->rule_resources.clear();
-    out->rule_resources.reserve(effective.env.size() +
-                                effective.fs_read.size() +
-                                effective.fs_read_deny.size() +
-                                effective.storage_namespaces.size() +
-                                effective.stdio_streams.size());
+    out->rule_resources.reserve(
+        effective.env.size() + effective.fs_read.size() + effective.fs_read_deny.size() +
+        effective.storage_namespaces.size() + effective.stdio_streams.size());
     for (const EffectiveEnvEntry& entry : effective.env) {
         out->rule_resources.push_back(entry.name);
     }
@@ -945,9 +893,7 @@ bool build_runtime_policy(
     }
     for (std::size_t index = 0; index < effective.fs_read.size(); ++index) {
         const std::uint32_t rule_id =
-            index < effective.fs_rule_ids.size()
-                ? effective.fs_rule_ids[index]
-                : 0;
+            index < effective.fs_rule_ids.size() ? effective.fs_rule_ids[index] : 0;
         if (rule_id == 0) {
             *error = "missing fs rule id";
             return false;
@@ -961,12 +907,9 @@ bool build_runtime_policy(
         ++resource_index;
         out->rules.push_back(rule);
     }
-    for (std::size_t index = 0;
-         index < effective.fs_read_deny.size(); ++index) {
+    for (std::size_t index = 0; index < effective.fs_read_deny.size(); ++index) {
         const std::uint32_t rule_id =
-            index < effective.fs_deny_rule_ids.size()
-                ? effective.fs_deny_rule_ids[index]
-                : 0;
+            index < effective.fs_deny_rule_ids.size() ? effective.fs_deny_rule_ids[index] : 0;
         if (rule_id == 0) {
             *error = "missing fs deny rule id";
             return false;
@@ -984,12 +927,9 @@ bool build_runtime_policy(
     // Runtime module gates on CAPSID_PERMISSION_STORAGE/STDIO with the
     // verbatim namespace/stream name. Each rule carries the compiler's
     // stable unique id, exactly like env/fs/fetch.
-    for (std::size_t index = 0; index < effective.storage_namespaces.size();
-         ++index) {
+    for (std::size_t index = 0; index < effective.storage_namespaces.size(); ++index) {
         const std::uint32_t rule_id =
-            index < effective.storage_rule_ids.size()
-                ? effective.storage_rule_ids[index]
-                : 0;
+            index < effective.storage_rule_ids.size() ? effective.storage_rule_ids[index] : 0;
         if (rule_id == 0) {
             *error = "missing storage rule id";
             return false;
@@ -1003,12 +943,9 @@ bool build_runtime_policy(
         ++resource_index;
         out->rules.push_back(rule);
     }
-    for (std::size_t index = 0; index < effective.stdio_streams.size();
-         ++index) {
+    for (std::size_t index = 0; index < effective.stdio_streams.size(); ++index) {
         const std::uint32_t rule_id =
-            index < effective.stdio_rule_ids.size()
-                ? effective.stdio_rule_ids[index]
-                : 0;
+            index < effective.stdio_rule_ids.size() ? effective.stdio_rule_ids[index] : 0;
         if (rule_id == 0) {
             *error = "missing stdio rule id";
             return false;
@@ -1047,7 +984,7 @@ bool build_runtime_policy(
             capsid_egress_rule_init(&rule);
             rule.action = CAPSID_EGRESS_ALLOW;
             rule.target = out->egress_targets[index].c_str();
-            rule.port_start = 0;  // any port
+            rule.port_start = 0; // any port
             rule.port_end = 0;
             rule.rule_id = 0;
             out->egress_rules.push_back(rule);
@@ -1066,10 +1003,8 @@ bool build_runtime_policy(
     }
     capsid_egress_policy_init(&out->egress);
     out->egress.default_action = CAPSID_EGRESS_DENY;
-    out->egress.rules =
-        out->egress_rules.empty() ? nullptr : out->egress_rules.data();
-    out->egress.rule_count =
-        static_cast<std::uint32_t>(out->egress_rules.size());
+    out->egress.rules = out->egress_rules.empty() ? nullptr : out->egress_rules.data();
+    out->egress.rule_count = static_cast<std::uint32_t>(out->egress_rules.size());
 
     out->env_values = env_values;
     out->env_entries.clear();
@@ -1095,16 +1030,11 @@ bool build_runtime_policy(
     capsid_capability_policy_init(&out->capability);
     out->capability.allowed_modules =
         out->module_pointers.empty() ? nullptr : out->module_pointers.data();
-    out->capability.allowed_module_count =
-        static_cast<std::uint32_t>(out->module_names.size());
-    out->capability.rules =
-        out->rules.empty() ? nullptr : out->rules.data();
-    out->capability.rule_count =
-        static_cast<std::uint32_t>(out->rules.size());
-    out->capability.env_entries =
-        out->env_entries.empty() ? nullptr : out->env_entries.data();
-    out->capability.env_entry_count =
-        static_cast<std::uint32_t>(out->env_entries.size());
+    out->capability.allowed_module_count = static_cast<std::uint32_t>(out->module_names.size());
+    out->capability.rules = out->rules.empty() ? nullptr : out->rules.data();
+    out->capability.rule_count = static_cast<std::uint32_t>(out->rules.size());
+    out->capability.env_entries = out->env_entries.empty() ? nullptr : out->env_entries.data();
+    out->capability.env_entry_count = static_cast<std::uint32_t>(out->env_entries.size());
     // Without this the worker's egress check consults a default-constructed
     // (deny-all) net policy whenever a capability policy is present — which
     // is always the case in managed mode — so every fetch was rejected.
@@ -1113,4 +1043,4 @@ bool build_runtime_policy(
     return true;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

@@ -20,9 +20,8 @@ std::string ascii_lower(std::string_view text) {
     std::string lower;
     lower.reserve(text.size());
     for (const unsigned char c : text) {
-        lower.push_back(
-            c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a')
-                                 : static_cast<char>(c));
+        lower.push_back(c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a')
+                                             : static_cast<char>(c));
     }
     return lower;
 }
@@ -31,20 +30,16 @@ bool ascii_case_equal(std::string_view left, std::string_view right) {
     return left.size() == right.size() &&
            std::equal(left.begin(), left.end(), right.begin(),
                       [](const unsigned char a, const unsigned char b) {
-                          const unsigned char lower_a =
-                              a >= 'A' && a <= 'Z' ? a - 'A' + 'a' : a;
-                          const unsigned char lower_b =
-                              b >= 'A' && b <= 'Z' ? b - 'A' + 'a' : b;
+                          const unsigned char lower_a = a >= 'A' && a <= 'Z' ? a - 'A' + 'a' : a;
+                          const unsigned char lower_b = b >= 'A' && b <= 'Z' ? b - 'A' + 'a' : b;
                           return lower_a == lower_b;
                       });
 }
 
 bool is_http_tchar(const unsigned char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') || c == '!' || c == '#' || c == '$' ||
-           c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
-           c == '-' || c == '.' || c == '^' || c == '_' || c == '`' ||
-           c == '|' || c == '~';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '!' ||
+           c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
+           c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
 }
 
 void stamp_vary_origin(http::response<http::string_body>& response) {
@@ -52,16 +47,13 @@ void stamp_vary_origin(http::response<http::string_body>& response) {
     std::size_t begin = 0;
     while (begin <= existing.size()) {
         const std::size_t comma = existing.find(',', begin);
-        const std::size_t end =
-            comma == std::string::npos ? existing.size() : comma;
+        const std::size_t end = comma == std::string::npos ? existing.size() : comma;
         std::size_t first = begin;
         std::size_t last = end;
-        while (first < last &&
-               (existing[first] == ' ' || existing[first] == '\t')) {
+        while (first < last && (existing[first] == ' ' || existing[first] == '\t')) {
             ++first;
         }
-        while (last > first &&
-               (existing[last - 1] == ' ' || existing[last - 1] == '\t')) {
+        while (last > first && (existing[last - 1] == ' ' || existing[last - 1] == '\t')) {
             --last;
         }
         if (ascii_case_equal(existing.substr(first, last - first), "origin")) {
@@ -72,8 +64,7 @@ void stamp_vary_origin(http::response<http::string_body>& response) {
         }
         begin = comma + 1;
     }
-    response.set(http::field::vary,
-                 existing.empty() ? "Origin" : existing + ", Origin");
+    response.set(http::field::vary, existing.empty() ? "Origin" : existing + ", Origin");
 }
 
 // Merges a `Vary: Origin` token into the response's Vary set. When the
@@ -81,8 +72,7 @@ void stamp_vary_origin(http::response<http::string_body>& response) {
 // request Origin, so any shared cache must partition on it; an
 // App-supplied `Vary: Accept-Encoding` must not be mistaken for an Origin
 // token and suppress that partition (which could cause incorrect cache reuse).
-void merge_vary_origin(
-    std::vector<std::pair<std::string, std::string>>* headers) {
+void merge_vary_origin(std::vector<std::pair<std::string, std::string>>* headers) {
     std::vector<std::string> tokens;
     std::vector<std::pair<std::string, std::string>> filtered;
     filtered.reserve(headers->size() + 1);
@@ -93,21 +83,17 @@ void merge_vary_origin(
         }
         std::size_t begin = 0;
         while (begin <= value.size()) {
-            while (begin < value.size() &&
-                   (value[begin] == ' ' || value[begin] == '\t')) {
+            while (begin < value.size() && (value[begin] == ' ' || value[begin] == '\t')) {
                 ++begin;
             }
             const std::size_t end = value.find(',', begin);
-            const std::size_t token_end =
-                end == std::string::npos ? value.size() : end;
+            const std::size_t token_end = end == std::string::npos ? value.size() : end;
             std::size_t trimmed = token_end;
-            while (trimmed > begin &&
-                   (value[trimmed - 1] == ' ' || value[trimmed - 1] == '\t')) {
+            while (trimmed > begin && (value[trimmed - 1] == ' ' || value[trimmed - 1] == '\t')) {
                 --trimmed;
             }
             if (trimmed > begin) {
-                tokens.push_back(
-                    ascii_lower(value.substr(begin, trimmed - begin)));
+                tokens.push_back(ascii_lower(value.substr(begin, trimmed - begin)));
             }
             if (end == std::string::npos) {
                 break;
@@ -133,7 +119,7 @@ void merge_vary_origin(
     *headers = std::move(filtered);
 }
 
-}  // namespace
+} // namespace
 
 bool valid_cors_origin(const std::string& value) {
     if (value == "*") {
@@ -147,8 +133,7 @@ bool valid_cors_origin(const std::string& value) {
     if (scheme != "http" && scheme != "https") {
         return false;
     }
-    return is_valid_public_authority(
-        std::string_view(value).substr(scheme_end + 3));
+    return is_valid_public_authority(std::string_view(value).substr(scheme_end + 3));
 }
 
 bool valid_cors_method_token(const std::string& value) {
@@ -175,17 +160,14 @@ bool valid_cors_header_token(const std::string& value) {
     return true;
 }
 
-ListenerCors::ListenerCors(const ListenerCorsConfig& config)
-    : config_(config) {
+ListenerCors::ListenerCors(const ListenerCorsConfig& config) : config_(config) {
     // Every public parser rejects a wildcard mixed with exact origins. Keep
     // the runtime fail-closed as well if an embedding caller bypasses those
     // parsers and constructs ListenerCorsConfig directly.
-    wildcard_ = config_.allowed_origins.size() == 1 &&
-                config_.allowed_origins[0] == "*";
+    wildcard_ = config_.allowed_origins.size() == 1 && config_.allowed_origins[0] == "*";
 }
 
-CorsDecision ListenerCors::prepare(
-    const http::request<http::string_body>& request) {
+CorsDecision ListenerCors::prepare(const http::request<http::string_body>& request) {
     origin_seen_ = false;
     origin_allowed_ = false;
     origin_.clear();
@@ -208,20 +190,16 @@ CorsDecision ListenerCors::prepare(
     origin_seen_ = !origin.empty();
     origin_allowed_ =
         !origin.empty() &&
-        (wildcard_ ||
-         std::any_of(config_.allowed_origins.begin(),
-                     config_.allowed_origins.end(),
-                     [&origin](const std::string& configured) {
-                         return ascii_case_equal(configured, origin);
-                     }));
+        (wildcard_ || std::any_of(config_.allowed_origins.begin(), config_.allowed_origins.end(),
+                                  [&origin](const std::string& configured) {
+                                      return ascii_case_equal(configured, origin);
+                                  }));
     if (origin_allowed_) {
         origin_ = origin;
     }
 
-    const std::string_view requested_method =
-        request[http::field::access_control_request_method];
-    if (request.method() == http::verb::options && !origin.empty() &&
-        !requested_method.empty()) {
+    const std::string_view requested_method = request[http::field::access_control_request_method];
+    if (request.method() == http::verb::options && !origin.empty() && !requested_method.empty()) {
         // Preflight: match the requested method and each requested header
         // against the config. A reject is 403 WITHOUT any
         // Access-Control-Allow-* field — the browser reports the CORS
@@ -234,21 +212,17 @@ CorsDecision ListenerCors::prepare(
                     c = static_cast<char>(c - 'a' + 'A');
                 }
             }
-            allowed = std::find(config_.allowed_methods.begin(),
-                                config_.allowed_methods.end(),
+            allowed = std::find(config_.allowed_methods.begin(), config_.allowed_methods.end(),
                                 upper) != config_.allowed_methods.end();
         }
         if (allowed) {
             const std::string_view requested_headers =
                 request[http::field::access_control_request_headers];
             std::size_t start = 0;
-            while (!requested_headers.empty() &&
-                   start <= requested_headers.size()) {
+            while (!requested_headers.empty() && start <= requested_headers.size()) {
                 const std::size_t comma = requested_headers.find(',', start);
                 const std::size_t end =
-                    comma == std::string_view::npos
-                        ? requested_headers.size()
-                        : comma;
+                    comma == std::string_view::npos ? requested_headers.size() : comma;
                 std::string name(requested_headers.substr(start, end - start));
                 name.erase(name.find_last_not_of(" \t") == std::string::npos
                                ? 0
@@ -262,8 +236,7 @@ CorsDecision ListenerCors::prepare(
                     }
                 }
                 if (name.empty() || !valid_cors_header_token(name) ||
-                    std::find(config_.allowed_headers.begin(),
-                              config_.allowed_headers.end(),
+                    std::find(config_.allowed_headers.begin(), config_.allowed_headers.end(),
                               name) == config_.allowed_headers.end()) {
                     allowed = false;
                     break;
@@ -274,14 +247,12 @@ CorsDecision ListenerCors::prepare(
                 start = comma + 1;
             }
         }
-        decision_ = allowed ? CorsDecision::kPreflightAllowed
-                            : CorsDecision::kPreflightRejected;
+        decision_ = allowed ? CorsDecision::kPreflightAllowed : CorsDecision::kPreflightRejected;
     }
     return decision_;
 }
 
-void ListenerCors::build_preflight(
-    http::response<http::string_body>& response) const {
+void ListenerCors::build_preflight(http::response<http::string_body>& response) const {
     if (decision_ == CorsDecision::kPreflightAllowed) {
         response.result(http::status::no_content);
         response.set(http::field::access_control_allow_origin, origin_);
@@ -317,31 +288,28 @@ void ListenerCors::build_preflight(
     }
 }
 
-void ListenerCors::filter_headers(
-    std::vector<std::pair<std::string, std::string>>* headers) const {
+void ListenerCors::filter_headers(std::vector<std::pair<std::string, std::string>>* headers) const {
     // Listener-level CORS is authoritative when configured: the App
     // cannot write its own Access-Control-Allow-Origin (that would
     // bypass the Host allow-list), and credentials survive only for an
     // exact allowed origin. A wildcard or a disallowed/absent Origin
     // strips App-owned credentials so wildcard never becomes any-origin
     // credentialed CORS.
-    const bool exact_origin =
-        origin_allowed_ && origin_seen_ && !wildcard_;
+    const bool exact_origin = origin_allowed_ && origin_seen_ && !wildcard_;
     std::vector<std::pair<std::string, std::string>> cors_filtered;
     cors_filtered.reserve(headers->size() + 2);
     for (const auto& [name, value] : *headers) {
         const std::string lower = ascii_lower(name);
         if (lower == "access-control-allow-origin") {
-            continue;  // Host decides this field
+            continue; // Host decides this field
         }
         if (lower == "access-control-allow-credentials" && !exact_origin) {
-            continue;  // wildcard/disallowed origins never get it
+            continue; // wildcard/disallowed origins never get it
         }
         cors_filtered.push_back({name, value});
     }
     if (origin_allowed_) {
-        cors_filtered.push_back(
-            {"access-control-allow-origin", origin_});
+        cors_filtered.push_back({"access-control-allow-origin", origin_});
     }
     merge_vary_origin(&cors_filtered);
     *headers = std::move(cors_filtered);
@@ -356,4 +324,4 @@ void ListenerCors::stamp(http::response<http::string_body>& response) const {
     }
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

@@ -34,8 +34,7 @@ void require(bool condition, const std::string& message) {
     }
 }
 
-capsid::host::SingleWorkerServerOptions worker_options(
-    const char* worker_path) {
+capsid::host::SingleWorkerServerOptions worker_options(const char* worker_path) {
     capsid::host::SingleWorkerServerOptions options;
     options.worker_path = worker_path;
     options.source_bundle_path = "concurrent-wait-inline";
@@ -85,8 +84,7 @@ void test_concurrent_shard_wait(const char* worker_path) {
     });
     first.join();
     second.join();
-    require(std::chrono::steady_clock::now() - began <
-                std::chrono::seconds(5),
+    require(std::chrono::steady_clock::now() - began < std::chrono::seconds(5),
             "concurrent shard wait exceeded its bounded window");
     require(first_ok && second_ok, "a concurrent shard wait() failed");
     // The server must be fully stopped: worker_available is false and the
@@ -101,10 +99,8 @@ void test_concurrent_pool_wait(const char* worker_path) {
     options.worker_options = worker_options(worker_path);
     capsid::host::StaticPoolServer pool(std::move(options));
     std::string error;
-    require(pool.start(fixture_bundle(), &error),
-            "concurrent pool wait: start failed: " + error);
-    require(pool.active_workers() == 2,
-            "concurrent pool wait fixture did not activate two shards");
+    require(pool.start(fixture_bundle(), &error), "concurrent pool wait: start failed: " + error);
+    require(pool.active_workers() == 2, "concurrent pool wait fixture did not activate two shards");
 
     pool.request_stop();
     bool first_ok = false;
@@ -120,15 +116,14 @@ void test_concurrent_pool_wait(const char* worker_path) {
     });
     first.join();
     second.join();
-    require(std::chrono::steady_clock::now() - began <
-                std::chrono::seconds(5),
+    require(std::chrono::steady_clock::now() - began < std::chrono::seconds(5),
             "concurrent pool wait exceeded its bounded window");
     require(first_ok && second_ok, "a concurrent pool wait() failed");
     require(pool.active_workers() == 0,
             "concurrent pool wait returned before the pool was stopped");
 }
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv) {
     require(argc == 3, "expected mode and capsid-worker path");

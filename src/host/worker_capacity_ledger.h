@@ -47,50 +47,42 @@
 namespace capsid::host {
 
 class WorkerCapacityLedger {
-public:
-    WorkerCapacityLedger(std::uint64_t workers_total,
-                         std::uint64_t activation_surge_workers)
-        : workers_total_(workers_total),
-          surge_workers_(activation_surge_workers) {}
+  public:
+    WorkerCapacityLedger(std::uint64_t workers_total, std::uint64_t activation_surge_workers)
+        : workers_total_(workers_total), surge_workers_(activation_surge_workers) {}
 
     // Fresh deploy (no serving pool): reserves `pool_size` against the
     // steady-state budget. False = budget exhausted; nothing is held.
-    bool reserve_fresh(const std::string& application,
-                       std::uint64_t pool_size);
+    bool reserve_fresh(const std::string& application, std::uint64_t pool_size);
 
     // Replacement deploy over a SERVING pool (`pool_size` new workers):
     // the steady state after the swap must fit workers_total and the
     // overlap peak max(new, old) must fit the surge budget. False =
     // zero-downtime replace refused (no surge/headroom); nothing is held.
-    bool reserve_replace(const std::string& application,
-                         std::uint64_t new_pool_size);
+    bool reserve_replace(const std::string& application, std::uint64_t new_pool_size);
 
     // Settles a successful reserve. commit_fresh is a no-op on the counts
     // (the fresh pool was already held as steady); commit_replace moves
     // the new pool from surge to steady and the old pool into surge
     // (draining).
     void commit_fresh(const std::string& application);
-    void commit_replace(const std::string& application,
-                        std::uint64_t new_pool_size,
+    void commit_replace(const std::string& application, std::uint64_t new_pool_size,
                         std::uint64_t old_pool_size);
 
     // Rolls a reserve back when the operation settles without a live
     // pool (warm failure, persist failure, refused activation). Must
     // mirror the reserve that held the count.
-    void abort_reserve(const std::string& application,
-                       std::uint64_t pool_size, bool replacement);
+    void abort_reserve(const std::string& application, std::uint64_t pool_size, bool replacement);
 
     // Retire: the serving pool leaves steady for surge (draining). No
     // budget gate — the process count only shrinks, so the absolute
     // ceiling can never be exceeded by a retire.
-    void begin_retire(const std::string& application,
-                      std::uint64_t pool_size);
+    void begin_retire(const std::string& application, std::uint64_t pool_size);
 
     // Reaper finished: `drained` surge workers are gone. The old pool
     // releases its count only here (spec §9.4: after the reaper
     // completed, not when the drain started).
-    void release_drained(const std::string& application,
-                         std::uint64_t drained);
+    void release_drained(const std::string& application, std::uint64_t drained);
     void release_active(const std::string& application, std::uint64_t reaped);
 
     // True when the App has a serving pool (steady > 0).
@@ -101,10 +93,10 @@ public:
     std::uint64_t steady_of(const std::string& application) const;
     std::uint64_t surge_of(const std::string& application) const;
 
-private:
+  private:
     struct Entry {
-        std::uint64_t steady = 0;  // serving workers
-        std::uint64_t surge = 0;   // overlap workers (warming/draining)
+        std::uint64_t steady = 0; // serving workers
+        std::uint64_t surge = 0;  // overlap workers (warming/draining)
     };
     std::map<std::string, Entry> entries_;
     std::uint64_t steady_used_ = 0;
@@ -119,7 +111,7 @@ private:
 // category is actually released, exactly once. Warm reserves stay owned by
 // the coordinator until activation or abort settles them.
 class WorkerPoolCapacityLease {
-public:
+  public:
     WorkerPoolCapacityLease(WorkerCapacityLedger* ledger, std::string application,
                             std::uint64_t workers);
     void activate_fresh();
@@ -127,7 +119,8 @@ public:
     void abort(bool replacement);
     void begin_drain();
     void reaped();
-private:
+
+  private:
     enum class Stage { kPrepared, kActive, kDraining, kReleased };
     void release_reaped_locked();
     WorkerCapacityLedger* ledger_;
@@ -138,6 +131,6 @@ private:
     bool reaped_ = false;
 };
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

@@ -42,12 +42,12 @@
 
 namespace {
 
-void fail(const std::string &message) {
+void fail(const std::string& message) {
     std::cerr << "FAIL: " << message << std::endl;
     std::exit(1);
 }
 
-void require(bool condition, const char *message) {
+void require(bool condition, const char* message) {
     if (!condition) {
         fail(message);
     }
@@ -68,8 +68,7 @@ bool fork_matches_profile() {
         return false;
     }
     int status = 0;
-    return waitpid(child, &status, 0) == child && WIFEXITED(status) &&
-        WEXITSTATUS(status) == 0;
+    return waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 #else
     if (child > 0) {
         waitpid(child, NULL, 0);
@@ -80,7 +79,7 @@ bool fork_matches_profile() {
 
 bool executable_memory_matches_profile(bool succeeded, int failure_errno) {
 #if defined(CAPSID_SANITIZER_SANDBOX)
-    (void) failure_errno;
+    (void)failure_errno;
     return succeeded;
 #else
     return !succeeded && failure_errno == EPERM;
@@ -110,8 +109,7 @@ int verify_permanent_denies(int base) {
         return base + 3;
     }
 
-    const int network_socket =
-        socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int network_socket = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (network_socket < 0) {
         return base + 4;
     }
@@ -120,25 +118,19 @@ int verify_permanent_denies(int base) {
     local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     local.sin_port = 0;
     errno = 0;
-    if (bind(network_socket,
-             reinterpret_cast<const struct sockaddr *>(&local),
-             sizeof(local)) == 0 || errno != EPERM) {
+    if (bind(network_socket, reinterpret_cast<const struct sockaddr*>(&local), sizeof(local)) ==
+            0 ||
+        errno != EPERM) {
         close(network_socket);
         return base + 5;
     }
     close(network_socket);
 
     errno = 0;
-    void *const executable = reinterpret_cast<void *>(syscall(
-        SYS_mmap,
-        NULL,
-        4096,
-        PROT_READ | PROT_EXEC,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1,
-        0));
-    const bool executable_matches = executable_memory_matches_profile(
-        executable != MAP_FAILED, errno);
+    void* const executable = reinterpret_cast<void*>(
+        syscall(SYS_mmap, NULL, 4096, PROT_READ | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+    const bool executable_matches =
+        executable_memory_matches_profile(executable != MAP_FAILED, errno);
     if (executable != MAP_FAILED) {
         munmap(executable, 4096);
     }
@@ -148,10 +140,9 @@ int verify_permanent_denies(int base) {
     return 0;
 }
 
-int apply_binding_profile(
-    const std::vector<std::string> &profiles,
-    const std::vector<std::string> &read_paths,
-    const std::vector<std::string> &write_paths) {
+int apply_binding_profile(const std::vector<std::string>& profiles,
+                          const std::vector<std::string>& read_paths,
+                          const std::vector<std::string>& write_paths) {
     const uint32_t available_abi = capsid::query_landlock_abi();
     if (available_abi == 0 || (!write_paths.empty() && available_abi < 3)) {
         std::cerr << "required Landlock ABI is unavailable" << std::endl;
@@ -171,22 +162,18 @@ int apply_binding_profile(
     uint32_t landlock_abi = 0;
     uint32_t seccomp_mode = 0;
     std::string error;
-    if (!capsid::apply_sandbox(
-            config, &features, &landlock_abi, &seccomp_mode, &error)) {
+    if (!capsid::apply_sandbox(config, &features, &landlock_abi, &seccomp_mode, &error)) {
         std::cerr << "binding sandbox setup failed: " << error << std::endl;
         return 1;
     }
-    if ((features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) !=
-            CAPSID_SANDBOX_FEATURE_STRICT_BASE ||
-        landlock_abi == 0 ||
-        seccomp_mode != capsid::kSeccompModeFilter) {
+    if ((features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) != CAPSID_SANDBOX_FEATURE_STRICT_BASE ||
+        landlock_abi == 0 || seccomp_mode != capsid::kSeccompModeFilter) {
         return 76;
     }
     return 0;
 }
 
-int run_linux_probe(const std::string &allowed_path,
-                    const std::string &denied_path) {
+int run_linux_probe(const std::string& allowed_path, const std::string& denied_path) {
     capsid::SandboxConfig config;
     config.address_space_limit = 0;
     config.file_descriptor_limit = 64;
@@ -201,8 +188,7 @@ int run_linux_probe(const std::string &allowed_path,
         std::cerr << "sandbox setup failed: " << error << std::endl;
         return 10;
     }
-    if ((features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) !=
-        CAPSID_SANDBOX_FEATURE_STRICT_BASE) {
+    if ((features & CAPSID_SANDBOX_FEATURE_STRICT_BASE) != CAPSID_SANDBOX_FEATURE_STRICT_BASE) {
         return 11;
     }
     if (prctl(PR_GET_NO_NEW_PRIVS, 0, 0, 0, 0) != 1) {
@@ -225,8 +211,7 @@ int run_linux_probe(const std::string &allowed_path,
     }
 
     errno = 0;
-    const int writable = open(
-        allowed_path.c_str(), O_WRONLY | O_APPEND | O_CLOEXEC);
+    const int writable = open(allowed_path.c_str(), O_WRONLY | O_APPEND | O_CLOEXEC);
     if (writable >= 0 || (errno != EACCES && errno != EPERM)) {
         if (writable >= 0) {
             close(writable);
@@ -238,14 +223,9 @@ int run_linux_probe(const std::string &allowed_path,
     struct open_how write_how = {};
     write_how.flags = O_WRONLY | O_APPEND | O_CLOEXEC;
     errno = 0;
-    const int openat2_writable = static_cast<int>(syscall(
-        SYS_openat2,
-        AT_FDCWD,
-        allowed_path.c_str(),
-        &write_how,
-        sizeof(write_how)));
-    if (openat2_writable >= 0 ||
-        (errno != EACCES && errno != EPERM)) {
+    const int openat2_writable = static_cast<int>(
+        syscall(SYS_openat2, AT_FDCWD, allowed_path.c_str(), &write_how, sizeof(write_how)));
+    if (openat2_writable >= 0 || (errno != EACCES && errno != EPERM)) {
         if (openat2_writable >= 0) {
             close(openat2_writable);
         }
@@ -266,8 +246,7 @@ int run_linux_probe(const std::string &allowed_path,
         return 17;
     }
 
-    const int network_socket =
-        socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    const int network_socket = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (network_socket < 0) {
         return 18;
     }
@@ -287,10 +266,8 @@ int run_linux_probe(const std::string &allowed_path,
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
     errno = 0;
-    const int bind_result = bind(
-        network_socket,
-        reinterpret_cast<const struct sockaddr *>(&address),
-        sizeof(address));
+    const int bind_result =
+        bind(network_socket, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address));
     if (bind_result == 0 || errno != EPERM) {
         close(network_socket);
         return 20;
@@ -310,17 +287,11 @@ int run_linux_probe(const std::string &allowed_path,
     close(network_socket);
 
     errno = 0;
-    void *const executable = reinterpret_cast<void *>(syscall(
-        SYS_mmap,
-        NULL,
-        4096,
-        PROT_READ | PROT_EXEC,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1,
-        0));
+    void* const executable = reinterpret_cast<void*>(
+        syscall(SYS_mmap, NULL, 4096, PROT_READ | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
     const int executable_errno = errno;
-    const bool executable_matches = executable_memory_matches_profile(
-        executable != MAP_FAILED, executable_errno);
+    const bool executable_matches =
+        executable_memory_matches_profile(executable != MAP_FAILED, executable_errno);
     if (executable != MAP_FAILED) {
         munmap(executable, 4096);
     }
@@ -328,26 +299,17 @@ int run_linux_probe(const std::string &allowed_path,
         return 23;
     }
 
-    void *const writable_mapping = mmap(
-        NULL,
-        4096,
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS,
-        -1,
-        0);
+    void* const writable_mapping =
+        mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (writable_mapping == MAP_FAILED) {
         return 24;
     }
     errno = 0;
-    const long protected_result = syscall(
-        SYS_mprotect,
-        writable_mapping,
-        4096,
-        PROT_READ | PROT_EXEC);
+    const long protected_result =
+        syscall(SYS_mprotect, writable_mapping, 4096, PROT_READ | PROT_EXEC);
     const int protected_errno = errno;
     munmap(writable_mapping, 4096);
-    if (!executable_memory_matches_profile(
-            protected_result == 0, protected_errno)) {
+    if (!executable_memory_matches_profile(protected_result == 0, protected_errno)) {
         return 25;
     }
 
@@ -356,16 +318,13 @@ int run_linux_probe(const std::string &allowed_path,
 
 int run_linux_namespace_probe() {
     const uint32_t namespace_features =
-        CAPSID_SANDBOX_FEATURE_USER_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_MOUNT_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_IPC_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE;
+        CAPSID_SANDBOX_FEATURE_USER_NAMESPACE | CAPSID_SANDBOX_FEATURE_MOUNT_NAMESPACE |
+        CAPSID_SANDBOX_FEATURE_IPC_NAMESPACE | CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE;
     capsid::SandboxConfig config;
     config.address_space_limit = 0;
     config.file_descriptor_limit = 64;
     config.strict = true;
-    config.required_features =
-        CAPSID_SANDBOX_FEATURE_STRICT_BASE | namespace_features;
+    config.required_features = CAPSID_SANDBOX_FEATURE_STRICT_BASE | namespace_features;
     config.preinstalled_features = 0;
 
     uint32_t features = 0;
@@ -377,20 +336,17 @@ int run_linux_namespace_probe() {
     return (features & namespace_features) == namespace_features ? 0 : 20;
 }
 
-
 // Binding v1 §7.9: profile conformance probes. Each probe runs in a fresh
 // forked child with the binding profiles under test; the parent holds the
 // listener and the authorized directory.
-int run_binding_write_probe(const std::string &authorized_dir) {
-    const int setup = apply_binding_profile(
-        {"filesystem-write"}, {}, {authorized_dir});
+int run_binding_write_probe(const std::string& authorized_dir) {
+    const int setup = apply_binding_profile({"filesystem-write"}, {}, {authorized_dir});
     if (setup != 0) {
         return setup;
     }
     // Write inside the authorized directory succeeds.
     const std::string inside = authorized_dir + "/binding-probe.txt";
-    const int fd = open(inside.c_str(),
-                        O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    const int fd = open(inside.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd < 0) {
         return 31;
     }
@@ -404,26 +360,22 @@ int run_binding_write_probe(const std::string &authorized_dir) {
     }
     const std::string first = authorized_dir + "/rename-first.txt";
     const std::string second = authorized_dir + "/rename-second.txt";
-    const int rename_fd = open(
-        first.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+    const int rename_fd = open(first.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
     if (rename_fd < 0) {
         return 36;
     }
     close(rename_fd);
-    if (rename(first.c_str(), second.c_str()) != 0 ||
-        unlink(second.c_str()) != 0) {
+    if (rename(first.c_str(), second.c_str()) != 0 || unlink(second.c_str()) != 0) {
         return 37;
     }
     const std::string directory = authorized_dir + "/binding-probe-dir";
-    if (mkdir(directory.c_str(), 0700) != 0 ||
-        rmdir(directory.c_str()) != 0) {
+    if (mkdir(directory.c_str(), 0700) != 0 || rmdir(directory.c_str()) != 0) {
         return 38;
     }
     // Writing outside the authorized directory fails (Landlock).
     errno = 0;
-    const int escape_fd = open(
-        "/tmp/capsid-binding-escape-probe",
-        O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    const int escape_fd =
+        open("/tmp/capsid-binding-escape-probe", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     const int escape_errno = errno;
     if (escape_fd >= 0) {
         close(escape_fd);
@@ -436,10 +388,8 @@ int run_binding_write_probe(const std::string &authorized_dir) {
     return verify_permanent_denies(40);
 }
 
-int run_binding_read_probe(const std::string &authorized_path,
-                           const std::string &denied_path) {
-    const int setup = apply_binding_profile(
-        {"filesystem-read"}, {authorized_path}, {});
+int run_binding_read_probe(const std::string& authorized_path, const std::string& denied_path) {
+    const int setup = apply_binding_profile({"filesystem-read"}, {authorized_path}, {});
     if (setup != 0) {
         return setup;
     }
@@ -464,10 +414,9 @@ int run_binding_read_probe(const std::string &authorized_path,
     return verify_permanent_denies(52);
 }
 
-int run_binding_watch_probe(const std::string &authorized_path) {
-    const int setup = apply_binding_profile(
-        {"filesystem-read", "filesystem-watch"},
-        {authorized_path}, {});
+int run_binding_watch_probe(const std::string& authorized_path) {
+    const int setup =
+        apply_binding_profile({"filesystem-read", "filesystem-watch"}, {authorized_path}, {});
     if (setup != 0) {
         return setup;
     }
@@ -475,8 +424,7 @@ int run_binding_watch_probe(const std::string &authorized_path) {
     if (watcher < 0) {
         return 60;
     }
-    const int watch = inotify_add_watch(
-        watcher, authorized_path.c_str(), IN_MODIFY | IN_ATTRIB);
+    const int watch = inotify_add_watch(watcher, authorized_path.c_str(), IN_MODIFY | IN_ATTRIB);
     if (watch < 0) {
         close(watcher);
         return 61;
@@ -489,24 +437,19 @@ int run_binding_watch_probe(const std::string &authorized_path) {
     return verify_permanent_denies(62);
 }
 
-int run_binding_sqlite_probe(const std::string &authorized_dir,
-                             const std::string &authorized_path,
-                             const std::string &denied_path) {
-    const int setup = apply_binding_profile(
-        {"filesystem-read", "filesystem-write", "sqlite"},
-        {authorized_dir}, {authorized_dir});
+int run_binding_sqlite_probe(const std::string& authorized_dir, const std::string& authorized_path,
+                             const std::string& denied_path) {
+    const int setup = apply_binding_profile({"filesystem-read", "filesystem-write", "sqlite"},
+                                            {authorized_dir}, {authorized_dir});
     if (setup != 0) {
         return setup;
     }
-    const int database = open(
-        authorized_path.c_str(), O_RDWR | O_CLOEXEC);
+    const int database = open(authorized_path.c_str(), O_RDWR | O_CLOEXEC);
     if (database < 0) {
         return 70;
     }
-    if (pwrite(database, "sqlite", 6, 0) != 6 ||
-        fsync(database) != 0 ||
-        ftruncate(database, 6) != 0 ||
-        flock(database, LOCK_EX) != 0 ||
+    if (pwrite(database, "sqlite", 6, 0) != 6 || fsync(database) != 0 ||
+        ftruncate(database, 6) != 0 || flock(database, LOCK_EX) != 0 ||
         flock(database, LOCK_UN) != 0) {
         close(database);
         return 71;
@@ -539,14 +482,12 @@ int run_binding_network_probe(int listener_fd) {
     // the environment-free global below.
     (void)listener_fd;
     extern int binding_probe_listener_port;
-    address.sin_port = htons(
-        static_cast<uint16_t>(binding_probe_listener_port));
+    address.sin_port = htons(static_cast<uint16_t>(binding_probe_listener_port));
     const int client = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (client < 0) {
         return 40;
     }
-    if (connect(client, reinterpret_cast<struct sockaddr *>(&address),
-                sizeof(address)) != 0) {
+    if (connect(client, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) != 0) {
         close(client);
         return 41;
     }
@@ -555,9 +496,8 @@ int run_binding_network_probe(int listener_fd) {
     return verify_permanent_denies(80);
 }
 
-int run_binding_wasi_probe(const std::string &authorized_path) {
-    const int setup = apply_binding_profile(
-        {"filesystem-read", "wasi"}, {authorized_path}, {});
+int run_binding_wasi_probe(const std::string& authorized_path) {
+    const int setup = apply_binding_profile({"filesystem-read", "wasi"}, {authorized_path}, {});
     if (setup != 0) {
         return setup;
     }
@@ -565,8 +505,7 @@ int run_binding_wasi_probe(const std::string &authorized_path) {
     // test_worker_zero_binding. At the kernel profile boundary, exercise
     // the controlled-preopen primitive itself: an authorized descriptor
     // can be opened and read with pread.
-    const int preopen = open(
-        authorized_path.c_str(), O_RDONLY | O_CLOEXEC);
+    const int preopen = open(authorized_path.c_str(), O_RDONLY | O_CLOEXEC);
     if (preopen < 0) {
         return 90;
     }
@@ -579,22 +518,19 @@ int run_binding_wasi_probe(const std::string &authorized_path) {
     return verify_permanent_denies(91);
 }
 
-int run_binding_union_probe(const std::string &authorized_dir,
-                            const std::string &authorized_path,
-                            const std::string &denied_path) {
-    const int setup = apply_binding_profile(
-        {"filesystem-read", "filesystem-write", "filesystem-watch",
-         "network-client", "sqlite", "wasi"},
-        {authorized_dir}, {authorized_dir});
+int run_binding_union_probe(const std::string& authorized_dir, const std::string& authorized_path,
+                            const std::string& denied_path) {
+    const int setup =
+        apply_binding_profile({"filesystem-read", "filesystem-write", "filesystem-watch",
+                               "network-client", "sqlite", "wasi"},
+                              {authorized_dir}, {authorized_dir});
     if (setup != 0) {
         return setup;
     }
 
-    const int database = open(
-        authorized_path.c_str(), O_RDWR | O_CLOEXEC);
-    if (database < 0 || pwrite(database, "union", 5, 0) != 5 ||
-        fsync(database) != 0 || flock(database, LOCK_EX) != 0 ||
-        flock(database, LOCK_UN) != 0) {
+    const int database = open(authorized_path.c_str(), O_RDWR | O_CLOEXEC);
+    if (database < 0 || pwrite(database, "union", 5, 0) != 5 || fsync(database) != 0 ||
+        flock(database, LOCK_EX) != 0 || flock(database, LOCK_UN) != 0) {
         if (database >= 0) {
             close(database);
         }
@@ -606,8 +542,7 @@ int run_binding_union_probe(const std::string &authorized_dir,
     if (watcher < 0) {
         return 101;
     }
-    const int watch = inotify_add_watch(
-        watcher, authorized_path.c_str(), IN_MODIFY);
+    const int watch = inotify_add_watch(watcher, authorized_path.c_str(), IN_MODIFY);
     if (watch < 0 || inotify_rm_watch(watcher, watch) != 0) {
         close(watcher);
         return 102;
@@ -629,9 +564,9 @@ int binding_probe_listener_port = 0;
 
 #endif
 
-}  // namespace
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
 #if defined(__linux__)
 #if defined(CAPSID_SANITIZER_SANDBOX)
     std::cout << "Sandbox probe profile: sanitizer (not production)" << std::endl;
@@ -640,18 +575,15 @@ int main(int argc, char **argv) {
 #endif
     if (argc == 2 && std::string(argv[1]) == "--binding-setup-error") {
         if (capsid::query_landlock_abi() == 0) {
-            std::cerr << "Landlock is unavailable for the setup-error control"
-                      << std::endl;
+            std::cerr << "Landlock is unavailable for the setup-error control" << std::endl;
             return 77;
         }
         char directory[] = "/tmp/capsid-binding-setup-error-XXXXXX";
         require(mkdtemp(directory) != NULL, "setup-error directory created");
         const std::string missing = std::string(directory) + "/absent";
-        const int result = apply_binding_profile(
-            {"filesystem-read"}, {missing}, {});
+        const int result = apply_binding_profile({"filesystem-read"}, {missing}, {});
         rmdir(directory);
-        require(result == 1,
-                "missing fixture must fail setup, never pass or skip");
+        require(result == 1, "missing fixture must fail setup, never pass or skip");
         return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--namespaces") {
@@ -668,9 +600,7 @@ int main(int argc, char **argv) {
             _exit(run_linux_namespace_probe());
         }
         int status = 0;
-        require(
-            waitpid(pid, &status, 0) == pid,
-            "namespace sandbox probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "namespace sandbox probe reaped");
         if (WIFEXITED(status)) {
             return WEXITSTATUS(status);
         }
@@ -684,8 +614,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_write_probe(argv[2]));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding write probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding write probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 60;
     }
     if (argc == 4 && std::string(argv[1]) == "--binding-read") {
@@ -695,8 +624,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_read_probe(argv[2], argv[3]));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding read probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding read probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 63;
     }
     if (argc == 3 && std::string(argv[1]) == "--binding-watch") {
@@ -706,8 +634,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_watch_probe(argv[2]));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding watch probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding watch probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 64;
     }
     if (argc == 5 && std::string(argv[1]) == "--binding-sqlite") {
@@ -717,8 +644,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_sqlite_probe(argv[2], argv[3], argv[4]));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding sqlite probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding sqlite probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 65;
     }
     if (argc == 2 && std::string(argv[1]) == "--binding-network") {
@@ -729,13 +655,10 @@ int main(int argc, char **argv) {
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         address.sin_port = htons(0);
-        require(bind(listener, reinterpret_cast<struct sockaddr *>(&address),
-                     sizeof(address)) == 0,
+        require(bind(listener, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) == 0,
                 "binding listener bound");
         socklen_t length = sizeof(address);
-        require(getsockname(listener,
-                            reinterpret_cast<struct sockaddr *>(&address),
-                            &length) == 0,
+        require(getsockname(listener, reinterpret_cast<struct sockaddr*>(&address), &length) == 0,
                 "binding listener named");
         require(listen(listener, 4) == 0, "binding listener listening");
         binding_probe_listener_port = ntohs(address.sin_port);
@@ -746,8 +669,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_network_probe(-1));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding network probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding network probe reaped");
         close(listener);
         return WIFEXITED(status) ? WEXITSTATUS(status) : 61;
     }
@@ -758,8 +680,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_wasi_probe(argv[2]));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding wasi probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding wasi probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 62;
     }
     if (argc == 5 && std::string(argv[1]) == "--binding-union") {
@@ -769,8 +690,7 @@ int main(int argc, char **argv) {
             _exit(run_binding_union_probe(argv[2], argv[3], argv[4]));
         }
         int status = 0;
-        require(waitpid(pid, &status, 0) == pid,
-                "binding union probe reaped");
+        require(waitpid(pid, &status, 0) == pid, "binding union probe reaped");
         return WIFEXITED(status) ? WEXITSTATUS(status) : 66;
     }
     if (argc != 1) {
@@ -796,14 +716,10 @@ int main(int argc, char **argv) {
     unlink(allowed_template);
     unlink(denied_template);
     if (!WIFEXITED(status)) {
-        fail(
-            std::string("sandbox probe terminated by signal ") +
-            std::to_string(WTERMSIG(status)));
+        fail(std::string("sandbox probe terminated by signal ") + std::to_string(WTERMSIG(status)));
     }
     if (WEXITSTATUS(status) != 0) {
-        fail(
-            std::string("sandbox probe failed with code ") +
-            std::to_string(WEXITSTATUS(status)));
+        fail(std::string("sandbox probe failed with code ") + std::to_string(WEXITSTATUS(status)));
     }
 #else
     if (argc == 2 && std::string(argv[1]) == "--namespaces") {
@@ -843,12 +759,10 @@ int main(int argc, char **argv) {
     config.preinstalled_features = 0;
     uint32_t features = 0;
     std::string error;
-    require(
-        !capsid::apply_sandbox(config, &features, NULL, NULL, &error),
-        "strict sandbox remains fail-closed outside Linux");
-    require(
-        error.find("strict sandbox is unavailable") != std::string::npos,
-        "unsupported platform error is explicit");
+    require(!capsid::apply_sandbox(config, &features, NULL, NULL, &error),
+            "strict sandbox remains fail-closed outside Linux");
+    require(error.find("strict sandbox is unavailable") != std::string::npos,
+            "unsupported platform error is explicit");
 #endif
     return 0;
 }

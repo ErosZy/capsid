@@ -77,10 +77,8 @@ struct ServiceLifecycleTransition {
 };
 
 // Invalid/malformed states always derive fail-closed behavior.
-ServiceRouteDisposition service_route_disposition(
-    const ServiceLifecycleState& state);
-bool service_allows_automatic_replacement(
-    const ServiceLifecycleState& state);
+ServiceRouteDisposition service_route_disposition(const ServiceLifecycleState& state);
+bool service_allows_automatic_replacement(const ServiceLifecycleState& state);
 
 struct ServiceRecoveryPlan {
     bool ok = false;
@@ -95,20 +93,17 @@ struct ServiceRecoveryPlan {
 
 // Translates the strict M0.4 recovery result. Retired/quarantined/absent and
 // every malformed/error result start no worker and publish no active route.
-ServiceRecoveryPlan plan_service_recovery(
-    const ActiveStateRecoveryResult& recovery);
+ServiceRecoveryPlan plan_service_recovery(const ActiveStateRecoveryResult& recovery);
 
 // Starts explicit retire. Active and quarantined states first become
 // kRetiring and stop new requests, then request a retired tombstone write.
 // Retired is an idempotent success; absent is not found; transient and
 // durability-uncertain states reject the operation.
-ServiceLifecycleTransition request_service_retire(
-    const ServiceLifecycleState& state);
+ServiceLifecycleTransition request_service_retire(const ServiceLifecycleState& state);
 
 // Starts crash-budget quarantine from an active generation. Routing and
 // automatic replacement stop before the quarantined state is persisted.
-ServiceLifecycleTransition enter_service_quarantine(
-    const ServiceLifecycleState& state);
+ServiceLifecycleTransition enter_service_quarantine(const ServiceLifecycleState& state);
 
 // Resolves persist_active_state() for kRetiring/kQuarantining:
 // - committed retire publishes the retired tombstone and begins drain;
@@ -117,14 +112,13 @@ ServiceLifecycleTransition enter_service_quarantine(
 // - rename followed by uncertain durability enters kDurabilityUncertain and
 //   blocks later state writes.
 // Inconsistent persist results also fail closed as kInvalidPersistenceResult.
-ServiceLifecycleTransition resolve_service_state_persistence(
-    const ServiceLifecycleState& state,
-    const ActiveStatePersistResult& persistence);
+ServiceLifecycleTransition
+resolve_service_state_persistence(const ServiceLifecycleState& state,
+                                  const ActiveStatePersistResult& persistence);
 
 // A committed retired tombstone remains kRetiring while its old pool drains.
 // Completion moves it to kRetired. Repeated completion is idempotent.
-ServiceLifecycleTransition complete_service_retire_drain(
-    const ServiceLifecycleState& state);
+ServiceLifecycleTransition complete_service_retire_drain(const ServiceLifecycleState& state);
 
 enum class ExplicitDeployAction {
     kAlreadyActive,
@@ -148,12 +142,11 @@ struct ExplicitDeployPlan {
 // active.json. An active exact generation is idempotent. Retired and
 // quarantined states, including the exact previous/current generation, must
 // warm and atomically activate rather than taking an idempotent shortcut.
-ExplicitDeployPlan plan_explicit_service_deploy(
-    const ServiceLifecycleState& state,
-    std::string_view application,
-    std::string_view version,
-    std::string_view generation);
+ExplicitDeployPlan plan_explicit_service_deploy(const ServiceLifecycleState& state,
+                                                std::string_view application,
+                                                std::string_view version,
+                                                std::string_view generation);
 
-}  // namespace capsid::host
+} // namespace capsid::host
 
 #endif

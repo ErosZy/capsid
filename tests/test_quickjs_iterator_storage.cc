@@ -14,74 +14,119 @@ namespace {
 struct Allocator {
     size_t live = 0, bytes = 0, attempts = 0, fail_at = 0, failures = 0;
 };
-struct alignas(std::max_align_t) Header { size_t size; Allocator *owner; };
-bool fail(Allocator *a) {
+struct alignas(std::max_align_t) Header {
+    size_t size;
+    Allocator* owner;
+};
+bool fail(Allocator* a) {
     ++a->attempts;
-    if (a->fail_at != 0 && a->attempts == a->fail_at) { ++a->failures; return true; }
+    if (a->fail_at != 0 && a->attempts == a->fail_at) {
+        ++a->failures;
+        return true;
+    }
     return false;
 }
-void *allocate(void *opaque, size_t size) {
-    Allocator *a = static_cast<Allocator *>(opaque);
-    if (size > std::numeric_limits<size_t>::max() - sizeof(Header) || fail(a)) return NULL;
-    Header *h = static_cast<Header *>(std::malloc(sizeof(Header) + size));
-    if (!h) return NULL;
-    h->size = size; h->owner = a; ++a->live; a->bytes += size;
+void* allocate(void* opaque, size_t size) {
+    Allocator* a = static_cast<Allocator*>(opaque);
+    if (size > std::numeric_limits<size_t>::max() - sizeof(Header) || fail(a))
+        return NULL;
+    Header* h = static_cast<Header*>(std::malloc(sizeof(Header) + size));
+    if (!h)
+        return NULL;
+    h->size = size;
+    h->owner = a;
+    ++a->live;
+    a->bytes += size;
     return h + 1;
 }
-void *allocate_zero(void *opaque, size_t count, size_t size) {
-    if (count != 0 && size > std::numeric_limits<size_t>::max() / count) return NULL;
-    void *p = allocate(opaque, count * size);
-    if (p) std::memset(p, 0, count * size);
+void* allocate_zero(void* opaque, size_t count, size_t size) {
+    if (count != 0 && size > std::numeric_limits<size_t>::max() / count)
+        return NULL;
+    void* p = allocate(opaque, count * size);
+    if (p)
+        std::memset(p, 0, count * size);
     return p;
 }
-void release(void *opaque, void *p) {
-    if (!p) return;
-    Header *h = static_cast<Header *>(p) - 1;
-    Allocator *a = static_cast<Allocator *>(opaque);
-    if (h->owner != a || a->live == 0 || h->size > a->bytes) std::abort();
-    --a->live; a->bytes -= h->size; std::free(h);
+void release(void* opaque, void* p) {
+    if (!p)
+        return;
+    Header* h = static_cast<Header*>(p) - 1;
+    Allocator* a = static_cast<Allocator*>(opaque);
+    if (h->owner != a || a->live == 0 || h->size > a->bytes)
+        std::abort();
+    --a->live;
+    a->bytes -= h->size;
+    std::free(h);
 }
-void *resize(void *opaque, void *p, size_t size) {
-    if (!p) return allocate(opaque, size);
-    if (size == 0) { release(opaque, p); return NULL; }
-    Allocator *a = static_cast<Allocator *>(opaque);
-    if (size > std::numeric_limits<size_t>::max() - sizeof(Header) || fail(a)) return NULL;
-    Header *old = static_cast<Header *>(p) - 1;
-    if (old->owner != a) std::abort();
+void* resize(void* opaque, void* p, size_t size) {
+    if (!p)
+        return allocate(opaque, size);
+    if (size == 0) {
+        release(opaque, p);
+        return NULL;
+    }
+    Allocator* a = static_cast<Allocator*>(opaque);
+    if (size > std::numeric_limits<size_t>::max() - sizeof(Header) || fail(a))
+        return NULL;
+    Header* old = static_cast<Header*>(p) - 1;
+    if (old->owner != a)
+        std::abort();
     const size_t previous = old->size;
-    Header *h = static_cast<Header *>(std::realloc(old, sizeof(Header) + size));
-    if (!h) return NULL;
-    h->size = size; a->bytes = a->bytes - previous + size;
+    Header* h = static_cast<Header*>(std::realloc(old, sizeof(Header) + size));
+    if (!h)
+        return NULL;
+    h->size = size;
+    a->bytes = a->bytes - previous + size;
     return h + 1;
 }
-size_t usable(const void *p) { return p ? (static_cast<const Header *>(p) - 1)->size : 0; }
+size_t usable(const void* p) { return p ? (static_cast<const Header*>(p) - 1)->size : 0; }
 const JSMallocFunctions functions = {allocate_zero, allocate, release, resize, usable};
-void require(bool value, const char *message) { if (!value) throw std::runtime_error(message); }
+void require(bool value, const char* message) {
+    if (!value)
+        throw std::runtime_error(message);
+}
 struct Runtime {
-    JSRuntime *rt;
-    JSContext *ctx;
-    explicit Runtime(Allocator *a) : rt(JS_NewRuntime2(&functions, a)), ctx(NULL) {
+    JSRuntime* rt;
+    JSContext* ctx;
+    explicit Runtime(Allocator* a) : rt(JS_NewRuntime2(&functions, a)), ctx(NULL) {
         require(rt != NULL, "runtime allocation");
         ctx = JS_NewContext(rt);
-        if (!ctx) { JS_FreeRuntime(rt); rt = NULL; throw std::runtime_error("context allocation"); }
+        if (!ctx) {
+            JS_FreeRuntime(rt);
+            rt = NULL;
+            throw std::runtime_error("context allocation");
+        }
         JS_SetGCThreshold(rt, std::numeric_limits<size_t>::max());
     }
-    ~Runtime() { if (ctx) JS_FreeContext(ctx); if (rt) { JS_RunGC(rt); JS_FreeRuntime(rt); } }
+    ~Runtime() {
+        if (ctx)
+            JS_FreeContext(ctx);
+        if (rt) {
+            JS_RunGC(rt);
+            JS_FreeRuntime(rt);
+        }
+    }
 };
-void clear_exception(JSContext *ctx) { JSValue ex = JS_GetException(ctx); JS_FreeValue(ctx, ex); }
-void eval(JSContext *ctx, const char *code) {
-    JSValue value = JS_Eval(ctx, code, std::strlen(code), "iterator-storage-properties.js", JS_EVAL_TYPE_GLOBAL);
+void clear_exception(JSContext* ctx) {
+    JSValue ex = JS_GetException(ctx);
+    JS_FreeValue(ctx, ex);
+}
+void eval(JSContext* ctx, const char* code) {
+    JSValue value = JS_Eval(ctx, code, std::strlen(code), "iterator-storage-properties.js",
+                            JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(value)) {
         JSValue ex = JS_GetException(ctx);
-        const char *message = JS_ToCString(ctx, ex);
-        std::fprintf(stderr, "JavaScript property failure: %s\n", message ? message : "unprintable");
-        JS_FreeCString(ctx, message); JS_FreeValue(ctx, ex);
+        const char* message = JS_ToCString(ctx, ex);
+        std::fprintf(stderr, "JavaScript property failure: %s\n",
+                     message ? message : "unprintable");
+        JS_FreeCString(ctx, message);
+        JS_FreeValue(ctx, ex);
         throw std::runtime_error("iterator observable behavior");
     }
     require(JS_ToBool(ctx, value) == 1, "JavaScript property did not complete");
     JS_FreeValue(ctx, value);
 }
-size_t property_oom(size_t point, size_t *failure_count) {
+size_t property_oom(size_t point, size_t* failure_count) {
     Allocator a;
     size_t operations = 0;
     {
@@ -91,21 +136,27 @@ size_t property_oom(size_t point, size_t *failure_count) {
         JSValue method = JS_GetPropertyStr(vm.ctx, array, "values");
         require(!JS_IsException(method), "iterator method setup");
         const size_t start = a.attempts;
-        if (point) a.fail_at = start + point;
+        if (point)
+            a.fail_at = start + point;
         JSValue iterator = JS_Call(vm.ctx, method, array, 0, NULL);
         bool failed = JS_IsException(iterator);
         if (!failed) {
             for (unsigned i = 0; i < 21; ++i) {
                 const std::string key = "owned" + std::to_string(i);
-                if (JS_SetPropertyStr(vm.ctx, iterator, key.c_str(), JS_NewInt32(vm.ctx, static_cast<int>(i))) < 0) {
-                    failed = true; break;
+                if (JS_SetPropertyStr(vm.ctx, iterator, key.c_str(),
+                                      JS_NewInt32(vm.ctx, static_cast<int>(i))) < 0) {
+                    failed = true;
+                    break;
                 }
             }
         }
         operations = a.attempts - start;
         a.fail_at = 0;
-        if (failed) clear_exception(vm.ctx);
-        JS_FreeValue(vm.ctx, iterator); JS_FreeValue(vm.ctx, method); JS_FreeValue(vm.ctx, array);
+        if (failed)
+            clear_exception(vm.ctx);
+        JS_FreeValue(vm.ctx, iterator);
+        JS_FreeValue(vm.ctx, method);
+        JS_FreeValue(vm.ctx, array);
         JS_RunGC(vm.rt);
         *failure_count = a.failures;
     }
@@ -184,11 +235,19 @@ int main() {
             iterator_allocations = a.live - live;
             const size_t added_bytes = a.bytes - bytes;
             JS_ComputeMemoryUsage(vm.rt, &after);
-            JS_FreeValue(vm.ctx, measured); JS_FreeValue(vm.ctx, warm); JS_FreeValue(vm.ctx, method); JS_FreeValue(vm.ctx, array);
-            require(iterator_allocations == 1, "empty iterator still requires separate allocations");
+            JS_FreeValue(vm.ctx, measured);
+            JS_FreeValue(vm.ctx, warm);
+            JS_FreeValue(vm.ctx, method);
+            JS_FreeValue(vm.ctx, array);
+            require(iterator_allocations == 1,
+                    "empty iterator still requires separate allocations");
             require(after.obj_count - before.obj_count == 1, "iterator object metric");
-            require(after.memory_used_count - before.memory_used_count == static_cast<int64_t>(iterator_allocations), "iterator allocation metric");
-            require(after.memory_used_size - before.memory_used_size == static_cast<int64_t>(added_bytes), "iterator byte metric omits inline state");
+            require(after.memory_used_count - before.memory_used_count ==
+                        static_cast<int64_t>(iterator_allocations),
+                    "iterator allocation metric");
+            require(after.memory_used_size - before.memory_used_size ==
+                        static_cast<int64_t>(added_bytes),
+                    "iterator byte metric omits inline state");
         }
         require(a.live == 0 && a.bytes == 0, "observable or cyclic iterator leaked");
         size_t none = 0;
@@ -199,9 +258,11 @@ int main() {
             property_oom(point, &failures);
             require(failures == 1, "allocation failure point not exercised");
         }
-        std::printf("PASS: iterator observables, 2048 cyclic graphs, exact memory metrics, %zu allocation failure points; empty iterator allocations=%zu\n", operations, iterator_allocations);
+        std::printf(
+            "PASS: iterator observables, 2048 cyclic graphs, exact memory metrics, %zu allocation failure points; empty iterator allocations=%zu\n",
+            operations, iterator_allocations);
         return 0;
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
         std::fprintf(stderr, "FAIL: %s\n", e.what());
         return 1;
     }

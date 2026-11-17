@@ -27,10 +27,7 @@ namespace {
 
 using ErrorCode = ActiveStateErrorCode;
 
-void set_error(ActiveStateError &error,
-               ErrorCode code,
-               std::string path,
-               std::string message) {
+void set_error(ActiveStateError& error, ErrorCode code, std::string path, std::string message) {
     error.code = code;
     error.path = std::move(path);
     error.message = std::move(message);
@@ -53,18 +50,10 @@ std::string escape_pointer_component(std::string_view component) {
 }
 
 // Hand-written ASCII range checks: never locale-dependent isalnum.
-bool ascii_digit(char c) {
-    return c >= '0' && c <= '9';
-}
-bool ascii_lower(char c) {
-    return c >= 'a' && c <= 'z';
-}
-bool ascii_upper(char c) {
-    return c >= 'A' && c <= 'Z';
-}
-bool ascii_hex_lower(char c) {
-    return ascii_digit(c) || (c >= 'a' && c <= 'f');
-}
+bool ascii_digit(char c) { return c >= '0' && c <= '9'; }
+bool ascii_lower(char c) { return c >= 'a' && c <= 'z'; }
+bool ascii_upper(char c) { return c >= 'A' && c <= 'Z'; }
+bool ascii_hex_lower(char c) { return ascii_digit(c) || (c >= 'a' && c <= 'f'); }
 
 // Application IDs: [a-z0-9][a-z0-9._-]{0,62}.
 bool valid_application_id(std::string_view value) {
@@ -75,8 +64,7 @@ bool valid_application_id(std::string_view value) {
         return false;
     }
     for (const char c : value) {
-        if (!(ascii_lower(c) || ascii_digit(c) || c == '.' || c == '_' ||
-              c == '-')) {
+        if (!(ascii_lower(c) || ascii_digit(c) || c == '.' || c == '_' || c == '-')) {
             return false;
         }
     }
@@ -88,13 +76,12 @@ bool valid_version_id(std::string_view value) {
     if (value.empty() || value.size() > 128) {
         return false;
     }
-    if (!(ascii_lower(value[0]) || ascii_upper(value[0]) ||
-          ascii_digit(value[0]))) {
+    if (!(ascii_lower(value[0]) || ascii_upper(value[0]) || ascii_digit(value[0]))) {
         return false;
     }
     for (const char c : value) {
-        if (!(ascii_lower(c) || ascii_upper(c) || ascii_digit(c) ||
-              c == '.' || c == '_' || c == '-')) {
+        if (!(ascii_lower(c) || ascii_upper(c) || ascii_digit(c) || c == '.' || c == '_' ||
+              c == '-')) {
             return false;
         }
     }
@@ -119,13 +106,11 @@ bool valid_operation_id(std::string_view value) {
     if (value.empty() || value.size() > 64) {
         return false;
     }
-    if (!(ascii_lower(value[0]) || ascii_upper(value[0]) ||
-          ascii_digit(value[0]))) {
+    if (!(ascii_lower(value[0]) || ascii_upper(value[0]) || ascii_digit(value[0]))) {
         return false;
     }
     for (const char c : value) {
-        if (!(ascii_lower(c) || ascii_upper(c) || ascii_digit(c) ||
-              c == '_' || c == '-')) {
+        if (!(ascii_lower(c) || ascii_upper(c) || ascii_digit(c) || c == '_' || c == '-')) {
             return false;
         }
     }
@@ -134,8 +119,8 @@ bool valid_operation_id(std::string_view value) {
 
 // The JSON member names in canonical field order.
 constexpr std::string_view kFieldNames[] = {
-    "schema", "app", "state", "version",
-    "generation", "previousVersion", "previousGeneration", "reason",
+    "schema", "app", "state", "version", "generation", "previousVersion", "previousGeneration",
+    "reason",
 };
 constexpr std::size_t kSchemaField = 0;
 constexpr std::size_t kAppField = 1;
@@ -161,23 +146,19 @@ std::string_view state_name(ActiveServiceState state) {
 
 // Validates the document struct and reports the first failing field. Used
 // by both the encoder and the state checks of the parser.
-bool validate_document(const ActiveStateDocument &document,
-                       ActiveStateError &error) {
+bool validate_document(const ActiveStateDocument& document, ActiveStateError& error) {
     if (!valid_application_id(document.application)) {
-        set_error(error, ErrorCode::kInvalidValue, "/app",
-                  "invalid App ID");
+        set_error(error, ErrorCode::kInvalidValue, "/app", "invalid App ID");
         return false;
     }
     switch (document.state) {
     case ActiveServiceState::kActive:
         if (!valid_version_id(document.version)) {
-            set_error(error, ErrorCode::kInvalidValue, "/version",
-                      "invalid Version ID");
+            set_error(error, ErrorCode::kInvalidValue, "/version", "invalid Version ID");
             return false;
         }
         if (!valid_generation(document.generation)) {
-            set_error(error, ErrorCode::kInvalidValue, "/generation",
-                      "invalid generation digest");
+            set_error(error, ErrorCode::kInvalidValue, "/generation", "invalid generation digest");
             return false;
         }
         if (!document.previous_version.empty()) {
@@ -186,14 +167,12 @@ bool validate_document(const ActiveStateDocument &document,
             return false;
         }
         if (!document.previous_generation.empty()) {
-            set_error(error, ErrorCode::kInvalidValue,
-                      "/previousGeneration",
+            set_error(error, ErrorCode::kInvalidValue, "/previousGeneration",
                       "tombstone field on an active state");
             return false;
         }
         if (!document.reason.empty()) {
-            set_error(error, ErrorCode::kInvalidValue, "/reason",
-                      "reason on an active state");
+            set_error(error, ErrorCode::kInvalidValue, "/reason", "reason on an active state");
             return false;
         }
         return true;
@@ -204,14 +183,12 @@ bool validate_document(const ActiveStateDocument &document,
             return false;
         }
         if (!valid_generation(document.previous_generation)) {
-            set_error(error, ErrorCode::kInvalidValue,
-                      "/previousGeneration",
+            set_error(error, ErrorCode::kInvalidValue, "/previousGeneration",
                       "invalid previous generation digest");
             return false;
         }
         if (!document.version.empty()) {
-            set_error(error, ErrorCode::kInvalidValue, "/version",
-                      "version on a retired state");
+            set_error(error, ErrorCode::kInvalidValue, "/version", "version on a retired state");
             return false;
         }
         if (!document.generation.empty()) {
@@ -220,25 +197,21 @@ bool validate_document(const ActiveStateDocument &document,
             return false;
         }
         if (!document.reason.empty()) {
-            set_error(error, ErrorCode::kInvalidValue, "/reason",
-                      "reason on a retired state");
+            set_error(error, ErrorCode::kInvalidValue, "/reason", "reason on a retired state");
             return false;
         }
         return true;
     case ActiveServiceState::kQuarantined:
         if (!valid_version_id(document.version)) {
-            set_error(error, ErrorCode::kInvalidValue, "/version",
-                      "invalid Version ID");
+            set_error(error, ErrorCode::kInvalidValue, "/version", "invalid Version ID");
             return false;
         }
         if (!valid_generation(document.generation)) {
-            set_error(error, ErrorCode::kInvalidValue, "/generation",
-                      "invalid generation digest");
+            set_error(error, ErrorCode::kInvalidValue, "/generation", "invalid generation digest");
             return false;
         }
         if (document.reason != kCrashBudgetExceededReason) {
-            set_error(error, ErrorCode::kInvalidValue, "/reason",
-                      "unknown quarantine reason");
+            set_error(error, ErrorCode::kInvalidValue, "/reason", "unknown quarantine reason");
             return false;
         }
         if (!document.previous_version.empty()) {
@@ -247,15 +220,13 @@ bool validate_document(const ActiveStateDocument &document,
             return false;
         }
         if (!document.previous_generation.empty()) {
-            set_error(error, ErrorCode::kInvalidValue,
-                      "/previousGeneration",
+            set_error(error, ErrorCode::kInvalidValue, "/previousGeneration",
                       "tombstone field on a quarantined state");
             return false;
         }
         return true;
     }
-    set_error(error, ErrorCode::kInvalidValue, "/state",
-              "unknown service state");
+    set_error(error, ErrorCode::kInvalidValue, "/state", "unknown service state");
     return false;
 }
 
@@ -265,19 +236,17 @@ bool validate_document(const ActiveStateDocument &document,
 bool field_forbidden_for_state(ActiveServiceState state, std::size_t field) {
     switch (state) {
     case ActiveServiceState::kActive:
-        return field == kPreviousVersionField ||
-               field == kPreviousGenerationField || field == kReasonField;
-    case ActiveServiceState::kRetired:
-        return field == kVersionField || field == kGenerationField ||
+        return field == kPreviousVersionField || field == kPreviousGenerationField ||
                field == kReasonField;
+    case ActiveServiceState::kRetired:
+        return field == kVersionField || field == kGenerationField || field == kReasonField;
     case ActiveServiceState::kQuarantined:
-        return field == kPreviousVersionField ||
-               field == kPreviousGenerationField;
+        return field == kPreviousVersionField || field == kPreviousGenerationField;
     }
     return false;
 }
 
-std::string build_canonical_json(const ActiveStateDocument &document) {
+std::string build_canonical_json(const ActiveStateDocument& document) {
     // All fields are grammar-restricted, so no JSON escaping is needed.
     std::string json = "{\"schema\":\"";
     json += kActiveStateSchema;
@@ -287,28 +256,25 @@ std::string build_canonical_json(const ActiveStateDocument &document) {
     json += state_name(document.state);
     switch (document.state) {
     case ActiveServiceState::kActive:
-        json += "\",\"version\":\"" + document.version +
-                "\",\"generation\":\"" + document.generation + "\"}";
+        json += "\",\"version\":\"" + document.version + "\",\"generation\":\"" +
+                document.generation + "\"}";
         break;
     case ActiveServiceState::kRetired:
         json += "\",\"previousVersion\":\"" + document.previous_version +
-                "\",\"previousGeneration\":\"" +
-                document.previous_generation + "\"}";
+                "\",\"previousGeneration\":\"" + document.previous_generation + "\"}";
         break;
     case ActiveServiceState::kQuarantined:
-        json += "\",\"version\":\"" + document.version +
-                "\",\"generation\":\"" + document.generation +
-                "\",\"reason\":\"" + document.reason + "\"}";
+        json += "\",\"version\":\"" + document.version + "\",\"generation\":\"" +
+                document.generation + "\",\"reason\":\"" + document.reason + "\"}";
         break;
     }
     return json;
 }
 
-}  // namespace
+} // namespace
 
-ActiveStateDocumentResult parse_active_state_json(
-    std::string_view expected_application,
-    std::string_view json) {
+ActiveStateDocumentResult parse_active_state_json(std::string_view expected_application,
+                                                  std::string_view json) {
     ActiveStateDocumentResult result;
 
     if (json.size() > kMaxActiveStateBytes) {
@@ -318,21 +284,18 @@ ActiveStateDocumentResult parse_active_state_json(
     }
 
     json_error_t parse_error;
-    json_t *root = json_loadb(json.data(), json.size(),
-                              JSON_REJECT_DUPLICATES | JSON_ALLOW_NUL,
-                              &parse_error);
+    json_t* root =
+        json_loadb(json.data(), json.size(), JSON_REJECT_DUPLICATES | JSON_ALLOW_NUL, &parse_error);
     if (root == nullptr) {
         const enum json_error_code parse_code = json_error_code(&parse_error);
         set_error(result.error,
-                  parse_code == json_error_duplicate_key
-                      ? ErrorCode::kDuplicateKey
-                      : ErrorCode::kInvalidJson,
+                  parse_code == json_error_duplicate_key ? ErrorCode::kDuplicateKey
+                                                         : ErrorCode::kInvalidJson,
                   "", "invalid active state document");
         return result;
     }
     if (!json_is_object(root)) {
-        set_error(result.error, ErrorCode::kInvalidJson, "",
-                  "active state must be a JSON object");
+        set_error(result.error, ErrorCode::kInvalidJson, "", "active state must be a JSON object");
         json_decref(root);
         return result;
     }
@@ -342,15 +305,13 @@ ActiveStateDocumentResult parse_active_state_json(
     // string, which must not be confused with the field being absent.
     std::array<bool, kFieldCount> present{};
     std::string values[kFieldCount];
-    for (void *iter = json_object_iter(root); iter != nullptr;
+    for (void* iter = json_object_iter(root); iter != nullptr;
          iter = json_object_iter_next(root, iter)) {
-        const std::string_view key(json_object_iter_key(iter),
-                                   json_object_iter_key_len(iter));
+        const std::string_view key(json_object_iter_key(iter), json_object_iter_key_len(iter));
         // NUL bytes in keys are rejected by the upstream parser; this check
         // is defensive and must never splice the key into the path.
         if (key.find('\0') != std::string_view::npos) {
-            set_error(result.error, ErrorCode::kInvalidValue, "",
-                      "object key contains a NUL byte");
+            set_error(result.error, ErrorCode::kInvalidValue, "", "object key contains a NUL byte");
             json_decref(root);
             return result;
         }
@@ -361,23 +322,20 @@ ActiveStateDocumentResult parse_active_state_json(
             }
         }
         if (index == kFieldCount) {
-            set_error(result.error, ErrorCode::kUnknownField,
-                      "/" + escape_pointer_component(key),
+            set_error(result.error, ErrorCode::kUnknownField, "/" + escape_pointer_component(key),
                       "unknown active state field");
             json_decref(root);
             return result;
         }
-        json_t *value = json_object_iter_value(iter);
+        json_t* value = json_object_iter_value(iter);
         if (!json_is_string(value)) {
-            set_error(result.error, ErrorCode::kInvalidValue,
-                      "/" + std::string(kFieldNames[index]),
+            set_error(result.error, ErrorCode::kInvalidValue, "/" + std::string(kFieldNames[index]),
                       "active state field must be a string");
             json_decref(root);
             return result;
         }
         present[index] = true;
-        values[index].assign(json_string_value(value),
-                             json_string_length(value));
+        values[index].assign(json_string_value(value), json_string_length(value));
     }
     json_decref(root);
 
@@ -386,10 +344,8 @@ ActiveStateDocumentResult parse_active_state_json(
                   "unsupported active state schema");
         return result;
     }
-    if (values[kAppField] != expected_application ||
-        !valid_application_id(values[kAppField])) {
-        set_error(result.error, ErrorCode::kInvalidValue, "/app",
-                  "invalid App ID");
+    if (values[kAppField] != expected_application || !valid_application_id(values[kAppField])) {
+        set_error(result.error, ErrorCode::kInvalidValue, "/app", "invalid App ID");
         return result;
     }
     ActiveServiceState state;
@@ -400,8 +356,7 @@ ActiveStateDocumentResult parse_active_state_json(
     } else if (values[kStateField] == "quarantined") {
         state = ActiveServiceState::kQuarantined;
     } else {
-        set_error(result.error, ErrorCode::kInvalidValue, "/state",
-                  "unknown service state");
+        set_error(result.error, ErrorCode::kInvalidValue, "/state", "unknown service state");
         return result;
     }
 
@@ -410,8 +365,7 @@ ActiveStateDocumentResult parse_active_state_json(
     // forbidden appearance.
     for (std::size_t field = 0; field < kFieldCount; ++field) {
         if (present[field] && field_forbidden_for_state(state, field)) {
-            set_error(result.error, ErrorCode::kInvalidValue,
-                      "/" + std::string(kFieldNames[field]),
+            set_error(result.error, ErrorCode::kInvalidValue, "/" + std::string(kFieldNames[field]),
                       "state-inapplicable field");
             return result;
         }
@@ -435,8 +389,7 @@ ActiveStateDocumentResult parse_active_state_json(
     return result;
 }
 
-ActiveStateDocumentResult encode_active_state_json(
-    const ActiveStateDocument &document) {
+ActiveStateDocumentResult encode_active_state_json(const ActiveStateDocument& document) {
     ActiveStateDocumentResult result;
     if (!validate_document(document, result.error)) {
         return result;
@@ -447,10 +400,9 @@ ActiveStateDocumentResult encode_active_state_json(
     return result;
 }
 
-ActiveStatePersistResult persist_active_state(
-    const ActiveStateDocument &document,
-    std::string_view operation_id,
-    ActiveStateFilesystem &filesystem) {
+ActiveStatePersistResult persist_active_state(const ActiveStateDocument& document,
+                                              std::string_view operation_id,
+                                              ActiveStateFilesystem& filesystem) {
     ActiveStatePersistResult result;
 
     if (!valid_operation_id(operation_id)) {
@@ -460,8 +412,7 @@ ActiveStatePersistResult persist_active_state(
         return result;
     }
 
-    const ActiveStateDocumentResult encoded =
-        encode_active_state_json(document);
+    const ActiveStateDocumentResult encoded = encode_active_state_json(document);
     if (!encoded.ok) {
         result.error = encoded.error;
         return result;
@@ -473,22 +424,19 @@ ActiveStatePersistResult persist_active_state(
         const GenerationCompleteness completeness =
             filesystem.inspect_generation(document.generation);
         if (completeness != GenerationCompleteness::kComplete) {
-            result.error.code =
-                completeness == GenerationCompleteness::kError
-                    ? ErrorCode::kStorageError
-                    : ErrorCode::kGenerationNotComplete;
+            result.error.code = completeness == GenerationCompleteness::kError
+                                    ? ErrorCode::kStorageError
+                                    : ErrorCode::kGenerationNotComplete;
             result.error.path = "/generation";
-            result.error.message =
-                completeness == GenerationCompleteness::kError
-                    ? "generation inspection failed"
-                    : "generation is not complete";
+            result.error.message = completeness == GenerationCompleteness::kError
+                                       ? "generation inspection failed"
+                                       : "generation is not complete";
             return result;
         }
     }
 
     result.temp_name = "active.json.tmp." + std::string(operation_id);
-    const ActiveStateIoStatus created =
-        filesystem.create_active_temp_exclusive(result.temp_name);
+    const ActiveStateIoStatus created = filesystem.create_active_temp_exclusive(result.temp_name);
     if (created == ActiveStateIoStatus::kAlreadyExists) {
         result.error.code = ErrorCode::kTemporaryFileExists;
         result.error.path = "/" + result.temp_name;
@@ -514,8 +462,7 @@ ActiveStatePersistResult persist_active_state(
         result.error.message = "could not sync the active-state temp";
         return result;
     }
-    if (filesystem.rename_temp_over_active(result.temp_name) !=
-        ActiveStateIoStatus::kOk) {
+    if (filesystem.rename_temp_over_active(result.temp_name) != ActiveStateIoStatus::kOk) {
         result.error.code = ErrorCode::kStorageError;
         result.error.path = "/" + result.temp_name;
         result.error.message = "could not rename the active-state temp";
@@ -529,8 +476,7 @@ ActiveStatePersistResult persist_active_state(
         // in-memory Registry snapshot.
         result.error.code = ErrorCode::kDurabilityUncertain;
         result.error.path = "";
-        result.error.message =
-            "active.json was replaced but the directory sync failed";
+        result.error.message = "active.json was replaced but the directory sync failed";
         return result;
     }
 
@@ -539,9 +485,8 @@ ActiveStatePersistResult persist_active_state(
     return result;
 }
 
-ActiveStateRecoveryResult recover_active_state(
-    std::string_view expected_application,
-    ActiveStateFilesystem &filesystem) {
+ActiveStateRecoveryResult recover_active_state(std::string_view expected_application,
+                                               ActiveStateFilesystem& filesystem) {
     ActiveStateRecoveryResult result;
 
     // Stale temp cleanup is best effort and never changes the selected
@@ -579,15 +524,13 @@ ActiveStateRecoveryResult recover_active_state(
         const GenerationCompleteness completeness =
             filesystem.inspect_generation(parsed.document.generation);
         if (completeness != GenerationCompleteness::kComplete) {
-            result.error.code =
-                completeness == GenerationCompleteness::kError
-                    ? ErrorCode::kStorageError
-                    : ErrorCode::kGenerationNotComplete;
+            result.error.code = completeness == GenerationCompleteness::kError
+                                    ? ErrorCode::kStorageError
+                                    : ErrorCode::kGenerationNotComplete;
             result.error.path = "/generation";
-            result.error.message =
-                completeness == GenerationCompleteness::kError
-                    ? "generation inspection failed"
-                    : "active generation is not complete";
+            result.error.message = completeness == GenerationCompleteness::kError
+                                       ? "generation inspection failed"
+                                       : "active generation is not complete";
             return result;
         }
         result.ok = true;
@@ -611,4 +554,4 @@ ActiveStateRecoveryResult recover_active_state(
     return result;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

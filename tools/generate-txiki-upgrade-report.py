@@ -26,7 +26,15 @@ WORKERD_STANDARD_FAILURES = {
     "worker_wpt_fetch_api_headers_headers_basic_any_js",
     "worker_wpt_fetch_api_headers_headers_errors_any_js",
 }
-WORKERD_ARGUMENTS = ("acceptance", "last_test", "registration", "gate", "context", "wpt_root", "ctest_exit_code")
+WORKERD_ARGUMENTS = (
+    "acceptance",
+    "last_test",
+    "registration",
+    "gate",
+    "context",
+    "wpt_root",
+    "ctest_exit_code",
+)
 REQUIRED_AUDIT_TESTS = {
     "txiki_vendor_patch_integrity",
     "txiki_overlay_audit_negative_controls",
@@ -109,15 +117,10 @@ def vendor_evidence(root: Path, build: Path) -> dict[str, Any]:
         line
         for line in submodules
         if line.startswith(("+", "U"))
-        or (
-            line.startswith("-")
-            and " deps/quickjs/test262 " not in f" {line} "
-        )
+        or (line.startswith("-") and " deps/quickjs/test262 " not in f" {line} ")
     ]
     if bad_submodules:
-        raise RuntimeError(
-            f"vendor submodules are not pinned: {bad_submodules}"
-        )
+        raise RuntimeError(f"vendor submodules are not pinned: {bad_submodules}")
     patches = sorted((root / "patches/txiki").glob("*.patch"))
     patch_records = [
         {"name": patch.name, "bytes": patch.stat().st_size, "sha256": sha256(patch)}
@@ -170,14 +173,8 @@ def run_vendor_audit(
         f"-DCAPSID_TXIKI_VENDOR={root / 'vendor/txiki.js'}",
         f"-DCAPSID_TXIKI_PATCH_DIR={root / 'patches/txiki'}",
         f"-DCAPSID_TXIKI_EXPECTED_TAG={current_tag}",
-        (
-            "-DCAPSID_TXIKI_OVERLAY_STAMP="
-            f"{build / 'vendor-overlay/txiki.js/.capsid-overlay-key'}"
-        ),
-        (
-            "-DCAPSID_TXIKI_PREPARE_SCRIPT="
-            f"{root / 'cmake/PrepareTxiki.cmake'}"
-        ),
+        (f"-DCAPSID_TXIKI_OVERLAY_STAMP={build / 'vendor-overlay/txiki.js/.capsid-overlay-key'}"),
+        (f"-DCAPSID_TXIKI_PREPARE_SCRIPT={root / 'cmake/PrepareTxiki.cmake'}"),
         # The audit applies the patch series to a fresh copy in this
         # scratch dir (mirroring the test registration, which passes
         # Testing/txiki-patch-probe).
@@ -191,7 +188,11 @@ def run_vendor_audit(
         "output": run(vendor_command),
         "scripts": {
             name: sha256(root / "cmake" / name)
-            for name in ["AuditTxikiVendor.cmake", "PrepareTxiki.cmake", "ComputeTxikiOverlayKey.cmake"]
+            for name in [
+                "AuditTxikiVendor.cmake",
+                "PrepareTxiki.cmake",
+                "ComputeTxikiOverlayKey.cmake",
+            ]
         },
     }
 
@@ -237,9 +238,7 @@ def source_configuration(
     }
     actual = {key: cache.get(key) for key in expected}
     if actual != expected:
-        raise RuntimeError(
-            f"restricted Release configuration mismatch: {actual}"
-        )
+        raise RuntimeError(f"restricted Release configuration mismatch: {actual}")
     sources = [
         root / "src/txiki_restricted_core.c",
         root / "src/worker_runtime.cc",
@@ -251,9 +250,7 @@ def source_configuration(
     return {
         "passed": True,
         "cache": actual,
-        "source_artifacts": [
-            artifact(path, root) for path in sources
-        ],
+        "source_artifacts": [artifact(path, root) for path in sources],
     }
 
 
@@ -262,14 +259,14 @@ def ctest_evidence(
     junit_path: Path,
     compatibility: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    catalog = json.loads(
-        run(["ctest", "--test-dir", str(build), "--show-only=json-v1"])
-    )
+    catalog = json.loads(run(["ctest", "--test-dir", str(build), "--show-only=json-v1"]))
     tests = catalog.get("tests")
     if not isinstance(tests, list) or not tests:
         raise RuntimeError("empty or invalid CTest catalog")
     names = [test.get("name") for test in tests]
-    if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(names):
+    if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(
+        names
+    ):
         raise RuntimeError("missing or duplicate CTest catalog names")
     registered = dict(zip(names, tests))
     if "wpt_conformance_not_configured" in registered:
@@ -285,9 +282,7 @@ def ctest_evidence(
     missing = sorted(set(registered) - set(cases))
     extra = sorted(set(cases) - set(registered))
     if missing or extra:
-        raise RuntimeError(
-            f"JUnit/catalog mismatch: missing={missing}, extra={extra}"
-        )
+        raise RuntimeError(f"JUnit/catalog mismatch: missing={missing}, extra={extra}")
     failed: list[str] = []
     skipped: list[str] = []
     passed: list[str] = []
@@ -295,8 +290,7 @@ def ctest_evidence(
         name
         for name, test in registered.items()
         if any(
-            prop.get("name") == "SKIP_RETURN_CODE"
-            and str(prop.get("value")) == "77"
+            prop.get("name") == "SKIP_RETURN_CODE" and str(prop.get("value")) == "77"
             for prop in test.get("properties", [])
         )
     }
@@ -324,44 +318,48 @@ def ctest_evidence(
             raise RuntimeError(f"JUnit summary disagrees with executed cases: {key}")
     unexpected_skips = sorted(set(skipped) - allowed_skips)
     if unexpected_skips or failed and compatibility is None:
-        raise RuntimeError(
-            f"full matrix failed={failed}, unexpected_skips={unexpected_skips}"
-        )
+        raise RuntimeError(f"full matrix failed={failed}, unexpected_skips={unexpected_skips}")
     if compatibility is not None:
-        flags = {"complete": True, "compatibilityQualified": True,
-                 "standardsConformanceClaimed": False, "ordinarySuitePassed": False,
-                 "privilegedSandboxAndOtherHostedJobsStillMandatory": True}
-        if (compatibility.get("schema") != "capsid-workerd-release-replay-v1"
-                or compatibility.get("profile") != WORKERD_PROFILE
-                or any(compatibility.get(k) is not v for k, v in flags.items())):
+        flags = {
+            "complete": True,
+            "compatibilityQualified": True,
+            "standardsConformanceClaimed": False,
+            "ordinarySuitePassed": False,
+            "privilegedSandboxAndOtherHostedJobsStillMandatory": True,
+        }
+        if (
+            compatibility.get("schema") != "capsid-workerd-release-replay-v1"
+            or compatibility.get("profile") != WORKERD_PROFILE
+            or any(compatibility.get(k) is not v for k, v in flags.items())
+        ):
             raise RuntimeError("complete versioned workerd replay is required")
         if set(failed) != WORKERD_STANDARD_FAILURES:
             raise RuntimeError("compatible report retains exactly the five standard failures")
         if compatibility.get("registration") != catalog:
-            raise RuntimeError("workerd replay and upgrade report must use the same complete catalog")
-        if (compatibility.get("junitSHA256") != sha256(junit_path)
-                or Path(compatibility.get("junit", "")).resolve() != junit_path.resolve()
-                or Path(compatibility.get("build", "")).resolve() != build.resolve()):
+            raise RuntimeError(
+                "workerd replay and upgrade report must use the same complete catalog"
+            )
+        if (
+            compatibility.get("junitSHA256") != sha256(junit_path)
+            or Path(compatibility.get("junit", "")).resolve() != junit_path.resolve()
+            or Path(compatibility.get("build", "")).resolve() != build.resolve()
+        ):
             raise RuntimeError("workerd replay must bind the same actual build and raw JUnit")
         ordinary = compatibility.get("ordinary", {})
-        if (ordinary.get("selected") != len(cases)
-                or ordinary.get("failed") != sorted(failed)
-                or sorted(ordinary.get("skipped", [])) != sorted(skipped)):
+        if (
+            ordinary.get("selected") != len(cases)
+            or ordinary.get("failed") != sorted(failed)
+            or sorted(ordinary.get("skipped", [])) != sorted(skipped)
+        ):
             raise RuntimeError("workerd replay must retain every actual failed and skipped case")
     missing_audits = sorted(REQUIRED_AUDIT_TESTS - set(passed))
     if missing_audits:
-        raise RuntimeError(
-            f"required audit tests did not pass: {missing_audits}"
-        )
-    wpt = sorted(
-        name for name in registered if name.startswith("worker_wpt_")
-    )
+        raise RuntimeError(f"required audit tests did not pass: {missing_audits}")
+    wpt = sorted(name for name in registered if name.startswith("worker_wpt_"))
     if len(wpt) < 80:
         raise RuntimeError(f"expected fixed WPT matrix, found {len(wpt)} tests")
     return {
-        "catalog_sha256": hashlib.sha256(
-            json.dumps(catalog, sort_keys=True).encode()
-        ).hexdigest(),
+        "catalog_sha256": hashlib.sha256(json.dumps(catalog, sort_keys=True).encode()).hexdigest(),
         "junit": {
             "path": str(junit_path.resolve()),
             "sha256": sha256(junit_path),
@@ -373,8 +371,15 @@ def ctest_evidence(
         "allowed_environment_skips": sorted(allowed_skips),
         "failed": sorted(failed),
         "ordinary_suite_passed": not failed,
-        **({"compatibility_evidence": {k: v for k, v in compatibility.items() if k != "registration"}}
-           if compatibility is not None else {}),
+        **(
+            {
+                "compatibility_evidence": {
+                    k: v for k, v in compatibility.items() if k != "registration"
+                }
+            }
+            if compatibility is not None
+            else {}
+        ),
         "wpt_files": len(wpt),
         "required_audit_tests": sorted(REQUIRED_AUDIT_TESTS),
     }
@@ -389,12 +394,8 @@ def deviations(root: Path, baseline: dict[str, Any]) -> dict[str, Any]:
         cells = [cell.strip() for cell in line.split("|")[1:-1]]
         current[cells[0]] = cells[2]
     previous = baseline["conformance_deviations"]
-    added = {
-        key: current[key] for key in sorted(set(current) - set(previous))
-    }
-    removed = {
-        key: previous[key] for key in sorted(set(previous) - set(current))
-    }
+    added = {key: current[key] for key in sorted(set(current) - set(previous))}
+    removed = {key: previous[key] for key in sorted(set(previous) - set(current))}
     changed = {
         key: {"before": previous[key], "after": current[key]}
         for key in sorted(set(previous) & set(current))
@@ -415,9 +416,7 @@ def deviations(root: Path, baseline: dict[str, Any]) -> dict[str, Any]:
 def surface_inventory(root: Path) -> dict[str, Any]:
     profile_path = root / "js/profile-manifest.js"
     profile_text = profile_path.read_text(encoding="utf-8")
-    profile_match = re.search(
-        r"profileId\s*=\s*'([^']+)'", profile_text
-    )
+    profile_match = re.search(r"profileId\s*=\s*'([^']+)'", profile_text)
     block_match = re.search(
         r"profileGlobalNames\s*=\s*Object\.freeze\(\[(.*?)\]\.sort\(\)\)",
         profile_text,
@@ -445,15 +444,9 @@ def surface_inventory(root: Path) -> dict[str, Any]:
             "contract_test": "worker_global_surface",
         },
         "modules": {
-            "application_visible": capability["modules"][
-                "built_and_available"
-            ],
-            "known_not_built": capability["modules"][
-                "known_but_not_built"
-            ],
-            "permanently_forbidden": capability["modules"][
-                "permanently_forbidden"
-            ],
+            "application_visible": capability["modules"]["built_and_available"],
+            "known_not_built": capability["modules"]["known_but_not_built"],
+            "permanently_forbidden": capability["modules"]["permanently_forbidden"],
             "manifest_sha256": sha256(capability_path),
             "contract_tests": [
                 "worker_denies_public_native_module",
@@ -485,36 +478,33 @@ def render_report(document: dict[str, Any]) -> str:
             "# txiki.js 升级门禁报告",
             "",
             f"> 生成时间：{document['generated_at']}",
-            f"> vendor：`{document['vendor']['tag']}` / "
-            f"`{document['vendor']['commit']}`",
+            f"> vendor：`{document['vendor']['tag']}` / `{document['vendor']['commit']}`",
             "",
             "## 结论",
             "",
-            ("workerd版本兼容验收通过，原始标准矩阵的五项失败仍保留。"
-             "完整参考/context证据已重新核验；privileged矩阵和其他Hosted任务仍须通过。"
-             if tests.get("compatibility_evidence") else
-             "门禁通过。vendor、patch、overlay、受限源码与符号、完整测试矩阵、"
-             "合规偏差差异和运行时表面清单已汇总到同一份 JSON 证据。"),
+            (
+                "workerd版本兼容验收通过，原始标准矩阵的五项失败仍保留。"
+                "完整参考/context证据已重新核验；privileged矩阵和其他Hosted任务仍须通过。"
+                if tests.get("compatibility_evidence")
+                else "门禁通过。vendor、patch、overlay、受限源码与符号、完整测试矩阵、"
+                "合规偏差差异和运行时表面清单已汇总到同一份 JSON 证据。"
+            ),
             "",
             "## 测试",
             "",
             f"- 注册：{tests['registered']}",
             f"- 通过：{tests['passed']}",
             f"- 原始失败：{len(tests['failed'])}（{', '.join(tests['failed']) or '无'}）",
-            f"- 环境型 skip：{len(tests['skipped'])} "
-            f"（{', '.join(tests['skipped']) or '无'}）",
+            f"- 环境型 skip：{len(tests['skipped'])} （{', '.join(tests['skipped']) or '无'}）",
             f"- 固定 WPT 文件：{tests['wpt_files']}",
             "",
             "## 合规与表面",
             "",
             f"- 偏差：{len(deviation['current'])} 项；相对 baseline "
             f"{'无变化' if deviation['unchanged'] else '有变化，见 JSON diff'}；",
-            f"- 全局：{inventory['globals']['count']} 个，"
-            "`worker_global_surface` 验证精确集合；",
-            f"- 应用可见原生模块："
-            f"{', '.join(inventory['modules']['application_visible'])}；",
-            f"- 受限原生 helper："
-            f"{inventory['native']['restricted_helper_count']} 个。",
+            f"- 全局：{inventory['globals']['count']} 个，`worker_global_surface` 验证精确集合；",
+            f"- 应用可见原生模块：{', '.join(inventory['modules']['application_visible'])}；",
+            f"- 受限原生 helper：{inventory['native']['restricted_helper_count']} 个。",
             "",
             "权威明细、哈希、patch 列表、审计输出、完整全局/模块/原生清单和 "
             "JUnit 摘要均在同名 JSON 文件中。",
@@ -538,8 +528,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def compatible_release_evidence(args: argparse.Namespace, root: Path,
-                                build: Path, cache: dict[str, str]) -> dict[str, Any] | None:
+def compatible_release_evidence(
+    args: argparse.Namespace, root: Path, build: Path, cache: dict[str, str]
+) -> dict[str, Any] | None:
     values = {name: getattr(args, "workerd_" + name, None) for name in WORKERD_ARGUMENTS}
     if not values["acceptance"]:
         if any(values.values()) or getattr(args, "workerd_python", None):
@@ -551,8 +542,16 @@ def compatible_release_evidence(args: argparse.Namespace, root: Path,
     if not node or not Path(node).is_file():
         raise RuntimeError("compatible reports require the configured Node executable")
     helper = Path(__file__).with_name("replay-workerd-release-acceptance.mjs")
-    command = [str(node), str(helper), "--source-root", str(root), "--build", str(build),
-               "--junit", str(args.junit.resolve())]
+    command = [
+        str(node),
+        str(helper),
+        "--source-root",
+        str(root),
+        "--build",
+        str(build),
+        "--junit",
+        str(args.junit.resolve()),
+    ]
     for name, file in values.items():
         command.extend(["--" + name.replace("_", "-"), str(file.resolve())])
     python = getattr(args, "workerd_python", None)
@@ -561,7 +560,9 @@ def compatible_release_evidence(args: argparse.Namespace, root: Path,
     try:
         result = json.loads(run(command))
     except subprocess.CalledProcessError as error:
-        raise RuntimeError("workerd acceptance replay failed: " + str(error.output)[-12000:]) from error
+        raise RuntimeError(
+            "workerd acceptance replay failed: " + str(error.output)[-12000:]
+        ) from error
     if result.get("sourceRoot") != str(root) or result.get("build") != str(build):
         raise RuntimeError("workerd replay must bind the requested source and build")
     return result
@@ -593,20 +594,14 @@ def collect_report(args: argparse.Namespace) -> dict[str, Any]:
         "surface_inventory": surface_inventory(root),
         "artifacts": {
             "worker": artifact(build / "capsid-worker", root),
-            "tjs_archive": artifact(
-                build / "txiki-build/libtjs_core.a", root
-            ),
-            "runtime_archive": artifact(
-                build / "libcapsid_runtime.a", root
-            ),
+            "tjs_archive": artifact(build / "txiki-build/libtjs_core.a", root),
+            "runtime_archive": artifact(build / "libcapsid_runtime.a", root),
         },
     }
     expected_vendor = baseline["vendor"]
     document["vendor"]["baseline_diff"] = {
         "tag_changed": document["vendor"]["tag"] != expected_vendor["tag"],
-        "commit_changed": (
-            document["vendor"]["commit"] != expected_vendor["commit"]
-        ),
+        "commit_changed": (document["vendor"]["commit"] != expected_vendor["commit"]),
     }
     return document
 
@@ -618,9 +613,13 @@ def write_document(args: argparse.Namespace, document: dict[str, Any]) -> None:
         json.dumps(document, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    text = render_report(document) if document["state"] == "complete" else (
-        "# txiki.js 升级报告未完成\n\n"
-        f"状态：{document['state']}。\n\n{document.get('error', '验收仍在执行。')}\n"
+    text = (
+        render_report(document)
+        if document["state"] == "complete"
+        else (
+            "# txiki.js 升级报告未完成\n\n"
+            f"状态：{document['state']}。\n\n{document.get('error', '验收仍在执行。')}\n"
+        )
     )
     args.output_md.write_text(text, encoding="utf-8")
 
@@ -628,27 +627,43 @@ def write_document(args: argparse.Namespace, document: dict[str, Any]) -> None:
 def main() -> None:
     args = parse_args()
     outputs = [args.output_json.resolve(), args.output_md.resolve()]
-    inputs = {args.junit.resolve(), args.baseline.resolve(),
-              (args.build_dir / "CMakeCache.txt").resolve(), Path(__file__).resolve()}
+    inputs = {
+        args.junit.resolve(),
+        args.baseline.resolve(),
+        (args.build_dir / "CMakeCache.txt").resolve(),
+        Path(__file__).resolve(),
+    }
     inputs.add(Path(__file__).with_name("replay-workerd-release-acceptance.mjs").resolve())
     for name in WORKERD_ARGUMENTS:
         value = getattr(args, "workerd_" + name, None)
         if value is not None:
             inputs.add(value.resolve())
     protected_trees = [getattr(args, "workerd_" + name, None) for name in ("gate", "wpt_root")]
-    if (outputs[0] == outputs[1] or any(path in inputs or path.is_dir() for path in outputs)
-            or any(path.is_relative_to(tree.resolve()) for path in outputs for tree in protected_trees if tree is not None)):
+    if (
+        outputs[0] == outputs[1]
+        or any(path in inputs or path.is_dir() for path in outputs)
+        or any(
+            path.is_relative_to(tree.resolve())
+            for path in outputs
+            for tree in protected_trees
+            if tree is not None
+        )
+    ):
         raise RuntimeError("report outputs must be distinct files and cannot replace report inputs")
-    status = {"schema_version": SCHEMA_VERSION, "state": "incomplete",
-              "generated_at": datetime.now(timezone.utc).isoformat()}
+    status = {
+        "schema_version": SCHEMA_VERSION,
+        "state": "incomplete",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
     # A failed attempt must not leave an earlier successful report at the
     # requested output paths. Keep a concrete failed/incomplete artifact.
     write_document(args, status)
     try:
         document = collect_report(args)
     except Exception as error:
-        write_document(args, {**status, "state": "failed",
-                              "error": f"{type(error).__name__}: {error}"})
+        write_document(
+            args, {**status, "state": "failed", "error": f"{type(error).__name__}: {error}"}
+        )
         raise
     write_document(args, document)
 

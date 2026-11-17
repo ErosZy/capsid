@@ -33,19 +33,13 @@ typedef enum capsid_sandbox_feature {
     CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE = 1u << 7,
     CAPSID_SANDBOX_FEATURE_CGROUP_V2 = 1u << 8,
     CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE = 1u << 9,
-    CAPSID_SANDBOX_FEATURE_STRICT_BASE =
-        CAPSID_SANDBOX_FEATURE_RLIMITS |
-        CAPSID_SANDBOX_FEATURE_NO_NEW_PRIVS |
-        CAPSID_SANDBOX_FEATURE_SECCOMP |
+    CAPSID_SANDBOX_FEATURE_STRICT_BASE = CAPSID_SANDBOX_FEATURE_RLIMITS |
+        CAPSID_SANDBOX_FEATURE_NO_NEW_PRIVS | CAPSID_SANDBOX_FEATURE_SECCOMP |
         CAPSID_SANDBOX_FEATURE_LANDLOCK,
-    CAPSID_SANDBOX_FEATURE_ALL =
-        CAPSID_SANDBOX_FEATURE_STRICT_BASE |
-        CAPSID_SANDBOX_FEATURE_USER_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_MOUNT_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_IPC_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE |
-        CAPSID_SANDBOX_FEATURE_CGROUP_V2 |
-        CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE
+    CAPSID_SANDBOX_FEATURE_ALL = CAPSID_SANDBOX_FEATURE_STRICT_BASE |
+        CAPSID_SANDBOX_FEATURE_USER_NAMESPACE | CAPSID_SANDBOX_FEATURE_MOUNT_NAMESPACE |
+        CAPSID_SANDBOX_FEATURE_IPC_NAMESPACE | CAPSID_SANDBOX_FEATURE_UTS_NAMESPACE |
+        CAPSID_SANDBOX_FEATURE_CGROUP_V2 | CAPSID_SANDBOX_FEATURE_NETWORK_NAMESPACE
 } capsid_sandbox_feature;
 
 typedef struct capsid_worker capsid_worker;
@@ -72,7 +66,7 @@ typedef enum capsid_result {
  * thread. Returns NULL when the last call succeeded (or never ran), and
  * on OOM paths only static text is stored — the mechanism never allocates.
  */
-const char *capsid_last_error(void);
+const char* capsid_last_error(void);
 
 /*
  * Immutable identity of the Runtime/QuickJS bytecode toolchain plus the
@@ -94,19 +88,19 @@ const char *capsid_last_error(void);
 typedef struct capsid_build_info {
     uint32_t struct_size;
     uint32_t version;
-    const char *runtime_version;
+    const char* runtime_version;
     uint32_t abi_version;
     uint32_t fetchrpc_version;
-    const char *quickjs_commit;
-    const char *txiki_overlay_key;
-    const char *txiki_overlay_manifest;
-    const char *bytecode_compile_flags;
-    const char *target_architecture;
-    const char *endianness;
+    const char* quickjs_commit;
+    const char* txiki_overlay_key;
+    const char* txiki_overlay_manifest;
+    const char* bytecode_compile_flags;
+    const char* target_architecture;
+    const char* endianness;
     uint32_t pointer_width_bits;
-    const char *bytecode_format_identity;
-    const char *capability_manifest_sha256;
-    const char *compatibility_id;
+    const char* bytecode_format_identity;
+    const char* capability_manifest_sha256;
+    const char* compatibility_id;
     /* Build-info v2 (WP-07, spec §11.3/§11.4): provenance of the exact
      * linked build. capsid_commit is 40 lowercase hex on a git checkout,
      * "unknown" when the commit could not be resolved; capsid_tree_clean
@@ -115,15 +109,15 @@ typedef struct capsid_build_info {
      * build (non-Release configure, unresolved commit, or dirty tree).
      * build_feature_flags is one canonical ASCII string:
      *   "lto=ON|OFF asan=... ubsan=... tsan=... mimalloc=... host=... worker=..." */
-    const char *build_id;
-    const char *capsid_commit;
+    const char* build_id;
+    const char* capsid_commit;
     uint32_t capsid_tree_clean;
     uint32_t provenance_dirty;
-    const char *compiler_id;
-    const char *compiler_version;
-    const char *target_triple;
-    const char *cmake_build_type;
-    const char *build_feature_flags;
+    const char* compiler_id;
+    const char* compiler_version;
+    const char* target_triple;
+    const char* cmake_build_type;
+    const char* build_feature_flags;
 } capsid_build_info;
 
 /*
@@ -138,14 +132,10 @@ typedef enum capsid_resource_limit_field {
     CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_MAX = 1u << 4,
     CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_SWAP_MAX = 1u << 5,
     CAPSID_RESOURCE_LIMIT_CGROUP_PIDS_MAX = 1u << 6,
-    CAPSID_RESOURCE_LIMIT_ALL =
-        CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS |
-        CAPSID_RESOURCE_LIMIT_CGROUP_CPU_MAX |
-        CAPSID_RESOURCE_LIMIT_CGROUP_CPU_WEIGHT |
-        CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_HIGH |
-        CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_MAX |
-        CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_SWAP_MAX |
-        CAPSID_RESOURCE_LIMIT_CGROUP_PIDS_MAX
+    CAPSID_RESOURCE_LIMIT_ALL = CAPSID_RESOURCE_LIMIT_FILE_DESCRIPTORS |
+        CAPSID_RESOURCE_LIMIT_CGROUP_CPU_MAX | CAPSID_RESOURCE_LIMIT_CGROUP_CPU_WEIGHT |
+        CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_HIGH | CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_MAX |
+        CAPSID_RESOURCE_LIMIT_CGROUP_MEMORY_SWAP_MAX | CAPSID_RESOURCE_LIMIT_CGROUP_PIDS_MAX
 } capsid_resource_limit_field;
 
 typedef struct capsid_resource_limits {
@@ -191,7 +181,7 @@ typedef enum capsid_egress_action {
 typedef struct capsid_egress_rule {
     uint32_t struct_size;
     capsid_egress_action action;
-    const char *target;
+    const char* target;
     uint16_t port_start;
     uint16_t port_end;
     /* Stable host-provided audit identifier. Zero assigns index + 1. */
@@ -202,7 +192,7 @@ typedef struct capsid_egress_rule {
 typedef struct capsid_egress_policy {
     uint32_t struct_size;
     capsid_egress_action default_action;
-    const capsid_egress_rule *rules;
+    const capsid_egress_rule* rules;
     uint32_t rule_count;
     uint32_t reserved;
 } capsid_egress_policy;
@@ -252,7 +242,7 @@ typedef struct capsid_permission_rule {
      * and sys/stdio/storage/engine use fixed resource names.
      * CAPSID_PERMISSION_NET must use capsid_capability_policy.net_policy.
      */
-    const char *resource;
+    const char* resource;
     /* Nonzero and unique within the capability policy. */
     uint32_t rule_id;
     uint32_t reserved;
@@ -265,32 +255,32 @@ typedef struct capsid_permission_rule {
  */
 typedef struct capsid_env_entry {
     uint32_t struct_size;
-    const char *name;
-    const char *value;
+    const char* name;
+    const char* value;
     uint32_t reserved;
 } capsid_env_entry;
 
 typedef struct capsid_capability_policy {
     uint32_t struct_size;
     uint32_t version;
-    const char *application_identity;
-    const char *const *allowed_modules;
+    const char* application_identity;
+    const char* const* allowed_modules;
     uint32_t allowed_module_count;
-    const capsid_permission_rule *rules;
+    const capsid_permission_rule* rules;
     uint32_t rule_count;
     /*
      * The operation-level policy for standard fetch and future client
      * transports. If both this and capsid_worker_config.egress_policy are
      * provided, both must allow the operation.
      */
-    const capsid_egress_policy *net_policy;
+    const capsid_egress_policy* net_policy;
     uint32_t reserved;
     /*
      * Version 2: immutable values exposed by capsid:env. Every entry must be
      * covered by an effective CAPSID_PERMISSION_ENV allow rule, and the module
      * itself must be present in allowed_modules.
      */
-    const capsid_env_entry *env_entries;
+    const capsid_env_entry* env_entries;
     uint32_t env_entry_count;
     uint32_t env_reserved;
 } capsid_capability_policy;
@@ -298,7 +288,7 @@ typedef struct capsid_capability_policy {
 typedef struct capsid_worker_config {
     uint32_t struct_size;
     uint32_t abi_version;
-    const char *worker_path;
+    const char* worker_path;
     uint64_t js_heap_limit;
     uint64_t process_memory_limit;
     uint64_t request_timeout_ms;
@@ -313,7 +303,7 @@ typedef struct capsid_worker_config {
      */
     uint8_t strict_sandbox;
     uint8_t reserved[7];
-    const char *tls_ca_bundle_path;
+    const char* tls_ca_bundle_path;
     uint64_t max_fetch_request_body_bytes;
     uint64_t max_fetch_response_body_bytes;
     /*
@@ -327,23 +317,23 @@ typedef struct capsid_worker_config {
      * applies enabled controller limits, verifies them, and attaches the
      * child before HELLO. Non-NULL implies CAPSID_SANDBOX_FEATURE_CGROUP_V2.
      */
-    const char *sandbox_cgroup_path;
+    const char* sandbox_cgroup_path;
     /*
      * Optional typed resource controls. The descriptor is read synchronously
      * by capsid_worker_spawn() and is never exposed to JavaScript.
      */
-    const capsid_resource_limits *resource_limits;
+    const capsid_resource_limits* resource_limits;
     /*
      * Immutable direct-fetch network policy. NULL denies every outbound
      * Fetch. The native HTTP client remains internal to the worker.
      */
-    const capsid_egress_policy *egress_policy;
+    const capsid_egress_policy* egress_policy;
     /*
      * Optional immutable module/capability policy. NULL preserves the legacy
      * module-deny behavior and leaves direct fetch governed only by
      * egress_policy. When non-NULL, its net policy is an additional gate.
      */
-    const capsid_capability_policy *capability_policy;
+    const capsid_capability_policy* capability_policy;
     /*
      * Linux network namespace descriptor prepared by the host. The namespace
      * must already contain the intended routing and firewall policy. -1
@@ -426,7 +416,7 @@ typedef struct capsid_protocol_info {
 } capsid_protocol_info;
 
 typedef struct capsid_bytes {
-    const uint8_t *data;
+    const uint8_t* data;
     size_t size;
 } capsid_bytes;
 
@@ -617,20 +607,16 @@ typedef struct capsid_channel_event {
     capsid_bytes diagnostic;
 } capsid_channel_event;
 
-capsid_result capsid_channel_event_init_sized(capsid_channel_event *event,
-                                              uint32_t caller_size);
+capsid_result capsid_channel_event_init_sized(capsid_channel_event* event, uint32_t caller_size);
 /* The initializer's size is evaluated in the caller's translation unit. */
-static inline void capsid_channel_event_init(capsid_channel_event *event) {
+static inline void capsid_channel_event_init(capsid_channel_event* event) {
     (void)capsid_channel_event_init_sized(event, (uint32_t)sizeof(*event));
 }
-capsid_result capsid_channel_event_decode(const capsid_event *event,
-                                          capsid_channel_event *out,
+capsid_result capsid_channel_event_decode(const capsid_event* event, capsid_channel_event* out,
                                           uint32_t caller_size);
 /* CANCEL reason is a scalar getter; the v1 typed view keeps its layout. */
-capsid_result capsid_channel_cancel_reason(const capsid_event *event,
-                                            uint32_t *out_reason);
-capsid_result capsid_channel_ack_kind(const capsid_event *event,
-                                       uint32_t *out_kind);
+capsid_result capsid_channel_cancel_reason(const capsid_event* event, uint32_t* out_reason);
+capsid_result capsid_channel_ack_kind(const capsid_event* event, uint32_t* out_kind);
 /* CONFIRM capability: stop the channel's producer and drain/cancel its IO
  * before acknowledging CANCEL/transport close. Use channel_id=0 and a
  * nonzero dial_id for pending-dial cancellation; assigned identities use
@@ -638,53 +624,37 @@ capsid_result capsid_channel_ack_kind(const capsid_event *event,
  * with control priority. A dial ACCEPT remains provisional until the pump
  * delivers ACK_DIAL_RESULT, so no channel DATA may be sent before it.
  * The event and typed-view layouts remain unchanged. */
-capsid_result capsid_worker_channel_confirm(capsid_worker *worker,
-                                              uint32_t channel_id,
-                                              uint64_t dial_id,
-                                              uint32_t kind);
+capsid_result capsid_worker_channel_confirm(capsid_worker* worker, uint32_t channel_id,
+                                            uint64_t dial_id, uint32_t kind);
 
 /*
  * Sends one DATA fragment (flags: CAPSID_CHANNEL_FLAG_*). The message
  * must fit the negotiated per-message cap; fragments are credit-bound
  * per direction. The bytes are copied before returning.
  */
-capsid_result capsid_worker_channel_send(capsid_worker *worker,
-                                         uint32_t channel_id,
-                                         const uint8_t *data,
-                                         size_t size,
-                                         uint32_t flags);
+capsid_result capsid_worker_channel_send(capsid_worker* worker, uint32_t channel_id,
+                                         const uint8_t* data, size_t size, uint32_t flags);
 /* Grants the worker `credit` additional send bytes on the channel. */
-capsid_result capsid_worker_channel_grant(capsid_worker *worker,
-                                          uint32_t channel_id,
+capsid_result capsid_worker_channel_grant(capsid_worker* worker, uint32_t channel_id,
                                           uint64_t credit);
 /* Half-closes the host's send side (requires the HALF_CLOSE bit). */
-capsid_result capsid_worker_channel_half_close(capsid_worker *worker,
-                                               uint32_t channel_id);
+capsid_result capsid_worker_channel_half_close(capsid_worker* worker, uint32_t channel_id);
 /* Close handshake; code/reason follow the contract close matrix.
  * code == 0 with an empty reason encodes an empty Close body. */
-capsid_result capsid_worker_channel_close(capsid_worker *worker,
-                                          uint32_t channel_id,
-                                          uint16_t code,
-                                          const char *reason);
+capsid_result capsid_worker_channel_close(capsid_worker* worker, uint32_t channel_id, uint16_t code,
+                                          const char* reason);
 /* Explicit close kind: 0 initiated, 1 observed network Close, 2 transport,
  * 3 final (send Close then stop transport, requires CHANNEL_CLOSE_FINAL).
  * Transport codes are synthetic diagnostics and must not go on the network. */
-capsid_result capsid_worker_channel_close_ex(capsid_worker *worker,
-                                             uint32_t channel_id,
-                                             uint32_t kind,
-                                             uint16_t code,
-                                             const char *reason);
+capsid_result capsid_worker_channel_close_ex(capsid_worker* worker, uint32_t channel_id,
+                                             uint32_t kind, uint16_t code, const char* reason);
 /* Counted UTF-8 reason; preserves embedded NUL bytes permitted by RFC 6455.
  * Input is copied synchronously. The original C-string APIs remain valid. */
-capsid_result capsid_worker_channel_close_bytes(capsid_worker *worker,
-                                                uint32_t channel_id,
-                                                uint32_t kind,
-                                                uint16_t code,
-                                                const uint8_t *reason,
+capsid_result capsid_worker_channel_close_bytes(capsid_worker* worker, uint32_t channel_id,
+                                                uint32_t kind, uint16_t code, const uint8_t* reason,
                                                 size_t reason_size);
 /* Terminal cancel (reason: CAPSID_CANCEL_REASON_*). */
-capsid_result capsid_worker_channel_cancel(capsid_worker *worker,
-                                           uint32_t channel_id,
+capsid_result capsid_worker_channel_cancel(capsid_worker* worker, uint32_t channel_id,
                                            uint32_t reason);
 /*
  * Reserves an inbound Upgrade for the next begin_request (or
@@ -696,16 +666,12 @@ capsid_result capsid_worker_channel_cancel(capsid_worker *worker,
  * a non-101 response releases it. Cancel channel_id to abort a reservation.
  * Host-assigned ids must be announced in increasing order on the IPC stream.
  */
-capsid_result capsid_worker_upgrade_begin(capsid_worker *worker,
-                                          uint64_t request_id,
-                                          uint32_t channel_id,
-                                          uint64_t max_message_bytes);
+capsid_result capsid_worker_upgrade_begin(capsid_worker* worker, uint64_t request_id,
+                                          uint32_t channel_id, uint64_t max_message_bytes);
 /* Accepts a worker dial: assigns channel_id at the accepted cap. */
-capsid_result capsid_worker_dial_accept(capsid_worker *worker,
-                                        uint64_t dial_id,
-                                        uint32_t channel_id,
-                                        uint64_t max_message_bytes,
-                                        const char *selected_protocol);
+capsid_result capsid_worker_dial_accept(capsid_worker* worker, uint64_t dial_id,
+                                        uint32_t channel_id, uint64_t max_message_bytes,
+                                        const char* selected_protocol);
 /* Additive ABI-v7 descriptor for a negotiated FETCH_UPGRADE result.
  * Initialize every field (including struct_size and version) before use.
  * Names/values are counted HTTP ByteString octets, with duplicate headers
@@ -717,36 +683,31 @@ typedef struct capsid_fetch_upgrade_response {
     uint32_t struct_size;
     uint32_t version;
     uint32_t status;
-    uint32_t redirected;  /* 0 or 1 */
+    uint32_t redirected; /* 0 or 1 */
     capsid_bytes status_text;
     capsid_bytes url;
-    const capsid_header *headers;
+    const capsid_header* headers;
     size_t header_count;
 } capsid_fetch_upgrade_response;
 
 /* Requires the negotiated FETCH_UPGRADE capability and matching fetch OPEN.
  * Ordinary dial_accept remains the constructor-WebSocket operation.
  * Queue refusal preserves the pending dial and assigned id for retry. */
-capsid_result capsid_worker_dial_accept_http(capsid_worker *worker,
-                                             uint64_t dial_id,
-                                             uint32_t channel_id,
-                                             uint64_t max_message_bytes,
-                                             const capsid_fetch_upgrade_response *response);
+capsid_result capsid_worker_dial_accept_http(capsid_worker* worker, uint64_t dial_id,
+                                             uint32_t channel_id, uint64_t max_message_bytes,
+                                             const capsid_fetch_upgrade_response* response);
 /* Rejects a worker dial (contract REJECT reason codes 0..9). */
-capsid_result capsid_worker_dial_reject(capsid_worker *worker,
-                                        uint64_t dial_id,
-                                        uint32_t reason_code,
-                                        const char *diagnostic);
+capsid_result capsid_worker_dial_reject(capsid_worker* worker, uint64_t dial_id,
+                                        uint32_t reason_code, const char* diagnostic);
 
-
-void capsid_resource_limits_init(capsid_resource_limits *limits);
-void capsid_egress_rule_init(capsid_egress_rule *rule);
-void capsid_egress_policy_init(capsid_egress_policy *policy);
-void capsid_permission_rule_init(capsid_permission_rule *rule);
-void capsid_env_entry_init(capsid_env_entry *entry);
-void capsid_capability_policy_init(capsid_capability_policy *policy);
-void capsid_audit_record_init(capsid_audit_record *record);
-void capsid_memory_metrics_init(capsid_memory_metrics *metrics);
+void capsid_resource_limits_init(capsid_resource_limits* limits);
+void capsid_egress_rule_init(capsid_egress_rule* rule);
+void capsid_egress_policy_init(capsid_egress_policy* policy);
+void capsid_permission_rule_init(capsid_permission_rule* rule);
+void capsid_env_entry_init(capsid_env_entry* entry);
+void capsid_capability_policy_init(capsid_capability_policy* policy);
+void capsid_audit_record_init(capsid_audit_record* record);
+void capsid_memory_metrics_init(capsid_memory_metrics* metrics);
 /*
  * Initializes the build-info envelope for size negotiation. Stamps the
  * CALLER's struct size — which only the caller's own header knows — so
@@ -759,7 +720,7 @@ void capsid_memory_metrics_init(capsid_memory_metrics *metrics);
  * versions conservatively.
  */
 #ifndef CAPSID_BUILD_INFO_INIT_IMPLEMENTATION
-static inline void capsid_build_info_init(capsid_build_info *info) {
+static inline void capsid_build_info_init(capsid_build_info* info) {
     if (info == NULL) {
         return;
     }
@@ -767,8 +728,8 @@ static inline void capsid_build_info_init(capsid_build_info *info) {
     info->version = CAPSID_BUILD_INFO_VERSION;
 }
 #endif
-void capsid_worker_config_init(capsid_worker_config *config);
-const char *capsid_result_string(capsid_result result);
+void capsid_worker_config_init(capsid_worker_config* config);
+const char* capsid_result_string(capsid_result result);
 
 /*
  * Returns the library-side build identity and provenance. struct_size is a
@@ -811,9 +772,9 @@ const char *capsid_result_string(capsid_result result);
  * featureFlags=<build_feature_flags>
  * dependencyOverlayKey=<txiki_overlay_key>
  */
-capsid_result capsid_runtime_build_info(capsid_build_info *out_info);
+capsid_result capsid_runtime_build_info(capsid_build_info* out_info);
 
-capsid_result capsid_worker_spawn(const capsid_worker_config *config, capsid_worker **out_worker);
+capsid_result capsid_worker_spawn(const capsid_worker_config* config, capsid_worker** out_worker);
 
 /*
  * Protocol-selected spawn. options == NULL is exactly the published v3
@@ -830,9 +791,9 @@ capsid_result capsid_worker_spawn(const capsid_worker_config *config, capsid_wor
  * reserved fields, unknown capability bits, and unsatisfiable
  * dependency combinations are CAPSID_INVALID_ARGUMENT.
  */
-capsid_result capsid_worker_spawn_ex(const capsid_worker_config *config,
-                                     const capsid_protocol_options *options,
-                                     capsid_worker **out_worker);
+capsid_result capsid_worker_spawn_ex(const capsid_worker_config* config,
+                                     const capsid_protocol_options* options,
+                                     capsid_worker** out_worker);
 
 /*
  * Initializes a protocol options descriptor in the caller's buffer.
@@ -844,8 +805,7 @@ capsid_result capsid_worker_spawn_ex(const capsid_worker_config *config,
  * version 1, wire version 3, no capabilities, zero limits (deployment
  * defaults).
  */
-capsid_result capsid_protocol_options_init(capsid_protocol_options *options,
-                                           uint32_t caller_size);
+capsid_result capsid_protocol_options_init(capsid_protocol_options* options, uint32_t caller_size);
 
 /*
  * Negotiated protocol state after the worker's READY. Fills the
@@ -853,9 +813,8 @@ capsid_result capsid_protocol_options_init(capsid_protocol_options *options,
  * caller_size is the caller's allocation size). Returns
  * CAPSID_WOULD_BLOCK until READY has been observed on this worker.
  */
-capsid_result capsid_worker_get_protocol_info(const capsid_worker *worker,
-                                              capsid_protocol_info *out_info,
-                                              uint32_t caller_size);
+capsid_result capsid_worker_get_protocol_info(const capsid_worker* worker,
+                                              capsid_protocol_info* out_info, uint32_t caller_size);
 /*
  * Abortive cleanup (spec §13.3): closes the IPC channel and terminates the
  * worker process immediately — in-flight requests are dropped without
@@ -868,9 +827,9 @@ capsid_result capsid_worker_get_protocol_info(const capsid_worker *worker,
  * escape: the Host's normal stop is graceful, and only a shutdown deadline
  * turns into capsid_worker_terminate.
  */
-void capsid_worker_destroy(capsid_worker *worker);
-int capsid_worker_fd(const capsid_worker *worker);
-int64_t capsid_worker_pid(const capsid_worker *worker);
+void capsid_worker_destroy(capsid_worker* worker);
+int capsid_worker_fd(const capsid_worker* worker);
+int64_t capsid_worker_pid(const capsid_worker* worker);
 
 /*
  * Host execution topology. The recommended count is bounded by the calling
@@ -886,14 +845,13 @@ int64_t capsid_worker_pid(const capsid_worker *worker);
  */
 uint32_t capsid_recommended_worker_count(void);
 uint32_t capsid_available_cpu_count(void);
-capsid_result capsid_available_cpu_at(uint32_t index, uint32_t *out_cpu);
-capsid_result capsid_worker_set_cpu_affinity(capsid_worker *worker, uint32_t cpu);
+capsid_result capsid_available_cpu_at(uint32_t index, uint32_t* out_cpu);
+capsid_result capsid_worker_set_cpu_affinity(capsid_worker* worker, uint32_t cpu);
 
-capsid_result capsid_worker_load_bundle(capsid_worker *worker, const uint8_t *bundle, size_t bundle_size);
-capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
-                                          const uint8_t *bundle,
-                                          size_t bundle_size,
-                                          const char *source_name);
+capsid_result capsid_worker_load_bundle(capsid_worker* worker, const uint8_t* bundle,
+                                        size_t bundle_size);
+capsid_result capsid_worker_load_bundle_named(capsid_worker* worker, const uint8_t* bundle,
+                                              size_t bundle_size, const char* source_name);
 
 /*
  * Binding v1 (docs/binding-technical-design.md §6): additive, versioned
@@ -906,47 +864,46 @@ capsid_result capsid_worker_load_bundle_named(capsid_worker *worker,
 #define CAPSID_BINDING_DESCRIPTOR_VERSION 1u
 
 typedef struct capsid_binding_secret {
-    const char *key;
+    const char* key;
     capsid_bytes value;
 } capsid_binding_secret;
 
 typedef struct capsid_binding_policy {
     // Manifest permission modules (the Binding Runtime's module grants;
     // the App never repeats them).
-    const char *const *modules;
+    const char* const* modules;
     uint32_t module_count;
-    const char *const *net_rules;
+    const char* const* net_rules;
     uint32_t net_rule_count;
-    const char *const *fs_read;
+    const char* const* fs_read;
     uint32_t fs_read_count;
-    const char *const *fs_write;
+    const char* const* fs_write;
     uint32_t fs_write_count;
-    const char *const *env;
+    const char* const* env;
     uint32_t env_count;
-    const char *const *stdio;
+    const char* const* stdio;
     uint32_t stdio_count;
 } capsid_binding_policy;
 
 typedef struct capsid_sandbox_requirements {
-    const char *const *profiles;
+    const char* const* profiles;
     uint32_t profile_count;
 } capsid_sandbox_requirements;
 
 typedef struct capsid_binding_descriptor {
     uint32_t struct_size;
     uint32_t version;
-    const char *binding_name;
+    const char* binding_name;
     capsid_bytes source;
     capsid_bytes config_json;
-    const capsid_binding_secret *secrets;
+    const capsid_binding_secret* secrets;
     uint32_t secret_count;
-    const capsid_binding_policy *policy;
-    const capsid_sandbox_requirements *sandbox;
+    const capsid_binding_policy* policy;
+    const capsid_sandbox_requirements* sandbox;
 } capsid_binding_descriptor;
 
-capsid_result capsid_worker_load_binding(
-    capsid_worker *worker,
-    const capsid_binding_descriptor *binding);
+capsid_result capsid_worker_load_binding(capsid_worker* worker,
+                                         const capsid_binding_descriptor* binding);
 
 /*
  * Loads QuickJS bytecode produced by the exact same trusted Capsid/QuickJS
@@ -956,42 +913,35 @@ capsid_result capsid_worker_load_binding(
  * data to this function. source_name must exactly match the module name
  * embedded when the bytecode was compiled.
  */
-capsid_result capsid_worker_load_trusted_bytecode_named(
-    capsid_worker *worker,
-    const uint8_t *bytecode,
-    size_t bytecode_size,
-    const char *source_name);
-capsid_result capsid_worker_begin_request(capsid_worker *worker,
-                                      uint64_t request_id,
-                                      const char *method,
-                                      const char *url,
-                                      const capsid_header *headers,
-                                      size_t header_count);
+capsid_result capsid_worker_load_trusted_bytecode_named(capsid_worker* worker,
+                                                        const uint8_t* bytecode,
+                                                        size_t bytecode_size,
+                                                        const char* source_name);
+capsid_result capsid_worker_begin_request(capsid_worker* worker, uint64_t request_id,
+                                          const char* method, const char* url,
+                                          const capsid_header* headers, size_t header_count);
 // Optimized begin for GET/HEAD requests: sets the END_REQUEST flag on the
 // RequestHead frame so the worker skips the initial request-direction credit
 // and marks request_ended immediately. Saves one frame per bodyless request.
-capsid_result capsid_worker_begin_bodyless_request(capsid_worker *worker,
-                                      uint64_t request_id,
-                                      const char *method,
-                                      const char *url,
-                                      const capsid_header *headers,
-                                      size_t header_count);
-capsid_result capsid_worker_write_request(capsid_worker *worker,
-                                      uint64_t request_id,
-                                      const uint8_t *data,
-                                      size_t size);
-capsid_result capsid_worker_end_request(capsid_worker *worker, uint64_t request_id);
-capsid_result capsid_worker_grant_response_credit(capsid_worker *worker, uint64_t request_id, uint32_t credit);
-capsid_result capsid_worker_cancel(capsid_worker *worker, uint64_t request_id);
+capsid_result capsid_worker_begin_bodyless_request(capsid_worker* worker, uint64_t request_id,
+                                                   const char* method, const char* url,
+                                                   const capsid_header* headers,
+                                                   size_t header_count);
+capsid_result capsid_worker_write_request(capsid_worker* worker, uint64_t request_id,
+                                          const uint8_t* data, size_t size);
+capsid_result capsid_worker_end_request(capsid_worker* worker, uint64_t request_id);
+capsid_result capsid_worker_grant_response_credit(capsid_worker* worker, uint64_t request_id,
+                                                  uint32_t credit);
+capsid_result capsid_worker_cancel(capsid_worker* worker, uint64_t request_id);
 /*
  * Queues one host-only heap snapshot request. If token reclamation is already
  * scheduled, sampling follows its next ordinary tick; this does not force extra
  * GC or await live work. The response is delivered as CAPSID_EVENT_MEMORY_METRICS
  * and decoded with capsid_memory_metrics_decode().
  */
-capsid_result capsid_worker_request_memory_metrics(capsid_worker *worker);
-capsid_result capsid_worker_flush(capsid_worker *worker);
-capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *event);
+capsid_result capsid_worker_request_memory_metrics(capsid_worker* worker);
+capsid_result capsid_worker_flush(capsid_worker* worker);
+capsid_result capsid_worker_next_event(capsid_worker* worker, capsid_event* event);
 /*
  * Graceful stop (spec §13.3), used only as part of the explicit sequence
  * shutdown → flush → drain EXIT → destroy: queues the worker-side shutdown
@@ -1000,31 +950,27 @@ capsid_result capsid_worker_next_event(capsid_worker *worker, capsid_event *even
  * the drain must still run capsid_worker_destroy (abortive) to reap the
  * child.
  */
-capsid_result capsid_worker_shutdown(capsid_worker *worker);
+capsid_result capsid_worker_shutdown(capsid_worker* worker);
 /*
  * Abortive signal: SIGKILLs the worker process without a graceful frame.
  * Use only when a shutdown deadline expired; the worker must still be
  * reaped with capsid_worker_destroy afterwards.
  */
-capsid_result capsid_worker_terminate(capsid_worker *worker);
+capsid_result capsid_worker_terminate(capsid_worker* worker);
 
 /*
  * Response header views point into event->payload and remain valid only until
  * the next capsid_worker_next_event call for the same worker.
  */
-capsid_result capsid_response_header_count(const capsid_event *event, size_t *out_count);
-capsid_result capsid_response_header_at(const capsid_event *event,
-                                    size_t index,
-                                    capsid_header *out_header);
-capsid_result capsid_response_status_text(const capsid_event *event,
-                                      capsid_bytes *out_status_text);
+capsid_result capsid_response_header_count(const capsid_event* event, size_t* out_count);
+capsid_result capsid_response_header_at(const capsid_event* event, size_t index,
+                                        capsid_header* out_header);
+capsid_result capsid_response_status_text(const capsid_event* event, capsid_bytes* out_status_text);
 
-capsid_result capsid_audit_record_decode(
-    const capsid_event *event,
-    capsid_audit_record *out_record);
-capsid_result capsid_memory_metrics_decode(
-    const capsid_event *event,
-    capsid_memory_metrics *out_metrics);
+capsid_result capsid_audit_record_decode(const capsid_event* event,
+                                         capsid_audit_record* out_record);
+capsid_result capsid_memory_metrics_decode(const capsid_event* event,
+                                           capsid_memory_metrics* out_metrics);
 
 #ifdef __cplusplus
 }

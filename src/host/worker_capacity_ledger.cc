@@ -12,14 +12,15 @@
 
 namespace capsid::host {
 
-bool WorkerCapacityLedger::reserve_fresh(const std::string& application,
-                                         std::uint64_t pool_size) {
+bool WorkerCapacityLedger::reserve_fresh(const std::string& application, std::uint64_t pool_size) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (steady_used_ > workers_total_) throw std::logic_error("invalid steady worker count");
+    if (steady_used_ > workers_total_)
+        throw std::logic_error("invalid steady worker count");
     auto available = workers_total_ - steady_used_;
     if (surge_used_ > surge_workers_) {
         const auto excess = surge_used_ - surge_workers_;
-        if (excess > available) return false;
+        if (excess > available)
+            return false;
         available -= excess;
     }
     if (pool_size > available) {
@@ -30,8 +31,8 @@ bool WorkerCapacityLedger::reserve_fresh(const std::string& application,
     return true;
 }
 
-bool WorkerCapacityLedger::reserve_replace(
-    const std::string& application, std::uint64_t new_pool_size) {
+bool WorkerCapacityLedger::reserve_replace(const std::string& application,
+                                           std::uint64_t new_pool_size) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto found = entries_.find(application);
     if (found == entries_.end() || found->second.steady == 0) {
@@ -47,8 +48,7 @@ bool WorkerCapacityLedger::reserve_replace(
     }
     // The overlap peak: the new pool warms (surge), then the old pool
     // drains (surge) — the surge budget must fit the larger side.
-    const std::uint64_t overlap_peak =
-        std::max(new_pool_size, old_pool_size);
+    const std::uint64_t overlap_peak = std::max(new_pool_size, old_pool_size);
     if (surge_used_ > surge_workers_ || overlap_peak > surge_workers_ - surge_used_) {
         return false;
     }
@@ -66,9 +66,9 @@ void WorkerCapacityLedger::commit_fresh(const std::string& application) {
     (void)application;
 }
 
-void WorkerCapacityLedger::commit_replace(
-    const std::string& application, std::uint64_t new_pool_size,
-    std::uint64_t old_pool_size) {
+void WorkerCapacityLedger::commit_replace(const std::string& application,
+                                          std::uint64_t new_pool_size,
+                                          std::uint64_t old_pool_size) {
     std::lock_guard<std::mutex> lock(mutex_);
     Entry& entry = entries_[application];
     if (entry.surge < new_pool_size || surge_used_ < new_pool_size ||
@@ -86,8 +86,7 @@ void WorkerCapacityLedger::commit_replace(
     surge_used_ += old_pool_size;
 }
 
-void WorkerCapacityLedger::abort_reserve(const std::string& application,
-                                         std::uint64_t pool_size,
+void WorkerCapacityLedger::abort_reserve(const std::string& application, std::uint64_t pool_size,
                                          bool replacement) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto found = entries_.find(application);
@@ -110,8 +109,7 @@ void WorkerCapacityLedger::abort_reserve(const std::string& application,
     }
 }
 
-void WorkerCapacityLedger::begin_retire(const std::string& application,
-                                        std::uint64_t pool_size) {
+void WorkerCapacityLedger::begin_retire(const std::string& application, std::uint64_t pool_size) {
     std::lock_guard<std::mutex> lock(mutex_);
     Entry& entry = entries_[application];
     if (entry.steady < pool_size || steady_used_ < pool_size)
@@ -122,8 +120,7 @@ void WorkerCapacityLedger::begin_retire(const std::string& application,
     surge_used_ += pool_size;
 }
 
-void WorkerCapacityLedger::release_drained(const std::string& application,
-                                           std::uint64_t drained) {
+void WorkerCapacityLedger::release_drained(const std::string& application, std::uint64_t drained) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto found = entries_.find(application);
     if (found == entries_.end()) {
@@ -143,58 +140,78 @@ void WorkerCapacityLedger::release_active(const std::string& application, std::u
     const auto found = entries_.find(application);
     if (found == entries_.end() || found->second.steady < reaped || steady_used_ < reaped)
         throw std::logic_error("reaped active capacity category mismatch");
-    found->second.steady -= reaped; steady_used_ -= reaped;
-    if (found->second.steady == 0 && found->second.surge == 0) entries_.erase(found);
+    found->second.steady -= reaped;
+    steady_used_ -= reaped;
+    if (found->second.steady == 0 && found->second.surge == 0)
+        entries_.erase(found);
 }
 
 WorkerPoolCapacityLease::WorkerPoolCapacityLease(WorkerCapacityLedger* ledger,
-    std::string application, std::uint64_t workers)
+                                                 std::string application, std::uint64_t workers)
     : ledger_(ledger), application_(std::move(application)), workers_(workers) {}
 
 void WorkerPoolCapacityLease::release_reaped_locked() {
-    if (!reaped_) return;
-    if (stage_ == Stage::kActive) ledger_->release_active(application_, workers_);
-    else if (stage_ == Stage::kDraining) ledger_->release_drained(application_, workers_);
-    else return;
+    if (!reaped_)
+        return;
+    if (stage_ == Stage::kActive)
+        ledger_->release_active(application_, workers_);
+    else if (stage_ == Stage::kDraining)
+        ledger_->release_drained(application_, workers_);
+    else
+        return;
     stage_ = Stage::kReleased;
 }
 
 void WorkerPoolCapacityLease::activate_fresh() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stage_ != Stage::kPrepared) throw std::logic_error("pool capacity already settled");
-    ledger_->commit_fresh(application_); stage_ = Stage::kActive; release_reaped_locked();
+    if (stage_ != Stage::kPrepared)
+        throw std::logic_error("pool capacity already settled");
+    ledger_->commit_fresh(application_);
+    stage_ = Stage::kActive;
+    release_reaped_locked();
 }
 
-void WorkerPoolCapacityLease::activate_replacement(const std::shared_ptr<WorkerPoolCapacityLease>& old) {
-    if (!old || old.get() == this) throw std::logic_error("replacement pool capacity missing");
+void WorkerPoolCapacityLease::activate_replacement(
+    const std::shared_ptr<WorkerPoolCapacityLease>& old) {
+    if (!old || old.get() == this)
+        throw std::logic_error("replacement pool capacity missing");
     std::scoped_lock lock(mutex_, old->mutex_);
-    if (stage_ != Stage::kPrepared) throw std::logic_error("pool capacity already settled");
-    if (old->ledger_ != ledger_ || old->application_ != application_ || old->stage_ == Stage::kPrepared)
+    if (stage_ != Stage::kPrepared)
+        throw std::logic_error("pool capacity already settled");
+    if (old->ledger_ != ledger_ || old->application_ != application_ ||
+        old->stage_ == Stage::kPrepared)
         throw std::logic_error("replacement capacity belongs to another activation");
     const auto active_old = old->stage_ == Stage::kActive ? old->workers_ : 0;
     ledger_->commit_replace(application_, workers_, active_old);
-    if (old->stage_ == Stage::kActive) old->stage_ = Stage::kDraining;
-    stage_ = Stage::kActive; release_reaped_locked();
+    if (old->stage_ == Stage::kActive)
+        old->stage_ = Stage::kDraining;
+    stage_ = Stage::kActive;
+    release_reaped_locked();
 }
 
 void WorkerPoolCapacityLease::abort(bool replacement) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (stage_ == Stage::kReleased) return;
-    if (stage_ != Stage::kPrepared) throw std::logic_error("cannot abort committed capacity");
-    ledger_->abort_reserve(application_, workers_, replacement); stage_ = Stage::kReleased;
+    if (stage_ == Stage::kReleased)
+        return;
+    if (stage_ != Stage::kPrepared)
+        throw std::logic_error("cannot abort committed capacity");
+    ledger_->abort_reserve(application_, workers_, replacement);
+    stage_ = Stage::kReleased;
 }
 
 void WorkerPoolCapacityLease::begin_drain() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (stage_ == Stage::kActive) {
-        ledger_->begin_retire(application_, workers_); stage_ = Stage::kDraining;
+        ledger_->begin_retire(application_, workers_);
+        stage_ = Stage::kDraining;
     }
     release_reaped_locked();
 }
 
 void WorkerPoolCapacityLease::reaped() {
     std::lock_guard<std::mutex> lock(mutex_);
-    reaped_ = true; release_reaped_locked();
+    reaped_ = true;
+    release_reaped_locked();
 }
 
 bool WorkerCapacityLedger::holds(const std::string& application) const {
@@ -213,18 +230,16 @@ std::uint64_t WorkerCapacityLedger::surge_used() const {
     return surge_used_;
 }
 
-std::uint64_t WorkerCapacityLedger::steady_of(
-    const std::string& application) const {
+std::uint64_t WorkerCapacityLedger::steady_of(const std::string& application) const {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto found = entries_.find(application);
     return found == entries_.end() ? 0 : found->second.steady;
 }
 
-std::uint64_t WorkerCapacityLedger::surge_of(
-    const std::string& application) const {
+std::uint64_t WorkerCapacityLedger::surge_of(const std::string& application) const {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto found = entries_.find(application);
     return found == entries_.end() ? 0 : found->second.surge;
 }
 
-}  // namespace capsid::host
+} // namespace capsid::host

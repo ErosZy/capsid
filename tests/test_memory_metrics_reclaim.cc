@@ -12,11 +12,10 @@
 
 namespace {
 void check(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition)
+        throw std::runtime_error(message);
 }
-void ok(capsid_result result, const char* message) {
-    check(result == CAPSID_OK, message);
-}
+void ok(capsid_result result, const char* message) { check(result == CAPSID_OK, message); }
 struct Worker {
     capsid_worker* value = nullptr;
     ~Worker() { capsid_worker_destroy(value); }
@@ -35,8 +34,7 @@ capsid_event next(capsid_worker* worker, Clock::time_point deadline) {
                   "worker remains healthy through snapshot");
             return event;
         }
-        check(result == CAPSID_WOULD_BLOCK && Clock::now() < deadline,
-              "absolute event deadline");
+        check(result == CAPSID_WOULD_BLOCK && Clock::now() < deadline, "absolute event deadline");
         capsid_pollfd descriptor{};
         descriptor.fd = capsid_worker_fd(worker);
         descriptor.events = POLLIN | (flushed == CAPSID_WOULD_BLOCK ? POLLOUT : 0);
@@ -47,7 +45,8 @@ capsid_event next(capsid_worker* worker, Clock::time_point deadline) {
 capsid_memory_metrics snapshot(capsid_worker* worker, Clock::time_point deadline) {
     for (;;) {
         const auto event = next(worker, deadline);
-        if (event.type != CAPSID_EVENT_MEMORY_METRICS) continue;
+        if (event.type != CAPSID_EVENT_MEMORY_METRICS)
+            continue;
         capsid_memory_metrics metrics;
         capsid_memory_metrics_init(&metrics);
         ok(capsid_memory_metrics_decode(&event, &metrics), "decode actual snapshot");
@@ -99,10 +98,12 @@ int main(int argc, char** argv) {
         config.request_timeout_ms = 5000;
         Worker worker;
         ok(capsid_worker_spawn(&config, &worker.value), "spawn real worker");
-        ok(capsid_worker_load_bundle(worker.value,
-             reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size()), "load soak fixture");
+        ok(capsid_worker_load_bundle(worker.value, reinterpret_cast<const uint8_t*>(bundle.data()),
+                                     bundle.size()),
+           "load soak fixture");
         const auto ready_deadline = Clock::now() + std::chrono::seconds(20);
-        while (next(worker.value, ready_deadline).type != CAPSID_EVENT_READY) {}
+        while (next(worker.value, ready_deadline).type != CAPSID_EVENT_READY) {
+        }
         const auto deadline = Clock::now() + std::chrono::seconds(60);
         ok(capsid_worker_request_memory_metrics(worker.value), "baseline request");
         const auto baseline = snapshot(worker.value, deadline);
@@ -110,8 +111,10 @@ int main(int argc, char** argv) {
         unsigned replies = 0;
         for (unsigned wave = 0; wave < 4; ++wave) {
             for (uint64_t i = 1; i <= 50; ++i) {
-                ok(capsid_worker_begin_bodyless_request(worker.value, wave * 50 + i,
-                     "GET", "https://soak.test/slow?ms=200", nullptr, 0), "begin slow request");
+                ok(capsid_worker_begin_bodyless_request(worker.value, wave * 50 + i, "GET",
+                                                        "https://soak.test/slow?ms=200", nullptr,
+                                                        0),
+                   "begin slow request");
             }
             for (uint64_t i = 1; i <= 50; ++i) {
                 ok(capsid_worker_cancel(worker.value, wave * 50 + i), "cancel request");
@@ -125,14 +128,14 @@ int main(int argc, char** argv) {
             const auto second = snapshot(worker.value, deadline);
             replies += 2;
             check(first.object_count == second.object_count &&
-                  first.memory_used_size == second.memory_used_size,
+                      first.memory_used_size == second.memory_used_size,
                   "one matching response per queued snapshot request");
             const bool above_baseline = first.object_count > baseline.object_count * 102 / 100;
-            std::printf("MEMORY_RECLAIM mode=%s wave=%u objects=%llu used=%llu baselineObjects=%llu replies=%u\n",
-                        argv[3], wave + 1,
-                        static_cast<unsigned long long>(first.object_count),
-                        static_cast<unsigned long long>(first.memory_used_size),
-                        static_cast<unsigned long long>(baseline.object_count), replies);
+            std::printf(
+                "MEMORY_RECLAIM mode=%s wave=%u objects=%llu used=%llu baselineObjects=%llu replies=%u\n",
+                argv[3], wave + 1, static_cast<unsigned long long>(first.object_count),
+                static_cast<unsigned long long>(first.memory_used_size),
+                static_cast<unsigned long long>(baseline.object_count), replies);
             if (retained) {
                 check(above_baseline && first.memory_used_size > previous.memory_used_size,
                       "reachable leak remains observable after ordinary reclaim");
