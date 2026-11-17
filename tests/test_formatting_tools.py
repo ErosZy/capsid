@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -40,6 +41,8 @@ class FormattingScopeTests(unittest.TestCase):
             "tests/wpt/adapter.js",
             "js/streams.js",
             "js/encoding-data/multibyte-indexes.js",
+            "tools/encoding-data/gb18030.lock.json",
+            "tools/encoding-data/captured.py",
             "docs/evidence/snapshot.py",
             "docs/history/archives/old.js",
             "perf-site/data.js",
@@ -98,6 +101,76 @@ class FormattingScopeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "empty"):
                 FORMAT.select_files(root, POLICY, language="javascript")
             self.assertEqual((root / "tests/fixtures/sealed.mjs").read_bytes(), b"sealed bytes\r\n")
+
+    def test_checkout_preserves_raw_locked_json_under_both_autocrlf_modes(self):
+        attributes = (ROOT / ".gitattributes").read_bytes()
+        name = "tools/encoding-data/gb18030.lock.json"
+        raw = b'{\r\n  "locked": true\r\n}\r\n'
+        for autocrlf in ["false", "true"]:
+            with (
+                self.subTest(autocrlf=autocrlf),
+                tempfile.TemporaryDirectory(prefix="capsid-format-eol-") as directory,
+            ):
+                root = Path(directory)
+
+                def git(*args, data=None):
+                    return subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(root),
+                            "-c",
+                            f"core.autocrlf={autocrlf}",
+                            "-c",
+                            "gc.auto=0",
+                            "-c",
+                            "user.name=Formatting control",
+                            "-c",
+                            "user.email=formatting@example.invalid",
+                            *args,
+                        ],
+                        input=data,
+                        capture_output=True,
+                        check=True,
+                    ).stdout
+
+                git("init", "-q")
+                (root / ".gitattributes").write_bytes(attributes)
+                path = root / name
+                path.parent.mkdir(parents=True)
+                path.write_bytes(raw)
+                git("add", "--", ".gitattributes")
+                # A legacy lock must enter the index verbatim, not through the
+                # EOL rule being tested. This models the already-published blob.
+                oid = git("hash-object", "-w", "--stdin", data=raw).decode().strip()
+                git("update-index", "--add", "--cacheinfo", f"100644,{oid},{name}")
+                git("commit", "-qm", "retain original lock bytes")
+                git("checkout-index", "--all", "--force")
+                self.assertEqual(path.read_bytes(), raw)
+                self.assertEqual(git("status", "--porcelain"), b"")
+
+                self.assertEqual(git("hash-object", "--path", name, name).decode().strip(), oid)
+
+                # Git compares the unchanged raw CRLF blob through an LF clean
+                # filter. It can therefore report a fresh checkout as dirty.
+                (root / ".gitattributes").write_bytes(
+                    attributes + b"\n/tools/encoding-data/*.json text eol=lf\n"
+                )
+                git("add", "--", ".gitattributes")
+                git("commit", "-qm", "negative EOL control")
+                git("checkout-index", "--all", "--force")
+                self.assertEqual(path.read_bytes(), raw)
+                self.assertNotEqual(git("hash-object", "--path", name, name).decode().strip(), oid)
+                stamp = path.stat()
+                os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1_000_000_000))
+                self.assertIn(name.encode(), git("status", "--porcelain"))
+
+                (root / ".gitattributes").write_bytes(attributes)
+                git("add", "--", ".gitattributes")
+                git("commit", "-qm", "restore protected lock")
+                git("checkout-index", "--all", "--force")
+                self.assertEqual(path.read_bytes(), raw)
+                self.assertEqual(git("status", "--porcelain"), b"")
 
     def test_batches_preserve_exact_inventory_and_bound_command_length(self):
         names = [f"tests/file with spaces-{index}.mjs" for index in range(40)]

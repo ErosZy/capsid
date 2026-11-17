@@ -407,8 +407,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification.",
-      "sha256": "927819ce2025ec4be841ef9b581c5ac071da161973dd7bc3cb0edc9d29b60d76"
+      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification. Exact-byte encoding locks, checkout EOL rules and clean Release boundary controls reviewed.",
+      "sha256": "0493c9295e3e40588601ef95ce295f09ae2a2e248a0feffb724a537c91e2708c"
     },
     {
       "path": "docs/framework-compatibility/README.md",

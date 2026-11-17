@@ -18,8 +18,10 @@ cannot serialize some BigInt AST values, so the wrapper uses this explicit
 comparison instead of skipping semantic checks. Regex flag order is canonical;
 changes to flags, patterns, operators or values still fail.
 
-`.editorconfig` supplies editor defaults and `.gitattributes` fixes source LF
-checkout behavior on Windows. Formatter versions are exact: Python tools in
+`.editorconfig` supplies editor defaults and `.gitattributes` fixes maintained-code LF
+checkout behavior on Windows. JSON normalization is limited to selected development
+files; generated source locks retain their exact bytes. Blanket JSON/YAML EOL rules
+can make a freshly checked-out repository dirty and correctly block Release builds. Formatter versions are exact: Python tools in
 `tools/format-requirements.txt`, JavaScript tools and integrity in
 `package.json` / `package-lock.json`.
 
@@ -82,7 +84,7 @@ Never apply a blanket formatter to:
 - `tests/fixtures`, the frozen ABI compatibility header and pinned `tests/wpt` inputs;
 - the explicit first-party source inputs in `preservedInputs` (source-hash-bound
   primary capture models/clients/drivers and the mutation runner template);
-- generated `js/streams.js` and `js/encoding-data` tables;
+- generated `js/streams.js`, `js/encoding-data` tables and `tools/encoding-data` locks;
 - benchmark result directories, performance data/transports or captured reports;
 - historical evidence/snapshots or machine-generated documentation status.
 

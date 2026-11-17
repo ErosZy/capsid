@@ -37,3 +37,10 @@ jobs:
         run: |
           .venv-format/bin/python -B tests/test_formatting_tools.py
           node --test tests/test_formatting_ast.mjs
+      - name: Require the checkout to remain clean
+        run: |
+          status="$(git status --porcelain)"
+          if [ -n "${status}" ]; then
+            printf '%s\n' "${status}"
+            exit 1
+          fi

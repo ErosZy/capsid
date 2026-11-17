@@ -11,9 +11,15 @@
 *.mjs text eol=lf
 *.cjs text eol=lf
 *.py text eol=lf
-*.json text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
+
+# Only formatter-selected development JSON is normalized. Blanket JSON/YAML
+# rules re-normalize legacy/generated locks during Git's index comparison.
+/package.json text eol=lf
+/package-lock.json text eol=lf
+/.prettierrc.json text eol=lf
+/examples/*/package.json text eol=lf
+/examples/*/package-lock.json text eol=lf
+/.github/workflows/format.yml text eol=lf
 
 # Existing/generated/captured data is not an automatic normalization target.
 /vendor/** -text
@@ -22,6 +28,8 @@
 /perf-site/** -text
 /bench/results/** -text
 /tests/wpt/** -text
+/js/encoding-data/** -text
+/tools/encoding-data/** -text
 
 # Patch payload whitespace is semantic and is covered by application/audit
 # tests rather than Git's generic whitespace checker. The stack is also

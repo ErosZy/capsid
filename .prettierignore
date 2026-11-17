@@ -12,6 +12,7 @@ tests/fixtures/
 tests/wpt/
 js/streams.js
 js/encoding-data/
+tools/encoding-data/
 perf-site/
 # First-party source identities referenced by retained primary captures.
 tests/compat/runtime_v7.h

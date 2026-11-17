@@ -16,7 +16,8 @@
     "bench/bench-apps/php-slim/vendor/",
     "tests/fixtures/",
     "tests/wpt/",
-    "js/encoding-data/"
+    "js/encoding-data/",
+    "tools/encoding-data/"
   ],
   "excludeFiles": ["js/streams.js"],
   "extensions": {
