@@ -25,10 +25,10 @@ See [testing](testing-guide.md) and the
 
 ## 1. Prepare a Checkout
 
-For the published beta source:
+For the published `0.3.0-beta` source:
 
 ```sh
-git clone --branch v0.3.0-beta.2 --recurse-submodules \
+git clone --branch v0.3.0-beta.3 --recurse-submodules \
   https://github.com/ErosZy/capsid.git
 cd capsid
 ```

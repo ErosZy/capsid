@@ -1,7 +1,7 @@
 # Performance: Current Measurements and Methodology
 
-Reviewed 2026-11-17. The latest accepted local measurement is a **development
-snapshot**, not a beta.2 or stable v0.3.0 benchmark. The
+Reviewed 2026-11-18. The latest accepted local measurement is a **development
+snapshot**, not a `0.3.0-beta` or stable v0.3.0 benchmark. The
 [current status](current-status.md) and [generated data](current-status.json)
 separate release identity, measured source, qualification and historical data.
 
@@ -16,7 +16,7 @@ separate release identity, measured source, qualification and historical data.
 | Machine/lane | i5-12400F; 12 logical CPUs; measured set 0–3; WSL2 Linux |
 | Runtime posture | Clean Release/LTO; strict C-ABI cold workers; managed/strict serving and density |
 | Record status | All three original lanes and whole-session independent review accepted |
-| Public beta.2 | Source `87ed463`; **not measured by this session** |
+| Public `0.3.0-beta` | Source `af8acc1` (and earlier `87ed463`); **not measured by this session** |
 
 The archival `release` label is `v0.3.0`, but its source tag is empty: this is
 not evidence that a stable v0.3.0 release was published. Source-tree equality
@@ -101,7 +101,7 @@ or verdict. It is not permission to repair a failed run. The
 The historical v0.2.2 point is preserved unchanged. It is unverified under the
 current full archive contract and differs in protocol/tool/dependency context.
 Its 9489.7 / 7109.1 / 6523.2 QPS and 882 / 568 / 132 warm worker counts are not
-beta.2 measurements. In particular, the latest local density must not be called
+`0.3.0-beta` measurements. In particular, the latest local density must not be called
 “unchanged” relative to those historical counts.
 
 No formal paired v0.2.2-versus-current gain, physical-host equivalence or

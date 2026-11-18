@@ -1,8 +1,8 @@
 # Performance History Site
 
-Updated 2026-11-17. The site defaults to the latest **accepted measured
+Updated 2026-11-18. The site defaults to the latest **accepted measured
 snapshot**, not to an assumed benchmark of the latest release. Stable remains
-v0.2.2; beta.2 is published, but has no matching complete performance session.
+v0.2.2; 0.3.0-beta is published, but has no matching complete performance session.
 The current measured snapshot is `485b29b`, completed 2026-11-16 under WSL2.
 See [current status](../docs/current-status.md) and
 [performance methodology/data](../docs/performance-benchmarks.md).
@@ -19,7 +19,7 @@ See [current status](../docs/current-status.md) and
 
 The latest point's original archive label is `v0.3.0`, but its tag is empty and
 its measured commit is `485b29be6cc8d0dcdb653ee6226956ddece02948`. The UI must
-call it a development snapshot, not a stable v0.3.0 or beta.2 result. The
+call it a development snapshot, not a stable v0.3.0 or 0.3.0-beta result. The
 historical v0.2.2 point remains unchanged and unverified under the current full
 contract. Do not draw a qualified release trend or paired optimization claim
 across those different records.
@@ -69,7 +69,7 @@ python3 bench/collect-perf-point.py --repo "$ARCHIVES" \
 ```
 
 The frozen `--release v0.3.0` here matches the archive's original label; do not
-replace it with beta.2 to relabel a different binary. On Windows use the full
+replace it with 0.3.0-beta to relabel a different binary. On Windows use the full
 Python runtime and PowerShell paths/variables; the CLI itself is portable.
 The `runtime-nonportable.tar` inside an original density record remains an
 opaque verified member: its Linux generation names are streamed/checked by the

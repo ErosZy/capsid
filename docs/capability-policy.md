@@ -1,6 +1,6 @@
 # Host Capability Policy
 
-> Reviewed against the v0.3.0-beta.2 source/API on 2026-11-17. See the
+> Reviewed against the 0.3.0-beta source/API on 2026-11-18. See the
 > [current status and data scope](current-status.md) for release and measurement identities.
 
 The public ABI provides an optional and immutable `capsid_capability_policy`. It
@@ -237,7 +237,7 @@ the host ambient environment.
 ```js
 import { system } from "capsid:system";
 
-system.get("runtimeVersion"); // "0.3.0" for beta.2; not the prerelease tag string
+system.get("runtimeVersion"); // "0.3.0" for 0.3.0-beta; not the prerelease tag string
 system.get("featureFlags");   // frozen compile-time capability object
 ```
 

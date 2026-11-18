@@ -1,6 +1,6 @@
 # Platform Support Overview
 
-Reviewed 2026-11-17 against the published beta.2 source and platform gates.
+Reviewed 2026-11-18 against the published `0.3.0-beta` source and platform gates.
 [Current status](current-status.md) distinguishes current interfaces and
 source-bound results from historical execution counts.
 
@@ -52,13 +52,13 @@ Use [building from source](building.md) for shared setup and commands,
 
 ### Linux
 
-- The published beta.2 Linux package remains **x86_64 musl**, `capsid-<version>-linux-musl.tar.gz`. The development workflow adds distinct `linux-musl-x86_64` and `linux-musl-arm64` packages on native runners; this does not add an ARM64 asset to existing Releases or inherit their qualification. See [release selection](releases.md#development-package-matrix);
+- The published `0.3.0-beta` Linux packages are fully static musl archives for both `x86_64` and `arm64`: `capsid-<version>-linux-musl-x86_64.tar.gz` and `capsid-<version>-linux-musl-arm64.tar.gz` (older `x86_64` releases used `capsid-<version>-linux-musl.tar.gz`). See [release selection](releases.md#development-package-matrix);
 - `CAPSID_ENABLE_LTO`, `CAPSID_ENABLE_ASAN/UBSAN/TSAN`, fuzz, and `CAPSID_GENERATE_LINK_MAP` are available;
 - strict sandbox requires the kernel to provide seccomp and Landlock; cgroup/namespace capabilities are delegated by the host. See [Linux strict sandbox](linux-sandbox.md) for the detailed contract.
 
 ### macOS
 
-- Built natively with system Clang. The published beta.2 package remains `capsid-<version>-darwin-arm64.tar.gz`; the development workflow additionally builds `capsid-<version>-darwin-x86_64.tar.gz` on a native Intel runner. Separate CPU archives are not universal binaries and do not add assets or qualification to existing Releases;
+- Built natively with system Clang. Published `0.3.0-beta` ships separate thin native archives for Apple Silicon (`capsid-<version>-darwin-arm64.tar.gz`) and Intel (`capsid-<version>-darwin-x86_64.tar.gz`), built on native runners rather than as universal binaries;
 - single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; static-pool uses one pool-owned acceptor;
 - `capsid:fs` is degraded but usable: readText/stat/list behave consistently with Linux, implemented as a component-by-component `openat(O_NOFOLLOW)` dirfd walk; symlinks are always rejected;
 - There is no API equivalent to `sched_setaffinity`; CPU affinity tests are skipped with CTest 77;

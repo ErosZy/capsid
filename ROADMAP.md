@@ -1,6 +1,6 @@
 # Capsid Roadmap: Progressive workerd Compatibility
 
-> Updated 2026-11-17 against the published v0.3.0-beta.2 source. Stable is v0.2.2;
+> Updated 2026-11-18 against the published 0.3.0-beta source. Stable is v0.2.2;
 > this roadmap separates delivered beta scope from future milestones and does
 > not claim complete workerd/Cloudflare parity. See [current status](docs/current-status.md).
 
@@ -26,7 +26,7 @@ not part of this roadmap.
 
 ## Current Baseline
 
-The stable channel is `0.2.2`. Experimental `0.3.0-beta.2` adds the delivered
+The stable channel is `0.2.2`. Experimental `0.3.0-beta` adds the delivered
 FetchRPC v4/WebSocket foundation while retaining ABI v7 and the legacy v3 entry.
 The shared HTTP runtime contains:
 
@@ -178,7 +178,7 @@ Milestone plan: [docs/v0.3.0-fetchrpc-v4-plan.md](docs/v0.3.0-fetchrpc-v4-plan.m
 wire reference: [docs/fetchrpc-v4.md](docs/fetchrpc-v4.md) · workerd semantics
 dossier: [docs/workerd-websocket-semantics.md](docs/workerd-websocket-semantics.md).
 
-Delivered in experimental beta.2: v4 negotiation, A2 channel layout,
+Delivered in experimental 0.3.0-beta: v4 negotiation, A2 channel layout,
 confirmation/terminal barriers, inbound WebSocketPair/101, outbound ws/wss,
 Upgrade-fetch metadata/body fallback and connection-lifetime accounting.
 First-party local/static-pool and Linux managed paths, native clients,
@@ -214,9 +214,9 @@ See the [embedding reference](docs/host-integration.md) for size negotiation,
 channel ACKs, counted Close reasons and optional capabilities.
 
 This delivery does not imply complete standards conformance, every historical
-R1–R9 causal closure, native Windows/macOS production isolation or beta.2
+R1–R9 causal closure, native Windows/macOS production isolation or 0.3.0-beta
 performance measurement. The latest accepted local performance record belongs
-to measured snapshot `485b29b`, not the published beta.2 binary.
+to measured snapshot `485b29b`, not the published 0.3.0-beta binary.
 
 Acceptance: real client/server interoperability, fragmented messages, slow
 consumers, simultaneous close, half-close where applicable, invalid frames,

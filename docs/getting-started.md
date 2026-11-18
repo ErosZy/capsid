@@ -11,10 +11,10 @@ provide that production isolation boundary.
 
 ## 1. Obtain the Tools
 
-These commands target the current source interface and the **v0.3.0-beta.2**
-package. Choose that channel explicitly in [releases and installation](releases.md),
-or follow [building from source](building.md). The default/latest installer still
-selects stable v0.2.2; this tutorial does not requalify that version.
+These commands target the current source interface and the **0.3.0-beta**
+package. Install it via the [releases and installation](releases.md) guide,
+or follow [building from source](building.md). Stable `v0.2.2` remains
+available as an explicit tag; this tutorial does not requalify `v0.2.2`.
 
 Keep `capsid-host` and `capsid-worker` from the same build together. A runtime
 version string alone does not establish build or bytecode compatibility.

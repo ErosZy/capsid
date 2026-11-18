@@ -1,43 +1,43 @@
 # Current Status and Data Scope
 
-Reviewed 2026-11-17. This is the current reader-facing status, not another
+Reviewed 2026-11-18. This is the current reader-facing status, not another
 execution diary. The [machine-readable status](current-status.json) is generated
 from committed source locks, the captured GitHub release metadata and validated
 measurement archives. Historical reviews retain their original dates and values.
 
 ## Development Checkout
 
-The development line includes repository-wide source formatting, pinned tools
-and separate Linux musl and macOS x86_64/arm64 packaging after the published beta
-baseline.
-The machine status keeps qualified-release hashes separate from the reviewed
-development snapshot under checkout. Packaging build-input changes are declared
-and fingerprinted explicitly. `releaseQualificationInherited:false` remains
-explicit: these changes do not qualify a new binary, CPU-specific release, bytecode
-identity or performance result. The already-published beta.2 assets remain
-unchanged. See [source formatting](formatting.md) for exact-byte exclusions and
-[development packaging](releases.md#development-package-matrix) for the new names.
+The development line now reflects the published `0.3.0-beta` (`v0.3.0-beta.3`)
+source (`af8acc1a7710b6344bdf85d1f6b0b067e0fabe89`) plus subsequent
+documentation and `perf-site` synchronization (`docs-successor`).
+The machine status keeps qualified-release digests (`headerSHA256`,
+`protocolSHA256`, and `qualifiedReleaseFiles`) aligned with the published
+`v0.3.0-beta.3` release while setting `releaseQualificationInherited:false`:
+later documentation or site edits do not requalify a binary or generate a new
+performance result. See [source formatting](formatting.md) for exact-byte
+exclusions and [package architecture](releases.md#development-package-matrix)
+for the five-platform archive matrix.
 
 ## Release and Development Channels
 
 | Item | Current recorded value | Boundary |
 | --- | --- | --- |
 | Development branch | `dev/v0.3.0` | Documentation/data changes do not requalify a binary |
-| Latest stable | `v0.2.2` | Still selected by the default installer/latest Release URL |
-| Experimental prerelease | `v0.3.0-beta.2` | Published; not a stable-production recommendation |
+| Experimental prerelease (GitHub Latest) | `0.3.0-beta` ([v0.3.0-beta.3](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.3)) | Published as GitHub `Latest`; not a stable-production recommendation |
+| Stable `0.2.x` release | `v0.2.2` | Remains the stable `0.2.x` channel; install explicitly with `v0.2.2` |
 | Beta runtime version | `0.3.0` | An archive/runtime string, not a stable-channel claim |
-| Qualified beta source | `87ed4630fa57e360ac0a3a8158218398250c8035` | Tree `96bef3a7b0a1acec0cd37be9d470a312046386cb`; 5347 frozen source inputs |
+| Qualified beta source | `af8acc1a7710b6344bdf85d1f6b0b067e0fabe89` | Tree `483146d28dc9f16025da332e86a9118cb8813f2e`; 5460 frozen git entries |
 | Public interface | C ABI v7; capability policy v2 | Existing layouts remain frozen; new interfaces are additive |
 | Protocol | FetchRPC v3 by default; explicit negotiated v4 | Never mix versions on one connection |
 | Pinned vendor | txiki.js `v26.6.0`, 78 SDK patches | No vendor upgrade is implied by this documentation refresh |
 
 The [read-only release capture](data/release-status.json) records its actual UTC
-observation, seven asset IDs/sizes/digests and stable/beta flags. The
+observation, 11 asset IDs/sizes/digests and stable/beta flags. The
 [release guide](releases.md) explains installation and package identity.
 
 ## Delivered Scope and Security Boundary
 
-Beta.2 includes the bounded FetchRPC v4/WebSocket foundation: inbound
+`0.3.0-beta` includes the bounded FetchRPC v4/WebSocket foundation: inbound
 WebSocketPair/101, outbound ws/wss, channel/result/terminal confirmation,
 Upgrade-fetch metadata/body fallback and retained incoming connection ownership.
 Bindings remain v1 with independent User/Binding runtimes and operation gates.
@@ -61,21 +61,19 @@ All of these bind to the beta source above, not to a later docs/data commit:
 
 | Required scope | Actual GitHub Actions run |
 | --- | --- |
-| Full Release/LTO, sanitizer/provider, native platform, fuzz/index qualification | [43881121477](https://github.com/ErosZy/capsid/actions/runs/43881121477) |
-| Debug, original regressions/timings and uninterrupted 1800-second soak | [43881141077](https://github.com/ErosZy/capsid/actions/runs/43881141077) |
-| Three-platform package preflight | [43881160382](https://github.com/ErosZy/capsid/actions/runs/43881160382) |
-| Actual beta.2 tag validation and packages | [43912740060](https://github.com/ErosZy/capsid/actions/runs/43912740060) |
+| Full Release/LTO, sanitizer/provider, native platform, fuzz/index qualification | [44246646875](https://github.com/ErosZy/capsid/actions/runs/44246646875) |
+| Pinned formatter and protected-input controls | [44246646886](https://github.com/ErosZy/capsid/actions/runs/44246646886) |
+| Five-platform Release validation and native packaging (all 13 jobs passed, attempt 1) | [44272321448](https://github.com/ErosZy/capsid/actions/runs/44272321448) |
 
-Required source qualification passed on its first attempts. In the actual tag
-run, the original macOS package job never acquired a runner and executed no
-steps. Exactly that job received one explicitly authorized capacity retry and
-passed on actual attempt 2; the other ten executions remained their original
-successful attempt 1. The cancellation, aliases, request and execution ledger
-remain visible in the [publication verification](evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json).
+All 11 published `0.3.0-beta` (`v0.3.0-beta.3`) assets match the verified
+archives and sidecars from run `44272321448` plus `install.sh` at `af8acc1`,
+recorded in [beta3-publication-final-r1.json](evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json).
 
-The failed beta.1 tag remains at `16f4354d353e6ab044394efe85438f040741c033`.
-Its checkout-ref failure happened before product builds/tests. It was not moved,
-rerun into success or used to publish beta.2.
+Earlier beta tags remain preserved for traceability: `v0.3.0-beta.2`
+(`87ed4630fa57e360ac0a3a8158218398250c8035`, marked Pre-release, with
+[beta2-publication-final-r1.json](evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json))
+and the failed `v0.3.0-beta.1` tag (`16f4354d353e6ab044394efe85438f040741c033`,
+whose checkout failed before product builds/tests).
 
 ## Standards and Compatibility Data
 
@@ -97,7 +95,7 @@ reported as complete WPT, browser or workerd conformance.
 
 The latest complete accepted local session was measured on **2026-11-16** at
 private development snapshot `485b29be6cc8d0dcdb653ee6226956ddece02948`, tree
-`25bbf46247b68478a005cf779d884970fb98dc13`. It is **not a measurement of beta.2
+`25bbf46247b68478a005cf779d884970fb98dc13`. It is **not a measurement of 0.3.0-beta
 or the later documentation commit**, and its archival `release: v0.3.0` label
 does not mean a stable v0.3.0 release existed.
 

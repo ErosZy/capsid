@@ -1,6 +1,6 @@
 # workerd WebSocket Semantics and Compatibility Scope
 
-Reviewed 2026-11-17 against the published beta.2 source and locked reference.
+Reviewed 2026-11-18 against the published 0.3.0-beta source and locked reference.
 This is a bounded compatibility reference, not a browser/workerd certification
 or a pending-release diary. [Current status](current-status.md) identifies the
 actual released source, raw standards conflicts and independent performance scope.
@@ -181,7 +181,7 @@ profile and Headers differences are documented in [conformance](conformance.md).
 Ordinary suite success and full standards conformance remain false; the older
 v1/two-file classification is not the current release policy.
 
-The declared beta.2 full/native/sanitizer/fuzz/soak/package gates passed; see
+The declared 0.3.0-beta full/native/sanitizer/fuzz/soak/package gates passed; see
 [qualification](v0.3.0-current-qualification.md). This does not certify every
 possible lifecycle/proxy graph, resolve missing historical schedules, grant
 native macOS/Windows production isolation or turn a reference observation into

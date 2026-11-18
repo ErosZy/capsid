@@ -1,6 +1,6 @@
 # Host Embedding and Integration Specification
 
-> Reviewed against the v0.3.0-beta.2 public headers/source on 2026-11-17.
+> Reviewed against the 0.3.0-beta public headers/source on 2026-11-18.
 > ABI v7 remains frozen; the additive v4 APIs below do not imply ABI v8.
 > [Current status](current-status.md) separates this API baseline from measured snapshots.
 

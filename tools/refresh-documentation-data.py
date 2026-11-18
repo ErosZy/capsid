@@ -27,7 +27,7 @@ def digest(path):
 def derive(root):
     release = load(root / "docs/data/release-status.json")
     publication_path = (
-        "docs/evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json"
+        "docs/evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json"
     )
     publication = load(root / publication_path)
     wpt = load(root / "tests/wpt/manifest.json")
@@ -54,13 +54,13 @@ def derive(root):
     assert source_manifest["sourceCommit"] == publication["productCheckout"]
     assert source_manifest["sourceTree"] == publication["productTree"]
     checkout = source_manifest["checkout"]
-    assert checkout["kind"] in {"formatting-successor", "packaging-successor"}
+    assert checkout["kind"] in {"docs-successor", "formatting-successor", "packaging-successor"}
     assert checkout["releaseQualificationInherited"] is False
     qualified_files = source_manifest["qualifiedReleaseFiles"]
     current_files = source_manifest["files"]
     declared_build_changes = checkout.get("buildInputChanges", {})
-    if checkout["kind"] == "formatting-successor":
-        assert not declared_build_changes, "formatting cannot change build inputs"
+    if checkout["kind"] in {"docs-successor", "formatting-successor"}:
+        assert not declared_build_changes, "docs/formatting cannot change build inputs"
     else:
         assert set(declared_build_changes) == {
             "cmake/CapsidPackage.cmake",
@@ -136,7 +136,7 @@ def derive(root):
         "capabilityPolicyVersion": capability["policy_version"],
         "headerSHA256": source_manifest["qualifiedReleaseDigests"]["headerSHA256"],
         "protocolSHA256": source_manifest["qualifiedReleaseDigests"]["protocolSHA256"],
-        "sourceScope": "qualified beta.2 interface baseline; current checkout is separate",
+        "sourceScope": "qualified 0.3.0-beta interface baseline (v0.3.0-beta.3); current checkout runtime inputs match",
         "sourceManifest": "docs/data/runtime-source-manifest.json",
         "appPidLimitFieldEnforced": False,
     }
@@ -163,13 +163,10 @@ def derive(root):
         "qualification": {
             "sourceCommit": publication["productCheckout"],
             "sourceFiles": publication["sourceFileCount"],
-            "allRequiredCiGatesAndActualTagPackagesPassed": publication[
-                "allRequiredCiGatesAndActualTagPackagesPassed"
+            "allRequiredCiGatesAndNativePackagesPassed": publication[
+                "allRequiredCiGatesAndNativePackagesPassed"
             ],
             "sourceQualificationRuns": publication["sourceQualificationRuns"],
-            "tagReleaseRun": publication["tagReleaseRun"],
-            "tagMacosActualAttempt": publication["tagReleaseActualMacJobAttempt"],
-            "otherTagJobsActualAttempt": publication["otherTagJobsActualExecutionAttempt"],
             "ordinarySuitePassed": publication["ordinarySuitePassed"],
             "standardsConformanceClaimed": publication["standardsConformanceClaimed"],
             "evidence": publication_path,

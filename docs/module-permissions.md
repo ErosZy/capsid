@@ -1,6 +1,6 @@
 # JavaScript Modules and Permissions Reference
 
-> Reviewed against the v0.3.0-beta.2 source/API on 2026-11-17. See the
+> Reviewed against the 0.3.0-beta source/API on 2026-11-18. See the
 > [current status and data scope](current-status.md) for the pinned profile and release identity.
 
 This article is for users writing bundles and configuring host policy. It

@@ -1,7 +1,7 @@
 # Performance benchmark & perf-site specification
 
-> Reviewed 2026-11-17. The latest accepted local record is measured snapshot
-> 485b29b (2026-11-16), not beta.2. See [current status](../docs/current-status.md).
+> Reviewed 2026-11-18. The latest accepted local record is measured snapshot
+> 485b29b (2026-11-16), not 0.3.0-beta. See [current status](../docs/current-status.md).
 > Protocol constants and original measurement budgets below are unchanged.
 
 This document is the normative spec for the performance measurement
@@ -173,7 +173,7 @@ Formal mode requires clean measured-build/session metadata, all five stacks and
 three sizes, complete sealed raw/correctness/identity evidence and self-validation
 against the collector. Restricted `--observation` output has no publication
 envelope. The accepted 2026-11-16 local snapshot has a complete quiet session;
-there is no fresh paired v0.2.2 rebuild/requalification or beta.2-specific point.
+there is no fresh paired v0.2.2 rebuild/requalification or 0.3.0-beta-specific point.
 Controller tests and restricted smoke still do not qualify a performance point.
 
 ### 2.3 Density lane — `bench/density-lane.sh`
@@ -301,7 +301,7 @@ rules below: all supplied lanes need complete sealed `lane.json` records,
 raw samples, correctness and isolation records. The CLI has no legacy or
 parser-only publication bypass. All three lanes now have producers for this
 contract. The 485b29b record passed independent build/source/binary and
-complete-session review. It is not beta.2 qualification or a newly run benchmark.
+complete-session review. It is not 0.3.0-beta qualification or a newly run benchmark.
 Earlier missing-contract points remain unverified historical observations.
 
 - `bench/collect-perf-point.py --cold-start D1 --qps D2 [--density D3]`

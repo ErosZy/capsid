@@ -3,7 +3,7 @@
 <!-- capsid-historical-context-20261117 -->
 > **Historical plan/review — not current execution instructions.** The original
 > body, counts, failures and pending language below retain their captured source/date.
-> Stable is v0.2.2 and experimental v0.3.0-beta.2 is now published. Use
+> Stable is v0.2.2 and experimental 0.3.0-beta is now published. Use
 > [current status](../../current-status.md) for delivered scope, exact qualification and
 > measured-source data; do not restart old campaigns from this record.
 <!-- /capsid-historical-context-20261117 -->

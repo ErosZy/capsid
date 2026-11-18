@@ -1,6 +1,6 @@
 # Capsid Binding v1 Technical Design
 
-> Source/API reviewed 2026-11-17 against beta.2; historical dated results in §8.2
+> Source/API reviewed 2026-11-18 against 0.3.0-beta; historical dated results in §8.2
 > keep their original scope. [Current status](current-status.md) links current acceptance.
 >
 > Status: implemented. The acceptance matrix in §8 maps the design to current

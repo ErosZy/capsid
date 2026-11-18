@@ -102,11 +102,12 @@ The independent **Formatting** workflow checks the same selection and pinned
 versions, then exercises selection guards and AST corruption controls. It does
 not replace the existing runtime/test workflows or change their budgets.
 
-The formatted development checkout is not the published beta.2 source identity.
-`docs/current-status.json` keeps qualified-release digests separate from the
-reviewed development snapshot and explicitly denies inherited qualification.
-Later packaging build-input changes are declared separately; they are not
-classified as mechanical formatting or qualified evidence for new CPU releases.
-Neither unchanged tokens/ASTs nor a green format check requalify a new binary,
-trusted bytecode identity, sandbox deployment or performance result. See
-[current status](current-status.md) and [testing](testing-guide.md).
+Source formatting and five-platform native packaging are included in the published
+`0.3.0-beta` (`v0.3.0-beta.3`) release (`af8acc1`). For subsequent commits,
+`docs/current-status.json` keeps qualified-release digests bound to the declared
+release commit and explicitly denies inherited qualification (`releaseQualificationInherited:false`).
+Later changes are never classified as qualified binary or performance evidence
+without their own matching run. Neither unchanged tokens/ASTs nor a green
+format check requalify a new binary, trusted bytecode identity, sandbox
+deployment or performance result. See [current status](current-status.md) and
+[testing](testing-guide.md).

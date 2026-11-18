@@ -1,6 +1,6 @@
 # How to Write `capsid.json` (Tutorial)
 
-> Reviewed against the v0.3.0-beta.2 parser/compiler on 2026-11-17.
+> Reviewed against the 0.3.0-beta parser/compiler on 2026-11-18.
 > [Current status](current-status.md) records the source and release boundary.
 
 `capsid.json` describes **one application version**'s requested permissions,

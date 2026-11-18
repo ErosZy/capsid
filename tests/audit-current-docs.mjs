@@ -181,7 +181,7 @@ for (const permissionName of Object.keys(capabilityManifest.permissions)) {
 }
 
 for (const requiredFragment of [
-  '> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta.2`. Public C ABI v7.',
+  '> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta`. Public C ABI v7.',
   'cmake --install build-release',
   '<capsid/runtime.hpp>',
   'When `egress_policy == NULL`, all egress Fetch requests are denied.',
@@ -204,7 +204,7 @@ for (const [documentName, content] of [
   ['SECURITY.md', securityPolicy],
 ]) {
   assert.ok(
-    content.includes('`0.2.2`') && content.includes('`0.3.0-beta.2`'),
+    content.includes('`0.2.2`') && content.includes('`0.3.0-beta`'),
     `${documentName} must distinguish stable from the experimental prerelease`,
   );
 }
@@ -332,21 +332,18 @@ const profileV2 = JSON.parse(
   await readFile(path.join(root, 'tests/wpt/workerd-default-profile-v2.json'), 'utf8'),
 );
 assert.equal(currentStatus.developmentBranch, 'dev/v0.3.0');
-assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.2');
+assert.equal(currentStatus.prerelease.channel, '0.3.0-beta');
+assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.3');
 assert.equal(currentStatus.runtime.publicAbi, 7);
 assert.equal(currentStatus.runtime.defaultWireVersion, 3);
-assert.equal(currentStatus.checkout.kind, 'packaging-successor');
-assert.deepEqual(Object.keys(currentStatus.checkout.buildInputChanges).sort(), [
-  'cmake/CapsidPackage.cmake',
-  'cmake/CapsidPackagePlatform.cmake',
-  'cmake/build_tests.cmake',
-]);
+assert.equal(currentStatus.checkout.kind, 'docs-successor');
+assert.deepEqual(currentStatus.checkout.buildInputChanges, {});
 assert.equal(
   currentStatus.checkout.releaseQualificationInherited,
   false,
-  'formatting does not inherit the old binary qualification',
+  'docs commits do not inherit binary qualification beyond the declared release commit',
 );
-assert.match(currentStatus.runtime.sourceScope, /qualified beta\.2 interface baseline/);
+assert.match(currentStatus.runtime.sourceScope, /qualified 0\.3\.0-beta interface baseline/);
 assert.equal(currentStatus.conformance.referenceProfile, profileV2.id);
 assert.deepEqual(
   currentStatus.conformance.rawFailingFiles.map((value) => value.path),
@@ -357,7 +354,7 @@ assert.equal(currentStatus.qualification.standardsConformanceClaimed, false);
 assert.equal(
   currentStatus.performance.publishedBetaPerformanceMeasured,
   false,
-  'the older measured snapshot is not relabeled as beta.2',
+  'the older measured snapshot is not relabeled as 0.3.0-beta',
 );
 assert.ok(documents.get('docs/conformance.md').includes('workerd-default-profile-v2.json'));
 assert.ok(documents.get('docs/host-integration.md').includes('capsid_worker_channel_confirm'));

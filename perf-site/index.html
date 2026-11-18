@@ -300,7 +300,7 @@
         <p>Throughput, cold start, and process-level memory under a frozen
            protocol. Each point states its verification status; historical
            observations remain available. The latest accepted data is a
-           development snapshot, not a benchmark of published beta.2.</p>
+           development snapshot, not a benchmark of published 0.3.0-beta.</p>
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
@@ -534,10 +534,10 @@ function renderReleaseContext() {
   var s = STATUS;
   $("release-context").innerHTML = "<b>Release status:</b> stable " +
     '<a href="' + esc(s.stable.url) + '">' + esc(s.stable.tag) + "</a>; experimental " +
-    '<a href="' + esc(s.prerelease.url) + '">' + esc(s.prerelease.tag) + "</a>." +
+    '<a href="' + esc(s.prerelease.url) + '">' + esc(s.prerelease.channel || "0.3.0-beta") + "</a>." +
     " Latest accepted local measurement: <b>" + esc(s.performance.displayLabel) + "</b>, " + esc(s.performance.date) + "." +
     (s.performance.publishedBetaPerformanceMeasured ? "" :
-      " <b>Published beta.2 has no matching complete performance measurement.</b>") +
+      " <b>Published 0.3.0-beta has no matching complete performance measurement.</b>") +
     " The archival v0.3.0 label is not a stable-release claim. " +
     '<a href="https://github.com/ErosZy/capsid/blob/dev/v0.3.0/docs/current-status.md">Sources and limits</a>' +
     " · status captured " + esc(s.asOfUTC.slice(0, 10)) + ".";

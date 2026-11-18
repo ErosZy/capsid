@@ -1,7 +1,7 @@
 # Performance archive contract
 
-> Reviewed 2026-11-17. The latest accepted complete local record is snapshot
-> 485b29b, not the beta.2 binary; see [current status](../docs/current-status.md).
+> Reviewed 2026-11-18. The latest accepted complete local record is snapshot
+> 485b29b, not the 0.3.0-beta binary; see [current status](../docs/current-status.md).
 > This contract and its original raw assertions/budgets remain mandatory.
 
 `collect-perf-point.py` publishes only complete archives under
@@ -12,7 +12,7 @@ does not qualify a measurement point.
 The current validator and site staging path implement the T16 collection
 boundary. All three controllers produce this contract. The 2026-11-16 snapshot
 passed independent source/build/binary and complete-session acceptance; that
-acceptance is not inherited by beta.2 or another code/build. Do not create missing
+acceptance is not inherited by 0.3.0-beta or another code/build. Do not create missing
 records retrospectively or claim measurement acceptance from synthetic tests.
 
 ## Lane envelope
@@ -399,7 +399,7 @@ requires metadata and an OUT under `bench/results/`. Missing stacks or metadata
 fail before any SUT launch. Synthetic full-archive tests stay in temporary
 repositories and do not qualify an actual performance point. The existing
 accepted session is a separate original measurement, not the output of these
-fixtures or a fresh beta.2 benchmark.
+fixtures or a fresh 0.3.0-beta benchmark.
 
 ## Compressed publication transport
 

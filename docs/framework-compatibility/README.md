@@ -1,7 +1,7 @@
 # Framework compatibility
 
-> Source/profile reviewed 2026-11-17. The four dependency locks below describe
-> the beta.2 matrix, not upstream-latest packages. See [current status](../current-status.md).
+> Source/profile reviewed 2026-11-18. The four dependency locks below describe
+> the 0.3.0-beta matrix, not upstream-latest packages. See [current status](../current-status.md).
 
 Capsid implements the WinterTC **ECMA-429 Minimum Common Web API** profile
 `CAPSID-MIN-2025-subset-v0` (see [standards and conformance](../conformance.md)).

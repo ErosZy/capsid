@@ -5,40 +5,45 @@ the stable channel's support or isolation guarantees.
 
 ## Release Channels
 
-As recorded by the 2026-11-17 publication verification:
+As recorded by the 2026-11-18 release capture:
 
 | Channel | Version | Meaning |
 | --- | --- | --- |
-| Stable | [v0.2.2](https://github.com/ErosZy/capsid/releases/tag/v0.2.2) | Selected by the default installer and the `latest` release URL |
-| Experimental prerelease | [v0.3.0-beta.2](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.2) | Explicit opt-in; public C ABI v7; runtime version string `0.3.0` |
-| Historical failed tag | `v0.3.0-beta.1` | Preserved for traceability; its release workflow failed before builds/tests and no Release assets were published |
+| Experimental prerelease (GitHub Latest) | [0.3.0-beta](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.3) | Current GitHub Latest release (tag `v0.3.0-beta.3`); public C ABI v7; runtime version string `0.3.0` |
+| Stable | [v0.2.2](https://github.com/ErosZy/capsid/releases/tag/v0.2.2) | Stable `0.2.x` line; install explicitly with `v0.2.2` |
+| Earlier beta tags | [v0.3.0-beta.2](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.2), `v0.3.0-beta.1` | `v0.3.0-beta.2` is marked Pre-release; `v0.3.0-beta.1` failed before builds/tests with no Release assets |
 
-The beta was published with `prerelease:true` and `make_latest:false`. Its
-qualified product commit is `87ed4630fa57e360ac0a3a8158218398250c8035`.
+The current `0.3.0-beta` (`v0.3.0-beta.3`) release is published as GitHub
+`Latest` (`draft:false`, `prerelease:false`, `make_latest:true`) while `v0.2.2`
+remains the stable `0.2.x` release. Its qualified product commit is
+`af8acc1a7710b6344bdf85d1f6b0b067e0fabe89`.
 The [qualification record](v0.3.0-current-qualification.md) and
-[final verification](evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json)
-retain the exact gates, original failures and one explicitly authorized
-macOS package capacity retry. A later documentation edit is not a new
-qualification of the release binary.
+[final verification](evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json)
+retain the exact gates, verified assets and earlier preserved records
+(including [beta2-publication-final-r1.json](evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json)).
+A later documentation edit is not a new qualification of the release binary.
 
 ## Published Packages
 
-Beta.2 carries these archives, each with its original `.sha256` sidecar:
+`0.3.0-beta` (`v0.3.0-beta.3`) carries five native archives, each with its
+original `.sha256` sidecar, plus `install.sh` (11 verified assets total):
 
 | Platform | Archive | Scope |
 | --- | --- | --- |
-| Linux x86_64 | `capsid-0.3.0-linux-musl.tar.gz` | Fully static musl package; Linux isolation still requires the documented kernel/delegation prerequisites |
-| macOS arm64 | `capsid-0.3.0-darwin-arm64.tar.gz` | Native development/integration, not Linux strict sandboxing |
+| Linux x86_64 | `capsid-0.3.0-linux-musl-x86_64.tar.gz` | Fully static musl package; Linux isolation still requires the documented kernel/delegation prerequisites |
+| Linux arm64 | `capsid-0.3.0-linux-musl-arm64.tar.gz` | Fully static musl package on native ARM64; Linux isolation still requires the documented kernel/delegation prerequisites |
+| macOS arm64 | `capsid-0.3.0-darwin-arm64.tar.gz` | Native Apple Silicon development/integration, not Linux strict sandboxing |
+| macOS x86_64 | `capsid-0.3.0-darwin-x86_64.tar.gz` | Native Intel development/integration, not Linux strict sandboxing |
 | Windows x86_64 | `capsid-0.3.0-windows-x86_64.zip` | Native MSVC/static-CRT development/integration |
 
 The archive filename contains runtime version `0.3.0`; the Release tag selects
-`v0.3.0-beta.2`. Do not infer a stable channel from that filename. A source build
-on another architecture does not mean a matching release asset exists; in
-particular, these assets do not include Linux arm64 or macOS x86_64.
+`v0.3.0-beta.3`. Do not infer a `0.3.0` stable-production channel from that
+filename.
 
-## Development Package Matrix
+<a id="development-package-matrix"></a>
+## Package Architecture and Matrix
 
-The current development workflow defines five separate native package targets:
+The release and development packaging workflow builds five separate native package targets:
 
 | Native build target | Archive |
 | --- | --- |
@@ -57,14 +62,12 @@ and shared-library dependencies, package metadata and native package/SDK smoke
 tests on both Linux and macOS CPUs. Windows remains a native x86_64 job. Archive
 and SBOM names use the same canonical architecture.
 
-This is a development packaging change, **not an additional published beta.2
-asset or inherited qualification for either new CPU target**. Existing Releases/tags/assets above
-are unchanged. A manual **Release** workflow run is a validation/package
-preflight only: it preserves verified Actions artifacts and cannot publish or
-edit a Release. Stable publication remains restricted to stable tag pushes;
-prerelease publication still requires operator review of every package.
+A manual **Release** workflow run is a validation/package preflight only: it
+preserves verified Actions artifacts and cannot publish or edit a Release.
+Stable publication remains restricted to stable tag pushes; prerelease
+publication requires operator review of every package.
 
-The current installer prefers the explicit CPU suffix. For old Releases,
+The current installer prefers the explicit CPU suffix. For older Releases,
 x86_64 alone can fall back to `linux-musl.tar.gz`; ARM64 never downloads that
 legacy x86_64 archive. macOS also selects the exact CPU suffix and never substitutes
 the other CPU's archive. Missing compatible assets fail without changing the
@@ -85,24 +88,31 @@ of exhaustive transitive license inventory or general SPDX certification.
 The installer selects the matching published OS/architecture asset, verifies its
 SHA-256 sidecar and installs under `$HOME/.local` by default.
 
-Latest stable:
+Current `0.3.0-beta` (GitHub `latest`, resolving to `v0.3.0-beta.3`):
 
 ```sh
 curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash
 ```
 
-Explicit beta:
+Explicit `0.3.0-beta` tag (`v0.3.0-beta.3`):
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/install.sh \
-  | bash -s -- v0.3.0-beta.2
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.3/install.sh \
+  | bash -s -- v0.3.0-beta.3
 ```
 
 Custom prefix:
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/install.sh \
-  | bash -s -- --prefix "$HOME/opt/capsid-beta2" v0.3.0-beta.2
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.3/install.sh \
+  | bash -s -- --prefix "$HOME/opt/capsid-beta" v0.3.0-beta.3
+```
+
+Explicit stable `v0.2.2`:
+
+```sh
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.2/install.sh \
+  | bash -s -- v0.2.2
 ```
 
 You can download and inspect `install.sh` before running it instead of piping it
@@ -125,7 +135,7 @@ $sidecar = "$archive.sha256"
 $expected = ((Get-Content -LiteralPath $sidecar -Encoding UTF8 -Raw).Trim() -split '\s+')[0]
 $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actual -ne $expected.ToLowerInvariant()) { throw 'SHA-256 mismatch' }
-Expand-Archive -LiteralPath $archive -DestinationPath '.\capsid-beta2'
+Expand-Archive -LiteralPath $archive -DestinationPath '.\capsid-beta'
 ```
 
 Choose a new destination instead of overwriting another installation. Use the
@@ -149,9 +159,9 @@ build provenance; see [Host integration](host-integration.md).
 
 ## What Release Acceptance Means
 
-The beta passed its declared source-specific CI, actual tag validation and
-three-platform package review. Its published seven assets—the three archives,
-three checksum sidecars and installer—were verified against their remote digests.
+The `0.3.0-beta` release passed its declared source-specific CI and
+five-platform package review. Its published 11 assets—the five archives,
+five checksum sidecars and installer—were verified against their remote digests.
 
 That does **not** claim complete Web Platform Tests conformance, removal of all
 genuine prerequisite skips, closure of every historical v0.3.0 goal or a new

@@ -1,6 +1,6 @@
 # Array and string iterator storage
 
-> Technical reference source-checked for beta.2 on 2026-11-17. Named controls
+> Technical reference source-checked for 0.3.0-beta on 2026-11-18. Named controls
 > and original budgets below describe the implemented contract, not a new test
 > execution or performance acceptance. See [current status](current-status.md).
 

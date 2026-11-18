@@ -1,6 +1,6 @@
 # Standards and Conformance
 
-> Reviewed against the v0.3.0-beta.2 source/profile on 2026-11-17. The beta is
+> Reviewed against the 0.3.0-beta source/profile on 2026-11-18. The beta is
 > published; stable remains v0.2.2. Required compatibility acceptance is **not**
 > full WPT or ECMA-429 conformance. See [current status](current-status.md).
 
@@ -219,7 +219,7 @@ The current adapted batch executes 84 upstream files in separate realms. It only
 
 The development profile adds WebSocketPair, WebSocket and CloseEvent. Inbound
 101 and User-origin outbound ws/wss have working first-party host paths;
-beta.2 is published with ABI v7 and additive FetchRPC v4 APIs. The stable channel
+0.3.0-beta is published with ABI v7 and additive FetchRPC v4 APIs. The stable channel
 remains v0.2.2; the current [qualification record](v0.3.0-current-qualification.md)
 identifies the actual accepted source and platform scope.
 The [semantics dossier](workerd-websocket-semantics.md) records the locked

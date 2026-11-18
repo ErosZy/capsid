@@ -1,6 +1,6 @@
 # Architecture and Product Boundary
 
-> Source/API reviewed 2026-11-17 against published beta.2. See
+> Source/API reviewed 2026-11-18 against published 0.3.0-beta. See
 > [current status](current-status.md) for release, standards and measured-source identities.
 
 Capsid Runtime is a process-isolated JavaScript runtime built from a pinned txiki.js vendor tree. It targets embedded HTTP hosts and provides a versioned Minimum Common Web API subset; it does not claim full ECMA-429 conformance. Capsid is the only product name; external organization names are used only to identify standard sources and historical internal implementation.

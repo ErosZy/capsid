@@ -9,12 +9,12 @@ embeddable runtime for self-contained ESM applications exporting a Web-standard
 `fetch(request)` handler. Applications run in worker processes; the Host owns
 listeners, routing, capabilities, resource limits and worker lifetime.
 
-> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta.2`. Public C ABI v7.
+> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta`. Public C ABI v7.
 > The beta is experimental, not a stable-production recommendation. Only Linux
 > strict sandboxing provides the production isolation boundary; native macOS
 > and Windows support is for trusted development and integration.
 >
-> Documentation/data reviewed **2026-11-17** for `dev/v0.3.0`.
+> Documentation/data reviewed **2026-11-18** for `dev/v0.3.0`.
 > [Current status and data scope](docs/current-status.md) separates the published
 > beta, current source interface, measured development snapshot and dated history.
 
@@ -26,19 +26,18 @@ listeners, routing, capabilities, resource limits and worker lifetime.
 - **Embed in your own C/C++ Host:** [Host integration](docs/host-integration.md).
 - **Find a reference or design record:** [Documentation index](docs/README.md).
 
-The default installer selects the latest stable release. Opt in to the beta
-explicitly; it does not replace stable:
+Install the current `0.3.0-beta` release (currently set as the GitHub `latest`
+release, or pinned explicitly to `v0.3.0-beta.3`; pass `v0.2.2` for stable `0.2.2`):
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/install.sh \
-  | bash -s -- v0.3.0-beta.2
+curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.3/install.sh \
+  | bash -s -- v0.3.0-beta.3
 ```
 
-Published packages are available for Linux x86_64 musl, macOS arm64 and Windows
-x86_64. The development packaging workflow adds separate Linux musl x86_64/arm64
-and macOS x86_64/arm64 archives; it does not change the published beta.2 assets.
-See the [installation guide](docs/releases.md) for architecture selection,
-SHA-256 verification, Windows extraction and package contents.
+Published `0.3.0-beta` packages are available for Linux musl (`x86_64` and `arm64`),
+macOS (`arm64` and `x86_64`) and Windows (`x86_64`).
+See the [installation guide](docs/releases.md) for channel selection, architecture
+matching, SHA-256 verification, Windows extraction and package contents.
 
 ## Application Model
 
@@ -154,13 +153,13 @@ The ordinary suite is not represented as all-passing.
 - [Performance methodology](docs/performance-benchmarks.md) and
   [historical charts](https://eroszy.github.io/capsid/): measurements belong to
   their recorded source, build, machine and protocol. Historical v0.2.2 numbers
-  are not beta.2 measurements.
+  are not 0.3.0-beta measurements.
 
 **Latest accepted local measurement:** snapshot `485b29b`, 2026-11-16, i5-12400F
 under WSL2. JSON 1/16 KiB and stream throughput: **9341.6 / 8090.2 / 6491.7 QPS**;
 service-tree PSS: **14.0 MiB** trickle / **18.0 MiB** loaded. Warm density under
 the original 2048 MiB budget: **738 / 509 / 128 workers** at 10/100 KiB/1 MiB.
-These are source-bound snapshot results, **not beta.2 benchmarks or a formal
+These are source-bound snapshot results, **not 0.3.0-beta benchmarks or a formal
 paired improvement over v0.2.2**. The complete sealed archives and provenance
 are linked from the [performance reference](docs/performance-benchmarks.md).
 

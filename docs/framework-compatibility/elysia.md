@@ -1,7 +1,7 @@
 # Elysia compatibility
 
-> Source/profile reviewed 2026-11-17. The exact pinned app configuration below
-> is part of the beta.2 matrix; see [current status](../current-status.md).
+> Source/profile reviewed 2026-11-18. The exact pinned app configuration below
+> is part of the 0.3.0-beta matrix; see [current status](../current-status.md).
 
 ## Status
 

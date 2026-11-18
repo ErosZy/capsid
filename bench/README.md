@@ -1,8 +1,8 @@
 # Benchmark Tools, Records and Publication
 
-Updated 2026-11-17. All three producers are implemented. The latest complete
+Updated 2026-11-18. All three producers are implemented. The latest complete
 accepted local session is `local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
-measured snapshot `485b29b`, not the published beta.2 binary. See
+measured snapshot `485b29b`, not the published 0.3.0-beta binary. See
 [current status](../docs/current-status.md) and
 [current performance data](../docs/performance-benchmarks.md).
 

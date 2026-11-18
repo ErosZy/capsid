@@ -1,12 +1,12 @@
 # FetchRPC v4 contract
 
-> Reviewed against the v0.3.0-beta.2 codec, registry and public header on
-> 2026-11-17. ABI v7 and the default v3 entry remain unchanged; v4 is explicitly
+> Reviewed against the 0.3.0-beta codec, registry and public header on
+> 2026-11-18. ABI v7 and the default v3 entry remain unchanged; v4 is explicitly
 > negotiated and never mixed with v3 on one connection.
 
 This is the current byte/state reference. Early design/checkpoint journals have
 been separated from it, not reinterpreted as present-day blockers. The declared
-beta.2 gates passed; references below to bounded phase observations describe
+0.3.0-beta gates passed; references below to bounded phase observations describe
 their evidence scope, not an unpublished release. Broader graphs and historical
 causal gaps remain limited to their own evidence.
 

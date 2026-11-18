@@ -1,6 +1,6 @@
 # First-party Host Architecture and Review Boundary
 
-Reviewed 2026-11-17 against the published beta.2 source. This page describes the
+Reviewed 2026-11-18 against the published 0.3.0-beta source. This page describes the
 implemented Host, not a pending M1/M2 work queue. The original milestone design
 and all checkpoints are preserved in the historical snapshot linked below.
 Use [current status](current-status.md) for source, release, test and data identities.
@@ -123,7 +123,7 @@ is claimed closed. Native Windows/macOS integration is separate from production
 isolation. See [qualification](v0.3.0-current-qualification.md).
 
 The benchmark controllers are implemented and their latest accepted local
-three-lane session belongs to measured snapshot `485b29b`. It is not beta.2
+three-lane session belongs to measured snapshot `485b29b`. It is not 0.3.0-beta
 performance evidence. Diagnostic samples, an implementation milestone, selected
 CTest success or a matching source tree cannot stand in for the declared
 whole-session protocol and binary/source identity. See

@@ -1,6 +1,6 @@
 # Linux strict sandbox
 
-> Reviewed against the v0.3.0-beta.2 source/API on 2026-11-17. Release acceptance
+> Reviewed against the 0.3.0-beta source/API on 2026-11-18. Release acceptance
 > and its limits are recorded in [current status](current-status.md).
 >
 > For a cross-platform capability overview and selection guidance, see [Platform Support Overview](platform-support.md).

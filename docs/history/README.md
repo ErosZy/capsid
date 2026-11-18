@@ -17,8 +17,9 @@ to today's source or the published beta.
 ## Release and Qualification Records
 
 - [v0.3.0 qualification and release boundary](../v0.3.0-current-qualification.md):
-  published beta.2, source identities, exact CI scope and retained limitations.
-- [Final beta.2 publication verification](../evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json).
+  published `0.3.0-beta`, source identities, exact CI scope and retained limitations.
+- [Final 0.3.0-beta (v0.3.0-beta.3) publication verification](../evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json)
+  and earlier [v0.3.0-beta.2 verification](../evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json).
 - [v0.3.0 evidence index](../evidence/v0.3.0/2026-11-10/index.json) and
   [historical availability audit](../evidence/v0.3.0/2026-11-10/historical-evidence-availability.json):
   what was retained or unavailable at those capture dates.
@@ -27,7 +28,7 @@ to today's source or the published beta.
   [testing.md.txt](archives/2026-11-17/testing.md.txt), not the current procedure.
 - [Current performance data](../performance-benchmarks.md) and the exact
   [old performance journal](archives/2026-11-17/performance-benchmarks.md.txt).
-  The accepted 485b29b measurement, published beta.2 and old checkpoints have
+  The accepted 485b29b measurement, published `0.3.0-beta` and old checkpoints have
   distinct source identities; none is substituted for another.
 
 ## Six Byte-Preserved Reference/Journal Sources
@@ -42,7 +43,7 @@ to today's source or the published beta.
 These `.md.txt` files are exact historical source downloads, not new maintained
 instructions. Their old “current/unpublished” language refers to the captured
 phase. Do not edit those bytes or reinterpret their test/performance counts as
-beta.2 data.
+`0.3.0-beta` data.
 
 A `qualification-before.md` under a dated evidence directory is a byte-preserved
 snapshot. Its adjacent `index.json` supplies the SHA-256 checked by the

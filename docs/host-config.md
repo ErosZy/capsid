@@ -1,6 +1,6 @@
 # host.json and capsid.json Configuration Reference
 
-> Parser/compiler/API reviewed 2026-11-17 against beta.2. See
+> Parser/compiler/API reviewed 2026-11-18 against 0.3.0-beta. See
 > [current status](current-status.md) for source and release/data boundaries.
 
 Managed mode (`capsid-host --mode managed`) uses two JSON files to describe the whole

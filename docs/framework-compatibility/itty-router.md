@@ -1,6 +1,6 @@
 # itty-router compatibility
 
-> Source/profile reviewed 2026-11-17. Pinned beta.2 compatibility is separate
+> Source/profile reviewed 2026-11-18. Pinned 0.3.0-beta compatibility is separate
 > from untested versions/adapters; see [current status](../current-status.md).
 
 ## Status
