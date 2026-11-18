@@ -1,4 +1,9 @@
 if(BUILD_TESTING)
+    add_test(NAME package_platform_naming
+        COMMAND "${CMAKE_COMMAND}" -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_platform.cmake")
+    set_tests_properties(package_platform_naming PROPERTIES
+        LABELS "build;package;architecture" TIMEOUT 10)
     # The frozen FetchRPC vectors are also exercised in Host/worker-off
     # builds (including the standalone fuzz job). They need the actual
     # vendored JSON target, even when neither product target creates it.
@@ -39,6 +44,11 @@ if(BUILD_TESTING)
     if(NOT CAPSID_PYTHON3_EXECUTABLE)
         find_program(CAPSID_PYTHON3_EXECUTABLE NAMES python3 python REQUIRED)
     endif()
+    add_test(NAME release_package_architecture_controls
+        COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_package_architecture.py")
+    set_tests_properties(release_package_architecture_controls PROPERTIES
+        LABELS "build;package;architecture;negative-controls" TIMEOUT 10)
     add_test(NAME asan_memory_acceptance_controls
         COMMAND "${CAPSID_PYTHON3_EXECUTABLE}" -B
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_asan_memory_acceptance.py")

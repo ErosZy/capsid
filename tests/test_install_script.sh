@@ -30,12 +30,15 @@ while [[ $# -gt 0 ]]; do
         *) url="$1"; shift ;;
     esac
 done
+if [[ -n "${CAPSID_FAKE_REQUEST_LOG:-}" ]]; then
+    printf '%s\n' "$url" >>"$CAPSID_FAKE_REQUEST_LOG"
+fi
 if [[ -z "$output" ]]; then
     printf '%s\n' "${CAPSID_FAKE_RELEASE_JSON:?}"
-elif [[ "$url" == *.sha256 ]]; then
-    cp "${CAPSID_FAKE_ARCHIVE_SHA:?}" "$output"
 else
-    cp "${CAPSID_FAKE_ARCHIVE:?}" "$output"
+    # Respect the requested URL: selecting the wrong architecture must not
+    # accidentally receive the fixture archive the caller wanted to test.
+    cp "${CAPSID_FAKE_ASSET_DIR:?}/${url##*/}" "$output"
 fi
 SH
 chmod +x "$fake_bin/uname" "$fake_bin/curl"
@@ -67,13 +70,16 @@ make_package() {
 run_fixture() {
     local system="$1" machine="$2" archive="$3" prefix="$4" tag="$5"
     local asset="$(basename "$archive")"
+    local release_json="${6:-}"
     # Put the digest attachment first to prove the installer matches the
     # complete asset name instead of accepting an archive-name prefix.
+    if [[ -z "$release_json" ]]; then
+        release_json="{\"tag_name\":\"$tag\",\"assets\":[{\"name\":\"$asset.sha256\",\"browser_download_url\":\"https://fixture.invalid/$asset.sha256\"},{\"name\":\"$asset\",\"browser_download_url\":\"https://fixture.invalid/$asset\"}]}"
+    fi
     CAPSID_FAKE_UNAME_S="$system" \
     CAPSID_FAKE_UNAME_M="$machine" \
-    CAPSID_FAKE_ARCHIVE="$archive" \
-    CAPSID_FAKE_ARCHIVE_SHA="$archive.sha256" \
-    CAPSID_FAKE_RELEASE_JSON="{\"tag_name\":\"$tag\",\"assets\":[{\"name\":\"$asset.sha256\",\"browser_download_url\":\"https://fixture.invalid/$asset.sha256\"},{\"name\":\"$asset\",\"browser_download_url\":\"https://fixture.invalid/$asset\"}]}" \
+    CAPSID_FAKE_ASSET_DIR="$(dirname "$archive")" \
+    CAPSID_FAKE_RELEASE_JSON="$release_json" \
     PATH="$fake_bin:$real_path" \
         bash "$installer" --prefix "$prefix" "$tag"
 }
@@ -120,12 +126,70 @@ if run_fixture Linux x86_64 "$incomplete" "$work/incomplete-prefix" \
     exit 1
 fi
 
-# The release workflow currently publishes only x86_64 Linux. A different
-# CPU must fail before downloading an incompatible executable.
-if run_fixture Linux aarch64 "$linux_one" "$work/arm-prefix" \
-    v0.2.0-rc.07; then
-    echo "FAIL: install.sh accepted an unsupported Linux architecture" >&2
+# New releases have explicit Linux architectures. Keep the old x86_64 asset
+# first and ARM64 before x86_64 to detect broad/first-match-only selection.
+linux_x86="$work/capsid-0.3.0-linux-musl-x86_64.tar.gz"
+linux_arm="$work/capsid-0.3.0-linux-musl-arm64.tar.gz"
+make_package x86 "$linux_x86" ""
+make_package arm "$linux_arm" ""
+darwin_x86="$work/capsid-0.3.0-darwin-x86_64.tar.gz"
+darwin_arm="$work/capsid-0.3.0-darwin-arm64.tar.gz"
+make_package mac-x86 "$darwin_x86" ""
+make_package mac-arm "$darwin_arm" ""
+mixed_json="{\"tag_name\":\"v0.3.0\",\"assets\":["
+for archive in "$linux_one" "$linux_arm" "$darwin_arm" "$linux_x86" "$darwin_x86"; do
+    asset="$(basename "$archive")"
+    mixed_json="${mixed_json}{\"browser_download_url\":\"https://fixture.invalid/$asset.sha256\"},{\"browser_download_url\":\"https://fixture.invalid/$asset\"},"
+done
+mixed_json="${mixed_json%,}]}"
+for machine in x86_64 amd64; do
+    run_fixture Linux "$machine" "$linux_x86" "$work/$machine-prefix" v0.3.0 "$mixed_json"
+    [[ "$("$work/$machine-prefix/bin/capsid-host")" == "x86-capsid-host" ]]
+done
+for machine in aarch64 arm64; do
+    run_fixture Linux "$machine" "$linux_arm" "$work/$machine-prefix" v0.3.0 "$mixed_json"
+    [[ "$("$work/$machine-prefix/bin/capsid-host")" == "arm-capsid-host" ]]
+done
+
+# A mixed release must select the matching macOS CPU as well, irrespective
+# of the earlier Linux and other macOS architecture attachments.
+for machine in x86_64 amd64; do
+    prefix="$work/darwin-$machine-prefix"
+    run_fixture Darwin "$machine" "$darwin_x86" "$prefix" v0.3.0 "$mixed_json"
+    [[ "$("$prefix/bin/capsid-host")" == "mac-x86-capsid-host" ]]
+done
+for machine in arm64 aarch64; do
+    prefix="$work/darwin-$machine-prefix"
+    run_fixture Darwin "$machine" "$darwin_arm" "$prefix" v0.3.0 "$mixed_json"
+    [[ "$("$prefix/bin/capsid-host")" == "mac-arm-capsid-host" ]]
+done
+prefix="$work/darwin-existing-prefix"
+mkdir -p "$prefix/bin"
+printf 'existing installation\n' >"$prefix/bin/capsid-host"
+log="$work/reject-darwin-x86.log"
+if CAPSID_FAKE_REQUEST_LOG="$log" run_fixture Darwin x86_64 "$darwin_arm" "$prefix" v0.3.0; then
+    echo "FAIL: Intel macOS accepted an ARM64-only release" >&2
+    exit 1
+fi
+[[ "$(<"$prefix/bin/capsid-host")" == 'existing installation' ]]
+if grep -q 'https://fixture.invalid/' "$log"; then
+    echo "FAIL: macOS downloaded an incompatible architecture" >&2
     exit 1
 fi
 
-echo "PASS: install.sh stages, validates and upgrades every platform fixture"
+# ARM64 cannot fall back to a legacy x86_64 archive, and 32-bit/unknown
+# architectures cannot be mislabeled as either supported 64-bit target.
+for machine in aarch64 arm64 i686 riscv64; do
+    log="$work/reject-$machine.log"
+    if CAPSID_FAKE_REQUEST_LOG="$log" run_fixture Linux "$machine" "$linux_one" \
+        "$work/reject-$machine" v0.2.0-rc.07; then
+        echo "FAIL: install.sh accepted an incompatible Linux package: $machine" >&2
+        exit 1
+    fi
+    if grep -q 'https://fixture.invalid/' "$log"; then
+        echo "FAIL: install.sh downloaded an incompatible architecture" >&2
+        exit 1
+    fi
+done
+
+echo "PASS: installer legacy compatibility, explicit CPU selection and rejection controls"

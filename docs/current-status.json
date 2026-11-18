@@ -1,7 +1,22 @@
 {
   "asOfUTC": "2026-11-17T04:51:19.379176+00:00",
   "checkout": {
-    "baseCommit": "5d9ab83d6487cde118927de39d4873da2b9673fc",
+    "baseCommit": "2fc5ffaa4b2e3248e97d18a425357c21b3de82bd",
+    "buildInputChanges": {
+      "cmake/CapsidPackage.cmake": {
+        "currentGitObject": "7516870d1df1e2efd9c87f17e3b3b34b78048aaa",
+        "qualifiedGitObject": "34b799f99112bb749bd658f88be4770ea326c50b"
+      },
+      "cmake/CapsidPackagePlatform.cmake": {
+        "currentGitObject": "b5a374cb69d03475fbca6f8cb1f624258b669abb",
+        "qualifiedGitObject": null
+      },
+      "cmake/build_tests.cmake": {
+        "currentGitObject": "5922883fb2ea6a77dbd41d0128e62dd710399830",
+        "qualifiedGitObject": "3b81d4eb2f2f1e256c31f1898915795a9de9c4dc"
+      }
+    },
+    "changeScope": "mechanical source formatting, development tooling, Linux musl and macOS x86_64/arm64 packaging; no inherited binary, new-CPU release or performance qualification",
     "formatters": {
       "clang-format": "23.1.5",
       "prettier": "3.8.3",
@@ -9,7 +24,7 @@
     },
     "headerSHA256": "54946a795edfd8f9dec7fdca6a66887e9140c28f473d96e4027d9ab17b5caa97",
     "inputManifest": "docs/data/runtime-source-manifest.json",
-    "kind": "formatting-successor",
+    "kind": "packaging-successor",
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf",
     "releaseQualificationInherited": false
   },
@@ -247,7 +262,7 @@
     "version": "0.3.0"
   },
   "schema": 1,
-  "sourceChangeScope": "mechanical source formatting and development tooling; no new runtime binary qualification",
+  "sourceChangeScope": "mechanical source formatting, development tooling, Linux musl and macOS x86_64/arm64 packaging; no inherited binary, new-CPU release or performance qualification",
   "stable": {
     "prerelease": false,
     "releaseId": 380229548,

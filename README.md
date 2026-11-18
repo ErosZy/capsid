@@ -34,9 +34,11 @@ curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.2/inst
   | bash -s -- v0.3.0-beta.2
 ```
 
-Packages are available for Linux x86_64 musl, macOS arm64 and Windows x86_64.
-See the [installation guide](docs/releases.md) for SHA-256 verification,
-Windows extraction and package contents.
+Published packages are available for Linux x86_64 musl, macOS arm64 and Windows
+x86_64. The development packaging workflow adds separate Linux musl x86_64/arm64
+and macOS x86_64/arm64 archives; it does not change the published beta.2 assets.
+See the [installation guide](docs/releases.md) for architecture selection,
+SHA-256 verification, Windows extraction and package contents.
 
 ## Application Model
 

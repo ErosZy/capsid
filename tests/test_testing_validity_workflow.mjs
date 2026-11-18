@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { auditReleasePackages } from './release_package_workflow.mjs';
 
 // These private workflow copies exercise the actual auditor. No Hosted jobs
 // are submitted or counted as executed by these controls.
@@ -99,6 +100,67 @@ for (const replacement of ['branches: [main]', 'branches: [dev/v0.3.0, main]']) 
     const result = run(workflow, controlEol, source);
     assert.notEqual(result.status, 0);
     assert.ok(result.output.includes('Pages push trigger follows the retained development branch'));
+  });
+}
+
+for (const [name, before, after] of [
+  ['ARM runner cannot become x86', '- os: ubuntu-24.04-arm', '- os: ubuntu-24.04'],
+  [
+    'ARM archive cannot alias x86',
+    'package_platform: linux-musl-arm64',
+    'package_platform: linux-musl-x86_64',
+  ],
+  [
+    'ARM container cannot become x86',
+    'docker_platform: linux/arm64',
+    'docker_platform: linux/amd64',
+  ],
+  ['ARM native assertion cannot become x86', 'native_machine: aarch64', 'native_machine: x86_64'],
+  ['both Linux entries must build', "if: runner.os == 'Linux'", "if: matrix.os == 'ubuntu-24.04'"],
+  ['Docker platform cannot disappear', '--platform "${DOCKER_PLATFORM}"', ''],
+  [
+    'package smoke cannot disappear',
+    'worker_package_contents|worker_package_smoke',
+    'worker_package_contents',
+  ],
+  [
+    'verifier cannot be disabled',
+    '- name: Verify native package before upload',
+    '- name: Verify native package before upload\n        if: false',
+  ],
+  [
+    'expected CPU must reach verifier',
+    'CAPSID_PACKAGE_PLATFORM: ${{ matrix.package_platform }}',
+    'CAPSID_PACKAGE_PLATFORM: linux-musl-x86_64',
+  ],
+  ['Intel Mac runner cannot become ARM', '- os: macos-15-intel', '- os: macos-15'],
+  [
+    'Intel Mac archive cannot alias ARM',
+    'package_platform: darwin-x86_64',
+    'package_platform: darwin-arm64',
+  ],
+  ['Intel compiler cannot target ARM', 'macos_arch: x86_64', 'macos_arch: arm64'],
+  ['macOS compiler target cannot disappear', '-DCMAKE_OSX_ARCHITECTURES="${MACOS_ARCH}"', ''],
+  [
+    'both Mac CPUs must build OpenSSL',
+    "- name: Build OpenSSL 3.5.7 for macOS Release\n        if: runner.os == 'macOS'",
+    "- name: Build OpenSSL 3.5.7 for macOS Release\n        if: matrix.os == 'macos-15'",
+  ],
+  [
+    'macOS smoke cannot disappear',
+    'ctest --test-dir build --no-tests=error --output-on-failure',
+    'true # missing package smoke',
+  ],
+  [
+    'manual preflight cannot publish',
+    "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && ",
+    '',
+  ],
+]) {
+  test(`release architecture guard: ${name}`, () => {
+    const source = release.replace(before, after);
+    assert.notEqual(source, release, 'fault actually changes the release workflow');
+    assert.throws(() => auditReleasePackages(serialize(source, controlEol)));
   });
 }
 

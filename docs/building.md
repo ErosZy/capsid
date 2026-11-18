@@ -181,7 +181,16 @@ Keep the install prefix outside the source worktree so installation does not
 make a clean Release checkout dirty before packaging. Use a separate prefix for
 each build you want to keep. CPack emits the configured archive
 and SHA-256 sidecar; use the [release guide](releases.md) to understand package
-identity, SBOM scope and supported published architectures.
+identity, SBOM scope and supported published architectures. Current Linux package
+names contain both libc and target CPU, for example
+`capsid-0.3.0-linux-musl-x86_64.tar.gz` and
+`capsid-0.3.0-linux-musl-arm64.tar.gz` (local glibc builds use `linux-gnu-<arch>`).
+CMake canonicalizes `AMD64`/`x86_64` and `aarch64`/`arm64` from the target
+processor, not the build host. The Release workflow uses native runners for both
+Linux CPUs and both macOS CPUs, and retains validation-before-packaging.
+macOS Intel emits `capsid-0.3.0-darwin-x86_64.tar.gz`; Apple Silicon keeps
+`capsid-0.3.0-darwin-arm64.tar.gz`. These are distinct native archives, not
+universal binaries.
 
 The examples use single-configuration Ninja. With a supported multi-config
 generator, select the same configuration for build, tests and installation using

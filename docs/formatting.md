@@ -104,7 +104,9 @@ not replace the existing runtime/test workflows or change their budgets.
 
 The formatted development checkout is not the published beta.2 source identity.
 `docs/current-status.json` keeps qualified-release digests separate from the
-reviewed formatting snapshot and explicitly denies inherited qualification.
+reviewed development snapshot and explicitly denies inherited qualification.
+Later packaging build-input changes are declared separately; they are not
+classified as mechanical formatting or qualified evidence for new CPU releases.
 Neither unchanged tokens/ASTs nor a green format check requalify a new binary,
 trusted bytecode identity, sandbox deployment or performance result. See
 [current status](current-status.md) and [testing](testing-guide.md).

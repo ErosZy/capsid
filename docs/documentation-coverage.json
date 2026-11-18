@@ -23,8 +23,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "c5ab8f3ba18066450d0fd3c00b535f11f0d9929641c4173bf382fc35d7d54392",
-      "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
+      "sha256": "27001afe4b24d34f07d8be2e4656caabcc87c3ff9234ec40e6371dac560d1b5f",
+      "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim. Formatting setup and qualified-release versus formatting-checkout boundary reviewed. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
       "path": "ROADMAP.md",
@@ -111,8 +111,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "d2d8eb89e74cbc7c063d760dbaab7fc15583b674a388a08294e302a2e45280a1",
-      "review": "CMake/dependency/pinned-source setup, Debug versus clean Release, native toolchains and actual installed SDK targets."
+      "sha256": "8db2cd87230b7a73f29449c290805efea9e60d7b4fac3af88a5a48f0d86f2c44",
+      "review": "CMake/dependency/pinned-source setup, Debug versus clean Release, native toolchains and actual installed SDK targets. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
       "path": "docs/capability-policy.md",
@@ -143,8 +143,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "0efcebc16e6a4df2704845c0b3b8d3b001b9e9be246dd8c5b685dfa92aa5315a",
-      "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
+      "sha256": "9013089ab67fa529cf908f29767eafb2b9f9eab91500e8acbbcdc10181bb0897",
+      "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures. Formatting setup and qualified-release versus formatting-checkout boundary reviewed. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
       "path": "docs/evidence/v0.3.0/2026-11-12-byob-density/qualification-before.md",
@@ -407,8 +407,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification. Exact-byte encoding locks, checkout EOL rules and clean Release boundary controls reviewed.",
-      "sha256": "0493c9295e3e40588601ef95ce295f09ae2a2e248a0feffb724a537c91e2708c"
+      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification. Exact-byte encoding locks, checkout EOL rules and clean Release boundary controls reviewed. Development packaging CPU split and non-inheritance of existing release qualification reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged.",
+      "sha256": "79eff64d4c796ddcb86ad20f447bc755086c68356f07f4ddd729024a8655228e"
     },
     {
       "path": "docs/framework-compatibility/README.md",
@@ -591,16 +591,16 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "10321c168371315fa5d92ae6c8e911e2a806177085d6518debf0cee27de19106",
-      "review": "Native versus Linux production isolation, supported assets, local modes, trusted Binding owners and platform-specific resource semantics."
+      "sha256": "f9437df562da50af83231a6ebe2237a91123a694d9aaba95eab558e613367ab6",
+      "review": "Native versus Linux production isolation, supported assets, local modes, trusted Binding owners and platform-specific resource semantics. Development packaging CPU split and non-inheritance of existing release qualification reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
       "path": "docs/releases.md",
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "866ca1336951c066879f65ea621e98bf238553a58174cd87346e8e770d595d2f",
-      "review": "Captured stable/beta flags, actual asset architectures/names/digests, installer channel selection, checksums and build identity limits."
+      "sha256": "4a37345aa05de94d1b419cb3b601349c60679d8b067076ce47d4bba26a6a67a4",
+      "review": "Captured stable/beta flags, actual asset architectures/names/digests, installer channel selection, checksums and build identity limits. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
       "path": "docs/superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md",

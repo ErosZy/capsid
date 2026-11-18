@@ -52,13 +52,13 @@ Use [building from source](building.md) for shared setup and commands,
 
 ### Linux
 
-- The published Linux package is **x86_64 musl**, `capsid-<version>-linux-musl.tar.gz`; a source build on another architecture does not establish an available or qualified release asset. See [release selection](releases.md);
+- The published beta.2 Linux package remains **x86_64 musl**, `capsid-<version>-linux-musl.tar.gz`. The development workflow adds distinct `linux-musl-x86_64` and `linux-musl-arm64` packages on native runners; this does not add an ARM64 asset to existing Releases or inherit their qualification. See [release selection](releases.md#development-package-matrix);
 - `CAPSID_ENABLE_LTO`, `CAPSID_ENABLE_ASAN/UBSAN/TSAN`, fuzz, and `CAPSID_GENERATE_LINK_MAP` are available;
 - strict sandbox requires the kernel to provide seccomp and Landlock; cgroup/namespace capabilities are delegated by the host. See [Linux strict sandbox](linux-sandbox.md) for the detailed contract.
 
 ### macOS
 
-- Built natively with the system Clang; the Release package is `capsid-<version>-darwin-arm64.tar.gz`;
+- Built natively with system Clang. The published beta.2 package remains `capsid-<version>-darwin-arm64.tar.gz`; the development workflow additionally builds `capsid-<version>-darwin-x86_64.tar.gz` on a native Intel runner. Separate CPU archives are not universal binaries and do not add assets or qualification to existing Releases;
 - single-worker and static-pool (single / multi shard) are part of the three-platform unified contract; static-pool uses one pool-owned acceptor;
 - `capsid:fs` is degraded but usable: readText/stat/list behave consistently with Linux, implemented as a component-by-component `openat(O_NOFOLLOW)` dirfd walk; symlinks are always rejected;
 - There is no API equivalent to `sched_setaffinity`; CPU affinity tests are skipped with CTest 77;

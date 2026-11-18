@@ -83,13 +83,19 @@ fi
 
 os="$(uname -s)"
 arch="$(uname -m)"
+legacy_asset_pattern=''
 case "$os" in
     Linux)
         case "$arch" in
-            x86_64|amd64) ;;
+            x86_64|amd64)
+                linux_arch='x86_64'
+                # Older published releases used an unqualified x86_64 name.
+                legacy_asset_pattern='capsid-.*-linux-musl\.tar\.gz$'
+                ;;
+            arm64|aarch64) linux_arch='arm64' ;;
             *) echo "install.sh: unsupported Linux architecture: ${arch}" >&2; exit 1 ;;
         esac
-        asset_pattern='capsid-.*-linux-musl\.tar\.gz$'
+        asset_pattern="capsid-.*-linux-musl-${linux_arch}\\.tar\\.gz$"
         tool_suffix=''
         ;;
     Darwin)
@@ -115,11 +121,16 @@ case "$os" in
         ;;
 esac
 
-asset_url="$(printf '%s\n' "$release_json" \
+asset_urls="$(printf '%s\n' "$release_json" \
     | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*"' \
-    | sed -E 's/.*"([^"]+)"$/\1/' \
-    | grep -E "$asset_pattern" \
-    | head -1 || true)"
+    | sed -E 's/.*"([^"]+)"$/\1/' || true)"
+asset_url="$(printf '%s\n' "$asset_urls" | grep -E "$asset_pattern" | head -1 || true)"
+if [[ -z "$asset_url" && -n "$legacy_asset_pattern" ]]; then
+    # Prefer the explicit architecture whenever present. ARM64 must never
+    # fall back to the legacy name, whose binaries were x86_64 only.
+    asset_url="$(printf '%s\n' "$asset_urls" \
+        | grep -E "$legacy_asset_pattern" | head -1 || true)"
+fi
 
 if [[ -z "$asset_url" ]]; then
     echo "install.sh: no matching release asset for ${os}/${arch} (pattern: ${asset_pattern})" >&2

@@ -2,7 +2,7 @@
   "schema": 2,
   "sourceCommit": "87ed4630fa57e360ac0a3a8158218398250c8035",
   "sourceTree": "96bef3a7b0a1acec0cd37be9d470a312046386cb",
-  "semantics": "sourceCommit/sourceTree identify the qualified release only. files fingerprint the reviewed formatting-successor checkout, not a new binary qualification.",
+  "semantics": "sourceCommit/sourceTree/qualifiedReleaseFiles identify the qualified release only. files fingerprint the separately reviewed development checkout; packaging changes do not inherit binary or new-CPU qualification.",
   "files": {
     "CMakeLists.txt": {
       "mode": "100644",
@@ -42,7 +42,12 @@
     "cmake/CapsidPackage.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "34b799f99112bb749bd658f88be4770ea326c50b"
+      "gitObject": "7516870d1df1e2efd9c87f17e3b3b34b78048aaa"
+    },
+    "cmake/CapsidPackagePlatform.cmake": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "b5a374cb69d03475fbca6f8cb1f624258b669abb"
     },
     "cmake/ComparePackageReproducibility.cmake": {
       "mode": "100644",
@@ -152,7 +157,7 @@
     "cmake/build_tests.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "3b81d4eb2f2f1e256c31f1898915795a9de9c4dc"
+      "gitObject": "5922883fb2ea6a77dbd41d0128e62dd710399830"
     },
     "cmake/build_worker.cmake": {
       "mode": "100644",
@@ -3082,13 +3087,28 @@
     "protocolSHA256": "bd4efe8b459c0fd649f158d64ff7985b4be033be16f51b2de022684dda69f60d"
   },
   "checkout": {
-    "kind": "formatting-successor",
-    "baseCommit": "5d9ab83d6487cde118927de39d4873da2b9673fc",
+    "kind": "packaging-successor",
+    "baseCommit": "2fc5ffaa4b2e3248e97d18a425357c21b3de82bd",
     "formatters": {
       "clang-format": "23.1.5",
       "prettier": "3.8.3",
       "ruff": "0.17.5"
     },
-    "releaseQualificationInherited": false
+    "releaseQualificationInherited": false,
+    "changeScope": "mechanical source formatting, development tooling, Linux musl and macOS x86_64/arm64 packaging; no inherited binary, new-CPU release or performance qualification",
+    "buildInputChanges": {
+      "cmake/CapsidPackage.cmake": {
+        "qualifiedGitObject": "34b799f99112bb749bd658f88be4770ea326c50b",
+        "currentGitObject": "7516870d1df1e2efd9c87f17e3b3b34b78048aaa"
+      },
+      "cmake/CapsidPackagePlatform.cmake": {
+        "qualifiedGitObject": null,
+        "currentGitObject": "b5a374cb69d03475fbca6f8cb1f624258b669abb"
+      },
+      "cmake/build_tests.cmake": {
+        "qualifiedGitObject": "3b81d4eb2f2f1e256c31f1898915795a9de9c4dc",
+        "currentGitObject": "5922883fb2ea6a77dbd41d0128e62dd710399830"
+      }
+    }
   }
 }

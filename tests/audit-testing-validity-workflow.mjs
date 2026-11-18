@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { auditReleasePackages } from './release_package_workflow.mjs';
 
 const root = path.resolve(process.argv[2] ?? '.');
 const workflowPath = path.join(root, '.github/workflows/testing-validity.yml');
@@ -41,6 +42,8 @@ assert.match(
   /ref: \$\{\{ github\.sha \}\}/,
   'package checkout uses the tested event SHA, not a movable tag name',
 );
+
+auditReleasePackages(releaseWorkflow);
 
 // Reusable validation also runs from release tags. A tag ref plus SHA can
 // collide with Git's automatic tag fetch before any test or build executes.

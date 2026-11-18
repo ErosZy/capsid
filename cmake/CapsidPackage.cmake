@@ -110,18 +110,12 @@ foreach(CAPSID_RPATH_TARGET IN LISTS CAPSID_INSTALL_BINARIES)
 endforeach()
 
 # ---- §12.3 package naming ---------------------------------------------------
-# Linux packages carry the libc instead of the arch: capsid-<ver>-linux-musl
-# (glibc builds would be linux-gnu). Non-Linux platforms keep the arch
-# (capsid-<ver>-darwin-arm64). Names are lowercased so the archive name is
-# stable across host spellings (Linux/Darwin, x86_64/AMD64). Computed BEFORE
-# the install(CODE) below: the SBOM name and the basename are expanded at
-# configure time, so the package identity must already exist.
+# Linux names include both libc and architecture: linux-musl-x86_64 and
+# linux-musl-arm64 (or linux-gnu-<arch> for local glibc builds). Non-Linux
+# platforms retain darwin-arm64 / windows-x86_64. The same canonical name
+# identifies the archive and SBOM, before install(CODE) expands it below.
 string(TOLOWER "${CMAKE_SYSTEM_NAME}" CAPSID_PACKAGE_SYSTEM)
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-    set(CAPSID_PACKAGE_ARCH "x86_64")
-else()
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" CAPSID_PACKAGE_ARCH)
-endif()
+set(CAPSID_PACKAGE_LIBC "")
 if(CAPSID_PACKAGE_SYSTEM STREQUAL "linux")
     include(CheckCSourceCompiles)
     set(CMAKE_REQUIRED_QUIET TRUE)
@@ -135,12 +129,11 @@ if(CAPSID_PACKAGE_SYSTEM STREQUAL "linux")
     else()
         set(CAPSID_PACKAGE_LIBC "musl")
     endif()
-    set(CAPSID_PACKAGE_BASENAME
-        "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_SYSTEM}-${CAPSID_PACKAGE_LIBC}")
-else()
-    set(CAPSID_PACKAGE_BASENAME
-        "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_SYSTEM}-${CAPSID_PACKAGE_ARCH}")
 endif()
+include("${CMAKE_CURRENT_LIST_DIR}/CapsidPackagePlatform.cmake")
+capsid_package_platform("${CMAKE_SYSTEM_NAME}" "${CMAKE_SYSTEM_PROCESSOR}"
+    "${CAPSID_PACKAGE_LIBC}" CAPSID_PACKAGE_PLATFORM CAPSID_PACKAGE_ARCH)
+set(CAPSID_PACKAGE_BASENAME "capsid-${PROJECT_VERSION}-${CAPSID_PACKAGE_PLATFORM}")
 set(CAPSID_SBOM_NAME "${CAPSID_PACKAGE_BASENAME}")
 
 # Post-install generation of the file manifest and the SPDX SBOM. Runs for

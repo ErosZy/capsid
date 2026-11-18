@@ -36,6 +36,40 @@ The archive filename contains runtime version `0.3.0`; the Release tag selects
 on another architecture does not mean a matching release asset exists; in
 particular, these assets do not include Linux arm64 or macOS x86_64.
 
+## Development Package Matrix
+
+The current development workflow defines five separate native package targets:
+
+| Native build target | Archive |
+| --- | --- |
+| Linux x86_64 / AMD64 | `capsid-<version>-linux-musl-x86_64.tar.gz` |
+| Linux arm64 / aarch64 | `capsid-<version>-linux-musl-arm64.tar.gz` |
+| macOS arm64 / Apple Silicon | `capsid-<version>-darwin-arm64.tar.gz` |
+| macOS x86_64 / Intel | `capsid-<version>-darwin-x86_64.tar.gz` |
+| Windows x86_64 | `capsid-<version>-windows-x86_64.zip` |
+
+Linux uses separate native Ubuntu runners and architecture-matched Alpine
+containers. macOS uses `macos-15` (Apple Silicon) and `macos-15-intel` (Intel),
+with the target architecture selected explicitly; these are separate thin
+binaries, not universal archives. The package gate checks the native runner CPU,
+all three ELF/Mach-O executable architectures, Linux's absence of dynamic-loader
+and shared-library dependencies, package metadata and native package/SDK smoke
+tests on both Linux and macOS CPUs. Windows remains a native x86_64 job. Archive
+and SBOM names use the same canonical architecture.
+
+This is a development packaging change, **not an additional published beta.2
+asset or inherited qualification for either new CPU target**. Existing Releases/tags/assets above
+are unchanged. A manual **Release** workflow run is a validation/package
+preflight only: it preserves verified Actions artifacts and cannot publish or
+edit a Release. Stable publication remains restricted to stable tag pushes;
+prerelease publication still requires operator review of every package.
+
+The current installer prefers the explicit CPU suffix. For old Releases,
+x86_64 alone can fall back to `linux-musl.tar.gz`; ARM64 never downloads that
+legacy x86_64 archive. macOS also selects the exact CPU suffix and never substitutes
+the other CPU's archive. Missing compatible assets fail without changing the
+active installation.
+
 Packages include:
 
 - `capsid-host`, `capsid-worker` and `capsid-bytecode-compile` under `bin`;

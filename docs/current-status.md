@@ -5,14 +5,18 @@ execution diary. The [machine-readable status](current-status.json) is generated
 from committed source locks, the captured GitHub release metadata and validated
 measurement archives. Historical reviews retain their original dates and values.
 
-## Formatted Development Checkout
+## Development Checkout
 
-The development line now includes repository-wide source formatting and pinned
-development tools after the published beta baseline. The machine status keeps
-qualified-release hashes separate from the reviewed formatting snapshot under
-checkout. `releaseQualificationInherited:false` is explicit: the new checkout
-is not a newly qualified binary, bytecode identity or performance result.
-See [source formatting](formatting.md) for scope and exact-byte exclusions.
+The development line includes repository-wide source formatting, pinned tools
+and separate Linux musl and macOS x86_64/arm64 packaging after the published beta
+baseline.
+The machine status keeps qualified-release hashes separate from the reviewed
+development snapshot under checkout. Packaging build-input changes are declared
+and fingerprinted explicitly. `releaseQualificationInherited:false` remains
+explicit: these changes do not qualify a new binary, CPU-specific release, bytecode
+identity or performance result. The already-published beta.2 assets remain
+unchanged. See [source formatting](formatting.md) for exact-byte exclusions and
+[development packaging](releases.md#development-package-matrix) for the new names.
 
 ## Release and Development Channels
 

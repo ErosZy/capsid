@@ -2,7 +2,15 @@
 from pathlib import Path, PurePosixPath
 import hashlib, json, os, subprocess, tarfile, tempfile, zipfile
 
+from release_package_architecture import (
+    native_release_platform,
+    verify_linux_binary,
+    verify_macos_binary,
+)
+
 source = Path.cwd()
+expected_platform = os.environ.get("CAPSID_PACKAGE_PLATFORM", native_release_platform())
+assert expected_platform == native_release_platform(), "package target differs from native runner"
 records = []
 for archive in sorted(
     [
@@ -11,6 +19,8 @@ for archive in sorted(
         *source.glob("build-musl/capsid-*.tar.gz"),
     ]
 ):
+    extension = ".zip" if expected_platform.startswith("windows-") else ".tar.gz"
+    assert archive.name.endswith("-" + expected_platform + extension), archive.name
     raw = archive.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     sidecar = Path(str(archive) + ".sha256")
@@ -58,11 +68,20 @@ for archive in sorted(
     compat = facts["compatibilityId"]
     assert compat.startswith("sha256:") and len(compat) == 71
     binaries = {}
+    architecture_checks = {}
     suffix = ".exe" if os.name == "nt" else ""
     for name in ["capsid-host", "capsid-worker", "capsid-bytecode-compile"]:
         p = root / "bin" / (name + suffix)
         assert p.is_file()
         data = p.read_bytes()
+        if expected_platform.startswith("linux-musl-"):
+            architecture_checks[name] = verify_linux_binary(
+                p, data, expected_platform.removeprefix("linux-musl-")
+            )
+        elif expected_platform.startswith("darwin-"):
+            architecture_checks[name] = verify_macos_binary(
+                data, expected_platform.removeprefix("darwin-")
+            )
         assert compat.encode() in data, (name, "embedded compatibility identity")
         binaries[name] = hashlib.sha256(data).hexdigest()
         if name == "capsid-bytecode-compile":
@@ -78,6 +97,8 @@ for archive in sorted(
             bytes=len(raw),
             sbomSHA256=hashlib.sha256(sbom.read_bytes()).hexdigest(),
             sourceCommit=os.environ["PRODUCT_SHA"],
+            platform=expected_platform,
+            binaryArchitectureChecks=architecture_checks,
             binaries=binaries,
             metadataValidatorPassed=True,
         )

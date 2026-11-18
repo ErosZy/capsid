@@ -335,7 +335,12 @@ assert.equal(currentStatus.developmentBranch, 'dev/v0.3.0');
 assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.2');
 assert.equal(currentStatus.runtime.publicAbi, 7);
 assert.equal(currentStatus.runtime.defaultWireVersion, 3);
-assert.equal(currentStatus.checkout.kind, 'formatting-successor');
+assert.equal(currentStatus.checkout.kind, 'packaging-successor');
+assert.deepEqual(Object.keys(currentStatus.checkout.buildInputChanges).sort(), [
+  'cmake/CapsidPackage.cmake',
+  'cmake/CapsidPackagePlatform.cmake',
+  'cmake/build_tests.cmake',
+]);
 assert.equal(
   currentStatus.checkout.releaseQualificationInherited,
   false,

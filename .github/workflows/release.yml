@@ -2,10 +2,11 @@ name: Release
 
 # Tag pushes (v*) validate and package the pinned checkout. Stable tags
 # attach CPack archives + SHA256 to a Release; prereleases retain verified
-# artifacts for all-platform review before operator publication. Three ship:
-#   - linux-musl: fully static (musl) built in an Alpine container —
-#     one portable binary, no libc version matrix to manage;
-#   - darwin-arm64: native macOS build (Apple ships no static libSystem);
+# artifacts for all-platform review before operator publication. Five ship:
+#   - linux-musl-x86_64 and linux-musl-arm64: fully static Alpine builds
+#     on separate native CPU runners; archive names cannot collide;
+#   - darwin-arm64 and darwin-x86_64: separate native macOS builds
+#     (Apple ships no static libSystem; these are not universal archives);
 #   - windows-x86_64: MSVC static-CRT ZIP (see docs/windows.md).
 # The same commit's full validity workflow must pass before packaging
 # or publication. Both validation and packaging use the triggering SHA.
@@ -14,6 +15,9 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual preflight validates/packages the selected commit without creating
+  # or editing a Release. Publication remains restricted to tag pushes.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -38,9 +42,25 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
+            package_platform: linux-musl-x86_64
+            native_machine: x86_64
+            docker_platform: linux/amd64
+          - os: ubuntu-24.04-arm
+            package_platform: linux-musl-arm64
+            native_machine: aarch64
+            docker_platform: linux/arm64
           - os: macos-15
+            package_platform: darwin-arm64
+            native_machine: arm64
+            macos_arch: arm64
+            deps: brew install ninja boost c-ares
+          - os: macos-15-intel
+            package_platform: darwin-x86_64
+            native_machine: x86_64
+            macos_arch: x86_64
             deps: brew install ninja boost c-ares
           - os: windows-latest
+            package_platform: windows-x86_64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -85,17 +105,23 @@ jobs:
             npm ci --ignore-scripts --prefix "${directory}"
           done
 
-      - name: Build and package in Alpine (musl, fully static)
-        if: matrix.os == 'ubuntu-24.04'
+      - name: Build and package in native Alpine (musl, fully static)
+        if: runner.os == 'Linux'
+        env:
+          EXPECTED_MACHINE: ${{ matrix.native_machine }}
+          DOCKER_PLATFORM: ${{ matrix.docker_platform }}
         run: |
           set -euo pipefail
-          if ! docker run --rm \
+          test "$(uname -m)" = "${EXPECTED_MACHINE}"
+          if ! docker run --rm --platform "${DOCKER_PLATFORM}" \
+            -e EXPECTED_MACHINE \
             -v "${GITHUB_WORKSPACE}:/src" \
             -w /src \
             alpine:3.24 sh -eux -c '
+              test "$(uname -m)" = "${EXPECTED_MACHINE}"
               echo "== apk add"
               apk add --no-cache build-base cmake ninja linux-headers \
-                nodejs npm git perl boost-dev boost1.84-static c-ares-dev
+                nodejs npm git perl python3 binutils boost-dev boost1.84-static c-ares-dev
               # The mounted workspace is owned by the runner user; as root,
               # git refuses it and the overlay-key / identity gates then
               # cannot resolve vendor HEADs. Covers every nested submodule
@@ -131,6 +157,9 @@ jobs:
               cmake --build build-musl --parallel 2
               echo "== package"
               cmake --build build-musl --target package
+              echo "== native package and SDK smoke"
+              ctest --test-dir build-musl --no-tests=error --output-on-failure \
+                -R "^(package_platform_naming|release_package_architecture_controls|worker_package_contents|worker_package_smoke)$"
             ' 2>&1 | tee /tmp/musl-build.log; then
             tail -8 /tmp/musl-build.log | while IFS= read -r line; do
               echo "::error::${line}"
@@ -146,7 +175,7 @@ jobs:
           fi
 
       - name: Build OpenSSL 3.5.7 for macOS Release
-        if: matrix.os == 'macos-15'
+        if: runner.os == 'macOS'
         run: |
           set -euo pipefail
           # Same pinned provider source as the sanitizer Host build in
@@ -172,11 +201,16 @@ jobs:
           fi
 
       - name: Configure and build macOS Release/LTO
-        if: matrix.os == 'macos-15'
+        if: runner.os == 'macOS'
+        env:
+          EXPECTED_MACHINE: ${{ matrix.native_machine }}
+          MACOS_ARCH: ${{ matrix.macos_arch }}
         run: |
           set -euo pipefail
+          test "$(uname -m)" = "${EXPECTED_MACHINE}"
           if ! cmake -S . -B build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_OSX_ARCHITECTURES="${MACOS_ARCH}" \
               -DCAPSID_BUILD_HOST=ON \
               -DCMAKE_PREFIX_PATH=/opt/openssl35 2>&1 | tee /tmp/configure.log; then
             tail -8 /tmp/configure.log | while IFS= read -r line; do
@@ -196,6 +230,8 @@ jobs:
             done
             exit 1
           fi
+          ctest --test-dir build --no-tests=error --output-on-failure \
+            -R '^(package_platform_naming|release_package_architecture_controls|worker_package_contents|worker_package_smoke)$'
           ls -la build/capsid-*
 
       - name: Configure and build Windows Release
@@ -222,15 +258,15 @@ jobs:
       # once every required validation/package job and artifact review passes.
       # GITHUB_TOKEN cannot update a Release whose target changes workflows
       # relative to main; do not partially publish from parallel package jobs.
-      - name: Verify prerelease package before artifact upload
-        if: contains(github.ref_name, '-')
+      - name: Verify native package before upload
         shell: bash
         env:
           PRODUCT_SHA: ${{ github.sha }}
+          CAPSID_PACKAGE_PLATFORM: ${{ matrix.package_platform }}
         run: python tools/verify-release-package.py
 
-      - name: Preserve verified prerelease package for gated publication
-        if: contains(github.ref_name, '-')
+      - name: Preserve verified package for preflight or gated publication
+        if: github.event_name == 'workflow_dispatch' || contains(github.ref_name, '-')
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: prerelease-package-${{ matrix.os }}
@@ -245,7 +281,7 @@ jobs:
             beta-package-review.json
 
       - name: Publish package to GitHub Release
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
         # The bash script must not run under the Windows default shell:
         # pwsh parses `--title` as the unary `--` operator and the step
         # dies with a ParserError before gh even runs.
