@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owned four-stack pure-JS serving lane with distinct trickle and loaded processes."""
+"""Owned five-stack pure-JS serving lane with distinct trickle and loaded processes."""
 
 import argparse
 from contextlib import contextmanager
@@ -57,6 +57,7 @@ def binary_paths(args):
         "capsid-worker": args.worker,
         "loadgen": args.loadgen,
         "node": args.node,
+        "bun": args.bun,
         "workerd": args.workerd,
     }
     required = set().union(*(required_binaries("qps", stack) for stack in args.stacks))
@@ -71,6 +72,7 @@ def parse_args(argv=None):
         ("worker", "WORKER", build / "capsid-worker"),
         ("loadgen", "LOADGEN", build / "benchmark-tools/loadgen"),
         ("node", "NODE_BIN", shutil.which("node")),
+        ("bun", "BUN_BIN", shutil.which("bun")),
         ("workerd", "WORKERD_BIN", shutil.which("workerd")),
     ):
         parser.add_argument("--" + flag, type=Path, default=os.environ.get(env, default))
@@ -175,7 +177,7 @@ def parse_args(argv=None):
     for name, path in binary_paths(args).items():
         if path is None or not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable for {name}: {path}")
-    for attr in ("host", "worker", "loadgen", "node", "workerd"):
+    for attr in ("host", "worker", "loadgen", "node", "bun", "workerd"):
         value = getattr(args, attr)
         if value is not None:
             setattr(args, attr, value.resolve())
@@ -358,6 +360,8 @@ def run_locked(args, lock):
                     if (
                         n == "qps-worker.mjs"
                         if stack in ("capsid", "workerd")
+                        else n == "qps-bun.mjs"
+                        if stack == "bun"
                         else n == "qps-node.mjs"
                     )
                     or n.startswith("probes/" + stack + "/")

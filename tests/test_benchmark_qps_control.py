@@ -72,8 +72,8 @@ def fixture(stack="capsid", workload="stream", round_no=1):
 
 
 class QpsControlTests(unittest.TestCase):
-    def test_all_four_stacks_three_workloads_and_five_rounds(self):
-        for stack in ("capsid", "node", "node-jitless", "workerd"):
+    def test_all_five_stacks_three_workloads_and_five_rounds(self):
+        for stack in ("capsid", "node", "node-jitless", "bun", "workerd"):
             for workload in ("matrix-json-1k", "matrix-json-16k", "stream"):
                 for round_no in range(1, 6):
                     rows, verdict = fixture(stack, workload, round_no)
@@ -205,7 +205,7 @@ class QpsControlTests(unittest.TestCase):
                 control.checked_round(*fixture(), "capsid", "stream", 1, **kwargs)
 
     def test_actual_memory_shapes_require_all_roles_roots_and_fresh_phases(self):
-        for stack in ("capsid", "node", "node-jitless", "workerd"):
+        for stack in ("capsid", "node", "node-jitless", "bun", "workerd"):
             phases = {phase: synthetic_memory(stack, phase) for phase in ("lowLoad", "serving")}
             self.assertIs(phases, control.checked_memory_pair(phases, stack))
             for phase in phases:

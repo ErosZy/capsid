@@ -39,8 +39,8 @@ STACKS_V1 = {
     "density": ("capsid", "workerd"),
 }
 STACKS = {
-    "cold-start": ("capsid-source", "capsid-bytecode", "node", "node-jitless", "workerd"),
-    "qps": ("capsid", "node", "node-jitless", "workerd"),
+    "cold-start": ("capsid-source", "capsid-bytecode", "node", "node-jitless", "bun", "workerd"),
+    "qps": ("capsid", "node", "node-jitless", "bun", "workerd"),
     "density": ("capsid", "workerd"),
 }
 
@@ -955,6 +955,7 @@ def validate_point(lanes, repo, version, release):
     )
     for binary, key in (
         ("node", "node"),
+        ("bun", "bun"),
         ("deno", "deno"),
         ("workerd", "workerd_version"),
         ("python", "python"),

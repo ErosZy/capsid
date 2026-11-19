@@ -9,12 +9,15 @@ def synthetic_memory(stack, phase, base_pid=None, *, seconds=15, rate=10, client
         "capsid": [("host", "worker")],
         "node": [("process", "process")],
         "node-jitless": [("process", "process")],
+        "bun": [("process", "process")],
         "workerd": [("process", "process")],
         "fastapi": [("process", "process")],
         "flask": [("master", "worker")],
         "php": [("nginx", "nginx-worker"), ("fpm-master", "fpm-worker")],
     }[stack]
-    index = ("capsid", "node", "node-jitless", "workerd", "fastapi", "flask", "php").index(stack)
+    index = ("capsid", "node", "node-jitless", "bun", "workerd", "fastapi", "flask", "php").index(
+        stack
+    )
     base = base_pid if base_pid is not None else index * 1000 + (200 if phase == "lowLoad" else 400)
     probe = {"pid": 41, "start": 1, "parent": 1, "session": 41, "state": "S"}
 

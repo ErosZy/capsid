@@ -219,9 +219,10 @@ try {
       { stack: 'capsid', workload: 'matrix-json-1k', qps: 19000, p50Ms: 3.2, p95Ms: 4.8 },
       { stack: 'node', workload: 'matrix-json-1k', qps: 25000, p50Ms: 2.5, p95Ms: 3.9 },
       { stack: 'node-jitless', workload: 'matrix-json-1k', qps: 12000, p50Ms: 5.1, p95Ms: 7.4 },
+      { stack: 'bun', workload: 'matrix-json-1k', qps: 60000, p50Ms: 1.0, p95Ms: 1.8 },
       { stack: 'workerd', workload: 'matrix-json-1k', qps: 45000, p50Ms: 1.4, p95Ms: 2.1 },
     ],
-    servingPssMb: { capsid: 18.6, node: 55.0, 'node-jitless': 42.0, workerd: 220.0 },
+    servingPssMb: { capsid: 18.6, node: 55.0, 'node-jitless': 42.0, bun: 75.0, workerd: 220.0 },
     servingPss: {
       capsid: [
         { role: 'host', mb: 9.6 },
@@ -229,9 +230,10 @@ try {
       ],
       node: [{ role: 'process', mb: 55.0 }],
       'node-jitless': [{ role: 'process', mb: 42.0 }],
+      bun: [{ role: 'process', mb: 75.0 }],
       workerd: [{ role: 'process', mb: 220.0 }],
     },
-    lowLoadPssMb: { capsid: 14.8, node: 48.0, 'node-jitless': 38.0, workerd: 90.0 },
+    lowLoadPssMb: { capsid: 14.8, node: 48.0, 'node-jitless': 38.0, bun: 58.0, workerd: 90.0 },
     lowLoadPss: {
       capsid: [
         { role: 'host', mb: 8.0 },
@@ -239,12 +241,14 @@ try {
       ],
       node: [{ role: 'process', mb: 48.0 }],
       'node-jitless': [{ role: 'process', mb: 38.0 }],
+      bun: [{ role: 'process', mb: 58.0 }],
       workerd: [{ role: 'process', mb: 90.0 }],
     },
   };
   elements = render(v2);
   assert.doesNotMatch(elements.get('nav-meta').textContent, /unverified/);
   assert.match(elements.get('qps-table').innerHTML, /Node\.js \(--jitless\)/);
+  assert.match(elements.get('qps-table').innerHTML, /Bun/);
 
   // Current packed evidence and user selection exercise the actual page,
   // using committed generated assets without inventing raw-file links.

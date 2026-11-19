@@ -1,4 +1,4 @@
-"""Actual four-stack pure-JS QPS runs, with isolated fresh trickle and serving trees."""
+"""Actual five-stack pure-JS QPS runs, with isolated fresh trickle and serving trees."""
 
 from contextlib import ExitStack
 from dataclasses import asdict
@@ -168,6 +168,11 @@ class QpsProbe:
             if stack == "node-jitless":
                 argv.append("--jitless")
             argv += [str(script), str(ports[0])]
+            return [("process", "process", argv, ports)]
+        if stack == "bun":
+            script = folder / "qps-bun.mjs"
+            shutil.copyfile(self.apps / "qps-bun.mjs", script)
+            argv = [str(self.binaries["bun"]), str(script), str(ports[0])]
             return [("process", "process", argv, ports)]
         raise ProbeError("qps-stack", "unknown QPS stack")
 

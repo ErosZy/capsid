@@ -8,7 +8,7 @@ from measurement_runtime import ProbeError
 
 EXPECTED_BODY = b'{"status":"ok","total":2039,"count":16}'
 HTTP_STACKS_V1 = ("node", "deno", "workerd")
-HTTP_STACKS = ("node", "node-jitless", "workerd")
+HTTP_STACKS = ("node", "node-jitless", "bun", "workerd")
 
 
 def cpu_selection(text, available):

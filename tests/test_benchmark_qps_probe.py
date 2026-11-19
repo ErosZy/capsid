@@ -451,10 +451,11 @@ class DeploymentCompletionTests(unittest.TestCase):
 
 
 class LaunchConfigurationTests(unittest.TestCase):
-    def test_node_and_node_jitless_share_fixture_with_explicit_jitless_flag(self):
+    def test_node_bun_and_workerd_launch_configurations_use_isolated_fixtures(self):
         apps = Path(__file__).resolve().parents[1] / "bench/bench-apps"
         binaries = {
             "node": Path("/usr/bin/node"),
+            "bun": Path("/usr/bin/bun"),
             "workerd": Path("/usr/bin/workerd"),
         }
         with tempfile.TemporaryDirectory(prefix="capsid-reference-config-") as temp:
@@ -475,6 +476,16 @@ class LaunchConfigurationTests(unittest.TestCase):
                 self.assertEqual(
                     (apps / "qps-node.mjs").read_bytes(), (folder / "qps-node.mjs").read_bytes()
                 )
+            bun = root / "bun"
+            bun.mkdir(mode=0o700)
+            specs = probe.prepare(bun, "bun", [48004])
+            self.assertEqual(1, len(specs))
+            role, child_role, argv, ports = specs[0]
+            self.assertEqual(("process", "process", [48004]), (role, child_role, ports))
+            self.assertEqual([str(binaries["bun"]), str(bun / "qps-bun.mjs"), "48004"], argv)
+            self.assertEqual(
+                (apps / "qps-bun.mjs").read_bytes(), (bun / "qps-bun.mjs").read_bytes()
+            )
             wk = root / "workerd"
             wk.mkdir(mode=0o700)
             specs = probe.prepare(wk, "workerd", [48003])

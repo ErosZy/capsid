@@ -500,8 +500,8 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.assertIn("density", point["origins"])
         for name, expected in point["evidence"].items():
             self.assertEqual(digest((f.root / name).read_bytes()), expected)
-        self.assertEqual(len(point["coldStart"]["cells"]), 15)
-        self.assertEqual(len(point["qps"]["cells"]), 12)
+        self.assertEqual(len(point["coldStart"]["cells"]), 18)
+        self.assertEqual(len(point["qps"]["cells"]), 15)
         self.assertTrue(any("/density/" in name for name in point["evidence"]))
         self.assertEqual(point["density"]["capsid"]["cold@10k"]["limit"], "cap")
 

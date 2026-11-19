@@ -163,7 +163,7 @@ class ColdProbe:
         startup_timeout=30,
         settle_seconds=1,
         pss_interval=1,
-        pss_attempts=8,
+        pss_attempts=24,
     ):
         self.binaries, self.apps, self.compiled = binaries, Path(apps), compiled
         self.out, self.cpuset, self.warm_requests = Path(out), cpuset, warm_requests
@@ -188,6 +188,10 @@ class ColdProbe:
             if stack == "node-jitless":
                 argv.append("--jitless")
             argv.append(str(runtime / "bundle.mjs"))
+        elif stack == "bun":
+            old = "  port: 18991,"
+            new = old.replace("18991", str(port))
+            argv = [str(self.binaries["bun"]), str(runtime / "bundle.mjs")]
         elif stack == "workerd":
             old = None
             config = (
@@ -241,6 +245,8 @@ class ColdProbe:
                     "1",
                     "--warm",
                     str(self.warm_requests),
+                    "--pss-attempts",
+                    str(self.pss_attempts),
                 ]
             else:
                 lease = self.ports.allocate(1)

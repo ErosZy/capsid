@@ -70,8 +70,8 @@ including density. There is no mixed-origin publication mode.
 
 | Lane | Required coverage (`capsid-perf-lane-v2`) | Frozen parameters |
 |---|---|---|
-| Cold start | capsid source/bytecode, Node, Node (`--jitless`), workerd × 10k/100k/1m | five measured rounds after one discard; 50 warm requests |
-| QPS | capsid, Node, Node (`--jitless`), workerd × JSON 1k/16k/stream | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
+| Cold start | capsid source/bytecode, Node, Node (`--jitless`), Bun, workerd × 10k/100k/1m | five measured rounds after one discard; 50 warm requests |
+| QPS | capsid, Node, Node (`--jitless`), Bun, workerd × JSON 1k/16k/stream | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
 | Density | capsid/workerd × 10k/100k/1m × cold/warm | 2048 MiB; 100 requests per worker/cell in warm phase; two stable reads; two verification retries |
 
 Density uses `warmupConcurrencyPolicy: pool-scaled-burst-v1`, base
@@ -139,10 +139,9 @@ validator requires those identities to match the loaded phase.
   `beforeMeasuredLoad: true`, all 150 individually verified JSON-1k requests,
   paced dispatch/completion times, and `duration_s >= 15`. Its exact readiness
   response is separate. Loaded memory excludes the probe and all 15 per-round
-  Go clients; those client identities must match the workload records. All
-  eight intervals (ten in historical schema 1 archives) are disjoint, use one
-  controller and fresh service identities, and completely reap their owned
-  forests. Totals/roles must reproduce the summary.
+  Go clients; those client identities must match the workload records. All ten
+  intervals are disjoint, use one controller and fresh service identities, and
+  completely reap their owned forests. Totals/roles must reproduce the summary.
   These are observations in the sampling window. Loaded QPS differs across
   stacks; it does not establish equal work performed or a steady-state bound.
 
@@ -192,12 +191,13 @@ binary, and archive validation alone is not full release qualification.
 ## QPS producer
 
 `qps-lane.sh` execs `qps-lane.py`. Its default is the complete pure-JS
-four-stack (`capsid`, `node`, `node-jitless`, `workerd`), three-workload
-protocol above. Capsid always uses managed/strict with a fixed one-worker pool.
-The maintained `qps-worker.mjs` is shared by Capsid and locked workerd;
-`qps-node.mjs` (built-in `node:http` with keep-alive, no third-party framework)
-is shared by `node` and `node-jitless`, with `node-jitless` launching the same
-`node` executable with `--jitless` recorded in `launch.json` and `lane.json`.
+five-stack (`capsid`, `node`, `node-jitless`, `bun`, `workerd`),
+three-workload protocol above. Capsid always uses managed/strict with a fixed
+one-worker pool. The maintained `qps-worker.mjs` is shared by Capsid and locked
+workerd; `qps-node.mjs` (built-in `node:http` with keep-alive, no third-party
+framework) is shared by `node` and `node-jitless`, with `node-jitless`
+launching the same `node` executable with `--jitless` recorded in `launch.json`
+and `lane.json`; `qps-bun.mjs` runs on Bun's built-in `Bun.serve`.
 Parent port leases, per-phase native temporary paths and pinned recursive
 ownership keep unrelated jobs out of measurements and cleanup. A single
 subreaper lease covers serving roots and transient clients; each tree retains
@@ -214,17 +214,18 @@ response record and fails if dispatch falls more than 0.1 s behind. Every
 measured round starts the real Go load generator in a separate owned session;
 both raw rows and its successful verdict are checked before the next round.
 
-Runner bytes, fixtures (`qps-worker.mjs`, `qps-node.mjs`) and selected
-executables are snapshotted before probes and rechecked at the end. Runtime
-files are retained with each path component percent-encoded, including managed
-filenames that contain a colon. The mapping is recorded in `runtime-files.json`.
+Runner bytes, fixtures (`qps-worker.mjs`, `qps-node.mjs`, `qps-bun.mjs`) and
+selected executables are snapshotted before probes and rechecked at the end.
+Runtime files are retained with each path component percent-encoded, including
+managed filenames that contain a colon. The mapping is recorded in
+`runtime-files.json`.
 
 For an actual short Linux observation:
 
 ```sh
 bash bench/qps-lane.sh --observation --out /tmp/qps-observation \
   --host /path/capsid-host --worker /path/capsid-worker \
-  --node /path/node --workerd /path/workerd \
+  --node /path/node --bun /path/bun --workerd /path/workerd \
   --loadgen /path/BUILD/benchmark-tools/loadgen \
   --rounds 1 --warmup 1 --duration 1 --connections 2 --inflight 2 \
   --trickle-seconds 1 --trickle-rate 10
@@ -235,15 +236,15 @@ OUT must be new. This writes sealed `observation.json`, `memory.json`, verified
 `lane.json`. Errors and SIGINT/SIGTERM preserve `failed.json`, phase logs and
 cleanup records and cannot publish partial cells as success.
 
-Formal mode uses the frozen defaults, all four pure-JS stacks and three
+Formal mode uses the frozen defaults, all five pure-JS stacks and three
 workloads, four available CPU indices, `--metadata`/`CAPSID_BENCH_METADATA`,
 and an OUT below `bench/results/`. Metadata follows the density schema below
 and requires actual identities for `capsid-host`, `capsid-worker`, `loadgen`,
-`node` and `workerd`; product/loadgen identity must match the clean measured
-source. The coordination lock is acquired before fixture preparation and held
-through self-validation. It does not prove an otherwise quiet machine. The
-formal producer emits `schema: 2` (`capsid-perf-lane-v2`), seals and replays
-the real archive validator before success. Synthetic 12-cell/60-client tests
+`node`, `bun` and `workerd`; product/loadgen identity must match the clean
+measured source. The coordination lock is acquired before fixture preparation
+and held through self-validation. It does not prove an otherwise quiet machine.
+The formal producer emits `schema: 2` (`capsid-perf-lane-v2`), seals and replays
+the real archive validator before success. Synthetic 15-cell/75-client tests
 use private temporary repositories and explicit injected probes only; short
 observations and signal tests are recorded separately. Neither substitutes for
 clean Release/LTO, full matrix or quiet-session formal performance
@@ -378,13 +379,13 @@ hashed. The compiler's no-replace contract is preserved on WSL mounts that rejec
 that filesystem operation. No lane writes shared APPS or reuses old bytecode.
 
 Formal cold metadata follows the density schema above and requires binary
-records for `capsid-worker`, `cold-start`, `capsid-bytecode-compile`, `node`
-and `workerd` (`node-jitless` reuses the `node` binary and `app-node-*.mjs`
+records for `capsid-worker`, `cold-start`, `capsid-bytecode-compile`, `node`,
+`bun` and `workerd` (`node-jitless` reuses the `node` binary and `app-node-*.mjs`
 fixtures with `--jitless`). The first three must match the measured clean source
 commit/tag/version. Formal mode emits `schema: 2` (`capsid-perf-lane-v2`) and
-requires all five stacks (`capsid-source`, `capsid-bytecode`, `node`,
-`node-jitless`, `workerd`), all three sizes, five rounds, one discarded run, 50
-warm requests and four available CPU indices. Source/binary/runner/input
+requires all six stacks (`capsid-source`, `capsid-bytecode`, `node`,
+`node-jitless`, `bun`, `workerd`), all three sizes, five rounds, one discarded
+run, 50 warm requests and four available CPU indices. Source/binary/runner/input
 identities are rechecked before sealing. The actual sealed archive is replayed
 through the real cold validator before success.
 
@@ -394,7 +395,7 @@ For a restricted smoke, provide actual binary paths and frozen generated apps:
 OUT=/tmp/cold-observation APPS=/path/generated-apps \
 WORKER=/path/capsid-worker COLD=/path/cold-start \
 COMPILE=/path/capsid-bytecode-compile NODE_BIN=/path/node \
-WORKERD_BIN=/path/workerd \
+BUN_BIN=/path/bun WORKERD_BIN=/path/workerd \
 bash bench/cold-start.sh --observation --sizes 10k --rounds 1 --warm 2
 ```
 

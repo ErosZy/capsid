@@ -45,6 +45,7 @@ def parse_args(argv=None):
         ("cold", "COLD", build / "cold-start"),
         ("compiler", "COMPILE", build / "capsid-bytecode-compile"),
         ("node", "NODE_BIN", shutil.which("node")),
+        ("bun", "BUN_BIN", shutil.which("bun")),
         ("workerd", "WORKERD_BIN", shutil.which("workerd")),
     ):
         parser.add_argument("--" + flag, type=Path, default=os.environ.get(env, default))
@@ -56,7 +57,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--stacks",
         nargs="+",
-        default=os.environ.get("STACKS", "capsid node node-jitless workerd").split(),
+        default=os.environ.get("STACKS", "capsid node node-jitless bun workerd").split(),
     )
     parser.add_argument("--rounds", type=int, default=os.environ.get("ROUNDS", 5))
     parser.add_argument("--warm", type=int, default=os.environ.get("WARM", 50))
@@ -118,7 +119,7 @@ def parse_args(argv=None):
     for name, path in paths.items():
         if path is None or not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable for {name}: {path}")
-    for attr in ("worker", "cold", "compiler", "node", "workerd"):
+    for attr in ("worker", "cold", "compiler", "node", "bun", "workerd"):
         value = getattr(args, attr)
         if value is not None:
             setattr(args, attr, value.resolve())
@@ -131,6 +132,7 @@ def binary_paths(args):
         "cold-start": args.cold,
         "capsid-bytecode-compile": args.compiler,
         "node": args.node,
+        "bun": args.bun,
         "workerd": args.workerd,
     }
     required = set().union(*(required_binaries("cold-start", stack) for stack in args.stacks))
@@ -405,7 +407,7 @@ def run_lane(args):
                 sutCpuSet=args.cpuset,
                 rounds=args.rounds,
                 warmRequests=args.warm,
-                pssAttempts=8,
+                pssAttempts=24,
                 pssIntervalSeconds=1,
                 settleSeconds=1,
             ),

@@ -163,6 +163,7 @@ class ProducerTests(unittest.TestCase):
             "cold-start",
             "capsid-bytecode-compile",
             "node",
+            "bun",
             "workerd",
         ):
             file = (
@@ -218,6 +219,7 @@ class ProducerTests(unittest.TestCase):
             cold=self.paths["cold-start"],
             compiler=self.paths["capsid-bytecode-compile"],
             node=self.paths["node"],
+            bun=self.paths["bun"],
             workerd=self.paths["workerd"],
         )
 
@@ -269,10 +271,10 @@ class ProducerTests(unittest.TestCase):
         with patch.object(lane, "ColdProbe", self.factory(changed_shared_apps)):
             result = lane.run_lane(self.config)
         self.assertTrue(result["publicationEligible"], "temporary synthetic contract fixture only")
-        self.assertEqual(15, result["cells"])
-        self.assertEqual(90, len(calls))
+        self.assertEqual(18, result["cells"])
+        self.assertEqual(108, len(calls))
         archive = Archive(self.config.out, self.root)
-        self.assertEqual(15, len(archive.manifest["records"]))
+        self.assertEqual(18, len(archive.manifest["records"]))
         self.assertEqual("python-http-exact-v1", archive.manifest["protocol"]["httpClient"])
         self.assertEqual(self.cpus, archive.manifest["clientAffinity"])
         for record in archive.manifest["records"]:
@@ -355,7 +357,7 @@ class ProducerTests(unittest.TestCase):
                 original = self.paths["workerd"].read_bytes()
 
                 def change(adapter, result):
-                    if adapter.calls == 90:
+                    if adapter.calls == 108:
                         target = (
                             self.paths["workerd"]
                             if mode == "binary"

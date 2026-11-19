@@ -60,6 +60,7 @@ two disagree, this file wins and the docs are stale.
   (`qps-node.mjs`, no third-party framework);
   node-jitless: identical `node` binary and `qps-node.mjs` fixture launched
   with `--jitless` (recorded in launch/manifest provenance);
+  bun: single-process built-in `Bun.serve` (`qps-bun.mjs`, no third-party framework);
   workerd: single process, minimal capnp sharing `qps-worker.mjs` with capsid.
 - **Memory:** process-tree PSS (`smaps_rollup`) sampled after the last
   round, decomposed per role; a **trickle phase** (fresh process, 15 s
@@ -78,8 +79,8 @@ warm-up prevents measurement; a failed verdict exits nonzero. Formal samples
 record a 30000 ms request timeout; the explicit shorter correctness-fixture
 setting is rejected by publication validation.
 
-The shell entry execs the owned Python controller. The full four-stack pure-JS
-producer (`capsid`, `node`, `node-jitless`, `workerd`) implements these
+The shell entry execs the owned Python controller. The full five-stack pure-JS
+producer (`capsid`, `node`, `node-jitless`, `bun`, `workerd`) implements these
 defaults, requires managed/strict posture and keeps every serving root and Go
 client in separate owned sessions. An exact application-readiness response
 precedes traffic and is separate from the 150 trickle responses. Low-load
@@ -97,7 +98,7 @@ absolute startup deadline; neither deploy nor the first exact business request
 is retried. Failed or malformed operation responses abort the probe.
 
 Formal archives emit `schema: 2` (`capsid-perf-lane-v2`), requiring clean
-measured-build/session metadata, four available CPU indices, all four pure-JS
+measured-build/session metadata, four available CPU indices, all five pure-JS
 stacks, all three workloads, five rounds and independent build provenance.
 Historical `schema: 1` (`capsid-perf-lane-v1`) archives remain replayable
 without modification. The producer self-validates its sealed output. Restricted
@@ -116,10 +117,10 @@ formal performance point. See [QPS producer](perf-evidence.md#qps-producer).
   and reports the median of five.
 - **capsid:** C-ABI tool with `--strict` (full sandbox in the spawned
   worker); source and trusted-bytecode paths both measured. Node / Node
-  (`--jitless`): stdout READY plus an owned listener, then the first exact HTTP
-  response. workerd: first owned-listener TCP connect (its isolate initializes
-  lazily on the first request, so the ready→first-response span carries that
-  cost).
+  (`--jitless`) / Bun: stdout READY plus an owned listener, then the first
+  exact HTTP response. workerd: first owned-listener TCP connect (its isolate
+  initializes lazily on the first request, so the ready→first-response span
+  carries that cost).
 
 The C-ABI probe now gets the spawned child's PID from the public
 `capsid_worker_pid()` API. Inherited socketpair credentials identify the socket
@@ -137,7 +138,7 @@ process back into the reported worker footprint.
 Worker-tree membership is pinned after the first response and before warming.
 Recursive PSS includes pinned reparented descendants. Missing/reaped/replaced
 or additional members fail; unreadable, zero or overflowing memory fails.
-After a one-second settle, the probe takes at most eight PSS reads one second
+After a one-second settle, the probe takes at most twenty-four PSS reads one second
 apart and requires two equal positive readings. Raw output includes round,
 correctness counts, PID/start identities, both PSS samples and warm latencies.
 SIGINT/SIGTERM and request failures reap the C-ABI worker through abortive
@@ -151,7 +152,7 @@ remaining owned processes. Discarded raw/correctness records are sealed and
 validated separately; a failed discarded run aborts the cell. The summary uses
 only measured rounds. Reusing a measured root PID/start identity fails.
 
-Node, Node (`--jitless`), and workerd requests use a fresh Python-standard-library loopback HTTP
+Node, Node (`--jitless`), Bun, and workerd requests use a fresh Python-standard-library loopback HTTP
 connection per request (`httpClient: python-http-exact-v1`). The old curl process
 startup floor describes historical points only. C-ABI IPC and HTTP transports
 remain different and are stated beside warm results. Both the controller/client

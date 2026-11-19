@@ -26,6 +26,7 @@
     --s2: #0ea371;  /* capsid bytecode */
     --s3: #fbbf24;  /* node */
     --s3b: #f59e0b; /* node --jitless */
+    --s3c: #f472b6; /* bun */
     --s4: #818cf8;  /* deno (historical v1) */
     --s5: #fb7185;  /* workerd */
     --s6: #22d3ee;  /* fastapi (historical v1) */
@@ -449,24 +450,25 @@
 /* ============ palette & labels ============ */
 var C = {
   "capsid-source": "#34d399", "capsid-bytecode": "#0ea371",
-  "node": "#fbbf24", "node-jitless": "#f59e0b", "deno": "#818cf8", "workerd": "#fb7185",
+  "node": "#fbbf24", "node-jitless": "#f59e0b", "bun": "#f472b6", "deno": "#818cf8", "workerd": "#fb7185",
   "capsid": "#34d399", "fastapi": "#22d3ee", "flask": "#a3e635", "php": "#c084fc"
 };
 var NAME = {
   "capsid-source": "Capsid · source", "capsid-bytecode": "Capsid · bytecode",
-  "node": "Node.js", "node-jitless": "Node.js (--jitless)", "deno": "Deno", "workerd": "workerd",
+  "node": "Node.js", "node-jitless": "Node.js (--jitless)", "bun": "Bun", "deno": "Deno", "workerd": "workerd",
   "capsid": "Capsid", "fastapi": "FastAPI", "flask": "Flask", "php": "PHP Slim"
 };
 /* short labels for chart gutters; long forms live in tables & tooltips */
 var SHORT = {
   "capsid-source": "Capsid src", "capsid-bytecode": "Capsid bc",
-  "node": "Node.js", "node-jitless": "Node jitless", "deno": "Deno", "workerd": "workerd",
+  "node": "Node.js", "node-jitless": "Node jitless", "bun": "Bun", "deno": "Deno", "workerd": "workerd",
   "capsid": "Capsid", "fastapi": "FastAPI", "flask": "Flask", "php": "PHP Slim"
 };
 var NAME_LONG = {
   "capsid": "Capsid — single worker",
   "node": "Node.js — single process (node:http)",
   "node-jitless": "Node.js (--jitless) — single process (node:http)",
+  "bun": "Bun — single process (Bun.serve)",
   "workerd": "workerd — single process",
   "fastapi": "FastAPI — uvicorn",
   "flask": "Flask — gunicorn",
@@ -775,13 +777,13 @@ function renderQps() {
 /* ============ serving memory ============ */
 var RC = {
   "host": "#34d399", "cw": "#0ea371", "proc": "#fb7185",
-  "nodep": "#fbbf24", "nodej": "#f59e0b",
+  "nodep": "#fbbf24", "nodej": "#f59e0b", "bunp": "#f472b6",
   "ngx": "#c084fc", "ngxw": "#9d6bdf", "fpmm": "#a3e635", "fpmw": "#7fb829",
   "pym": "#fbbf24", "pyw": "#d9a322"
 };
 var RL = {
   "host": "capsid host", "cw": "capsid worker", "proc": "workerd process",
-  "nodep": "node process", "nodej": "node --jitless process",
+  "nodep": "node process", "nodej": "node --jitless process", "bunp": "bun process",
   "ngx": "nginx", "ngxw": "nginx worker", "fpmm": "php-fpm master",
   "fpmw": "php-fpm child", "pym": "python master", "pyw": "python worker"
 };
@@ -799,6 +801,7 @@ function rk(st, role) {
   if (role === "process") {
     if (st === "node") return "nodep";
     if (st === "node-jitless") return "nodej";
+    if (st === "bun") return "bunp";
     return "proc";
   }
   return role;
@@ -890,12 +893,12 @@ function workerPart(parts) {
 }
 
 function renderWorkerCost(sp, spLow) {
-  var stacks = ["capsid", "node", "node-jitless", "workerd", "fastapi", "flask", "php"];
+  var stacks = ["capsid", "node", "node-jitless", "bun", "workerd", "fastapi", "flask", "php"];
   var entries = [];
   stacks.forEach(function (st) {
     if (!sp[st] && !(spLow && spLow[st])) return;
     var wl, wt;
-    if (st === "workerd" || st === "node" || st === "node-jitless") {
+    if (st === "workerd" || st === "node" || st === "node-jitless" || st === "bun") {
       /* single process: worker + server share it — an upper bound */
       var t1 = 0, t2 = 0;
       (sp[st] || []).forEach(function (x) { t1 += x.mb; });
@@ -1174,7 +1177,7 @@ function renderCold() {
     $("warm-chart").innerHTML = out;
     var httpPeers = sts.indexOf("deno") >= 0
       ? "Node/Deno/workerd"
-      : "Node/Node (--jitless)/workerd";
+      : "Node/Node (--jitless)/Bun/workerd";
     $("warm-note").innerHTML = exactHttp ?
       "Warm samples use C-ABI IPC for Capsid and a fresh loopback HTTP connection " +
       "for " + httpPeers + ". Every response is validated. The transports differ; " +
@@ -1224,9 +1227,10 @@ function renderMethod() {
     ["CPU", m.cpu],
     ["Kernel", m.uname],
     ["Cores", m.nproc],
-    ["Node.js", m.node],
-    ["workerd", m.workerd_version]
+    ["Node.js", m.node]
   ];
+  if (m.bun) fpRows.push(["Bun", m.bun]);
+  fpRows.push(["workerd", m.workerd_version]);
   if (m.deno) fpRows.push(["Deno", m.deno]);
   if (m.php_fpm) fpRows.push(["PHP", m.php_fpm]);
   if (m.nginx) fpRows.push(["nginx", m.nginx]);

@@ -18,6 +18,7 @@ ROOT_ROLES = {
     "capsid": {"host": "worker"},
     "node": {"process": "process"},
     "node-jitless": {"process": "process"},
+    "bun": {"process": "process"},
     "workerd": {"process": "process"},
 }
 
