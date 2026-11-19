@@ -163,7 +163,6 @@ class ProducerTests(unittest.TestCase):
             "cold-start",
             "capsid-bytecode-compile",
             "node",
-            "deno",
             "workerd",
         ):
             file = (
@@ -219,7 +218,6 @@ class ProducerTests(unittest.TestCase):
             cold=self.paths["cold-start"],
             compiler=self.paths["capsid-bytecode-compile"],
             node=self.paths["node"],
-            deno=self.paths["deno"],
             workerd=self.paths["workerd"],
         )
 
@@ -234,7 +232,13 @@ class ProducerTests(unittest.TestCase):
             def __call__(self, *, stack, size, round_no):
                 self.calls += 1
                 name = "synthetic-probe-" + str(self.calls)
-                kind = "capsid" if stack.startswith("capsid-") else stack
+                kind = (
+                    "capsid"
+                    if stack.startswith("capsid-")
+                    else "node"
+                    if stack == "node-jitless"
+                    else stack
+                )
                 source = self.options["apps"] / f"app-{kind}-{size}.mjs"
                 case.assertEqual(
                     expected[source.name],

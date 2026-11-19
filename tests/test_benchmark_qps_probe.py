@@ -451,36 +451,35 @@ class DeploymentCompletionTests(unittest.TestCase):
 
 
 class LaunchConfigurationTests(unittest.TestCase):
-    def test_private_reference_workers_keep_controller_identity(self):
+    def test_node_and_node_jitless_share_fixture_with_explicit_jitless_flag(self):
         apps = Path(__file__).resolve().parents[1] / "bench/bench-apps"
         binaries = {
-            "php-fpm": Path("/usr/sbin/php-fpm8.3"),
-            "nginx": Path("/usr/sbin/nginx"),
-            "python": Path(sys.executable),
+            "node": Path("/usr/bin/node"),
+            "workerd": Path("/usr/bin/workerd"),
         }
         with tempfile.TemporaryDirectory(prefix="capsid-reference-config-") as temp:
             root = Path(temp)
             probe = QpsProbe(
                 binaries=binaries, apps=apps, out=root, cpuset="0", workloads=["stream"]
             )
-            for uid in (0, 1000):
-                folder = root / str(uid)
+            for stack, port in (("node", 48001), ("node-jitless", 48002)):
+                folder = root / stack
                 folder.mkdir(mode=0o700)
-                with patch("qps_probe.os.geteuid", return_value=uid):
-                    specs = probe.prepare(folder, "php", [48001, 48002])
-                fpm = next(row for row in specs if row[0] == "fpm-master")
-                self.assertEqual(uid == 0, "--allow-to-run-as-root" in fpm[2])
+                specs = probe.prepare(folder, stack, [port])
+                self.assertEqual(1, len(specs))
+                role, child_role, argv, ports = specs[0]
+                self.assertEqual(("process", "process", [port]), (role, child_role, ports))
+                self.assertEqual(str(binaries["node"]), argv[0])
+                self.assertEqual(stack == "node-jitless", "--jitless" in argv)
+                self.assertEqual(str(port), argv[-1])
                 self.assertEqual(
-                    uid == 0, "user = root\ngroup = root\n" in (folder / "php-fpm.conf").read_text()
+                    (apps / "qps-node.mjs").read_bytes(), (folder / "qps-node.mjs").read_bytes()
                 )
-                self.assertEqual(uid == 0, "user root;\n" in (folder / "nginx.conf").read_text())
-                self.assertIn("pm.max_children = 1", (folder / "php-fpm.conf").read_text())
-                self.assertEqual([48002], fpm[3])
-            flask = root / "flask"
-            flask.mkdir(mode=0o700)
-            specs = probe.prepare(flask, "flask", [48003])
-            self.assertTrue((flask / "run").is_dir())
-            self.assertIn(str(flask / "run/gunicorn.ctl"), specs[0][2])
+            wk = root / "workerd"
+            wk.mkdir(mode=0o700)
+            specs = probe.prepare(wk, "workerd", [48003])
+            self.assertEqual(str(binaries["workerd"]), specs[0][2][0])
+            self.assertIn("127.0.0.1:48003", (wk / "workerd.capnp").read_text())
 
 
 class ProbeTests(unittest.TestCase):
@@ -500,28 +499,27 @@ class ProbeTests(unittest.TestCase):
             else []
         )
 
-    def adapter(self, php=False, bad=""):
+    def adapter(self, forked=False, bad=""):
         records = self.records
 
         class Fixture(QpsProbe):
             def prepare(self, folder, stack, ports):
                 extra = ["--" + bad] if bad else []
-                if php:
+                if forked:
                     return [
                         (
-                            "fpm-master",
-                            "fpm-worker",
-                            command(ports[1], records, "--fork-one", *extra),
-                            [ports[1]],
-                        ),
-                        (
-                            "nginx",
-                            "nginx-worker",
+                            "host",
+                            "worker",
                             command(ports[0], records, "--fork-one", *extra),
                             [ports[0]],
-                        ),
+                        )
                     ]
                 return [("process", "process", command(ports[0], records, *extra), ports)]
+
+            def wait_ready(self, group, roots, folder, stack, port):
+                if forked:
+                    return super().wait_ready(group, roots, folder, "node", port)
+                return super().wait_ready(group, roots, folder, stack, port)
 
         return Fixture(
             binaries={"loadgen": args.loadgen.resolve()},
@@ -540,25 +538,24 @@ class ProbeTests(unittest.TestCase):
             pss_interval=0.05,
         )
 
-    def test_two_root_forest_samples_serving_only_and_reaps_every_generation(self):
-        adapter = self.adapter(php=True)
+    def test_host_worker_forest_samples_serving_only_and_reaps_every_generation(self):
+        adapter = self.adapter(forked=True)
         allocator = PortAllocator()
         phases = {}
         for phase in ("lowLoad", "serving"):
-            with allocator.allocate(2) as lease:
+            with allocator.allocate(1) as lease:
                 phases[phase] = adapter(
-                    stack="php", phase=phase, ports=lease.ports, release_ports=lease.release
+                    stack="capsid", phase=phase, ports=lease.ports, release_ports=lease.release
                 )
-        checked_memory_pair(phases, "php", trickle_seconds=1, trickle_rate=10, expected_clients=1)
-        self.assertEqual(8, len(self.rows()))
+        checked_memory_pair(
+            phases, "capsid", trickle_seconds=1, trickle_rate=10, expected_clients=1
+        )
+        self.assertEqual(4, len(self.rows()))
         self.assertTrue(gone(self.rows()))
         measured = {p["pid"] for p in phases["serving"]["measurementProcesses"]}
-        self.assertEqual(4, len(measured))
+        self.assertEqual(2, len(measured))
         self.assertNotIn(phases["serving"]["loadgenProcesses"][0]["pid"], measured)
-        self.assertEqual(
-            {"nginx", "nginx-worker", "fpm-master", "fpm-worker"},
-            set(phases["serving"]["roles_kb"]),
-        )
+        self.assertEqual({"host", "worker"}, set(phases["serving"]["roles_kb"]))
 
     def test_bad_readiness_and_failed_actual_loadgen_cannot_leave_processes(self):
         for bad, phase in (("bad-ready", "lowLoad"), ("bad-after-ready", "serving")):

@@ -1,4 +1,4 @@
-"""Actual five-stack QPS runs, with isolated fresh trickle and serving trees."""
+"""Actual four-stack pure-JS QPS runs, with isolated fresh trickle and serving trees."""
 
 from contextlib import ExitStack
 from dataclasses import asdict
@@ -161,102 +161,15 @@ class QpsProbe:
                     ports,
                 )
             ]
-        if stack in ("fastapi", "flask"):
-            shutil.copyfile(self.apps / (stack + "_app.py"), folder / (stack + "_app.py"))
-            argv = [
-                str(self.binaries["python"]),
-                "-I",
-                "-B",
-                "-X",
-                "pycache_prefix=" + str(folder / "python-cache"),
-                "-m",
-            ]
-            if stack == "fastapi":
-                argv += [
-                    "uvicorn",
-                    "fastapi_app:app",
-                    "--app-dir",
-                    str(folder),
-                    "--workers",
-                    "1",
-                    "--no-access-log",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    str(ports[0]),
-                ]
-                return [("process", "process", argv, ports)]
-            (folder / "run").mkdir(exist_ok=True, mode=0o700)
-            argv += [
-                "gunicorn",
-                "--chdir",
-                str(folder),
-                "--workers",
-                "1",
-                "--worker-class",
-                "sync",
-                "--control-socket",
-                str(folder / "run/gunicorn.ctl"),
-                "--bind",
-                f"127.0.0.1:{ports[0]}",
-                "flask_app:app",
-            ]
-            return [("master", "worker", argv, ports)]
-        if stack != "php":
-            raise ProbeError("qps-stack", "unknown QPS stack")
-        shutil.copytree(self.apps / "php-slim", folder / "php-app")
-        (folder / "run").mkdir(exist_ok=True)
-        # Workers use the controller's identity so they can traverse its
-        # private directory. FPM requires an explicit opt-in when that
-        # identity is root, as in the privileged WSL acceptance session.
-        root_identity = os.geteuid() == 0
-        fpm_identity = "user = root\ngroup = root\n" if root_identity else ""
-        nginx_identity = "user root;\n" if root_identity else ""
-        (folder / "php-fpm.conf").write_text(
-            "[global]\ndaemonize = no\n"
-            f"error_log = {folder}/run/fpm-error.log\npid = {folder}/run/fpm.pid\n"
-            f"[www]\n{fpm_identity}listen = 127.0.0.1:{ports[1]}\npm = static\npm.max_children = 1\n"
-            "catch_workers_output = yes\nclear_env = yes\n"
-            "php_admin_value[opcache.enable] = 1\nphp_admin_value[opcache.validate_timestamps] = 0\n"
-            "php_admin_value[opcache.jit] = tracing\nphp_admin_value[opcache.jit_buffer_size] = 32M\n"
-        )
-        script = folder / "php-app/public/index.php"
-        (folder / "nginx.conf").write_text(
-            f"{nginx_identity}daemon off;\nmaster_process on;\nworker_processes 1;\n"
-            f"pid {folder}/run/nginx.pid;\nerror_log {folder}/run/nginx-error.log;\n"
-            "events { worker_connections 4096; }\nhttp {\naccess_log off;\n"
-            + "".join(
-                f"{kind}_temp_path {folder}/run/{kind};\n"
-                for kind in ("client_body", "proxy", "fastcgi", "uwsgi", "scgi")
-            )
-            + f"server {{ listen 127.0.0.1:{ports[0]}; location / {{\nfastcgi_keep_conn on;\n"
-            f"fastcgi_pass 127.0.0.1:{ports[1]};\nfastcgi_param SCRIPT_FILENAME {script};\n"
-            "fastcgi_param SCRIPT_NAME /index.php;\nfastcgi_param REQUEST_METHOD $request_method;\n"
-            "fastcgi_param REQUEST_URI $request_uri;\nfastcgi_param QUERY_STRING $query_string;\n"
-            "fastcgi_param CONTENT_TYPE $content_type;\nfastcgi_param CONTENT_LENGTH $content_length;\n"
-            "fastcgi_param SERVER_PROTOCOL $server_protocol;\nfastcgi_param GATEWAY_INTERFACE CGI/1.1;\n"
-            "fastcgi_param SERVER_NAME bench.invalid;\nfastcgi_param SERVER_PORT $server_port;\n"
-            "fastcgi_param REMOTE_ADDR $remote_addr;\nfastcgi_param REMOTE_PORT $remote_port;\n"
-            "fastcgi_param HTTP_HOST $http_host;\n} } }\n"
-        )
-        fpm_argv = [str(self.binaries["php-fpm"]), "-F", "-y", str(folder / "php-fpm.conf")]
-        if root_identity:
-            fpm_argv.append("--allow-to-run-as-root")
-        return [
-            ("fpm-master", "fpm-worker", fpm_argv, [ports[1]]),
-            (
-                "nginx",
-                "nginx-worker",
-                [
-                    str(self.binaries["nginx"]),
-                    "-p",
-                    str(folder) + "/",
-                    "-c",
-                    str(folder / "nginx.conf"),
-                ],
-                [ports[0]],
-            ),
-        ]
+        if stack in ("node", "node-jitless"):
+            script = folder / "qps-node.mjs"
+            shutil.copyfile(self.apps / "qps-node.mjs", script)
+            argv = [str(self.binaries["node"])]
+            if stack == "node-jitless":
+                argv.append("--jitless")
+            argv += [str(script), str(ports[0])]
+            return [("process", "process", argv, ports)]
+        raise ProbeError("qps-stack", "unknown QPS stack")
 
     def wait_ready(self, group, roots, folder, stack, port):
         deadline, deployed = time.monotonic() + self.startup_timeout, stack != "capsid"
@@ -291,7 +204,7 @@ class QpsProbe:
                 ready = True
                 for role, _, tree, ports in roots:
                     members = tree.discover()
-                    minimum = 2 if role in ("host", "master", "nginx", "fpm-master") else 1
+                    minimum = 2 if role == "host" else 1
                     if len(members) < minimum or not tree.listeners_owned(ports):
                         ready = False
                 if ready:
@@ -355,6 +268,7 @@ class QpsProbe:
                     "phase": phase,
                     "ports": ports,
                     "commands": [argv for _, _, argv, _ in plan],
+                    "runtimeFlags": ["--jitless"] if stack == "node-jitless" else [],
                     "cpuset": self.cpuset,
                     "mode": "managed-strict" if stack == "capsid" else stack,
                 },
@@ -364,15 +278,8 @@ class QpsProbe:
                 release_ports()
                 for role, child_role, argv, owned_ports in plan:
                     output = logs.enter_context((archive / (role + ".log")).open("wb"))
-                    env = dict(
-                        os.environ,
-                        PYTHONPYCACHEPREFIX=str(folder / "python-cache"),
-                        PYTHONDONTWRITEBYTECODE="1",
-                    )
-                    env.pop("PYTHONPATH", None)
-                    env.pop("PYTHONHOME", None)
-                    env.pop("GUNICORN_CMD_ARGS", None)
-                    env.pop("WEB_CONCURRENCY", None)
+                    env = dict(os.environ)
+                    env.pop("NODE_OPTIONS", None)
                     env["XDG_RUNTIME_DIR"] = str(folder / "run")
                     tree = group.spawn(
                         ["taskset", "-c", self.cpuset, *argv], stdout=output, cwd=folder, env=env

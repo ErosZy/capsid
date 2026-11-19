@@ -232,10 +232,8 @@ class ProducerTests(unittest.TestCase):
             "capsid-host",
             "capsid-worker",
             "loadgen",
+            "node",
             "workerd",
-            "python",
-            "php-fpm",
-            "nginx",
         ):
             self.metadata["binaries"][name] = {k: origin[k] for k in ("commit", "tag", "version")}
             self.metadata["binaries"][name]["sha256"] = lane.sha256(executable)
@@ -259,7 +257,7 @@ class ProducerTests(unittest.TestCase):
             ",".join(map(str, available[:4])),
             *[
                 v
-                for flag in ("host", "worker", "loadgen", "workerd", "python", "php-fpm", "nginx")
+                for flag in ("host", "worker", "loadgen", "node", "workerd")
                 for v in ("--" + flag, str(executable))
             ],
         ]
@@ -326,12 +324,7 @@ class ProducerTests(unittest.TestCase):
 
     def fixture_snapshot(self, apps, out, stacks):
         fixtures, inputs = {}, {}
-        for name in (
-            "qps-worker.mjs",
-            "fastapi_app.py",
-            "flask_app.py",
-            "php-slim/public/index.php",
-        ):
+        for name in ("qps-worker.mjs", "qps-node.mjs"):
             path = out / "fixtures" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"explicitly synthetic fixture")
@@ -339,41 +332,22 @@ class ProducerTests(unittest.TestCase):
             inputs[str(path)] = lane.sha256(path)
         return fixtures, inputs
 
-    def python_snapshot(self, binary, out, stacks):
-        path = out / "dependencies/python/synthetic"
-        path.parent.mkdir(parents=True)
-        path.write_bytes(b"synthetic package fixture")
-        names = ("fastapi", "uvicorn", "starlette", "flask", "gunicorn")
-        return {
-            "version": "synthetic interpreter",
-            "executableSHA256": lane.sha256(binary),
-            "packages": [{"name": n, "version": "synthetic"} for n in names],
-            "files": [
-                {
-                    "package": n,
-                    "logicalPath": "synthetic-module",
-                    "file": path.relative_to(out).as_posix(),
-                    "sha256": lane.sha256(path),
-                }
-                for n in names
-            ],
-        }, {str(path): lane.sha256(path)}
-
     def run_main(self):
         with (
             patch.object(lane, "QpsProbe", self.adapter),
             patch.object(lane, "snapshot_fixtures", self.fixture_snapshot),
-            patch.object(lane, "snapshot_python", self.python_snapshot),
             redirect_stdout(io.StringIO()),
         ):
             lane.main(self.argv)
 
-    def test_full_fifteen_cells_seventy_five_clients_seal_and_real_validator(self):
+    def test_full_twelve_cells_sixty_clients_seal_and_real_validator(self):
         self.run_main()
         manifest = json.loads((self.out / "lane.json").read_text())
-        self.assertEqual(15, len(manifest["records"]))
-        self.assertEqual(75, sum(len(r["samples"]) for r in manifest["records"]))
-        self.assertEqual(10, len(self.calls))
+        self.assertEqual(2, manifest["schema"])
+        self.assertEqual({"node-jitless": ["--jitless"]}, manifest["stackFlags"])
+        self.assertEqual(12, len(manifest["records"]))
+        self.assertEqual(60, sum(len(r["samples"]) for r in manifest["records"]))
+        self.assertEqual(8, len(self.calls))
         self.assertTrue(all(a[2] != b[2] for a, b in zip(self.calls, self.calls[1:])))
         self.assertEqual(b"shared inputs remain read-only", self.marker.read_bytes())
         collector_spec = importlib.util.spec_from_file_location(

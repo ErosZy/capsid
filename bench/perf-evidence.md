@@ -29,7 +29,7 @@ labels are retained as historical evidence; they do not meet this contract.
 
 | Field | Meaning |
 |---|---|
-| `schema`, `lane`, `status` | Integer `1`; `cold-start`, `qps` or `density`; `complete` |
+| `schema`, `lane`, `status` | Integer `2` (`capsid-perf-lane-v2`, pure-JS matrix) or legacy `1` (`capsid-perf-lane-v1`, historical replay only); `cold-start`, `qps` or `density`; `complete` |
 | `session` | Shared measurement session identity, recorded by every lane |
 | `startedAt`, `completedAt` | Measurement interval with timezone; intervals must not overlap |
 | `origin` | Measured capsid `commit`, `tag`, `version`, `release`, `clean: true` |
@@ -37,12 +37,13 @@ labels are retained as historical evidence; they do not meet this contract.
 | `command` | Exact command string, including the selected environment parameters |
 | `posture` | Linux/strict; `managed` for QPS/density, `c-abi` for cold start |
 | `protocol` | Frozen lane parameters below, plus explicit `sutCpuSet` |
+| `stackFlags` | Schema `2` (`cold-start` and `qps`): explicit per-stack runtime flags (`{"node-jitless": ["--jitless"]}`) |
 | `summary`, `isolation` | `cells.txt`; path to the sealed isolation/cleanup JSON |
 | `binaries` | Named measured binary identities, described below |
 | `fixtures` | Named `{file, sha256}` entries with archived fixture bytes |
 | `records` | One record for every required summary cell |
 | `memory` | QPS only: path to the sealed memory phase records |
-| `runtimeDependencies` | QPS only: sealed Python package/version/code inventory matching the selected interpreter |
+| `runtimeDependencies` | Legacy schema `1` QPS archives only (historical replay); omitted in schema `2` pure-JS archives |
 
 `origin.commit` describes the measured build. The collector's checkout and
 generation time are stored separately in `generation`, together with hashes
@@ -67,10 +68,10 @@ including density. There is no mixed-origin publication mode.
 
 ## Protocol and raw records
 
-| Lane | Required coverage | Frozen parameters |
+| Lane | Required coverage (`capsid-perf-lane-v2`) | Frozen parameters |
 |---|---|---|
-| Cold start | capsid source/bytecode, Node, Deno, workerd × 10k/100k/1m | five measured rounds after one discard; 50 warm requests |
-| QPS | capsid, workerd, FastAPI, Flask, PHP × JSON 1k/16k/stream | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
+| Cold start | capsid source/bytecode, Node, Node (`--jitless`), workerd × 10k/100k/1m | five measured rounds after one discard; 50 warm requests |
+| QPS | capsid, Node, Node (`--jitless`), workerd × JSON 1k/16k/stream | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
 | Density | capsid/workerd × 10k/100k/1m × cold/warm | 2048 MiB; 100 requests per worker/cell in warm phase; two stable reads; two verification retries |
 
 Density uses `warmupConcurrencyPolicy: pool-scaled-burst-v1`, base
@@ -138,9 +139,10 @@ validator requires those identities to match the loaded phase.
   `beforeMeasuredLoad: true`, all 150 individually verified JSON-1k requests,
   paced dispatch/completion times, and `duration_s >= 15`. Its exact readiness
   response is separate. Loaded memory excludes the probe and all 15 per-round
-  Go clients; those client identities must match the workload records. All ten
-  intervals are disjoint, use one controller and fresh service identities, and
-  completely reap their owned forests. Totals/roles must reproduce the summary.
+  Go clients; those client identities must match the workload records. All
+  eight intervals (ten in historical schema 1 archives) are disjoint, use one
+  controller and fresh service identities, and completely reap their owned
+  forests. Totals/roles must reproduce the summary.
   These are observations in the sampling window. Loaded QPS differs across
   stacks; it does not establish equal work performed or a steady-state bound.
 
@@ -189,16 +191,19 @@ binary, and archive validation alone is not full release qualification.
 
 ## QPS producer
 
-`qps-lane.sh` execs `qps-lane.py`. Its default is the complete five-stack,
-three-workload protocol above. Capsid always uses managed/strict with a fixed
-one-worker pool. The maintained `qps-worker.mjs` is shared by Capsid and locked
-workerd; Python and PHP use the maintained reference fixtures. Parent port
-leases, per-phase native temporary paths, private Gunicorn/nginx/FPM control
-files and pinned recursive ownership keep unrelated jobs out of measurements
-and cleanup. A single subreaper lease covers multiple roots and transient
-clients; each tree retains its own private session. Only serving roots enter
-PSS. Cleanup continues across roots after an error and cannot claim success
-until all owned members have been reaped.
+`qps-lane.sh` execs `qps-lane.py`. Its default is the complete pure-JS
+four-stack (`capsid`, `node`, `node-jitless`, `workerd`), three-workload
+protocol above. Capsid always uses managed/strict with a fixed one-worker pool.
+The maintained `qps-worker.mjs` is shared by Capsid and locked workerd;
+`qps-node.mjs` (built-in `node:http` with keep-alive, no third-party framework)
+is shared by `node` and `node-jitless`, with `node-jitless` launching the same
+`node` executable with `--jitless` recorded in `launch.json` and `lane.json`.
+Parent port leases, per-phase native temporary paths and pinned recursive
+ownership keep unrelated jobs out of measurements and cleanup. A single
+subreaper lease covers serving roots and transient clients; each tree retains
+its own private session. Only serving roots enter PSS. Cleanup continues across
+roots after an error and cannot claim success until all owned members have been
+reaped.
 
 Each stack first runs a fresh trickle forest, completely closes it, then starts
 a different loaded forest. Owned listeners and the single-worker topology must
@@ -209,44 +214,40 @@ response record and fails if dispatch falls more than 0.1 s behind. Every
 measured round starts the real Go load generator in a separate owned session;
 both raw rows and its successful verdict are checked before the next round.
 
-Runner bytes, fixtures, PHP vendor/lock, selected executables and installed
-Python package versions/code are snapshotted before probes and rechecked at
-the end. Package code is archived by digest; the interpreter path preserves
-its venv prefix. Isolated imports and private cache/control paths prevent
-shared bytecode/configuration from changing a run. Runtime files are retained
-with each path component percent-encoded, including managed filenames that
-contain a colon. The mapping is recorded in `runtime-files.json`.
+Runner bytes, fixtures (`qps-worker.mjs`, `qps-node.mjs`) and selected
+executables are snapshotted before probes and rechecked at the end. Runtime
+files are retained with each path component percent-encoded, including managed
+filenames that contain a colon. The mapping is recorded in `runtime-files.json`.
 
-For an actual short Linux observation, with a private Python environment that
-contains FastAPI, Uvicorn, Flask and Gunicorn, and a PHP fixture whose vendor
-directory and composer.lock already exist:
+For an actual short Linux observation:
 
 ```sh
 bash bench/qps-lane.sh --observation --out /tmp/qps-observation \
   --host /path/capsid-host --worker /path/capsid-worker \
-  --workerd /path/workerd --loadgen /path/BUILD/benchmark-tools/loadgen \
-  --python /path/venv/bin/python --php-fpm /path/php-fpm8.3 --nginx /path/nginx \
+  --node /path/node --workerd /path/workerd \
+  --loadgen /path/BUILD/benchmark-tools/loadgen \
   --rounds 1 --warmup 1 --duration 1 --connections 2 --inflight 2 \
   --trickle-seconds 1 --trickle-rate 10
 ```
 
 OUT must be new. This writes sealed `observation.json`, `memory.json`, verified
-`cells.txt`, per-phase results, raw client files and dependencies; it has no
-publication `lane.json`. Errors and SIGINT/SIGTERM preserve `failed.json`,
-phase logs and cleanup records and cannot publish partial cells as success.
+`cells.txt`, per-phase results and raw client files; it has no publication
+`lane.json`. Errors and SIGINT/SIGTERM preserve `failed.json`, phase logs and
+cleanup records and cannot publish partial cells as success.
 
-Formal mode uses the frozen defaults, all five stacks/three workloads, four
-available CPU indices, `--metadata`/`CAPSID_BENCH_METADATA`, and an OUT below
-`bench/results/`. Metadata follows the density schema below and requires actual
-identities for `capsid-host`, `capsid-worker`, `loadgen`, `workerd`, `python`,
-`php-fpm` and `nginx`; product/loadgen identity must match the clean measured
-source. The coordination lock is acquired before dependency preparation and
-held through self-validation. It does not prove an otherwise quiet machine.
-The formal producer seals and replays the real archive validator before
-success. Synthetic 15-cell/75-client tests use private temporary repositories
-and explicit injected probes only; actual five-stack short observations and
-signal tests are recorded separately. Neither substitutes for the clean
-Release/LTO/ALL, full matrix or quiet-session formal performance qualification.
+Formal mode uses the frozen defaults, all four pure-JS stacks and three
+workloads, four available CPU indices, `--metadata`/`CAPSID_BENCH_METADATA`,
+and an OUT below `bench/results/`. Metadata follows the density schema below
+and requires actual identities for `capsid-host`, `capsid-worker`, `loadgen`,
+`node` and `workerd`; product/loadgen identity must match the clean measured
+source. The coordination lock is acquired before fixture preparation and held
+through self-validation. It does not prove an otherwise quiet machine. The
+formal producer emits `schema: 2` (`capsid-perf-lane-v2`), seals and replays
+the real archive validator before success. Synthetic 12-cell/60-client tests
+use private temporary repositories and explicit injected probes only; short
+observations and signal tests are recorded separately. Neither substitutes for
+clean Release/LTO, full matrix or quiet-session formal performance
+qualification.
 
 ## Density producer
 
@@ -376,13 +377,16 @@ freshly compiled on private Linux native temporary storage, then archived and
 hashed. The compiler's no-replace contract is preserved on WSL mounts that reject
 that filesystem operation. No lane writes shared APPS or reuses old bytecode.
 
-Formal cold metadata follows the density schema above but requires binary
-records for `capsid-worker`, `cold-start`, `capsid-bytecode-compile`, `node`,
-`deno` and `workerd`. The first three must match the measured clean source
-commit/tag/version. Formal mode requires all five stacks, all three sizes,
-five rounds, one discarded run, 50 warm requests and four available CPU indices.
-Source/binary/runner/input identities are rechecked before sealing. The actual
-sealed archive is replayed through the real cold validator before success.
+Formal cold metadata follows the density schema above and requires binary
+records for `capsid-worker`, `cold-start`, `capsid-bytecode-compile`, `node`
+and `workerd` (`node-jitless` reuses the `node` binary and `app-node-*.mjs`
+fixtures with `--jitless`). The first three must match the measured clean source
+commit/tag/version. Formal mode emits `schema: 2` (`capsid-perf-lane-v2`) and
+requires all five stacks (`capsid-source`, `capsid-bytecode`, `node`,
+`node-jitless`, `workerd`), all three sizes, five rounds, one discarded run, 50
+warm requests and four available CPU indices. Source/binary/runner/input
+identities are rechecked before sealing. The actual sealed archive is replayed
+through the real cold validator before success.
 
 For a restricted smoke, provide actual binary paths and frozen generated apps:
 
@@ -390,7 +394,7 @@ For a restricted smoke, provide actual binary paths and frozen generated apps:
 OUT=/tmp/cold-observation APPS=/path/generated-apps \
 WORKER=/path/capsid-worker COLD=/path/cold-start \
 COMPILE=/path/capsid-bytecode-compile NODE_BIN=/path/node \
-DENO_BIN=/path/deno WORKERD_BIN=/path/workerd \
+WORKERD_BIN=/path/workerd \
 bash bench/cold-start.sh --observation --sizes 10k --rounds 1 --warm 2
 ```
 

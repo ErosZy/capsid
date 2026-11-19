@@ -14,7 +14,7 @@ from density_control import DensitySearch
 from density_probe import write_json
 from density_conditioning import ConditionedDensityProbe as DensityProbe
 from measurement_runtime import ProbeError
-from perf_evidence import PROTOCOL, sha256, validate_lane
+from perf_evidence import CURRENT_SCHEMA, PROTOCOL, sha256, validate_lane
 
 
 def parse_args(argv=None):
@@ -306,7 +306,7 @@ def run_lane(args):
             }
         manifest = dict(
             common,
-            schema=1,
+            schema=CURRENT_SCHEMA,
             lane="density",
             session=metadata["session"],
             origin=metadata["origin"],

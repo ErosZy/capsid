@@ -179,22 +179,16 @@ class ColdProbe:
     def prepare_http(self, stack, size, directory, port):
         runtime = directory / "runtime"
         runtime.mkdir()
-        source = (self.apps / f"app-{stack}-{size}.mjs").read_text(encoding="utf-8")
-        if stack == "node":
+        fixture_kind = "node" if stack == "node-jitless" else stack
+        source = (self.apps / f"app-{fixture_kind}-{size}.mjs").read_text(encoding="utf-8")
+        if stack in ("node", "node-jitless"):
             old = 'server.listen(18990, "127.0.0.1", () => console.log("READY"));'
             new = old.replace("18990", str(port))
-            argv = [str(self.binaries["node"]), str(runtime / "bundle.mjs")]
-        elif stack == "deno":
-            old = 'Deno.serve({ port: 18991, hostname: "127.0.0.1" },'
-            new = old.replace("18991", str(port))
-            argv = [
-                str(self.binaries["deno"]),
-                "run",
-                "--no-check",
-                "--allow-net=127.0.0.1:" + str(port),
-                str(runtime / "bundle.mjs"),
-            ]
-        else:
+            argv = [str(self.binaries["node"])]
+            if stack == "node-jitless":
+                argv.append("--jitless")
+            argv.append(str(runtime / "bundle.mjs"))
+        elif stack == "workerd":
             old = None
             config = (
                 'using Workerd = import "/workerd/workerd.capnp";\n'
@@ -207,6 +201,8 @@ class ColdProbe:
             )
             (runtime / "server.capnp").write_text(config, encoding="utf-8")
             argv = [str(self.binaries["workerd"]), "serve", str(runtime / "server.capnp")]
+        else:
+            raise ProbeError("cold-stack", "unknown cold HTTP stack")
         if old is not None:
             if source.count(old) != 1:
                 raise ProbeError("fixture-format", "cold fixture lacks its frozen listener entry")
@@ -253,16 +249,19 @@ class ColdProbe:
                 directory / "launch.json",
                 {
                     "command": command,
+                    "runtimeFlags": ["--jitless"] if stack == "node-jitless" else [],
                     "ports": lease.ports if lease else [],
                     "round": round_no,
                     "stack": stack,
                     "size": size,
                 },
             )
+            env = dict(os.environ)
+            env.pop("NODE_OPTIONS", None)
             with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
                 if lease is not None:
                     lease.release()
-                owned = OwnedProcess(command, stdout=stdout, stderr=stderr)
+                owned = OwnedProcess(command, stdout=stdout, stderr=stderr, env=env)
                 if stack.startswith("capsid-"):
                     wait_exit(owned, deadline)
                     rows = stdout_path.read_text(encoding="utf-8").splitlines()

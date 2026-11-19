@@ -14,7 +14,15 @@ import sys
 import tempfile
 
 from perf_archive import materialize
-from perf_evidence import EvidenceError, is_link, need, relative_name, validate_point
+from perf_evidence import (
+    CONTRACT_V1,
+    CONTRACT_V2,
+    EvidenceError,
+    is_link,
+    need,
+    relative_name,
+    validate_point,
+)
 
 spec = importlib.util.spec_from_file_location(
     "perf_collector", Path(__file__).with_name("collect-perf-point.py")
@@ -73,7 +81,7 @@ def prepare_site(repo, data_path, output):
             historical += 1
             continue
         need(
-            verification.get("contract") == "capsid-perf-lane-v1",
+            verification.get("contract") in (CONTRACT_V1, CONTRACT_V2),
             "unknown performance evidence contract",
         )
         archives = verification.get("archives")

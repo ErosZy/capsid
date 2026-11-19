@@ -7,12 +7,18 @@ from measurement_runtime import ProbeError
 
 RESPONSE_VALIDATION = "exact-bytes-v2"
 WORKLOADS = ("matrix-json-1k", "matrix-json-16k", "stream")
-ROOT_ROLES = {
+ROOT_ROLES_V1 = {
     "capsid": {"host": "worker"},
     "workerd": {"process": "process"},
     "fastapi": {"process": "process"},
     "flask": {"master": "worker"},
     "php": {"nginx": "nginx-worker", "fpm-master": "fpm-worker"},
+}
+ROOT_ROLES = {
+    "capsid": {"host": "worker"},
+    "node": {"process": "process"},
+    "node-jitless": {"process": "process"},
+    "workerd": {"process": "process"},
 }
 
 
@@ -144,13 +150,14 @@ def identity(value):
 
 
 def checked_memory(
-    value, stack, phase, *, trickle_seconds=15, trickle_rate=10, expected_clients=15
+    value, stack, phase, *, trickle_seconds=15, trickle_rate=10, expected_clients=15, schema=2
 ):
     integer(trickle_seconds, "trickle seconds", 1)
     integer(trickle_rate, "trickle rate", 1)
     integer(expected_clients, "expected load generators", 1)
+    root_roles = ROOT_ROLES_V1 if schema == 1 else ROOT_ROLES
     if (
-        stack not in ROOT_ROLES
+        stack not in root_roles
         or phase not in ("lowLoad", "serving")
         or not isinstance(value, dict)
         or value.get("method") != "recursive-process-tree-pss"
@@ -178,7 +185,7 @@ def checked_memory(
     roots, members = value.get("measurementRoots"), value.get("measurementProcesses")
     if (
         not isinstance(roots, list)
-        or len(roots) != len(ROOT_ROLES[stack])
+        or len(roots) != len(root_roles[stack])
         or not isinstance(members, list)
         or not members
     ):
@@ -192,7 +199,7 @@ def checked_memory(
         or probe in by_id
     ):
         raise ProbeError("qps-process", "duplicate, missing or probe process in serving PSS")
-    if {p.get("role"): p.get("childRole") for p in roots} != ROOT_ROLES[stack]:
+    if {p.get("role"): p.get("childRole") for p in roots} != root_roles[stack]:
         raise ProbeError("qps-process", "invalid serving process role roots")
     by_pid = {p["pid"]: p for p in members}
     if len(by_pid) != len(members) or probe[0] in by_pid:

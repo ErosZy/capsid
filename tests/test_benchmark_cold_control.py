@@ -45,10 +45,17 @@ class ControlTests(unittest.TestCase):
                 control.cpu_selection(text, {1, 2, 4, 5})
 
     def test_valid_rows_require_real_samples_and_even_warm_median(self):
-        for stack in ("capsid-source", "capsid-bytecode", "node", "deno", "workerd"):
+        for stack in ("capsid-source", "capsid-bytecode", "node", "node-jitless", "workerd"):
             row = synthetic_round(stack, "10k", 1, warm=2)
             row.update(warm_latencies_ms=[1, 3], warm_ms=2)
             self.assertIs(row, control.checked_round(row, 2, observed={(201, 10001)}))
+        deno_row = synthetic_round("deno", "10k", 1, warm=2)
+        deno_row.update(warm_latencies_ms=[1, 3], warm_ms=2)
+        with self.assertRaises(ProbeError):
+            control.checked_round(deno_row, 2, observed={(201, 10001)})
+        self.assertIs(
+            deno_row, control.checked_round(deno_row, 2, observed={(201, 10001)}, schema=1)
+        )
 
     def test_bad_timings_counts_and_correctness_are_rejected(self):
         mutations = [
@@ -134,26 +141,27 @@ class ControlTests(unittest.TestCase):
             apps = root / "apps"
             apps.mkdir()
             expected = {}
-            for stack in ("node", "deno", "workerd"):
+            for stack in ("node", "workerd"):
                 data = gen.body_to(10000)[0] + getattr(gen, stack + "_entry")()
                 file = apps / ("app-" + stack + "-10k.mjs")
                 file.write_text(data, encoding="utf-8")
                 expected[file] = file.read_bytes()
             adapter = probe.ColdProbe(
-                binaries={s: root / s for s in ("node", "deno", "workerd")},
+                binaries={s: root / s for s in ("node", "workerd")},
                 apps=apps,
                 compiled={},
                 out=root,
                 cpuset="0-3",
             )
-            for index, stack in enumerate(("node", "deno", "workerd")):
+            for index, stack in enumerate(("node", "node-jitless", "workerd")):
                 directory = root / stack
                 directory.mkdir()
-                adapter.prepare_http(stack, "10k", directory, 30000 + index)
+                argv = adapter.prepare_http(stack, "10k", directory, 30000 + index)
                 data = (directory / "runtime/bundle.mjs").read_text()
                 self.assertTrue(data.startswith(gen.body_to(10000)[0]))
                 if stack != "workerd":
                     self.assertIn(str(30000 + index), data)
+                    self.assertEqual(stack == "node-jitless", "--jitless" in argv)
                 else:
                     self.assertIn(
                         "127.0.0.1:30002", (directory / "runtime/server.capnp").read_text()

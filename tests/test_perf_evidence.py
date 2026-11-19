@@ -56,8 +56,9 @@ def digest(data):
 class Fixture:
     """Every required cell has independent raw and correctness files."""
 
-    def __init__(self, root):
+    def __init__(self, root, schema=contract.CURRENT_SCHEMA):
         self.root = root
+        self.schema = schema
         self.paths = {}
         self.manifests = {}
         self.saved = None
@@ -81,7 +82,7 @@ class Fixture:
             self.paths[lane] = path
             start = f"2026-10-20T0{offset}:00:00Z"
             m = {
-                "schema": 1,
+                "schema": schema,
                 "lane": lane,
                 "session": "synthetic-test-session",
                 "status": "complete",
@@ -102,6 +103,8 @@ class Fixture:
                 "fixtures": {},
                 "records": [],
             }
+            if schema == 2 and lane in ("cold-start", "qps"):
+                m["stackFlags"] = {"node-jitless": ["--jitless"]}
             self.manifests[lane] = m
             if lane == "density":
                 m["protocol"]["caps"] = {"capsid": 2, "workerd": 2}
@@ -109,12 +112,12 @@ class Fixture:
             self.write(path / "fixtures/app.mjs", asset)
             m["fixtures"]["shared-app"] = {"file": "fixtures/app.mjs", "sha256": digest(asset)}
             lines = []
-            for index, key in enumerate(sorted(contract.expected_keys(lane))):
+            for index, key in enumerate(sorted(contract.expected_keys(lane, schema=schema))):
                 stack, value = key[:2]
                 record = {
                     "stack": stack,
                     "workload" if lane == "qps" else "size": value,
-                    "binaries": sorted(contract.required_binaries(lane, stack)),
+                    "binaries": sorted(contract.required_binaries(lane, stack, schema=schema)),
                     "fixtures": ["shared-app"],
                     "samples": [],
                     "correctness": [],
@@ -246,7 +249,7 @@ class Fixture:
                 m["records"].append(record)
             if lane == "qps":
                 memory = {}
-                for stack in contract.STACKS[lane]:
+                for stack in contract.stacks_for(lane, schema=schema):
                     memory[stack] = {
                         phase: synthetic_memory(stack, phase) for phase in ("lowLoad", "serving")
                     }
@@ -277,47 +280,48 @@ class Fixture:
                         )
                 m["memory"] = "memory.json"
                 self.write(path / "memory.json", encoded(memory))
-                m["runtimeDependencies"] = "runtime-dependencies.json"
-                package_code = (
-                    b"synthetic installed framework code; independent of shared app fixture"
-                )
-                self.write(path / "dependencies/python/synthetic-module", package_code)
-                self.write(
-                    path / "runtime-dependencies.json",
-                    encoded(
-                        {
-                            "python": {
-                                "version": "synthetic Python fixture",
-                                "executableSHA256": m["binaries"]["python"]["sha256"],
-                                "packages": [
-                                    {"name": name, "version": "synthetic"}
-                                    for name in (
-                                        "fastapi",
-                                        "uvicorn",
-                                        "starlette",
-                                        "flask",
-                                        "gunicorn",
-                                    )
-                                ],
-                                "files": [
-                                    {
-                                        "package": name,
-                                        "logicalPath": "synthetic-module",
-                                        "file": "dependencies/python/synthetic-module",
-                                        "sha256": digest(package_code),
-                                    }
-                                    for name in (
-                                        "fastapi",
-                                        "uvicorn",
-                                        "starlette",
-                                        "flask",
-                                        "gunicorn",
-                                    )
-                                ],
+                if schema == 1:
+                    m["runtimeDependencies"] = "runtime-dependencies.json"
+                    package_code = (
+                        b"synthetic installed framework code; independent of shared app fixture"
+                    )
+                    self.write(path / "dependencies/python/synthetic-module", package_code)
+                    self.write(
+                        path / "runtime-dependencies.json",
+                        encoded(
+                            {
+                                "python": {
+                                    "version": "synthetic Python fixture",
+                                    "executableSHA256": m["binaries"]["python"]["sha256"],
+                                    "packages": [
+                                        {"name": name, "version": "synthetic"}
+                                        for name in (
+                                            "fastapi",
+                                            "uvicorn",
+                                            "starlette",
+                                            "flask",
+                                            "gunicorn",
+                                        )
+                                    ],
+                                    "files": [
+                                        {
+                                            "package": name,
+                                            "logicalPath": "synthetic-module",
+                                            "file": "dependencies/python/synthetic-module",
+                                            "sha256": digest(package_code),
+                                        }
+                                        for name in (
+                                            "fastapi",
+                                            "uvicorn",
+                                            "starlette",
+                                            "flask",
+                                            "gunicorn",
+                                        )
+                                    ],
+                                }
                             }
-                        }
-                    ),
-                )
+                        ),
+                    )
             self.write(path / "cells.txt", ("\n".join(lines) + "\n").encode())
             self.write(
                 path / "isolation.json",
@@ -492,11 +496,12 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.assertEqual(point["git"]["commit"], "a" * 40)
         self.assertEqual(point["generation"]["collector"]["commit"], "")
         self.assertEqual(point["verification"]["status"], "verified")
+        self.assertEqual(point["verification"]["contract"], contract.CONTRACT_V2)
         self.assertIn("density", point["origins"])
         for name, expected in point["evidence"].items():
             self.assertEqual(digest((f.root / name).read_bytes()), expected)
         self.assertEqual(len(point["coldStart"]["cells"]), 15)
-        self.assertEqual(len(point["qps"]["cells"]), 15)
+        self.assertEqual(len(point["qps"]["cells"]), 12)
         self.assertTrue(any("/density/" in name for name in point["evidence"]))
         self.assertEqual(point["density"]["capsid"]["cold@10k"]["limit"], "cap")
 
@@ -569,6 +574,7 @@ class PerformanceEvidenceTests(unittest.TestCase):
             ("binaries", {}, "binary identities"),
             ("fixtures", {}, "fixture identities"),
             ("memory", "missing.json", "SHA-256 entry"),
+            ("stackFlags", {}, "node-jitless"),
         ]
         for key, value, error in cases:
             with self.subTest(key=key, value=value), f.transaction():
@@ -1423,6 +1429,25 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.assertEqual(report["historicalPoints"], 1)
         self.assertEqual(report["evidenceFiles"], 0)
         self.assertFalse((output / "evidence").exists())
+
+    def test_legacy_v1_archive_and_site_replay_still_validate(self):
+        with tempfile.TemporaryDirectory(prefix="capsid-perf-v1-") as folder:
+            v1 = Fixture(Path(folder).resolve(strict=True), schema=1)
+            with redirect_stdout(io.StringIO()):
+                collector.main(v1.argv(density=True))
+            data = collector.load_existing(v1.root / "data.js")
+            point = data["points"][0]
+            self.assertEqual(point["verification"]["contract"], contract.CONTRACT_V1)
+            self.assertEqual(len(point["coldStart"]["cells"]), 15)
+            self.assertEqual(len(point["qps"]["cells"]), 15)
+            source = v1.root / "perf-site"
+            source.mkdir(exist_ok=True)
+            (source / "index.html").write_text(
+                "<!doctype html><title>v1 replay fixture</title>", encoding="utf-8"
+            )
+            report = site.prepare_site(v1.root, v1.root / "data.js", v1.root / "site-v1")
+            self.assertEqual(report["qualifiedPoints"], 1)
+            self.assertEqual(report["evidenceFiles"], len(point["evidence"]))
 
 
 def run_isolated_complete_suite():

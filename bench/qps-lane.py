@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owned five-stack serving lane with distinct trickle and loaded processes."""
+"""Owned four-stack pure-JS serving lane with distinct trickle and loaded processes."""
 
 import argparse
 from contextlib import contextmanager
@@ -17,9 +17,10 @@ from cold_control import cpu_selection
 from cold_probe import write_json
 from measurement_runtime import ProbeError, PortAllocator
 from qps_control import WORKLOADS, checked_round, checked_memory_pair, identity
-from qps_inputs import snapshot_fixtures, snapshot_python
+from qps_inputs import snapshot_fixtures
 from qps_probe import QpsProbe
 from perf_evidence import (
+    CURRENT_SCHEMA,
     PROTOCOL,
     STACKS,
     required_binaries,
@@ -55,10 +56,8 @@ def binary_paths(args):
         "capsid-host": args.host,
         "capsid-worker": args.worker,
         "loadgen": args.loadgen,
+        "node": args.node,
         "workerd": args.workerd,
-        "python": args.python,
-        "php-fpm": args.php_fpm,
-        "nginx": args.nginx,
     }
     required = set().union(*(required_binaries("qps", stack) for stack in args.stacks))
     return {name: paths[name] for name in sorted(required)}
@@ -71,10 +70,8 @@ def parse_args(argv=None):
         ("host", "HOST_BIN", build / "capsid-host"),
         ("worker", "WORKER", build / "capsid-worker"),
         ("loadgen", "LOADGEN", build / "benchmark-tools/loadgen"),
+        ("node", "NODE_BIN", shutil.which("node")),
         ("workerd", "WORKERD_BIN", shutil.which("workerd")),
-        ("python", "VENV_PYTHON", shutil.which("python3")),
-        ("php-fpm", "PHP_FPM_BIN", shutil.which("php-fpm8.3")),
-        ("nginx", "NGINX_BIN", shutil.which("nginx")),
     ):
         parser.add_argument("--" + flag, type=Path, default=os.environ.get(env, default))
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parent.parent)
@@ -178,11 +175,10 @@ def parse_args(argv=None):
     for name, path in binary_paths(args).items():
         if path is None or not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable for {name}: {path}")
-    for attr in ("host", "worker", "loadgen", "workerd", "python", "php_fpm", "nginx"):
+    for attr in ("host", "worker", "loadgen", "node", "workerd"):
         value = getattr(args, attr)
-        # Resolving a venv/bin/python symlink would discard the venv prefix.
         if value is not None:
-            setattr(args, attr, value.absolute() if attr == "python" else value.resolve())
+            setattr(args, attr, value.resolve())
     return args
 
 
@@ -222,11 +218,6 @@ def run_locked(args, lock):
         inputs[str(args.metadata.resolve())] = sha256(args.metadata)
     fixtures, fixture_inputs = snapshot_fixtures(args.apps, args.out, args.stacks)
     inputs.update(fixture_inputs)
-    dependencies = {}
-    if "python" in paths:
-        dependencies["python"], extra = snapshot_python(paths["python"], args.out, args.stacks)
-        inputs.update(extra)
-    write_json(args.out / "runtime-dependencies.json", dependencies)
     command = shlex.join(
         [
             sys.executable,
@@ -304,7 +295,7 @@ def run_locked(args, lock):
         for stack in args.stacks:
             memory[stack] = {}
             for phase in ("lowLoad", "serving"):
-                with allocator.allocate(2 if stack == "php" else 1) as lease:
+                with allocator.allocate(1) as lease:
                     result = adapter(
                         stack=stack, phase=phase, ports=lease.ports, release_ports=lease.release
                     )
@@ -367,9 +358,7 @@ def run_locked(args, lock):
                     if (
                         n == "qps-worker.mjs"
                         if stack in ("capsid", "workerd")
-                        else n == stack + "_app.py"
-                        if stack in ("fastapi", "flask")
-                        else n.startswith("php-slim/")
+                        else n == "qps-node.mjs"
                     )
                     or n.startswith("probes/" + stack + "/")
                 ]
@@ -411,6 +400,7 @@ def run_locked(args, lock):
             "posture": {"platform": "linux", "mode": "managed", "sandbox": "strict"},
             "runner": runner,
             "observedBinarySHA256": before,
+            "stackFlags": {"node-jitless": ["--jitless"]},
             "protocol": dict(
                 PROTOCOL["qps"],
                 sutCpuSet=args.cpuset,
@@ -436,7 +426,7 @@ def run_locked(args, lock):
             }
         manifest = dict(
             common,
-            schema=1,
+            schema=CURRENT_SCHEMA,
             lane="qps",
             session=metadata["session"],
             origin=metadata["origin"],
@@ -446,7 +436,6 @@ def run_locked(args, lock):
             fixtures=fixtures,
             records=records,
             memory="memory.json",
-            runtimeDependencies="runtime-dependencies.json",
         )
         write_json(args.out / "run-metadata.json", metadata)
         write_json(

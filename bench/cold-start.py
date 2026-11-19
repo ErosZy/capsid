@@ -15,7 +15,15 @@ import sys
 from cold_control import checked_round, cpu_selection, identity
 from cold_probe import ColdProbe, compile_fixture, write_json
 from measurement_runtime import ProbeError
-from perf_evidence import PROTOCOL, STACKS, median, required_binaries, sha256, validate_lane
+from perf_evidence import (
+    CURRENT_SCHEMA,
+    PROTOCOL,
+    STACKS,
+    median,
+    required_binaries,
+    sha256,
+    validate_lane,
+)
 from perf_run import (
     machine_identity,
     readable_manifest,
@@ -37,7 +45,6 @@ def parse_args(argv=None):
         ("cold", "COLD", build / "cold-start"),
         ("compiler", "COMPILE", build / "capsid-bytecode-compile"),
         ("node", "NODE_BIN", shutil.which("node")),
-        ("deno", "DENO_BIN", shutil.which("deno")),
         ("workerd", "WORKERD_BIN", shutil.which("workerd")),
     ):
         parser.add_argument("--" + flag, type=Path, default=os.environ.get(env, default))
@@ -47,7 +54,9 @@ def parse_args(argv=None):
         "--sizes", nargs="+", default=os.environ.get("SIZES", "10k 100k 1m").split()
     )
     parser.add_argument(
-        "--stacks", nargs="+", default=os.environ.get("STACKS", "capsid node deno workerd").split()
+        "--stacks",
+        nargs="+",
+        default=os.environ.get("STACKS", "capsid node node-jitless workerd").split(),
     )
     parser.add_argument("--rounds", type=int, default=os.environ.get("ROUNDS", 5))
     parser.add_argument("--warm", type=int, default=os.environ.get("WARM", 50))
@@ -109,7 +118,7 @@ def parse_args(argv=None):
     for name, path in paths.items():
         if path is None or not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable for {name}: {path}")
-    for attr in ("worker", "cold", "compiler", "node", "deno", "workerd"):
+    for attr in ("worker", "cold", "compiler", "node", "workerd"):
         value = getattr(args, attr)
         if value is not None:
             setattr(args, attr, value.resolve())
@@ -122,11 +131,18 @@ def binary_paths(args):
         "cold-start": args.cold,
         "capsid-bytecode-compile": args.compiler,
         "node": args.node,
-        "deno": args.deno,
         "workerd": args.workerd,
     }
     required = set().union(*(required_binaries("cold-start", stack) for stack in args.stacks))
     return {name: paths[name] for name in sorted(required)}
+
+
+def fixture_kind(stack):
+    if stack.startswith("capsid-"):
+        return "capsid"
+    if stack == "node-jitless":
+        return "node"
+    return stack
 
 
 def verify_fixtures(args):
@@ -137,7 +153,7 @@ def verify_fixtures(args):
     spec.loader.exec_module(generator)
     originals = {}
     for stack in args.stacks:
-        kind = "capsid" if stack.startswith("capsid-") else stack
+        kind = fixture_kind(stack)
         for size in args.sizes:
             name = f"app-{kind}-{size}"
             if name in originals:
@@ -287,9 +303,7 @@ def run_lane(args):
                     cell.mkdir(parents=True)
                     measured = []
                     roots = set()
-                    fixture_ids = [
-                        f"app-{'capsid' if stack.startswith('capsid-') else stack}-{size}"
-                    ]
+                    fixture_ids = [f"app-{fixture_kind(stack)}-{size}"]
                     if stack == "capsid-bytecode":
                         fixture_ids += [
                             n for n in fixtures if n.startswith("cold-bytecode-" + size + "-")
@@ -385,6 +399,7 @@ def run_lane(args):
             "posture": {"platform": "linux", "mode": "c-abi", "sandbox": "strict"},
             "runner": runner,
             "observedBinarySHA256": before,
+            "stackFlags": {"node-jitless": ["--jitless"]},
             "protocol": dict(
                 PROTOCOL["cold-start"],
                 sutCpuSet=args.cpuset,
@@ -407,7 +422,7 @@ def run_lane(args):
             }
         manifest = dict(
             common,
-            schema=1,
+            schema=CURRENT_SCHEMA,
             lane="cold-start",
             session=metadata["session"],
             origin=metadata["origin"],

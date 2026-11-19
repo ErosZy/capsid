@@ -51,15 +51,16 @@ two disagree, this file wins and the docs are stale.
 - **Workloads:** `matrix-json-1k`, `matrix-json-16k`, `stream` (1 KiB
   frozen b/c/d thirds). Payload bytes are shared across all stacks and
   verified per round.
-- **Serving topology:** one serving worker per stack, with the entire
+- **Serving topology:** one serving worker per pure-JS stack, with the entire
   service forest counted —
   capsid: managed coordinator + strict sandbox, one-worker fixed pool,
   Admin-API blue-green deploy, production stream-window defaults
-  (`CAPSID_MANAGED=1`); workerd: single process, minimal capnp;
-  FastAPI: uvicorn `--workers 1 --no-access-log` with precomputed
-  bodies and async endpoints/generators; Flask: gunicorn sync `-w 1`;
-  PHP: php-fpm `pm=static max_children=1` with opcache JIT tracing and
-  `fastcgi_keep_conn on` behind nginx.
+  (`CAPSID_MANAGED=1 CAPSID_STRICT=1`);
+  node: single-process built-in `node:http` event loop with HTTP/1.1 keep-alive
+  (`qps-node.mjs`, no third-party framework);
+  node-jitless: identical `node` binary and `qps-node.mjs` fixture launched
+  with `--jitless` (recorded in launch/manifest provenance);
+  workerd: single process, minimal capnp sharing `qps-worker.mjs` with capsid.
 - **Memory:** process-tree PSS (`smaps_rollup`) sampled after the last
   round, decomposed per role; a **trickle phase** (fresh process, 15 s
   at 10 req/s) is measured **before** any load, because V8 growth is
@@ -77,14 +78,15 @@ warm-up prevents measurement; a failed verdict exits nonzero. Formal samples
 record a 30000 ms request timeout; the explicit shorter correctness-fixture
 setting is rejected by publication validation.
 
-The shell entry now execs the owned Python controller. The full five-stack
-producer implements these defaults, requires managed/strict posture and keeps
-PHP's two roots and every Go client in separate owned sessions. An exact
-application-readiness response precedes traffic and is separate from the 150
-trickle responses. Low-load cleanup completes before a fresh loaded forest;
-after traffic, settle for 1 s and require two equal positive recursive PSS reads
-within eight attempts at 1 s intervals. Every process, role, client, response,
-raw sample, configuration and cleanup record is retained and sealed.
+The shell entry execs the owned Python controller. The full four-stack pure-JS
+producer (`capsid`, `node`, `node-jitless`, `workerd`) implements these
+defaults, requires managed/strict posture and keeps every serving root and Go
+client in separate owned sessions. An exact application-readiness response
+precedes traffic and is separate from the 150 trickle responses. Low-load
+cleanup completes before a fresh loaded forest; after traffic, settle for 1 s
+and require two equal positive recursive PSS reads within eight attempts at 1 s
+intervals. Every process, role, client, response, raw sample, configuration and
+cleanup record is retained and sealed.
 
 Managed QPS and density readiness retain the operation ID returned by the single
 Admin deploy request. Read-only polls require that exact operation and version
@@ -94,11 +96,13 @@ not a serving-readiness acknowledgement. This wait stays within the original
 absolute startup deadline; neither deploy nor the first exact business request
 is retried. Failed or malformed operation responses abort the probe.
 
-Formal archives require clean measured-build/session metadata, four available
-CPU indices, all stacks/workloads/rounds and independent build provenance. The
-producer self-validates its sealed output. Restricted `--observation` output
-has no `lane.json`; actual five-stack short smoke does not qualify a formal
-performance point. See [QPS producer](perf-evidence.md#qps-producer).
+Formal archives emit `schema: 2` (`capsid-perf-lane-v2`), requiring clean
+measured-build/session metadata, four available CPU indices, all four pure-JS
+stacks, all three workloads, five rounds and independent build provenance.
+Historical `schema: 1` (`capsid-perf-lane-v1`) archives remain replayable
+without modification. The producer self-validates its sealed output. Restricted
+`--observation` output has no `lane.json`; short observations do not qualify a
+formal performance point. See [QPS producer](perf-evidence.md#qps-producer).
 
 ### 2.2 Cold-start lane — `bench/cold-start.sh` + `bench/cold-start.cc`
 
@@ -107,14 +111,15 @@ performance point. See [QPS producer](perf-evidence.md#qps-producer).
   into `total_ms` (historical bug: shell-measured stacks once read
   ~400 ms because a 50-request curl warm loop was inside the timer).
 - **Fixtures:** real-shaped JS at 10k/100k/1m, byte-aligned across
-  runtimes (`gen-cold-start-apps.py`); each cell drops one warm-up run
+  runtimes (`gen-cold-start-apps.py`); `node-jitless` reuses the exact
+  `app-node-*.mjs` fixture with `--jitless`; each cell drops one warm-up run
   and reports the median of five.
 - **capsid:** C-ABI tool with `--strict` (full sandbox in the spawned
-  worker); source and trusted-bytecode paths both measured. Node/Deno:
-  stdout READY plus an owned listener, then the first exact HTTP response.
-  workerd: first owned-listener TCP connect (its
-  isolate initializes lazily on the first request, so the
-  ready→first-response span carries that cost).
+  worker); source and trusted-bytecode paths both measured. Node / Node
+  (`--jitless`): stdout READY plus an owned listener, then the first exact HTTP
+  response. workerd: first owned-listener TCP connect (its isolate initializes
+  lazily on the first request, so the ready→first-response span carries that
+  cost).
 
 The C-ABI probe now gets the spawned child's PID from the public
 `capsid_worker_pid()` API. Inherited socketpair credentials identify the socket
@@ -146,7 +151,7 @@ remaining owned processes. Discarded raw/correctness records are sealed and
 validated separately; a failed discarded run aborts the cell. The summary uses
 only measured rounds. Reusing a measured root PID/start identity fails.
 
-Node/Deno/workerd requests use a fresh Python-standard-library loopback HTTP
+Node, Node (`--jitless`), and workerd requests use a fresh Python-standard-library loopback HTTP
 connection per request (`httpClient: python-http-exact-v1`). The old curl process
 startup floor describes historical points only. C-ABI IPC and HTTP transports
 remain different and are stated beside warm results. Both the controller/client
@@ -236,7 +241,8 @@ Controller tests and restricted smoke still do not qualify a performance point.
   coverage. Doubling a total request count does not prove that every worker
   reached the target. Use benchmark-only counters; public responses and the
   production protocol must not gain diagnostic fields.
-- **Stacks:** formal capsid points require managed/strict posture; a
+- **Stacks:** formal density compares `capsid` and `workerd` only (budget
+  fill-to-2048 MiB). Formal capsid points require managed/strict posture; a
   static-pool diagnostic is an observation and cannot qualify publication.
   workerd uses N cells in one process (minimal capnp,
   cells touched through per-cell sockets).

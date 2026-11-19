@@ -25,13 +25,34 @@ class EvidenceError(ValueError):
     pass
 
 
+CONTRACT_V1 = "capsid-perf-lane-v1"
+CONTRACT_V2 = "capsid-perf-lane-v2"
+CURRENT_SCHEMA = 2
+SUPPORTED_SCHEMAS = (1, 2)
+EXPECTED_STACK_FLAGS_V2 = {"node-jitless": ["--jitless"]}
+
 SIZES = ("10k", "100k", "1m")
 WORKLOADS = ("matrix-json-1k", "matrix-json-16k", "stream")
-STACKS = {
+STACKS_V1 = {
     "cold-start": ("capsid-source", "capsid-bytecode", "node", "deno", "workerd"),
     "qps": ("capsid", "workerd", "fastapi", "flask", "php"),
     "density": ("capsid", "workerd"),
 }
+STACKS = {
+    "cold-start": ("capsid-source", "capsid-bytecode", "node", "node-jitless", "workerd"),
+    "qps": ("capsid", "node", "node-jitless", "workerd"),
+    "density": ("capsid", "workerd"),
+}
+
+
+def stacks_for(lane, schema=CURRENT_SCHEMA):
+    return (STACKS_V1 if schema == 1 else STACKS)[lane]
+
+
+def contract_for(schema):
+    return CONTRACT_V1 if schema == 1 else CONTRACT_V2
+
+
 PROTOCOL = {
     "cold-start": {
         "rounds": 5,
@@ -270,10 +291,10 @@ class Archive:
             )
 
 
-def cell_key(lane, cell):
+def cell_key(lane, cell, schema=CURRENT_SCHEMA):
     need(isinstance(cell, dict), f"{lane}: cell must be an object")
     stack = cell.get("stack")
-    need(stack in STACKS[lane], f"{lane}: unknown stack {stack}")
+    need(stack in stacks_for(lane, schema), f"{lane}: unknown stack {stack}")
     field = "workload" if lane == "qps" else "size"
     value = cell.get(field)
     need(value in (WORKLOADS if lane == "qps" else SIZES), f"{lane}: unknown {field} {value}")
@@ -283,16 +304,16 @@ def cell_key(lane, cell):
     return stack, value
 
 
-def expected_keys(lane):
+def expected_keys(lane, schema=CURRENT_SCHEMA):
     return {
         (s, v, p) if lane == "density" else (s, v)
-        for s in STACKS[lane]
+        for s in stacks_for(lane, schema)
         for v in (WORKLOADS if lane == "qps" else SIZES)
         for p in (("cold", "warm") if lane == "density" else (None,))
     }
 
 
-def required_binaries(lane, stack):
+def required_binaries(lane, stack, schema=CURRENT_SCHEMA):
     if stack.startswith("capsid"):
         names = (
             ["capsid-worker", "cold-start"]
@@ -301,10 +322,14 @@ def required_binaries(lane, stack):
         )
         if stack == "capsid-bytecode":
             names.append("capsid-bytecode-compile")
-    else:
+    elif stack in ("node", "node-jitless"):
+        names = ["node"]
+    elif schema == 1:
         names = {"fastapi": ["python"], "flask": ["python"], "php": ["php-fpm", "nginx"]}.get(
             stack, [stack]
         )
+    else:
+        names = [stack]
     return set(names + (["loadgen"] if lane == "qps" else []))
 
 
@@ -346,8 +371,8 @@ def correctness(archive, names, expected):
     return verdicts
 
 
-def validate_samples(archive, lane, record, summary):
-    key = cell_key(lane, record)
+def validate_samples(archive, lane, record, summary, schema=CURRENT_SCHEMA):
+    key = cell_key(lane, record, schema=schema)
     names = record.get("samples")
     rounds = 5 if lane != "density" else 1
     need(
@@ -379,7 +404,7 @@ def validate_samples(archive, lane, record, summary):
             f"{key}: expected five distinct measured rounds",
         )
         for row in rows:
-            need(cell_key(lane, row) == key, f"{key}: wrong cold stack or size")
+            need(cell_key(lane, row, schema=schema) == key, f"{key}: wrong cold stack or size")
             need(
                 row.get("ok") is True and type(row.get("warm_n")) is int and row["warm_n"] == 50,
                 f"{key}: failed response or incomplete warm phase",
@@ -396,7 +421,7 @@ def validate_samples(archive, lane, record, summary):
                 f"{key}: missing stable positive PSS readings",
             )
             try:
-                check_cold_round(row, 50)
+                check_cold_round(row, 50, schema=schema)
             except ProbeError as exc:
                 raise EvidenceError(f"cold-start {key}: {exc}") from exc
         discarded = record.get("discardedSamples")
@@ -409,11 +434,11 @@ def validate_samples(archive, lane, record, summary):
             len(discarded_rows) == 1
             and type(discarded_rows[0].get("round")) is int
             and discarded_rows[0]["round"] == 0
-            and cell_key(lane, discarded_rows[0]) == key,
+            and cell_key(lane, discarded_rows[0], schema=schema) == key,
             f"{key}: invalid discarded cold run",
         )
         try:
-            check_cold_round(discarded_rows[0], 50)
+            check_cold_round(discarded_rows[0], 50, schema=schema)
         except ProbeError as exc:
             raise EvidenceError(f"cold-start {key}: invalid discarded run: {exc}") from exc
         discard_verdict = correctness(archive, record.get("discardedCorrectness"), 1)[0]
@@ -447,7 +472,7 @@ def validate_samples(archive, lane, record, summary):
         need(len(rows) == 1, f"{key}: expected one final verification")
         row = rows[0]
         need(
-            cell_key(lane, row) == key
+            cell_key(lane, row, schema=schema) == key
             and row.get("status") == "ok"
             and row.get("finalVerification") is True,
             f"{key}: failed final verification",
@@ -522,14 +547,15 @@ def validate_samples(archive, lane, record, summary):
         summary["limit"] = row["limit"]
 
 
-def validate_qps_memory(archive, parsed):
+def validate_qps_memory(archive, parsed, schema=CURRENT_SCHEMA):
+    expected_stacks = set(stacks_for("qps", schema))
     memory = archive.json(archive.manifest.get("memory"))
     need(
-        isinstance(memory, dict) and set(memory) == set(STACKS["qps"]),
+        isinstance(memory, dict) and set(memory) == expected_stacks,
         "qps: missing memory sample records",
     )
     for output in ("servingPssMb", "servingPss", "lowLoadPssMb", "lowLoadPss"):
-        need(set(parsed.get(output, {})) == set(STACKS["qps"]), f"qps: missing {output} rows")
+        need(set(parsed.get(output, {})) == expected_stacks, f"qps: missing {output} rows")
     intervals, all_processes, probes = [], set(), set()
     for stack, phases in memory.items():
         need(
@@ -537,7 +563,7 @@ def validate_qps_memory(archive, parsed):
             f"qps: {stack}: missing memory phase",
         )
         try:
-            checked_memory_pair(phases, stack)
+            checked_memory_pair(phases, stack, schema=schema)
         except ProbeError as exc:
             raise EvidenceError(f"qps: {stack}: {exc}") from exc
         for sample in phases.values():
@@ -694,14 +720,14 @@ def validate_text_manifest(archive):
     need(values["command"] == m.get("command"), "manifest.txt: conflicting command")
 
 
-def summaries(lane, parsed):
+def summaries(lane, parsed, schema=CURRENT_SCHEMA):
     if lane != "density":
-        return {cell_key(lane, cell): cell for cell in parsed["cells"]}
+        return {cell_key(lane, cell, schema=schema): cell for cell in parsed["cells"]}
     result = {}
     for stack, cells in parsed.items():
         for label, cell in cells.items():
             phase, size = label.split("@")
-            key = cell_key(lane, {"stack": stack, "size": size, "phase": phase})
+            key = cell_key(lane, {"stack": stack, "size": size, "phase": phase}, schema=schema)
             result[key] = cell
     return result
 
@@ -713,11 +739,17 @@ def validate_lane(path, repo, lane, parsed, version, release):
     need(
         isinstance(m, dict)
         and type(m.get("schema")) is int
-        and m["schema"] == 1
+        and m["schema"] in SUPPORTED_SCHEMAS
         and m.get("lane") == lane
         and m.get("status") == "complete",
         f"{path}: missing complete {lane} manifest",
     )
+    schema = m["schema"]
+    if schema == 2 and lane in ("cold-start", "qps"):
+        need(
+            m.get("stackFlags") == EXPECTED_STACK_FLAGS_V2,
+            f"{lane}: missing or conflicting node-jitless launch flags provenance",
+        )
     text(m.get("session"), f"{lane}: session")
     start = timestamp(m.get("startedAt"), f"{lane}: startedAt")
     end = timestamp(m.get("completedAt"), f"{lane}: completedAt")
@@ -815,14 +847,17 @@ def validate_lane(path, repo, lane, parsed, version, release):
             f"{lane}: {name} fixture SHA-256 mismatch",
         )
     validate_text_manifest(archive)
-    summary = summaries(lane, parsed)
-    need(set(summary) == expected_keys(lane), f"{lane}: missing or unexpected summary rows")
+    summary = summaries(lane, parsed, schema=schema)
+    need(
+        set(summary) == expected_keys(lane, schema=schema),
+        f"{lane}: missing or unexpected summary rows",
+    )
     records = m.get("records")
     need(isinstance(records, list), f"{lane}: missing raw sample records")
     seen = set()
     used_files = set()
     for record in records:
-        key = cell_key(lane, record)
+        key = cell_key(lane, record, schema=schema)
         need(key not in seen, f"{lane}: duplicate record {key}")
         seen.add(key)
         names = record.get("binaries", [])
@@ -830,7 +865,7 @@ def validate_lane(path, repo, lane, parsed, version, release):
             isinstance(names, list)
             and all(isinstance(n, str) for n in names)
             and len(set(names)) == len(names)
-            and required_binaries(lane, key[0]) <= set(names) <= set(binaries),
+            and required_binaries(lane, key[0], schema=schema) <= set(names) <= set(binaries),
             f"{key}: missing measured binary identities",
         )
         names = record.get("fixtures", [])
@@ -855,12 +890,13 @@ def validate_lane(path, repo, lane, parsed, version, release):
             need(not (used_files & set(names)), f"{key}: evidence reused across cells")
             used_files.update(names)
         need(key in summary, f"{lane}: unexpected raw record {key}")
-        validate_samples(archive, lane, record, summary[key])
+        validate_samples(archive, lane, record, summary[key], schema=schema)
     need(seen == set(summary), f"{lane}: missing raw records for summary rows")
     if lane == "qps":
         try:
-            validate_qps_memory(archive, parsed)
-            validate_qps_dependencies(archive)
+            validate_qps_memory(archive, parsed, schema=schema)
+            if schema == 1:
+                validate_qps_dependencies(archive)
         except ProbeError as exc:
             raise EvidenceError(f"qps: {exc}") from exc
     return archive
@@ -873,10 +909,12 @@ def validate_point(lanes, repo, version, release):
     }
     need({"cold-start", "qps"} <= set(archives), "cold-start and QPS lanes are required")
     first = archives["cold-start"].manifest
+    schema = first["schema"]
     binaries = {}
     fixtures = {}
     for lane, archive in archives.items():
         m = archive.manifest
+        need(m["schema"] == schema, f"{lane}: conflicting lane schema across lanes")
         for key in ("session", "origin", "machine"):
             need(m[key] == first[key], f"{lane}: conflicting {key} across lanes")
         need(
@@ -933,7 +971,7 @@ def validate_point(lanes, repo, version, release):
         "evidence": evidence,
         "verification": {
             "status": "verified",
-            "contract": "capsid-perf-lane-v1",
+            "contract": contract_for(schema),
             "session": first["session"],
             "binaries": binaries,
             "archives": {lane: a.prefix for lane, a in archives.items()},

@@ -47,7 +47,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "103e0bc89f36ef7a43f630f4a0157be6a58496611f0049672f52c54940936ceb",
+      "sha256": "e912d30973f77ab08555f5c4f5862ceb069d2cb8f91ceb2ae8ffe6f23a23d76a",
       "review": "Implemented producers, source prerequisites, current accepted snapshot, transport replay, legacy replacement warning and full-session obligations."
     },
     {
@@ -55,7 +55,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "08ca03f0a9f4ed27a1f910a5d8040f9710fe22a196982aad6056c6e259037249",
+      "sha256": "a264cdf0d5d60759ce4a93db8a05ad6593ab1c81bda86894421593f77c32ed06",
       "review": "Normative protocol constants/budgets retained; status/current acceptance/transport and same-version history caveat corrected."
     },
     {
@@ -63,7 +63,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "72e902a14b8aa7b0d4f5c94c10dee40c7e69b1b5f9844203f137be8cd5d75b14",
+      "sha256": "99a8442caafd2799c65214e4e832758d6f9c5790f5f15fb26520523a394eeba8",
       "review": "Original complete lane/point/round/response/PSS/identity controls retained; bounded hashed compression is transport only."
     },
     {

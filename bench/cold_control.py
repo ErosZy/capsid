@@ -7,6 +7,8 @@ import statistics
 from measurement_runtime import ProbeError
 
 EXPECTED_BODY = b'{"status":"ok","total":2039,"count":16}'
+HTTP_STACKS_V1 = ("node", "deno", "workerd")
+HTTP_STACKS = ("node", "node-jitless", "workerd")
 
 
 def cpu_selection(text, available):
@@ -44,7 +46,7 @@ def identity(value):
     return value["pid"], value["start"]
 
 
-def checked_round(row, warm_requests, *, observed=None):
+def checked_round(row, warm_requests, *, observed=None, schema=2):
     if type(warm_requests) is not int or warm_requests <= 0:
         raise ProbeError("cold-warm", "positive warm request target is required")
     if (
@@ -94,7 +96,10 @@ def checked_round(row, warm_requests, *, observed=None):
             or row["worker_pid"] != row["measurementRoot"]["pid"]
         ):
             raise ProbeError("cold-identity", "missing strict C-ABI worker identity")
-    elif stack not in ("node", "deno", "workerd") or row.get("transport") != "http":
+    elif (
+        stack not in (HTTP_STACKS_V1 if schema == 1 else HTTP_STACKS)
+        or row.get("transport") != "http"
+    ):
         raise ProbeError("cold-transport", "unknown cold stack or measurement transport")
     if any(pid == probe[0] for pid, _ in identities):
         raise ProbeError("cold-identity", "probe process was included in measured memory")

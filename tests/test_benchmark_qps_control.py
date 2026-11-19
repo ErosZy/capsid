@@ -72,8 +72,8 @@ def fixture(stack="capsid", workload="stream", round_no=1):
 
 
 class QpsControlTests(unittest.TestCase):
-    def test_all_five_stacks_three_workloads_and_five_rounds(self):
-        for stack in ("capsid", "workerd", "fastapi", "flask", "php"):
+    def test_all_four_stacks_three_workloads_and_five_rounds(self):
+        for stack in ("capsid", "node", "node-jitless", "workerd"):
             for workload in ("matrix-json-1k", "matrix-json-16k", "stream"):
                 for round_no in range(1, 6):
                     rows, verdict = fixture(stack, workload, round_no)
@@ -205,11 +205,18 @@ class QpsControlTests(unittest.TestCase):
                 control.checked_round(*fixture(), "capsid", "stream", 1, **kwargs)
 
     def test_actual_memory_shapes_require_all_roles_roots_and_fresh_phases(self):
-        for stack in ("capsid", "workerd", "fastapi", "flask", "php"):
+        for stack in ("capsid", "node", "node-jitless", "workerd"):
             phases = {phase: synthetic_memory(stack, phase) for phase in ("lowLoad", "serving")}
             self.assertIs(phases, control.checked_memory_pair(phases, stack))
             for phase in phases:
                 self.assertEqual(1024, sum(phases[phase]["roles_kb"].values()))
+        for legacy_stack in ("fastapi", "flask", "php"):
+            phases = {
+                phase: synthetic_memory(legacy_stack, phase) for phase in ("lowLoad", "serving")
+            }
+            with self.assertRaises(ProbeError):
+                control.checked_memory_pair(phases, legacy_stack)
+            self.assertIs(phases, control.checked_memory_pair(phases, legacy_stack, schema=1))
 
     def test_missing_unstable_or_incomplete_memory_never_becomes_a_zero_sample(self):
         for mutate in (
@@ -243,10 +250,10 @@ class QpsControlTests(unittest.TestCase):
             ("lowLoad", lambda d: d.update(duration_s=14)),
             ("lowLoad", lambda d: d["cleanup"]["trees"][0]["processes"].pop()),
         ):
-            value = synthetic_memory("php", phase)
+            value = synthetic_memory("node-jitless", phase)
             mutate(value)
             with self.subTest(phase=phase, mutate=mutate), self.assertRaises(ProbeError):
-                control.checked_memory(value, "php", phase)
+                control.checked_memory(value, "node-jitless", phase)
 
     def test_loaded_trees_cannot_reuse_low_load_processes_or_precede_cleanup(self):
         for mode in ("reused", "overlap", "different-controller", "missing-phase"):
