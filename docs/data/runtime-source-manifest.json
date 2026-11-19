@@ -197,7 +197,7 @@
     "js/bootstrap.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67"
+      "gitObject": "51cb09f062698a7a6a3d935f432a95f702b9b0ee"
     },
     "js/dom-exception.js": {
       "mode": "100644",
@@ -232,7 +232,7 @@
     "js/fetch.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "6258e4adde36e41ade3e940608839f0332297905"
+      "gitObject": "0da7535409e4b62fb9f79451e72bcae9422a9684"
     },
     "js/file.js": {
       "mode": "100644",
@@ -277,7 +277,7 @@
     "js/url.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab"
+      "gitObject": "2579ff15f46a8d1be22f14f387027f318b3f3b08"
     },
     "js/wasm.js": {
       "mode": "100644",
@@ -3092,7 +3092,7 @@
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf"
   },
   "checkout": {
-    "kind": "docs-successor",
+    "kind": "runtime-optimization-successor",
     "baseCommit": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
     "formatters": {
       "clang-format": "23.1.5",
@@ -3100,7 +3100,21 @@
       "ruff": "0.17.5"
     },
     "releaseQualificationInherited": false,
-    "changeScope": "documentation and performance-site update after 0.3.0-beta (v0.3.0-beta.3) publication; runtime and build inputs match qualified release source",
-    "buildInputChanges": {}
+    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, build inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
+    "buildInputChanges": {},
+    "runtimeInputChanges": {
+      "js/bootstrap.js": {
+        "qualifiedGitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67",
+        "currentGitObject": "51cb09f062698a7a6a3d935f432a95f702b9b0ee"
+      },
+      "js/fetch.js": {
+        "qualifiedGitObject": "6258e4adde36e41ade3e940608839f0332297905",
+        "currentGitObject": "0da7535409e4b62fb9f79451e72bcae9422a9684"
+      },
+      "js/url.js": {
+        "qualifiedGitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab",
+        "currentGitObject": "2579ff15f46a8d1be22f14f387027f318b3f3b08"
+      }
+    }
   }
 }

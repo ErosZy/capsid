@@ -1,5 +1,4 @@
 import {
-  validateResponseWebSocket,
   setResponseWebSocket,
   getResponseWebSocket,
   isWebSocketEndpoint,
@@ -8,25 +7,60 @@ import {
   configureFetchChannelStreams,
   inheritFetchChannelStream,
   isFetchChannelStream,
+  createOrdinaryFetchBody,
+  isOrdinaryFetchBody,
+  teeOrdinaryFetchBody,
 } from './websocket.js';
 import { configureAbortExceptions } from 'txiki-polyfills/abort-controller.js';
 import { configureResponseBodyFactory } from 'txiki-polyfills/fetch/fetch.js';
 import { configureOwnedHeadersCloner } from 'txiki-polyfills/fetch/headers.js';
-import { createOrdinaryFetchBody, isOrdinaryFetchBody, teeOrdinaryFetchBody } from './websocket.js';
 
 configureAbortExceptions(captureNativeException);
 
 const NativeHeaders = globalThis.Headers;
 const NativeRequest = globalThis.Request;
-const NativeResponse = globalThis.Response;
 const nativeFetch = globalThis.fetch;
 
-function normalizeRequestInfo(input) {
-  // Preserve native Request bodies and brands (including the base instances
-  // returned by clone). Other RequestInfo values use one Web IDL string
-  // conversion, before RequestInit getters are observed.
-  return input instanceof NativeRequest ? input : `${input}`;
-}
+const bodyTypeError = globalThis.TypeError;
+const bodyRangeError = globalThis.RangeError;
+const bodyProperty = Object.getOwnPropertyDescriptor;
+const objectPrototype = Object.prototype;
+const hasOwn = objectPrototype.hasOwnProperty;
+const objectHasOwn = Object.hasOwn;
+const getPrototypeOf = Object.getPrototypeOf;
+const objectKeys = Object.keys;
+const applyIntrinsic = Reflect.apply;
+const headerBuiltinString = String;
+const headerByteArray = Uint8Array;
+const headerBigInt = BigInt;
+const headerChar = String.fromCharCode;
+const headerPrimitiveSymbol = Symbol.toPrimitive;
+const stringPrototype = String.prototype;
+const strToLowerCase = stringPrototype.toLowerCase;
+const strToUpperCase = stringPrototype.toUpperCase;
+const strCharCodeAt = stringPrototype.charCodeAt;
+const strSlice = stringPrototype.slice;
+const u8Subarray = Uint8Array.prototype.subarray;
+const u8Slice = Uint8Array.prototype.slice;
+const abSlice = ArrayBuffer.prototype.slice;
+const arraySlice = Array.prototype.slice;
+const arrayPush = Array.prototype.push;
+const weakMapPrototype = WeakMap.prototype;
+const weakMapGet = weakMapPrototype.get;
+const weakMapSet = weakMapPrototype.set;
+const weakSetHas = WeakSet.prototype.has;
+const weakSetAdd = WeakSet.prototype.add;
+const mapGet = Map.prototype.get;
+const mapSet = Map.prototype.set;
+const mapHas = Map.prototype.has;
+const mapDelete = Map.prototype.delete;
+
+const sharedTextEncoder = new TextEncoder();
+const sharedTextDecoder = new TextDecoder();
+const headerTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
+const textDecoderDecode = TextDecoder.prototype.decode;
+const textEncoderEncode = TextEncoder.prototype.encode;
+
 const emptyBodyIntrinsics = {
   bufferLength: Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get,
   typedLength: Object.getOwnPropertyDescriptor(
@@ -39,32 +73,6 @@ const emptyBodyIntrinsics = {
   paramsString: URLSearchParams.prototype.toString,
   isView: ArrayBuffer.isView,
 };
-const bodyTypeError = globalThis.TypeError;
-const bodyProperty = Object.getOwnPropertyDescriptor;
-
-function trackBodyUsage(body) {
-  let consumed = body.bodyUsed;
-  Object.defineProperty(body, 'bodyUsed', {
-    configurable: true,
-    enumerable: true,
-    get() {
-      // The pinned streams implementation records disturbance for read,
-      // cancel, tee and pipe operations. Pulling into its internal queue
-      // does not disturb it, and merely acquiring a reader does not count.
-      const stream = this._bodyStream;
-      return (
-        consumed ||
-        (stream !== null &&
-          stream !== undefined &&
-          bodyProperty(stream, '_disturbed')?.value === true)
-      );
-    },
-    // The native BodyMixin marks its convenience consumers before reading.
-    set(value) {
-      consumed = Boolean(value);
-    },
-  });
-}
 
 let maxFetchRequestBodyBytes = 0;
 let maxFetchResponseBodyBytes = 0;
@@ -89,27 +97,48 @@ export function configureFetchLimits(requestBytes, responseBytes) {
   );
 }
 
-const headerLists = new WeakMap();
-const setCookieLists = new WeakMap();
+// 128-byte ASCII classification tables for RFC/workerd header name and value rules.
+// HEADER_NAME_TABLE: 0 = invalid, 1 = valid lowercase/token char, 2 = valid ASCII A-Z.
+const HEADER_NAME_TABLE = new Uint8Array(128);
+{
+  const separators = '()<>@,;:\\"/[]?={}';
+  for (let code = 33; code < 127; code++) {
+    if (separators.indexOf(headerChar(code)) === -1) {
+      HEADER_NAME_TABLE[code] = code >= 65 && code <= 90 ? 2 : 1;
+    }
+  }
+}
+
+// HEADER_VALUE_TABLE bitmask: bit 1 = trimmable whitespace (\t, \n, \r, space),
+// bit 2 = invalid interior character (\0, \n, \r).
+const HEADER_VALUE_TABLE = new Uint8Array(128);
+HEADER_VALUE_TABLE[0] = 2;
+HEADER_VALUE_TABLE[9] = 1;
+HEADER_VALUE_TABLE[10] = 3;
+HEADER_VALUE_TABLE[13] = 3;
+HEADER_VALUE_TABLE[32] = 1;
+
+const HEADER_MAP_THRESHOLD = 32; // 16 pairs in flat array before promoting to Map
+const headerStates = new WeakMap();
 const iteratorStates = new WeakMap();
-const fastResponseBodies = new WeakMap();
-const immutableHeaders = new WeakSet();
-const headerBuiltinString = String;
-const headerLowerAscii = Function.prototype.call.bind(String.prototype.toLowerCase);
-const headerCode = Function.prototype.call.bind(String.prototype.charCodeAt);
-const headerSubarray = Function.prototype.call.bind(Uint8Array.prototype.subarray);
-const headerByteArray = Uint8Array;
-const headerBigInt = BigInt;
-const headerChar = String.fromCharCode;
+const ordinaryFetchStreams = new WeakSet();
+const readableLocked = Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'locked').get;
+const headerInvocationMessage =
+  'Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.';
+const isObjectValue = (value) =>
+  value !== null && (typeof value === 'object' || typeof value === 'function');
+const arrayIteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
+
 // kj::String conversion preserves unpaired UTF-16 code units as WTF-8.
 // The reference decodes their invalid byte sequence at the JS return boundary.
 function headerEncode(value) {
-  const bytes = new headerByteArray(value.length * 3);
+  const len = value.length;
+  const bytes = new headerByteArray(len * 3);
   let at = 0;
-  for (let index = 0; index < value.length; ++index) {
-    let code = headerCode(value, index);
-    if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
-      const low = headerCode(value, index + 1);
+  for (let index = 0; index < len; ++index) {
+    let code = strCharCodeAt.call(value, index);
+    if (code >= 0xd800 && code <= 0xdbff && index + 1 < len) {
+      const low = strCharCodeAt.call(value, index + 1);
       if (low >= 0xdc00 && low <= 0xdfff) {
         code = 0x10000 + ((code - 0xd800) << 10) + low - 0xdc00;
         ++index;
@@ -130,50 +159,47 @@ function headerEncode(value) {
       bytes[at++] = 0x80 | (code & 63);
     }
   }
-  return headerSubarray(bytes, 0, at);
+  return u8Subarray.call(bytes, 0, at);
 }
-const headerDecode = Function.prototype.call.bind(
-  TextDecoder.prototype.decode,
-  new TextDecoder('utf-8', { ignoreBOM: true }),
-);
-// Keep uncommon names as canonical bytes. The pinned64-bit SWAR conversion
+
+// Keep uncommon names as canonical bytes. The pinned 64-bit SWAR conversion
 // also has observable non-ASCII results; decoding only at display preserves
 // distinct raw keys that happen to render to the same replacement string.
-function lowerHeaderKey(name) {
-  if (!/[^\x00-\x7f]/.test(name)) return headerLowerAscii(name);
+function lowerHeaderKeyNonAscii(name) {
   const bytes = headerEncode(name);
   for (let offset = 0; offset < bytes.length; offset += 8) {
     const count = Math.min(8, bytes.length - offset);
     let word = 0n;
-    for (let index = 0; index < count; ++index)
+    for (let index = 0; index < count; ++index) {
       word |= headerBigInt(bytes[offset + index]) << headerBigInt(index * 8);
+    }
     word ^=
       (((word + 0x3f3f3f3f3f3f3f3fn) ^ (word + 0x2525252525252525n)) & 0x8080808080808080n) >> 2n;
-    for (let index = 0; index < count; ++index)
+    for (let index = 0; index < count; ++index) {
       bytes[offset + index] = Number((word >> headerBigInt(index * 8)) & 255n);
+    }
   }
   let raw = '';
-  for (const byte of bytes) raw += headerChar(byte);
+  for (let i = 0; i < bytes.length; i++) raw += headerChar(bytes[i]);
   return raw;
 }
+
 function displayHeaderKey(raw) {
-  if (!/[^\x00-\x7f]/.test(raw)) return raw;
-  const bytes = new headerByteArray(raw.length);
-  for (let index = 0; index < raw.length; ++index) bytes[index] = raw.charCodeAt(index);
-  return headerDecode(bytes);
+  const len = raw.length;
+  for (let i = 0; i < len; i++) {
+    if (strCharCodeAt.call(raw, i) >= 128) {
+      const bytes = new headerByteArray(len);
+      for (let index = 0; index < len; ++index) {
+        bytes[index] = strCharCodeAt.call(raw, index);
+      }
+      return textDecoderDecode.call(headerTextDecoder, bytes);
+    }
+  }
+  return raw;
 }
-const headerPrimitiveSymbol = Symbol.toPrimitive;
-// Private state must not call application replacements of WeakMap methods.
-const headerWeakGet = Function.prototype.call.bind(WeakMap.prototype.get);
-const headerWeakSet = Function.prototype.call.bind(WeakMap.prototype.set);
-const headerMapGet = Function.prototype.call.bind(Map.prototype.get);
-const headerMapHas = Function.prototype.call.bind(Map.prototype.has);
-const readableLocked = Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'locked').get;
-const headerInvocationMessage =
-  'Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors for details.';
-const isObjectValue = (value) =>
-  value !== null && (typeof value === 'object' || typeof value === 'function');
+
 function headerMutationString(value) {
+  if (typeof value === 'string') return value;
   if (isObjectValue(value)) {
     const exotic = value[headerPrimitiveSymbol];
     if (exotic !== undefined && exotic !== null) {
@@ -200,125 +226,345 @@ function headerMutationString(value) {
       if (!primitive) throw new bodyTypeError('Cannot convert object to primitive value');
     }
   }
-  if (typeof value === 'symbol')
+  if (typeof value === 'symbol') {
     throw new bodyTypeError('Cannot convert a Symbol value to a string');
+  }
   return headerBuiltinString(value);
 }
-function headerReadInput(headers, operation, count, name) {
-  const list = headerWeakGet(headerLists, headers);
-  if (list === undefined) throw new bodyTypeError(headerInvocationMessage);
-  if (count < 1) {
-    throw new bodyTypeError(
-      `Failed to execute '${operation}' on 'Headers': parameter 1 is not of type 'string'.`,
-    );
-  }
-  return { list, name: normalizeName(name) };
-}
-function headerMutationInput(headers, operation, count, name, value) {
-  const list = headerWeakGet(headerLists, headers);
-  if (list === undefined) throw new bodyTypeError(headerInvocationMessage);
-  const missing = (index) =>
-    new bodyTypeError(
-      `Failed to execute '${operation}' on 'Headers': parameter ${index} is not of type 'string'.`,
-    );
-  if (count < 1) throw missing(1);
-  name = headerMutationString(name);
-  if (operation !== 'delete') {
-    if (count < 2) throw missing(2);
-    value = headerMutationString(value);
-  }
-  requireMutableHeaders(headers);
-  const normalizedValue = operation === 'delete' ? undefined : normalizeValue(value);
-  return { list, name: normalizeName(name), value: normalizedValue };
-}
-const ordinaryFetchStreams = new WeakSet();
-const weakHas = Function.prototype.call.bind(WeakSet.prototype.has);
-const weakAdd = Function.prototype.call.bind(WeakSet.prototype.add);
-const applyIntrinsic = Reflect.apply;
-function requireMutableHeaders(headers) {
-  if (weakHas(immutableHeaders, headers))
-    throw new bodyTypeError("Can't modify immutable headers.");
-}
-function finishFetchedResponse(response, url, redirected) {
-  response.url = url;
-  response.redirected = Boolean(redirected);
-  weakAdd(immutableHeaders, response.headers);
-  if (response.body !== null) weakAdd(ordinaryFetchStreams, response.body);
-  return response;
-}
-const streamTee = ReadableStream.prototype.tee;
-Object.defineProperty(ReadableStream.prototype, 'tee', {
-  ...Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'tee'),
-  value: function tee() {
-    if (
-      (weakHas(ordinaryFetchStreams, this) || isOrdinaryFetchBody(this)) &&
-      applyIntrinsic(readableLocked, this, [])
-    )
-      throw new bodyTypeError('This ReadableStream is currently locked to a reader,');
-    const nativeBranches = teeOrdinaryFetchBody(this);
-    const branches = nativeBranches ?? applyIntrinsic(streamTee, this, []);
-    if (!nativeBranches) for (const branch of branches) inheritFetchChannelStream(this, branch);
-    if (weakHas(ordinaryFetchStreams, this)) this._disturbed = true;
-    return branches;
-  },
-});
-const incomingRequestBrand = Symbol('capsid incoming request');
-const arrayIteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
 
-function toByteString(value) {
-  const string = headerBuiltinString(value);
+function getHeaderState(obj) {
+  return weakMapPrototype.get === weakMapGet
+    ? headerStates.get(obj)
+    : weakMapGet.call(headerStates, obj);
+}
 
-  for (let i = 0; i < string.length; i++) {
-    if (string.charCodeAt(i) > 0xff) {
-      throw new TypeError('Value is not a valid ByteString');
+function setHeaderState(obj, state) {
+  if (weakMapPrototype.set === weakMapSet) {
+    headerStates.set(obj, state);
+  } else {
+    weakMapSet.call(headerStates, obj, state);
+  }
+}
+
+function normalizeNameString(name) {
+  const len = name.length;
+  const direct = stringPrototype.charCodeAt === strCharCodeAt;
+  let hasUpper = false;
+  for (let i = 0; i < len; i++) {
+    const c = direct ? name.charCodeAt(i) : strCharCodeAt.call(name, i);
+    if (c < 128) {
+      const cls = HEADER_NAME_TABLE[c];
+      if (cls === 0) throw new bodyTypeError('Invalid header name.');
+      if (cls === 2) hasUpper = true;
+    } else {
+      for (let j = i + 1; j < len; j++) {
+        const c2 = direct ? name.charCodeAt(j) : strCharCodeAt.call(name, j);
+        if (c2 < 128 && HEADER_NAME_TABLE[c2] === 0) {
+          throw new bodyTypeError('Invalid header name.');
+        }
+      }
+      return lowerHeaderKeyNonAscii(name);
     }
   }
-
-  return string;
+  if (!hasUpper) return name;
+  return stringPrototype.toLowerCase === strToLowerCase
+    ? name.toLowerCase()
+    : strToLowerCase.call(name);
 }
 
-// Preserve the pinned name rules, including empty/non-ASCII names, without
-// repeated interpreted character indexing and String.includes calls.
-const invalidHeaderName =
-  /[\u0000-\u0020\u007f\u0028\u0029\u003c\u003e\u0040\u002c\u003b\u003a\u005c\u0022\u002f\u005b\u005d\u003f\u003d\u007b\u007d]/;
-const nonAsciiHeaderValue = /[^\x00-\x7f]/;
-const headerRegExpExec = Function.prototype.call.bind(RegExp.prototype.exec);
 function normalizeName(value) {
-  const name = headerMutationString(value);
-  if (headerRegExpExec(invalidHeaderName, name) !== null)
-    throw new bodyTypeError('Invalid header name.');
-  return lowerHeaderKey(name);
+  return normalizeNameString(typeof value === 'string' ? value : headerMutationString(value));
+}
+
+function normalizeValueString(string) {
+  const len = string.length;
+  const direct = stringPrototype.charCodeAt === strCharCodeAt;
+  let start = 0;
+  while (start < len) {
+    const c = direct ? string.charCodeAt(start) : strCharCodeAt.call(string, start);
+    if (c > 32 || (HEADER_VALUE_TABLE[c] & 1) === 0) break;
+    start++;
+  }
+  let end = len;
+  while (end > start) {
+    const c = direct ? string.charCodeAt(end - 1) : strCharCodeAt.call(string, end - 1);
+    if (c > 32 || (HEADER_VALUE_TABLE[c] & 1) === 0) break;
+    end--;
+  }
+  let hasNonAscii = false;
+  for (let i = start; i < end; i++) {
+    const c = direct ? string.charCodeAt(i) : strCharCodeAt.call(string, i);
+    if (c > 13 && c < 128) continue;
+    if (c >= 128) {
+      hasNonAscii = true;
+    } else if (c === 0 || c === 10 || c === 13) {
+      throw new bodyTypeError('Invalid header value.');
+    }
+  }
+  const trimmed = start === 0 && end === len ? string : strSlice.call(string, start, end);
+  return hasNonAscii ? textDecoderDecode.call(headerTextDecoder, headerEncode(trimmed)) : trimmed;
 }
 
 function normalizeValue(value) {
-  const string = headerMutationString(value).replace(/^[\t\r\n ]+|[\t\r\n ]+$/g, '');
-  if (/[\0\r\n]/.test(string)) throw new bodyTypeError('Invalid header value.');
-  // UTF-8 encode/decode is identity for ASCII. Keep the original WTF-8
-  // conversion for non-ASCII, especially unpaired UTF-16 surrogates.
-  if (headerRegExpExec(nonAsciiHeaderValue, string) === null) return string;
-  return headerDecode(headerEncode(string));
+  return normalizeValueString(typeof value === 'string' ? value : headerMutationString(value));
 }
 
-function requireHeaders(value) {
-  const list = headerWeakGet(headerLists, value);
-  if (list === undefined) throw new bodyTypeError(headerInvocationMessage);
-  return list;
+function createHeaderState() {
+  return {
+    k0: null,
+    v0: null,
+    pairs: null,
+    map: null,
+    cookies: null,
+    immutable: false,
+  };
+}
+
+function createHeaderStateWithOne(k0, v0) {
+  return {
+    k0,
+    v0,
+    pairs: null,
+    map: null,
+    cookies: k0 === 'set-cookie' ? [v0] : null,
+    immutable: false,
+  };
+}
+
+function cloneHeaderState(src) {
+  return {
+    k0: src.k0,
+    v0: src.v0,
+    pairs: src.pairs === null ? null : arraySlice.call(src.pairs),
+    map: src.map === null ? null : new Map(src.map),
+    cookies: src.cookies === null ? null : arraySlice.call(src.cookies),
+    immutable: false,
+  };
+}
+
+function headerStateGet(state, name) {
+  if (state.k0 !== null) {
+    return state.k0 === name ? state.v0 : null;
+  }
+  const p = state.pairs;
+  if (p !== null) {
+    for (let i = 0, n = p.length; i < n; i += 2) {
+      if (p[i] === name) return p[i + 1];
+    }
+    return null;
+  }
+  const m = state.map;
+  if (m !== null) {
+    const v = mapGet.call(m, name);
+    return v === undefined ? null : v;
+  }
+  return null;
+}
+
+function headerStateHas(state, name) {
+  if (state.k0 !== null) {
+    return state.k0 === name;
+  }
+  const p = state.pairs;
+  if (p !== null) {
+    for (let i = 0, n = p.length; i < n; i += 2) {
+      if (p[i] === name) return true;
+    }
+    return false;
+  }
+  const m = state.map;
+  if (m !== null) {
+    return mapHas.call(m, name);
+  }
+  return false;
+}
+
+function headerStateAppendNormalized(state, name, value) {
+  if (name === 'set-cookie') {
+    if (state.cookies === null) state.cookies = [value];
+    else arrayPush.call(state.cookies, value);
+  }
+  const m = state.map;
+  if (m !== null) {
+    const existing = mapGet.call(m, name);
+    mapSet.call(m, name, existing === undefined ? value : `${existing}, ${value}`);
+    return;
+  }
+  const p = state.pairs;
+  if (p !== null) {
+    const n = p.length;
+    for (let i = 0; i < n; i += 2) {
+      if (p[i] === name) {
+        p[i + 1] = `${p[i + 1]}, ${value}`;
+        return;
+      }
+    }
+    if (n < HEADER_MAP_THRESHOLD) {
+      p[n] = name;
+      p[n + 1] = value;
+      return;
+    }
+    const nextMap = new Map();
+    for (let i = 0; i < n; i += 2) {
+      mapSet.call(nextMap, p[i], p[i + 1]);
+    }
+    mapSet.call(nextMap, name, value);
+    state.pairs = null;
+    state.map = nextMap;
+    return;
+  }
+  if (state.k0 !== null) {
+    if (state.k0 === name) {
+      state.v0 = `${state.v0}, ${value}`;
+      return;
+    }
+    state.pairs = [state.k0, state.v0, name, value];
+    state.k0 = null;
+    state.v0 = null;
+    return;
+  }
+  state.k0 = name;
+  state.v0 = value;
+}
+
+function headerStateSetNormalized(state, name, value) {
+  if (name === 'set-cookie') {
+    state.cookies = [value];
+  }
+  const m = state.map;
+  if (m !== null) {
+    mapSet.call(m, name, value);
+    return;
+  }
+  const p = state.pairs;
+  if (p !== null) {
+    const n = p.length;
+    for (let i = 0; i < n; i += 2) {
+      if (p[i] === name) {
+        p[i + 1] = value;
+        return;
+      }
+    }
+    if (n < HEADER_MAP_THRESHOLD) {
+      p[n] = name;
+      p[n + 1] = value;
+      return;
+    }
+    const nextMap = new Map();
+    for (let i = 0; i < n; i += 2) {
+      mapSet.call(nextMap, p[i], p[i + 1]);
+    }
+    mapSet.call(nextMap, name, value);
+    state.pairs = null;
+    state.map = nextMap;
+    return;
+  }
+  if (state.k0 !== null) {
+    if (state.k0 === name) {
+      state.v0 = value;
+      return;
+    }
+    state.pairs = [state.k0, state.v0, name, value];
+    state.k0 = null;
+    state.v0 = null;
+    return;
+  }
+  state.k0 = name;
+  state.v0 = value;
+}
+
+function headerStateDeleteNormalized(state, name) {
+  if (name === 'set-cookie') {
+    state.cookies = null;
+  }
+  const m = state.map;
+  if (m !== null) {
+    mapDelete.call(m, name);
+    return;
+  }
+  const p = state.pairs;
+  if (p !== null) {
+    const n = p.length;
+    for (let i = 0; i < n; i += 2) {
+      if (p[i] === name) {
+        p.splice(i, 2);
+        if (p.length === 2) {
+          state.k0 = p[0];
+          state.v0 = p[1];
+          state.pairs = null;
+        } else if (p.length === 0) {
+          state.pairs = null;
+        }
+        return;
+      }
+    }
+    return;
+  }
+  if (state.k0 === name) {
+    state.k0 = null;
+    state.v0 = null;
+  }
+}
+
+function requireHeaderState(value) {
+  const state = getHeaderState(value);
+  if (state === undefined) throw new bodyTypeError(headerInvocationMessage);
+  return state;
+}
+
+function sortedEntriesFromState(state) {
+  if (state.k0 !== null) {
+    if (state.k0 === 'set-cookie') {
+      const entries = [];
+      const cookies = state.cookies;
+      for (let i = 0; i < cookies.length; i++) {
+        entries.push(['set-cookie', cookies[i]]);
+      }
+      return entries;
+    }
+    return [[displayHeaderKey(state.k0), state.v0]];
+  }
+  const p = state.pairs;
+  if (p !== null) {
+    const count = p.length >> 1;
+    const keys = new Array(count);
+    for (let i = 0; i < count; i++) keys[i] = p[i << 1];
+    keys.sort();
+    const entries = [];
+    for (let i = 0; i < count; i++) {
+      const name = keys[i];
+      if (name === 'set-cookie') {
+        const cookies = state.cookies;
+        for (let j = 0; j < cookies.length; j++) entries.push(['set-cookie', cookies[j]]);
+      } else {
+        for (let j = 0; j < p.length; j += 2) {
+          if (p[j] === name) {
+            entries.push([displayHeaderKey(name), p[j + 1]]);
+            break;
+          }
+        }
+      }
+    }
+    return entries;
+  }
+  const m = state.map;
+  if (m !== null) {
+    const entries = [];
+    for (const name of Array.from(m.keys()).sort()) {
+      if (name === 'set-cookie') {
+        const cookies = state.cookies;
+        for (let j = 0; j < cookies.length; j++) entries.push(['set-cookie', cookies[j]]);
+      } else {
+        entries.push([displayHeaderKey(name), mapGet.call(m, name)]);
+      }
+    }
+    return entries;
+  }
+  return [];
 }
 
 function sortedEntries(headers) {
-  const entries = [];
-  const list = requireHeaders(headers);
-
-  for (const name of Array.from(list.keys()).sort()) {
-    if (name === 'set-cookie') {
-      for (const value of headerWeakGet(setCookieLists, headers)) {
-        entries.push([name, value]);
-      }
-    } else {
-      entries.push([displayHeaderKey(name), list.get(name)]);
-    }
-  }
-  return entries;
+  return sortedEntriesFromState(requireHeaderState(headers));
 }
 
 const headersIteratorPrototypes = Object.create(null);
@@ -334,7 +580,7 @@ for (const [kind, label] of [
       enumerable: true,
       writable: true,
       value: function next() {
-        const state = headerWeakGet(iteratorStates, this);
+        const state = weakMapGet.call(iteratorStates, this);
         if (!state || state.kind !== kind) throw new bodyTypeError(headerInvocationMessage);
         if (state.index >= state.entries.length) return { done: true, value: undefined };
         const [name, value] = state.entries[state.index++];
@@ -349,7 +595,7 @@ for (const [kind, label] of [
       writable: true,
       // The pinned iterator method is anonymous and checks its kind.
       value: function () {
-        const state = headerWeakGet(iteratorStates, this);
+        const state = weakMapGet.call(iteratorStates, this);
         if (!state || state.kind !== kind) throw new bodyTypeError(headerInvocationMessage);
         return this;
       },
@@ -362,7 +608,7 @@ for (const [kind, label] of [
 
 function createHeadersIterator(headers, kind) {
   const iterator = Object.create(headersIteratorPrototypes[kind]);
-  headerWeakSet(iteratorStates, iterator, { entries: sortedEntries(headers), kind, index: 0 });
+  weakMapSet.call(iteratorStates, iterator, { entries: sortedEntries(headers), kind, index: 0 });
   return iterator;
 }
 
@@ -380,120 +626,200 @@ function convertHeaderSequence(value, method, convert) {
   return converted;
 }
 
-class Headers {
-  constructor(init = undefined) {
-    headerWeakSet(headerLists, this, new Map());
-    headerWeakSet(setCookieLists, this, []);
-    if (init === undefined) return;
-
-    const owned = headerWeakGet(headerLists, init);
+function initHeadersIntoState(state, init) {
+  if (init === undefined) return;
+  if (!isObjectValue(init)) {
+    throw new bodyTypeError(
+      "Failed to construct 'Headers': constructor parameter 1 is not of type 'Headers or Sequence or object'.",
+    );
+  }
+  const proto = getPrototypeOf(init);
+  if (proto === headersPrototype) {
+    const owned = getHeaderState(init);
     if (owned !== undefined) {
-      headerWeakSet(headerLists, this, new Map(owned));
-      headerWeakSet(setCookieLists, this, headerWeakGet(setCookieLists, init).slice());
+      state.k0 = owned.k0;
+      state.v0 = owned.v0;
+      state.pairs = owned.pairs === null ? null : arraySlice.call(owned.pairs);
+      state.map = owned.map === null ? null : new Map(owned.map);
+      state.cookies = owned.cookies === null ? null : arraySlice.call(owned.cookies);
       return;
     }
-    if (!isObjectValue(init)) {
-      throw new bodyTypeError(
-        "Failed to construct 'Headers': constructor parameter 1 is not of type 'Headers or Sequence or object'.",
-      );
+  } else if (proto !== objectPrototype) {
+    const owned = getHeaderState(init);
+    if (owned !== undefined) {
+      state.k0 = owned.k0;
+      state.v0 = owned.v0;
+      state.pairs = owned.pairs === null ? null : arraySlice.call(owned.pairs);
+      state.map = owned.map === null ? null : new Map(owned.map);
+      state.cookies = owned.cookies === null ? null : arraySlice.call(owned.cookies);
+      return;
     }
     if (
       (init instanceof NativeHeaders || init instanceof Headers) &&
-      !Object.prototype.hasOwnProperty.call(init, Symbol.iterator) &&
+      !objectHasOwn(init, Symbol.iterator) &&
       typeof init.getSetCookie === 'function'
     ) {
       for (const [name, value] of init) {
-        if (name !== 'set-cookie') applyIntrinsic(headerAppendMethod, this, [name, value]);
+        if (name !== 'set-cookie') {
+          const nStr = headerMutationString(name);
+          const vStr = headerMutationString(value);
+          const normVal = normalizeValueString(vStr);
+          const normName = normalizeNameString(nStr);
+          headerStateAppendNormalized(state, normName, normVal);
+        }
       }
-      for (const value of init.getSetCookie())
-        applyIntrinsic(headerAppendMethod, this, ['set-cookie', value]);
+      for (const value of init.getSetCookie()) {
+        const vStr = headerMutationString(value);
+        const normVal = normalizeValueString(vStr);
+        headerStateAppendNormalized(state, 'set-cookie', normVal);
+      }
       return;
     }
+  }
 
-    const method = init[Symbol.iterator];
-    const sequence = typeof method === 'function';
-    let entries;
-    if (sequence) {
-      entries = convertHeaderSequence(init, method, (pair) => {
-        const inner = isObjectValue(pair) ? pair[Symbol.iterator] : undefined;
-        if (typeof inner !== 'function') {
-          throw new bodyTypeError("Incorrect type: the provided value is not of type 'Sequence'.");
-        }
-        return convertHeaderSequence(pair, inner, headerMutationString);
-      });
-    } else {
-      entries = [];
-      for (const name of Object.keys(init)) entries.push([name, headerMutationString(init[name])]);
-    }
-    // Complete the union/sequence/record conversion before native-style
-    // validation. A subclass append override is not part of construction.
-    for (const pair of entries) {
+  const method = init[Symbol.iterator];
+  if (typeof method === 'function') {
+    const entries = convertHeaderSequence(init, method, (pair) => {
+      const inner = isObjectValue(pair) ? pair[Symbol.iterator] : undefined;
+      if (typeof inner !== 'function') {
+        throw new bodyTypeError("Incorrect type: the provided value is not of type 'Sequence'.");
+      }
+      return convertHeaderSequence(pair, inner, headerMutationString);
+    });
+    for (let i = 0; i < entries.length; i++) {
+      const pair = entries[i];
       if (pair.length !== 2) {
         throw new bodyTypeError(
           'To initialize a Headers object from a sequence, each inner sequence must have exactly two elements.',
         );
       }
-      applyIntrinsic(headerAppendMethod, this, pair);
+      const normVal = normalizeValueString(pair[1]);
+      const normName = normalizeNameString(pair[0]);
+      headerStateAppendNormalized(state, normName, normVal);
+    }
+    return;
+  }
+
+  // Record path: read and coerce all values before validation to preserve
+  // Web IDL getter/proxy/error ordering, while avoiding intermediate pair arrays.
+  const keys = objectKeys(init);
+  const count = keys.length;
+  if (count === 0) return;
+  if (count === 1) {
+    const k0 = keys[0];
+    const raw0 = init[k0];
+    const v0 = typeof raw0 === 'string' ? raw0 : headerMutationString(raw0);
+    const normVal = normalizeValueString(v0);
+    const normName = normalizeNameString(k0);
+    headerStateAppendNormalized(state, normName, normVal);
+    return;
+  }
+  const values = new Array(count);
+  for (let i = 0; i < count; i++) {
+    const raw = init[keys[i]];
+    values[i] = typeof raw === 'string' ? raw : headerMutationString(raw);
+  }
+  for (let i = 0; i < count; i++) {
+    const normVal = normalizeValueString(values[i]);
+    const normName = normalizeNameString(keys[i]);
+    headerStateAppendNormalized(state, normName, normVal);
+  }
+}
+
+class Headers {
+  constructor(init = undefined) {
+    const state = createHeaderState();
+    setHeaderState(this, state);
+    if (init !== undefined) {
+      initHeadersIntoState(state, init);
     }
   }
 
   append(name, value) {
-    const input = headerMutationInput(this, 'append', arguments.length, name, value);
-    const list = input.list,
-      normalizedName = input.name,
-      normalizedValue = input.value;
-    const existing = list.get(normalizedName);
-
-    if (normalizedName === 'set-cookie') {
-      headerWeakGet(setCookieLists, this).push(normalizedValue);
+    const state = requireHeaderState(this);
+    if (arguments.length < 1) {
+      throw new bodyTypeError(
+        "Failed to execute 'append' on 'Headers': parameter 1 is not of type 'string'.",
+      );
     }
-    list.set(
-      normalizedName,
-      existing === undefined ? normalizedValue : `${existing}, ${normalizedValue}`,
-    );
+    const nStr = typeof name === 'string' ? name : headerMutationString(name);
+    if (arguments.length < 2) {
+      throw new bodyTypeError(
+        "Failed to execute 'append' on 'Headers': parameter 2 is not of type 'string'.",
+      );
+    }
+    const vStr = typeof value === 'string' ? value : headerMutationString(value);
+    if (state.immutable) throw new bodyTypeError("Can't modify immutable headers.");
+    const normVal = normalizeValueString(vStr);
+    const normName = normalizeNameString(nStr);
+    headerStateAppendNormalized(state, normName, normVal);
   }
 
   delete(name) {
-    const input = headerMutationInput(this, 'delete', arguments.length, name);
-    const list = input.list,
-      normalizedName = input.name;
-    list.delete(normalizedName);
-    if (normalizedName === 'set-cookie') {
-      headerWeakSet(setCookieLists, this, []);
+    const state = requireHeaderState(this);
+    if (arguments.length < 1) {
+      throw new bodyTypeError(
+        "Failed to execute 'delete' on 'Headers': parameter 1 is not of type 'string'.",
+      );
     }
+    const nStr = typeof name === 'string' ? name : headerMutationString(name);
+    if (state.immutable) throw new bodyTypeError("Can't modify immutable headers.");
+    headerStateDeleteNormalized(state, normalizeNameString(nStr));
   }
 
   get(name) {
-    const input = headerReadInput(this, 'get', arguments.length, name);
-    const value = headerMapGet(input.list, input.name);
-
-    return value === undefined ? null : value;
+    const state = requireHeaderState(this);
+    if (arguments.length < 1) {
+      throw new bodyTypeError(
+        "Failed to execute 'get' on 'Headers': parameter 1 is not of type 'string'.",
+      );
+    }
+    return headerStateGet(
+      state,
+      normalizeNameString(typeof name === 'string' ? name : headerMutationString(name)),
+    );
   }
 
   getSetCookie() {
-    requireHeaders(this);
-
-    return headerWeakGet(setCookieLists, this).slice();
+    const state = requireHeaderState(this);
+    return state.cookies === null ? [] : arraySlice.call(state.cookies);
   }
 
   has(name) {
-    const input = headerReadInput(this, 'has', arguments.length, name);
-    return headerMapHas(input.list, input.name);
+    const state = requireHeaderState(this);
+    if (arguments.length < 1) {
+      throw new bodyTypeError(
+        "Failed to execute 'has' on 'Headers': parameter 1 is not of type 'string'.",
+      );
+    }
+    return headerStateHas(
+      state,
+      normalizeNameString(typeof name === 'string' ? name : headerMutationString(name)),
+    );
   }
 
   set(name, value) {
-    const input = headerMutationInput(this, 'set', arguments.length, name, value);
-    const list = input.list,
-      normalizedName = input.name,
-      normalizedValue = input.value;
-    list.set(normalizedName, normalizedValue);
-    if (normalizedName === 'set-cookie') {
-      headerWeakSet(setCookieLists, this, [normalizedValue]);
+    const state = requireHeaderState(this);
+    if (arguments.length < 1) {
+      throw new bodyTypeError(
+        "Failed to execute 'set' on 'Headers': parameter 1 is not of type 'string'.",
+      );
     }
+    const nStr = typeof name === 'string' ? name : headerMutationString(name);
+    if (arguments.length < 2) {
+      throw new bodyTypeError(
+        "Failed to execute 'set' on 'Headers': parameter 2 is not of type 'string'.",
+      );
+    }
+    const vStr = typeof value === 'string' ? value : headerMutationString(value);
+    if (state.immutable) throw new bodyTypeError("Can't modify immutable headers.");
+    const normVal = normalizeValueString(vStr);
+    const normName = normalizeNameString(nStr);
+    headerStateSetNormalized(state, normName, normVal);
   }
 
   forEach(callback, thisArg = undefined) {
-    requireHeaders(this);
+    const state = requireHeaderState(this);
     if (typeof callback !== 'function') {
       throw new bodyTypeError(
         "Failed to execute 'forEach' on 'Headers': parameter 1 is not of type 'function'.",
@@ -501,8 +827,11 @@ class Headers {
     }
     // Pinned workerd uses a complete entry snapshot here, and invokes the
     // callback directly without reading this.entries or callback.call.
-    const entries = sortedEntries(this);
-    for (const [name, value] of entries) applyIntrinsic(callback, thisArg, [value, name, this]);
+    const entries = sortedEntriesFromState(state);
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      applyIntrinsic(callback, thisArg, [entry[1], entry[0], this]);
+    }
   }
 
   keys() {
@@ -526,26 +855,92 @@ class Headers {
   }
 }
 
-const headerAppendMethod = Headers.prototype.append;
+const headersPrototype = Headers.prototype;
+
+function createEmptyHeaders() {
+  const headers = Object.create(headersPrototype);
+  setHeaderState(headers, createHeaderState());
+  return headers;
+}
+
+function createHeadersFromIncomingPairs(rawPairs) {
+  const headers = Object.create(headersPrototype);
+  const state = createHeaderState();
+  setHeaderState(headers, state);
+  if (rawPairs !== undefined && rawPairs !== null) {
+    for (let i = 0; i < rawPairs.length; i++) {
+      const pair = rawPairs[i];
+      const normVal = normalizeValueString(
+        typeof pair[1] === 'string' ? pair[1] : headerMutationString(pair[1]),
+      );
+      const normName = normalizeNameString(
+        typeof pair[0] === 'string' ? pair[0] : headerMutationString(pair[0]),
+      );
+      headerStateAppendNormalized(state, normName, normVal);
+    }
+  }
+  return headers;
+}
+
+function cloneHeadersFromOwnedState(srcState) {
+  const headers = Object.create(headersPrototype);
+  setHeaderState(headers, cloneHeaderState(srcState));
+  return headers;
+}
 
 function wrapNormalizedNativeHeaders(nativeHeaders) {
-  const headers = Object.create(Headers.prototype);
-  const list = new Map();
-  const cookies = [];
-
-  headerWeakSet(headerLists, headers, list);
-  headerWeakSet(setCookieLists, headers, cookies);
+  const owned = getHeaderState(nativeHeaders);
+  if (owned !== undefined) {
+    return cloneHeadersFromOwnedState(owned);
+  }
+  const headers = Object.create(headersPrototype);
+  const state = createHeaderState();
+  setHeaderState(headers, state);
   for (const [name, value] of nativeHeaders) {
     if (name !== 'set-cookie') {
-      list.set(name, value);
+      headerStateSetNormalized(state, name, value);
     }
   }
   for (const value of nativeHeaders.getSetCookie()) {
-    const existing = list.get('set-cookie');
-    cookies.push(value);
-    list.set('set-cookie', existing === undefined ? value : `${existing}, ${value}`);
+    headerStateAppendNormalized(state, 'set-cookie', value);
   }
   return headers;
+}
+
+function finishFetchedResponse(response, url, redirected) {
+  response.url = url;
+  response.redirected = Boolean(redirected);
+  const state =
+    response._headersState !== null ? response._headersState : getHeaderState(response.headers);
+  if (state !== undefined && state !== null) {
+    state.immutable = true;
+  }
+  if (response.body !== null) weakSetAdd.call(ordinaryFetchStreams, response.body);
+  return response;
+}
+
+const streamTee = ReadableStream.prototype.tee;
+Object.defineProperty(ReadableStream.prototype, 'tee', {
+  ...Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'tee'),
+  value: function tee() {
+    if (
+      (weakSetHas.call(ordinaryFetchStreams, this) || isOrdinaryFetchBody(this)) &&
+      applyIntrinsic(readableLocked, this, [])
+    ) {
+      throw new bodyTypeError('This ReadableStream is currently locked to a reader,');
+    }
+    const nativeBranches = teeOrdinaryFetchBody(this);
+    const branches = nativeBranches ?? applyIntrinsic(streamTee, this, []);
+    if (!nativeBranches) for (const branch of branches) inheritFetchChannelStream(this, branch);
+    if (weakSetHas.call(ordinaryFetchStreams, this)) this._disturbed = true;
+    return branches;
+  },
+});
+
+function normalizeRequestInfo(input) {
+  // Preserve Request and NativeRequest brands. Other RequestInfo values use
+  // one Web IDL string conversion, before RequestInit getters are observed.
+  return input instanceof Request || input instanceof NativeRequest ? input : `${input}`;
 }
 
 function normalizeBody(body) {
@@ -590,88 +985,368 @@ function isEmptyFixedResponseBody(body) {
   return false;
 }
 
-// The txiki Fetch polyfill eagerly wraps every string body in a
-// ReadableStream. Keep an internal text snapshot for an untouched string
-// response so the Runtime can encode and send it with one native call.
-// Accessing or replacing `response.body` disables the shortcut:
-// application-visible stream consumption must retain the normal Fetch
-// semantics.
-// Bridge-only header extraction: one pass over the internal list, no
+// Bridge-only header extraction: one pass over the internal representation, no
 // sort, no iterator objects, no forEach callback, no getSetCookie slice.
-// Order is list-insertion order with set-cookie emitted last — the same
-// observable sequence the bootstrap's previous forEach+getSetCookie
-// construction produced (frozen by test_host_single_worker.mjs).
-export function bridgeHeaderPairs(headers) {
-  const list = headerWeakGet(headerLists, headers);
-  if (list === undefined) {
-    // Foreign (native) Headers instance: fall back to the public
-    // iterator construction.
-    const pairs = [];
-    headers.forEach((value, name) => {
-      if (name !== 'set-cookie') {
-        pairs.push([name, value]);
-      }
-    });
-    for (const value of headers.getSetCookie()) {
-      pairs.push(['set-cookie', value]);
+// Order is insertion order with set-cookie emitted last — the same observable
+// sequence frozen by test_host_single_worker.mjs.
+let bridgeLastHasContentLength = false;
+
+function bridgePairsFromState(state) {
+  if (state.k0 !== null) {
+    const k0 = state.k0;
+    if (k0 === 'content-length') {
+      bridgeLastHasContentLength = true;
+    }
+    if (k0 !== 'set-cookie') {
+      return [[k0, state.v0]];
+    }
+    const cookies = state.cookies;
+    const pairs = new Array(cookies.length);
+    for (let i = 0; i < cookies.length; i++) {
+      pairs[i] = ['set-cookie', cookies[i]];
     }
     return pairs;
   }
-  const pairs = [];
-  for (const name of list.keys()) {
-    if (name !== 'set-cookie') {
-      pairs.push([name, list.get(name)]);
+  const p = state.pairs;
+  if (p !== null) {
+    const pairs = [];
+    for (let i = 0, n = p.length; i < n; i += 2) {
+      const name = p[i];
+      if (name === 'content-length') {
+        bridgeLastHasContentLength = true;
+      }
+      if (name !== 'set-cookie') {
+        pairs.push([name, p[i + 1]]);
+      }
     }
+    const cookies = state.cookies;
+    if (cookies !== null) {
+      for (let i = 0; i < cookies.length; i++) {
+        pairs.push(['set-cookie', cookies[i]]);
+      }
+    }
+    return pairs;
   }
-  for (const value of headerWeakGet(setCookieLists, headers)) {
+  const m = state.map;
+  if (m !== null) {
+    const pairs = [];
+    for (const name of m.keys()) {
+      if (name === 'content-length') {
+        bridgeLastHasContentLength = true;
+      }
+      if (name !== 'set-cookie') {
+        pairs.push([name, mapGet.call(m, name)]);
+      }
+    }
+    const cookies = state.cookies;
+    if (cookies !== null) {
+      for (let i = 0; i < cookies.length; i++) {
+        pairs.push(['set-cookie', cookies[i]]);
+      }
+    }
+    return pairs;
+  }
+  return [];
+}
+
+export function bridgeHeaderPairs(headers) {
+  bridgeLastHasContentLength = false;
+  const state = getHeaderState(headers);
+  if (state !== undefined) {
+    return bridgePairsFromState(state);
+  }
+  const pairs = [];
+  headers.forEach((value, name) => {
+    if (name === 'content-length') {
+      bridgeLastHasContentLength = true;
+    }
+    if (name !== 'set-cookie') {
+      pairs.push([name, value]);
+    }
+  });
+  for (const value of headers.getSetCookie()) {
     pairs.push(['set-cookie', value]);
   }
   return pairs;
 }
 
-export function getFastResponseBody(response) {
-  const record = headerWeakGet(fastResponseBodies, response);
-
-  if (!record || record.exposed || response.bodyUsed || response._bodyStream !== record.stream) {
-    return null;
+export function bridgeResponseHeaders(response) {
+  bridgeLastHasContentLength = false;
+  const state = response._headersState;
+  if (state !== null && !objectHasOwn(response, 'headers')) {
+    return bridgePairsFromState(state);
   }
-  const descriptor = Object.getOwnPropertyDescriptor(response, 'body');
-  if (!descriptor || descriptor.get !== record.getter) {
-    return null;
-  }
-  return record.text;
+  return bridgeHeaderPairs(response.headers);
 }
 
-function materializeFastResponseBody(response, exposed) {
-  const record = headerWeakGet(fastResponseBodies, response);
+export function bridgeResponseHadContentLength() {
+  return bridgeLastHasContentLength;
+}
 
-  if (!record) {
+export function hasHeader(headers, normalizedName) {
+  const state = getHeaderState(headers);
+  if (state === undefined) {
+    return headers.has(normalizedName);
+  }
+  return headerStateHas(state, normalizedName);
+}
+
+export function getFastResponseBody(response) {
+  if (
+    response._bodyFastKind === 0 ||
+    response._bodyExposed ||
+    response._bodyConsumed ||
+    response._bodyStream !== null ||
+    objectHasOwn(response, 'body')
+  ) {
     return null;
   }
-  if (exposed) {
-    record.exposed = true;
+  return response._bodyFastData;
+}
+
+export function getFastStreamResponseBody(response) {
+  if (
+    response._bodyFastKind !== 0 ||
+    response._bodyStream === null ||
+    objectHasOwn(response, 'body')
+  ) {
+    return null;
   }
-  if (record.stream === null) {
-    if (record.bytes === null) {
-      record.bytes = new TextEncoder().encode(record.text);
-    }
-    record.stream = new ReadableStream({
+  return response._bodyStream instanceof ReadableStream ? response._bodyStream : null;
+}
+
+export function isNullFastResponseBody(response) {
+  return (
+    response._bodyFastKind === 0 &&
+    !response._bodyExposed &&
+    response._bodyStream === null &&
+    !objectHasOwn(response, 'body')
+  );
+}
+
+function materializeFastBody(target, exposed) {
+  if (exposed) {
+    target._bodyExposed = true;
+  }
+  if (target._bodyStream === null && target._bodyFastKind !== 0) {
+    const bytes =
+      target._bodyFastKind === 1
+        ? textEncoderEncode.call(sharedTextEncoder, target._bodyFastData)
+        : target._bodyFastData;
+    const stream = new ReadableStream({
       start(controller) {
-        controller.enqueue(record.bytes);
+        controller.enqueue(bytes);
         controller.close();
       },
     });
-    response._noBody = false;
-    response._bodySize = record.bytes.byteLength;
-    response._bodyStream = record.stream;
+    target._noBody = false;
+    target._bodySize = bytes.byteLength;
+    target._bodyStream = stream;
+    target._bodyFastKind = 0;
+    target._bodyFastData = null;
   }
-  return record;
+  return target._bodyStream;
 }
 
-function consumeFastResponseBody(response, method, args) {
-  const record = materializeFastResponseBody(response, true);
+function cloneBufferSource(body) {
+  if (body instanceof Uint8Array) {
+    return u8Slice.call(body);
+  }
+  if (body instanceof ArrayBuffer) {
+    return new Uint8Array(abSlice.call(body, 0));
+  }
+  const view = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+  return u8Slice.call(view);
+}
 
-  return record.consumers[method].apply(response, args);
+function initBodyFields(target, body, hState) {
+  target._bodyInit = body;
+  if (body === null || body === undefined || body === '') {
+    target._noBody = true;
+    target._bodySize = 0;
+    target._bodyStream = null;
+    target._bodyFastKind = 0;
+    target._bodyFastData = null;
+    if (typeof body === 'string' && hState !== null && !headerStateHas(hState, 'content-type')) {
+      headerStateSetNormalized(hState, 'content-type', 'text/plain;charset=UTF-8');
+    }
+    return;
+  }
+  if (typeof body === 'string') {
+    target._noBody = false;
+    target._bodySize = -1;
+    target._bodyStream = null;
+    target._bodyFastKind = 1;
+    target._bodyFastData = body;
+    if (hState !== null && !headerStateHas(hState, 'content-type')) {
+      headerStateSetNormalized(hState, 'content-type', 'text/plain;charset=UTF-8');
+    }
+    return;
+  }
+  if (body instanceof ReadableStream) {
+    target._noBody = false;
+    target._bodySize = -1;
+    target._bodyStream = body;
+    target._bodyFastKind = 0;
+    target._bodyFastData = null;
+    return;
+  }
+  if (body instanceof Uint8Array || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+    const bytes = cloneBufferSource(body);
+    target._noBody = false;
+    target._bodySize = bytes.byteLength;
+    target._bodyStream = null;
+    target._bodyFastKind = 2;
+    target._bodyFastData = bytes;
+    return;
+  }
+  if (body instanceof Blob) {
+    target._noBody = false;
+    target._bodySize = body.size;
+    target._bodyStream = body.stream();
+    target._bodyFastKind = 0;
+    target._bodyFastData = null;
+    if (body.type && hState !== null && !headerStateHas(hState, 'content-type')) {
+      headerStateSetNormalized(hState, 'content-type', normalizeValueString(String(body.type)));
+    }
+    return;
+  }
+  if (body instanceof FormData) {
+    const blob = body._blob();
+    target._noBody = false;
+    target._bodySize = blob.size;
+    target._bodyStream = blob.stream();
+    target._bodyFastKind = 0;
+    target._bodyFastData = null;
+    if (hState !== null && !headerStateHas(hState, 'content-type')) {
+      headerStateSetNormalized(hState, 'content-type', normalizeValueString(String(blob.type)));
+    }
+    return;
+  }
+  if (body instanceof URLSearchParams) {
+    const encoded = textEncoderEncode.call(sharedTextEncoder, body.toString());
+    target._noBody = false;
+    target._bodySize = encoded.byteLength;
+    target._bodyStream = null;
+    target._bodyFastKind = 2;
+    target._bodyFastData = encoded;
+    if (hState !== null && !headerStateHas(hState, 'content-type')) {
+      headerStateSetNormalized(
+        hState,
+        'content-type',
+        'application/x-www-form-urlencoded;charset=UTF-8',
+      );
+    }
+    return;
+  }
+  const str = String(body);
+  target._noBody = false;
+  target._bodySize = -1;
+  target._bodyStream = null;
+  target._bodyFastKind = 1;
+  target._bodyFastData = str;
+}
+
+function consumeBodyGuard(target) {
+  if (target._noBody) {
+    return null;
+  }
+  if (target.bodyUsed) {
+    return Promise.reject(new TypeError('Already read'));
+  }
+  target._bodyConsumed = true;
+  return null;
+}
+
+async function readAllChunks(stream) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let totalLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalLength += value.byteLength;
+  }
+
+  if (chunks.length === 1) {
+    const only = chunks[0];
+    if (only.byteOffset === 0 && only.byteLength === only.buffer.byteLength) {
+      return only.buffer;
+    }
+  }
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    result.set(chunks[i], offset);
+    offset += chunks[i].byteLength;
+  }
+  return result.buffer;
+}
+
+function decodeUrlEncodedFormData(body) {
+  const form = new FormData();
+  const trimmed = body.trim();
+  if (!trimmed) return form;
+  const parts = trimmed.split('&');
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i];
+    if (!entry) continue;
+    const eq = entry.indexOf('=');
+    const rawName = eq < 0 ? entry : entry.slice(0, eq);
+    const rawValue = eq < 0 ? '' : entry.slice(eq + 1);
+    form.append(
+      decodeURIComponent(rawName.replace(/\+/g, ' ')),
+      decodeURIComponent(rawValue.replace(/\+/g, ' ')),
+    );
+  }
+  return form;
+}
+
+function consumeArrayBuffer(target) {
+  const stream = materializeFastBody(target, true);
+  const rejected = consumeBodyGuard(target);
+  if (rejected !== null) return rejected;
+  if (!stream) return Promise.resolve(new ArrayBuffer(0));
+  return readAllChunks(stream);
+}
+
+function consumeBlob(target) {
+  const stream = materializeFastBody(target, true);
+  const rejected = consumeBodyGuard(target);
+  if (rejected !== null) return rejected;
+  const contentType = target.headers.get('content-type') ?? '';
+  if (!stream) return Promise.resolve(new Blob([], { type: contentType }));
+  return readAllChunks(stream).then((buffer) => new Blob([buffer], { type: contentType }));
+}
+
+function consumeText(target) {
+  const stream = materializeFastBody(target, true);
+  const rejected = consumeBodyGuard(target);
+  if (rejected !== null) return rejected;
+  if (!stream) return Promise.resolve('');
+  return readAllChunks(stream).then((buffer) => textDecoderDecode.call(sharedTextDecoder, buffer));
+}
+
+function consumeJson(target) {
+  return consumeText(target).then(JSON.parse);
+}
+
+function consumeFormData(target) {
+  materializeFastBody(target, true);
+  const contentType = target.headers.get('content-type') || '';
+  if (/^multipart\/form-data/i.test(contentType.trim())) {
+    return parseMultipartFormData(target);
+  }
+  if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(contentType)) {
+    return consumeText(target).then(() => {
+      throw new TypeError(
+        'Content-Type was not multipart/form-data or application/x-www-form-urlencoded',
+      );
+    });
+  }
+  return consumeText(target).then(decodeUrlEncodedFormData);
 }
 
 function toNativeHeaderEntries(init) {
@@ -688,61 +1363,63 @@ const redirectValueError =
   'Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge; use "manual" and check the response status code).';
 function normalizeRedirect(value) {
   if (value === undefined) return undefined;
-  if (typeof value === 'symbol')
+  if (typeof value === 'symbol') {
     throw new bodyTypeError('Cannot convert a Symbol value to a string');
+  }
   const redirect = `${value}`;
   if (redirect !== 'follow' && redirect !== 'manual') throw new bodyTypeError(redirectValueError);
   return redirect;
 }
 
-function normalizeInit(init, requestInit = false) {
+function normalizeRequestInit(init) {
   if (init === undefined || init === null) {
     return {};
   }
-
-  // Response's dictionary has no redirect/body member. Do not invoke
-  // unrelated getters or conversions while preparing a response.
-  const normalized = requestInit
-    ? { ...init }
-    : {
-        headers: init.headers,
-        status: init.status,
-        statusText: init.statusText,
-        webSocket: init.webSocket,
-      };
+  const normalized = {};
+  for (const key of objectKeys(init)) {
+    normalized[key] = init[key];
+  }
   if (normalized.headers !== undefined) {
     normalized.headers = new Headers(normalized.headers);
   }
-  if (Object.prototype.hasOwnProperty.call(normalized, 'body')) {
+  if (hasOwn.call(normalized, 'body')) {
     normalized.body = normalizeBody(normalized.body);
   }
-  if (requestInit && normalized.redirect !== undefined) {
+  if (normalized.redirect !== undefined) {
     normalized.redirect = normalizeRedirect(normalized.redirect);
   }
   return normalized;
 }
 
-function normalizeIncomingInit(init) {
-  // The incoming brand means bootstrap owns this init exclusively (it is
-  // not caller-visible), so the fields are normalized in place: no spread
-  // copy, no intermediate entries array, no per-pair arrays. The public
-  // normalizeInit path keeps the spec-required non-mutating copy.
-  const source = init.headers;
-  if (source !== undefined) {
-    // bootstrap owns this array-of-pairs shape. Normalize each field once
-    // without constructing an intermediate Headers object whose iterator
-    // repeatedly sorts/materializes the whole list; NativeRequest still
-    // receives ordinary canonical header entries below.
-    for (let i = 0; i < source.length; i++) {
-      const pair = source[i];
-      pair[0] = normalizeName(pair[0]);
-      pair[1] = normalizeValue(pair[1]);
-    }
+function normalizeMethod(method) {
+  if (
+    method === 'GET' ||
+    method === 'POST' ||
+    method === 'HEAD' ||
+    method === 'PUT' ||
+    method === 'DELETE' ||
+    method === 'OPTIONS' ||
+    method === 'PATCH' ||
+    method === 'CONNECT' ||
+    method === 'TRACE'
+  ) {
+    return method;
   }
-  if (Object.prototype.hasOwnProperty.call(init, 'body')) {
-    init.body = normalizeBody(init.body);
+  const upcased = strToUpperCase.call(method);
+  if (
+    upcased === 'GET' ||
+    upcased === 'POST' ||
+    upcased === 'HEAD' ||
+    upcased === 'PUT' ||
+    upcased === 'DELETE' ||
+    upcased === 'OPTIONS' ||
+    upcased === 'PATCH' ||
+    upcased === 'CONNECT' ||
+    upcased === 'TRACE'
+  ) {
+    return upcased;
   }
-  return init;
+  return method;
 }
 
 function isNullBodyStatus(status) {
@@ -755,7 +1432,7 @@ function bodyLimitError(kind, limit) {
 
 function bodyChunkSize(chunk) {
   if (typeof chunk === 'string') {
-    return new TextEncoder().encode(chunk).byteLength;
+    return textEncoderEncode.call(sharedTextEncoder, chunk).byteLength;
   }
   if (chunk instanceof ArrayBuffer) {
     return chunk.byteLength;
@@ -771,13 +1448,13 @@ function knownBodySize(body) {
     return 0;
   }
   if (typeof body === 'string') {
-    return new TextEncoder().encode(body).byteLength;
+    return textEncoderEncode.call(sharedTextEncoder, body).byteLength;
   }
   if (body instanceof Blob) {
     return body.size;
   }
   if (body instanceof URLSearchParams) {
-    return new TextEncoder().encode(String(body)).byteLength;
+    return textEncoderEncode.call(sharedTextEncoder, String(body)).byteLength;
   }
   if (body instanceof ArrayBuffer) {
     return body.byteLength;
@@ -790,13 +1467,21 @@ function knownBodySize(body) {
 
 function rejectedBodyStream(stream, error) {
   const channel = isFetchChannelStream(stream);
-  const rejected = new ReadableStream({
-    ...(channel ? { type: 'bytes' } : {}),
-    start(controller) {
-      Promise.resolve(stream.cancel(error)).catch(() => {});
-      controller.error(error);
-    },
-  });
+  const source = channel
+    ? {
+        type: 'bytes',
+        start(controller) {
+          Promise.resolve(stream.cancel(error)).catch(() => {});
+          controller.error(error);
+        },
+      }
+    : {
+        start(controller) {
+          Promise.resolve(stream.cancel(error)).catch(() => {});
+          controller.error(error);
+        },
+      };
+  const rejected = new ReadableStream(source);
   // A configured limit errors the native body without changing its reader
   // interface or losing the request context carried by the original stream.
   return channel ? inheritFetchChannelStream(stream, rejected) : rejected;
@@ -806,9 +1491,7 @@ function limitedBodyStream(stream, limit, kind, state = undefined) {
   const reader = stream.getReader();
   let total = 0;
   let finished = false;
-
-  const limited = new ReadableStream({
-    ...(kind === 'response' && isFetchChannelStream(stream) ? { type: 'bytes' } : {}),
+  const source = {
     async pull(controller) {
       const result = await reader.read();
       if (result.done) {
@@ -848,12 +1531,16 @@ function limitedBodyStream(stream, limit, kind, state = undefined) {
         reader.releaseLock();
       }
     },
-  });
+  };
+  if (kind === 'response' && isFetchChannelStream(stream)) {
+    source.type = 'bytes';
+  }
+  const limited = new ReadableStream(source);
   return kind === 'response' ? inheritFetchChannelStream(stream, limited) : limited;
 }
 
 function limitedNativeRequest(input, init, limit) {
-  if (init !== undefined && init !== null && Object.prototype.hasOwnProperty.call(init, 'body')) {
+  if (init !== undefined && init !== null && hasOwn.call(init, 'body')) {
     const size = knownBodySize(init.body);
     if (size !== null && size > limit) {
       throw bodyLimitError('request', limit);
@@ -886,7 +1573,7 @@ function limitedResponseBody(response, limit) {
   const ordinary = isOrdinaryFetchBody(response.body);
   const encodedGzip =
     (ordinary || isFetchChannelStream(response.body)) &&
-    headerLowerAscii(response.headers.get('content-encoding') ?? '') === 'gzip';
+    strToLowerCase.call(response.headers.get('content-encoding') ?? '') === 'gzip';
   if (
     !encodedGzip &&
     contentLength !== null &&
@@ -901,70 +1588,312 @@ function limitedResponseBody(response, limit) {
   return limitedBodyStream(response.body, limit, 'response');
 }
 
-class Request extends NativeRequest {
-  constructor(input, init = undefined, brand = undefined) {
-    const normalizedInput = normalizeRequestInfo(input);
-    const incoming = brand === incomingRequestBrand;
-    const normalized = incoming ? normalizeIncomingInit(init) : normalizeInit(init, true);
+function assignRequestSlots(
+  req,
+  url,
+  method,
+  credentials,
+  redirect,
+  mode,
+  headers,
+  rawHeaders,
+  signal,
+  signalState,
+  noBody,
+  bodyInit,
+  bodySize,
+  bodyStream,
+) {
+  req.url = url;
+  req.method = method;
+  req.credentials = credentials;
+  req.redirect = redirect;
+  req.mode = mode;
+  req.referrer = null;
+  req._headers = headers;
+  req._rawHeaders = rawHeaders;
+  req._signal = signal;
+  req._signalState = signalState;
+  req._noBody = noBody;
+  req._bodyInit = bodyInit;
+  req._bodySize = bodySize;
+  req._bodyStream = bodyStream;
+  req._bodyConsumed = false;
+  req._bodyFastKind = 0;
+  req._bodyFastData = null;
+  req._bodyExposed = false;
+}
 
-    if (input instanceof Request) {
-      const inherited = {
-        method: input.method,
-        headers: new Headers(input.headers),
-        credentials: input.credentials,
-        redirect: input.redirect,
-        mode: input.mode,
-        signal: input.signal,
-        ...normalized,
-      };
-      if (!Object.prototype.hasOwnProperty.call(normalized, 'body') && input.body !== null) {
-        inherited.body = input.body;
-        inherited.duplex = 'half';
+class Request {
+  constructor(input, init = undefined) {
+    const normalizedInput = normalizeRequestInfo(input);
+    const options = normalizeRequestInit(init);
+
+    let url;
+    let credentials;
+    let redirect;
+    let headers = null;
+    let method;
+    let mode;
+    let signal;
+    let body = options.body;
+    let bodyFromOptions = body !== undefined && body !== null;
+
+    if (normalizedInput instanceof Request || normalizedInput instanceof NativeRequest) {
+      if (!bodyFromOptions && normalizedInput.bodyUsed) {
+        throw new TypeError('Already read');
       }
-      super(input.url, inherited);
+      url = normalizedInput.url;
+      credentials = normalizedInput.credentials;
+      redirect = normalizedInput.redirect;
+      if (!options.headers) {
+        headers = new Headers(normalizedInput.headers);
+      }
+      method = normalizedInput.method;
+      mode = normalizedInput.mode;
+      signal = normalizedInput.signal;
+      if (!bodyFromOptions && normalizedInput.body !== null) {
+        body = normalizedInput.body;
+        normalizedInput.bodyUsed = true;
+      }
     } else {
-      super(normalizedInput, normalized);
+      url = String(normalizedInput);
     }
 
-    this.headers = incoming ? wrapNormalizedNativeHeaders(this.headers) : new Headers(this.headers);
-    /*
-     * BodyMixin is mixed in as own properties by the vendor constructor.
-     * Capture its formData before replacing it with our override that does
-     * byte-level multipart parsing.
-     */
-    this._nativeFormData = this.formData;
-    this.formData = multipartFormDataOverride;
-    trackBodyUsage(this);
+    credentials = options.credentials || credentials || 'same-origin';
+    redirect = options.redirect || redirect || 'follow';
+    if (options.headers) {
+      headers = options.headers instanceof Headers ? options.headers : new Headers(options.headers);
+    } else if (headers === null) {
+      headers = createEmptyHeaders();
+    }
+    method = normalizeMethod(options.method || method || 'GET');
+    mode = options.mode || mode || null;
+    signal = options.signal || signal || null;
+
+    if ((method === 'GET' || method === 'HEAD') && body) {
+      throw new TypeError('Body not allowed for GET or HEAD requests');
+    }
+    if (bodyFromOptions && body instanceof ReadableStream) {
+      if (options.duplex !== 'half') {
+        throw new TypeError('ReadableStream body requires duplex: "half" option');
+      }
+    }
+
+    if (
+      (method === 'GET' || method === 'HEAD') &&
+      (options.cache === 'no-store' || options.cache === 'no-cache')
+    ) {
+      const reParamSearch = /([?&])_=[^&]*/;
+      if (reParamSearch.test(url)) {
+        url = url.replace(reParamSearch, `$1_=${Date.now()}`);
+      } else {
+        url += (url.indexOf('?') >= 0 ? '&' : '?') + `_=${Date.now()}`;
+      }
+    }
+
+    assignRequestSlots(
+      this,
+      url,
+      method,
+      credentials,
+      redirect,
+      mode,
+      headers,
+      null,
+      signal,
+      null,
+      true,
+      null,
+      0,
+      null,
+    );
+    const hState = getHeaderState(headers) ?? null;
+    initBodyFields(this, body === undefined ? null : body, hState);
+  }
+
+  get headers() {
+    if (this._headers === null && this._rawHeaders !== null) {
+      const raw = this._rawHeaders;
+      this._rawHeaders = null;
+      this._headers = createHeadersFromIncomingPairs(raw);
+    }
+    return this._headers;
+  }
+
+  set headers(value) {
+    this._rawHeaders = null;
+    this._headers = value;
+  }
+
+  get signal() {
+    if (this._signal !== null) return this._signal;
+    const state = this._signalState;
+    if (state !== null) {
+      this._signalState = null;
+      if (state.abortController === null) {
+        state.abortController = new AbortController();
+        if (state.cancelled) {
+          state.abortController.abort(state.cancelReason);
+        }
+      }
+      this._signal = state.abortController.signal;
+      return this._signal;
+    }
+    return null;
+  }
+
+  set signal(value) {
+    this._signalState = null;
+    this._signal = value;
+  }
+
+  get body() {
+    if (this._bodyFastKind !== 0) {
+      return materializeFastBody(this, true);
+    }
+    return this._bodyStream;
+  }
+
+  set body(value) {
+    this._bodyExposed = true;
+    this._bodyFastKind = 0;
+    this._bodyFastData = null;
+    this._bodyStream = value;
+  }
+
+  get bodyUsed() {
+    if (this._bodyConsumed) return true;
+    const stream = this._bodyStream;
+    return (
+      stream !== null && stream !== undefined && bodyProperty(stream, '_disturbed')?.value === true
+    );
+  }
+
+  set bodyUsed(value) {
+    this._bodyConsumed = Boolean(value);
+  }
+
+  arrayBuffer() {
+    return consumeArrayBuffer(this);
+  }
+
+  blob() {
+    return consumeBlob(this);
+  }
+
+  formData() {
+    return consumeFormData(this);
+  }
+
+  json() {
+    return consumeJson(this);
+  }
+
+  text() {
+    return consumeText(this);
   }
 
   clone() {
-    const nativeClone = super.clone();
-    const cloned = new Request(nativeClone, {});
-    cloned.cache = nativeClone.cache;
-    cloned.destination = nativeClone.destination;
-    cloned.integrity = nativeClone.integrity;
-    cloned.isHistoryNavigation = nativeClone.isHistoryNavigation;
-    cloned.isReloadNavigation = nativeClone.isReloadNavigation;
-    cloned.keepalive = nativeClone.keepalive;
-    cloned.referrerPolicy = nativeClone.referrerPolicy;
+    if (this.bodyUsed) {
+      throw new TypeError('Already read');
+    }
+    let body2 = null;
+    if (this._bodyFastKind !== 0) {
+      body2 = this._bodyFastKind === 1 ? this._bodyFastData : u8Slice.call(this._bodyFastData);
+    } else if (this._bodyStream instanceof ReadableStream) {
+      const [body1, teeBody] = this._bodyStream.tee();
+      this._bodyStream = body1;
+      body2 = teeBody;
+    } else {
+      body2 = this._bodyStream;
+    }
+    const cloned = new Request(this.url, {
+      body: body2,
+      credentials: this.credentials,
+      duplex: body2 instanceof ReadableStream ? 'half' : undefined,
+      headers: new Headers(this.headers),
+      method: this.method,
+      mode: this.mode,
+      redirect: this.redirect,
+      signal: this.signal,
+    });
+    if (this.cache !== undefined) cloned.cache = this.cache;
+    if (this.destination !== undefined) cloned.destination = this.destination;
+    if (this.integrity !== undefined) cloned.integrity = this.integrity;
+    if (this.isHistoryNavigation !== undefined) {
+      cloned.isHistoryNavigation = this.isHistoryNavigation;
+    }
+    if (this.isReloadNavigation !== undefined) cloned.isReloadNavigation = this.isReloadNavigation;
+    if (this.keepalive !== undefined) cloned.keepalive = this.keepalive;
+    if (this.referrerPolicy !== undefined) cloned.referrerPolicy = this.referrerPolicy;
     return cloned;
   }
 }
 
-export function createIncomingRequest(input, init) {
-  return new Request(input, init, incomingRequestBrand);
+function validateIncomingHeaderPairs(rawPairs) {
+  if (rawPairs === undefined || rawPairs === null) return;
+  const direct = stringPrototype.charCodeAt === strCharCodeAt;
+  for (let i = 0; i < rawPairs.length; i++) {
+    const pair = rawPairs[i];
+    const name = typeof pair[0] === 'string' ? pair[0] : headerMutationString(pair[0]);
+    const nLen = name.length;
+    for (let j = 0; j < nLen; j++) {
+      const c = direct ? name.charCodeAt(j) : strCharCodeAt.call(name, j);
+      if (c < 128 && HEADER_NAME_TABLE[c] === 0) {
+        throw new bodyTypeError('Invalid header name.');
+      }
+    }
+    const value = typeof pair[1] === 'string' ? pair[1] : headerMutationString(pair[1]);
+    const vLen = value.length;
+    let start = 0;
+    while (start < vLen) {
+      const c = direct ? value.charCodeAt(start) : strCharCodeAt.call(value, start);
+      if (c > 32 || (HEADER_VALUE_TABLE[c] & 1) === 0) break;
+      start++;
+    }
+    let end = vLen;
+    while (end > start) {
+      const c = direct ? value.charCodeAt(end - 1) : strCharCodeAt.call(value, end - 1);
+      if (c > 32 || (HEADER_VALUE_TABLE[c] & 1) === 0) break;
+      end--;
+    }
+    for (let j = start; j < end; j++) {
+      const c = direct ? value.charCodeAt(j) : strCharCodeAt.call(value, j);
+      if (c > 13) continue;
+      if (c === 0 || c === 10 || c === 13) {
+        throw new bodyTypeError('Invalid header value.');
+      }
+    }
+  }
+}
+
+export function createIncomingRequest(url, method, headerEntries, body, hasBody, abortState) {
+  validateIncomingHeaderPairs(headerEntries);
+  const req = Object.create(Request.prototype);
+  assignRequestSlots(
+    req,
+    url,
+    normalizeMethod(method),
+    'same-origin',
+    'follow',
+    null,
+    null,
+    headerEntries,
+    null,
+    abortState,
+    !hasBody,
+    hasBody ? body : null,
+    hasBody ? -1 : 0,
+    hasBody ? body : null,
+  );
+  return req;
 }
 
 /*
  * Shared byte-level multipart/form-data parser used by both Request and
- * Response.  Must consume the body via arrayBuffer() (which sets bodyUsed)
+ * Response. Must consume the body via arrayBuffer() (which sets bodyUsed)
  * rather than reading the body stream directly.
- *
- * Boundary matching rules (RFC 2046 § 5.1.1):
- *   - The boundary delimiter is "--" + boundary, optionally preceded by CRLF
- *     (or at the start of the body for the first part).
- *   - A bare "--boundary" inside file payload is NOT a delimiter.
- *   - Media type and boundary parameter names are case-insensitive.
  */
 const crlfBytes = new Uint8Array([0x0d, 0x0a]);
 const doubleCrlfBytes = new Uint8Array([0x0d, 0x0a, 0x0d, 0x0a]);
@@ -978,7 +1907,7 @@ function extractBoundary(contentType) {
 }
 
 function buildDelimiter(boundary) {
-  return new TextEncoder().encode('--' + boundary);
+  return textEncoderEncode.call(sharedTextEncoder, `--${boundary}`);
 }
 
 function isCrlfBefore(bytes, index) {
@@ -994,7 +1923,6 @@ async function parseMultipartFormData(request) {
   const boundary = extractBoundary(contentType);
   const delimiter = buildDelimiter(boundary);
 
-  // Consume the body via arrayBuffer() so that bodyUsed is set correctly.
   const bodyBuffer = await request.arrayBuffer();
   const bytes = new Uint8Array(bodyBuffer);
 
@@ -1006,20 +1934,16 @@ async function parseMultipartFormData(request) {
     if (delimiterIndex < 0) {
       break;
     }
-    // A delimiter is only valid if it appears at the start of the body or
-    // is immediately preceded by CRLF.
     if (delimiterIndex !== 0 && !isCrlfBefore(bytes, delimiterIndex)) {
       offset = delimiterIndex + delimiter.byteLength;
       continue;
     }
     offset = delimiterIndex + delimiter.byteLength;
 
-    // End boundary: delimiter followed by "--"
     if (offset + 1 < bytes.byteLength && bytes[offset] === 0x2d && bytes[offset + 1] === 0x2d) {
       break;
     }
 
-    // Skip CRLF after delimiter
     if (
       offset + crlfBytes.byteLength <= bytes.byteLength &&
       bytes[offset] === crlfBytes[0] &&
@@ -1028,20 +1952,17 @@ async function parseMultipartFormData(request) {
       offset += crlfBytes.byteLength;
     }
 
-    // Find part header/body separator
     const headerEndIndex = indexOfBytes(bytes, doubleCrlfBytes, offset);
     if (headerEndIndex < 0) {
       break;
     }
 
-    // Decode part headers as text
     const headerBytes = bytes.subarray(offset, headerEndIndex);
-    const headerText = new TextDecoder().decode(headerBytes);
+    const headerText = textDecoderDecode.call(sharedTextDecoder, headerBytes);
     const partHeaders = parsePartHeaders(headerText);
 
     offset = headerEndIndex + doubleCrlfBytes.byteLength;
 
-    // Find NEXT valid delimiter to locate end of this part's body
     let nextDelimiterIndex = -1;
     let bodyEnd = bytes.byteLength;
     let searchOffset = offset;
@@ -1050,7 +1971,6 @@ async function parseMultipartFormData(request) {
       if (candidateIndex < 0) {
         break;
       }
-      // Must be at start of body or preceded by CRLF
       if (candidateIndex === 0 || isCrlfBefore(bytes, candidateIndex)) {
         nextDelimiterIndex = candidateIndex;
         break;
@@ -1060,7 +1980,6 @@ async function parseMultipartFormData(request) {
 
     if (nextDelimiterIndex >= 0) {
       bodyEnd = nextDelimiterIndex;
-      // Strip trailing CRLF before the delimiter
       if (isCrlfBefore(bytes, bodyEnd)) {
         bodyEnd -= crlfBytes.byteLength;
       }
@@ -1076,13 +1995,12 @@ async function parseMultipartFormData(request) {
     if (filenameMatch) {
       const filename = filenameMatch[1];
       const partContentType = partHeaders['content-type'] || 'application/octet-stream';
-      // Preserve raw bytes — do not go through .text().
       const file = new File([partBody.slice()], filename, {
         type: partContentType,
       });
       form.append(fieldName, file);
     } else {
-      const value = new TextDecoder().decode(partBody);
+      const value = textDecoderDecode.call(sharedTextDecoder, partBody);
       form.append(fieldName, value);
     }
 
@@ -1116,7 +2034,7 @@ function parsePartHeaders(text) {
   for (const line of lines) {
     if (line.startsWith(' ') || line.startsWith('\t')) {
       if (currentName) {
-        headers[currentName] += ' ' + line.trim();
+        headers[currentName] += ` ${line.trim()}`;
       }
     } else {
       const colonIndex = line.indexOf(':');
@@ -1129,216 +2047,356 @@ function parsePartHeaders(text) {
   return headers;
 }
 
-function multipartFormDataOverride() {
-  materializeFastResponseBody(this, true);
-  const contentType = this.headers.get('content-type');
-  if (!contentType || !/^multipart\/form-data/i.test(contentType.trim())) {
-    return this._nativeFormData.call(this);
-  }
-  return parseMultipartFormData(this);
+function assignResponseSlots(
+  res,
+  type,
+  status,
+  ok,
+  statusText,
+  headers,
+  headersState,
+  url,
+  redirected,
+  noBody,
+  bodyInit,
+  bodySize,
+  bodyStream,
+  bodyFastKind,
+  bodyFastData,
+) {
+  res.type = type;
+  res.status = status;
+  res.ok = ok;
+  res.statusText = statusText;
+  res._headers = headers;
+  res._headersState = headersState;
+  res.url = url;
+  res.redirected = redirected;
+  res._noBody = noBody;
+  res._bodyInit = bodyInit;
+  res._bodySize = bodySize;
+  res._bodyStream = bodyStream;
+  res._bodyConsumed = false;
+  res._bodyFastKind = bodyFastKind;
+  res._bodyFastData = bodyFastData;
+  res._bodyExposed = false;
 }
 
-class Response extends NativeResponse {
-  constructor(body = null, init = undefined) {
-    const normalized = normalizeInit(init);
-    const status = normalized.status === undefined ? 200 : Number(normalized.status);
-    let normalizedBody = normalizeBody(body);
-    const socket = normalized.webSocket;
-    if (socket !== undefined && socket !== null && !isWebSocketEndpoint(socket))
-      throw new TypeError(
-        "Incorrect type for the 'webSocket' field on 'InitializerDict': the provided value is not of type 'WebSocket'.",
-      );
-    if (status === 101) {
-      // 101 without an endpoint is the fetch-spec forbidden-status
-      // violation (RangeError in the reference, C13); with an
-      // endpoint CONSTRUCTION succeeds regardless of accept/role
-      // state — those are validated at send time (C14) — but the
-      // VALUE must still BE a WebSocket endpoint (fix-review §4:
-      // {} / true / 1 are TypeErrors, not silent 101s).
-      if (socket === undefined || socket === null)
-        throw new RangeError(
-          'Responses may only be constructed with status codes in the range 200 to 599, inclusive.',
-        );
-      // Fixed zero-byte bodies are absent in the locked reference,
-      // including detached BufferSources. An empty stream is still a
-      // body. Read native lengths, never caller-overridden properties.
-      if (isEmptyFixedResponseBody(normalizedBody)) normalizedBody = null;
-    } else if (socket !== undefined && socket !== null) {
-      throw new RangeError('Responses with a WebSocket must have status code 101.');
-    }
+function constructResponseWithHeaders(
+  target,
+  body,
+  hState,
+  initStatus,
+  initStatusText,
+  initWebSocket,
+) {
+  const status = initStatus === undefined ? 200 : Number(initStatus);
+  let normalizedBody = normalizeBody(body);
 
-    if (normalizedBody !== null && normalizedBody !== undefined && isNullBodyStatus(status)) {
-      throw new TypeError(
-        status === 101
-          ? 'Response with null body status (101, 204, 205, or 304) cannot have a body.'
-          : 'Response with a null-body status cannot have a body',
-      );
-    }
-
-    const fastText =
-      typeof normalizedBody === 'string' && normalizedBody.length > 0 ? normalizedBody : null;
-    super(
-      fastText === null ? normalizedBody : null,
-      status === 101 ? { ...normalized, status: 200, statusText: '' } : normalized,
+  if (
+    initWebSocket !== undefined &&
+    initWebSocket !== null &&
+    !isWebSocketEndpoint(initWebSocket)
+  ) {
+    throw new bodyTypeError(
+      "Incorrect type for the 'webSocket' field on 'InitializerDict': the provided value is not of type 'WebSocket'.",
     );
-    if (status === 101) {
-      this.status = 101;
-      this.statusText =
-        normalized.statusText === undefined ? 'Switching Protocols' : String(normalized.statusText);
-      this.ok = false;
-      setResponseWebSocket(this, socket);
+  }
+  if (status === 101) {
+    if (initWebSocket === undefined || initWebSocket === null) {
+      throw new bodyRangeError(
+        'Responses may only be constructed with status codes in the range 200 to 599, inclusive.',
+      );
     }
-    this.headers = new Headers(this.headers);
-    this.redirected = false;
-    this._nativeFormData = this.formData;
-    this.formData = multipartFormDataOverride;
-    trackBodyUsage(this);
-
-    if (fastText !== null) {
-      this._noBody = false;
-      this._bodyInit = normalizedBody;
-      // The untouched response goes straight to the native final
-      // bridge, so defer UTF-8 sizing/encoding until application code
-      // actually asks for the standards-visible body stream.
-      this._bodySize = -1;
-      this._bodyStream = null;
-      if (!this.headers.has('content-type')) {
-        this.headers.set('content-type', 'text/plain;charset=UTF-8');
-      }
-
-      const record = {
-        text: fastText,
-        bytes: null,
-        stream: null,
-        exposed: false,
-        getter: null,
-        consumers: {
-          arrayBuffer: this.arrayBuffer,
-          blob: this.blob,
-          json: this.json,
-          text: this.text,
-        },
-      };
-      headerWeakSet(fastResponseBodies, this, record);
-      record.getter = () => {
-        return materializeFastResponseBody(this, true).stream;
-      };
-      Object.defineProperty(this, 'body', {
-        configurable: true,
-        enumerable: true,
-        get: record.getter,
-        set(value) {
-          record.exposed = true;
-          record.stream = value;
-          this._bodyStream = value;
-        },
-      });
-      delete this.arrayBuffer;
-      delete this.blob;
-      delete this.json;
-      delete this.text;
+    if (isEmptyFixedResponseBody(normalizedBody)) normalizedBody = null;
+  } else {
+    if (initWebSocket !== undefined && initWebSocket !== null) {
+      throw new bodyRangeError('Responses with a WebSocket must have status code 101.');
+    }
+    if (!(status >= 200 && status <= 599)) {
+      throw new bodyRangeError(`The status provided (${status}) is outside the range [200, 599].`);
     }
   }
 
-  arrayBuffer(...args) {
-    return consumeFastResponseBody(this, 'arrayBuffer', args);
+  if (normalizedBody !== null && normalizedBody !== undefined && isNullBodyStatus(status)) {
+    throw new bodyTypeError(
+      status === 101
+        ? 'Response with null body status (101, 204, 205, or 304) cannot have a body.'
+        : 'Response with a null-body status cannot have a body',
+    );
   }
 
-  blob(...args) {
-    return consumeFastResponseBody(this, 'blob', args);
-  }
+  const statusText =
+    status === 101
+      ? initStatusText === undefined
+        ? 'Switching Protocols'
+        : String(initStatusText)
+      : initStatusText === undefined
+        ? ''
+        : `${initStatusText}`;
+  const ok = status >= 200 && status < 300;
 
-  json(...args) {
-    return consumeFastResponseBody(this, 'json', args);
+  assignResponseSlots(
+    target,
+    'default',
+    status,
+    ok,
+    statusText,
+    null,
+    hState,
+    '',
+    false,
+    true,
+    null,
+    0,
+    null,
+    0,
+    null,
+  );
+  if (status === 101) {
+    setResponseWebSocket(target, initWebSocket);
   }
+  initBodyFields(target, normalizedBody, hState);
+  return target;
+}
 
-  text(...args) {
-    return consumeFastResponseBody(this, 'text', args);
-  }
-
-  clone() {
-    if (getResponseWebSocket(this))
-      throw new TypeError('Cannot clone a response to a WebSocket handshake.');
-    /*
-     * Response.error() has status 0, which is outside [200, 599].
-     * The native clone() calls the Response constructor with status 0
-     * and throws RangeError. Build the error-response clone by hand.
-     */
-    if (this.type === 'error') {
-      const wrapped = Object.create(Response.prototype);
-      wrapped.ok = this.ok;
-      wrapped.status = this.status;
-      wrapped.statusText = this.statusText;
-      wrapped.type = this.type;
-      wrapped.url = this.url;
-      wrapped.redirected = this.redirected;
-      wrapped.headers = new Headers(this.headers);
-      wrapped.body = null;
-      wrapped.bodyUsed = false;
-      wrapped._nativeFormData = this._nativeFormData;
-      wrapped.formData = multipartFormDataOverride;
-      return wrapped;
+class Response {
+  constructor(body = null, init = undefined) {
+    let initHeaders;
+    let initStatus;
+    let initStatusText;
+    let initWebSocket;
+    if (init !== undefined && init !== null) {
+      // Response's dictionary has no redirect/body member. Read only the
+      // ResponseInit members in canonical order.
+      initHeaders = init.headers;
+      initStatus = init.status;
+      initStatusText = init.statusText;
+      initWebSocket = init.webSocket;
     }
-    const stream = this.body;
-    if (stream?.locked)
-      throw new bodyTypeError('This ReadableStream is currently locked to a reader,');
-    const nativeClone = super.clone();
-    const cloned = new Response(nativeClone.body, {
-      status: nativeClone.status,
-      statusText: nativeClone.statusText,
-      headers: nativeClone.headers,
-    });
-    cloned.ok = nativeClone.ok;
-    cloned.redirected = this.redirected;
-    cloned.type = nativeClone.type;
-    cloned.url = this.url;
-    if (weakHas(immutableHeaders, this.headers)) {
-      finishFetchedResponse(cloned, this.url, this.redirected);
-      if (this.body !== null) weakAdd(ordinaryFetchStreams, this.body);
+    const hState = createHeaderState();
+    if (initHeaders !== undefined) {
+      initHeadersIntoState(hState, initHeaders);
     }
-    return cloned;
+    constructResponseWithHeaders(this, body, hState, initStatus, initStatusText, initWebSocket);
   }
 
-  static error() {
-    const native = NativeResponse.error();
-    const response = new Response(null);
+  get headers() {
+    if (this._headers === null && this._headersState !== null) {
+      const headers = Object.create(headersPrototype);
+      setHeaderState(headers, this._headersState);
+      this._headers = headers;
+    }
+    return this._headers;
+  }
 
-    response.ok = native.ok;
-    response.status = native.status;
-    response.type = native.type;
-    return response;
+  set headers(value) {
+    this._headers = value;
+    this._headersState = null;
+  }
+
+  get body() {
+    if (this._bodyFastKind !== 0) {
+      return materializeFastBody(this, true);
+    }
+    return this._bodyStream;
+  }
+
+  set body(value) {
+    this._bodyExposed = true;
+    this._bodyFastKind = 0;
+    this._bodyFastData = null;
+    this._bodyStream = value;
+  }
+
+  get bodyUsed() {
+    if (this._bodyConsumed) return true;
+    const stream = this._bodyStream;
+    return (
+      stream !== null && stream !== undefined && bodyProperty(stream, '_disturbed')?.value === true
+    );
+  }
+
+  set bodyUsed(value) {
+    this._bodyConsumed = Boolean(value);
   }
 
   get webSocket() {
     return getResponseWebSocket(this);
   }
 
+  arrayBuffer() {
+    return consumeArrayBuffer(this);
+  }
+
+  blob() {
+    return consumeBlob(this);
+  }
+
+  formData() {
+    return consumeFormData(this);
+  }
+
+  json() {
+    return consumeJson(this);
+  }
+
+  text() {
+    return consumeText(this);
+  }
+
+  clone() {
+    if (getResponseWebSocket(this)) {
+      throw new TypeError('Cannot clone a response to a WebSocket handshake.');
+    }
+    if (this.type === 'error') {
+      const wrapped = Object.create(Response.prototype);
+      const srcState =
+        this._headersState !== null && !objectHasOwn(this, 'headers')
+          ? this._headersState
+          : getHeaderState(this.headers);
+      let clonedState;
+      if (srcState !== undefined && srcState !== null) {
+        clonedState = cloneHeaderState(srcState);
+      } else {
+        clonedState = createHeaderState();
+        initHeadersIntoState(clonedState, this.headers);
+      }
+      assignResponseSlots(
+        wrapped,
+        this.type,
+        this.status,
+        this.ok,
+        this.statusText,
+        null,
+        clonedState,
+        this.url,
+        this.redirected,
+        true,
+        null,
+        0,
+        null,
+        0,
+        null,
+      );
+      return wrapped;
+    }
+    let body2 = null;
+    if (this._bodyFastKind !== 0) {
+      body2 = this._bodyFastKind === 1 ? this._bodyFastData : u8Slice.call(this._bodyFastData);
+    } else if (this._bodyStream !== null) {
+      if (this._bodyStream.locked) {
+        throw new bodyTypeError('This ReadableStream is currently locked to a reader,');
+      }
+      if (this._bodyStream instanceof ReadableStream) {
+        const [body1, teeBody] = this._bodyStream.tee();
+        this._bodyStream = body1;
+        body2 = teeBody;
+      } else {
+        body2 = this._bodyStream;
+      }
+    }
+    const cloned = new Response(body2, {
+      status: this.status,
+      statusText: this.statusText,
+      headers: this.headers,
+    });
+    cloned.ok = this.ok;
+    cloned.redirected = this.redirected;
+    cloned.type = this.type;
+    cloned.url = this.url;
+    const hState = this._headersState !== null ? this._headersState : getHeaderState(this.headers);
+    if (hState !== undefined && hState !== null && hState.immutable) {
+      finishFetchedResponse(cloned, this.url, this.redirected);
+      if (this._bodyStream !== null) weakSetAdd.call(ordinaryFetchStreams, this._bodyStream);
+    }
+    return cloned;
+  }
+
+  static error() {
+    const response = Object.create(Response.prototype);
+    assignResponseSlots(
+      response,
+      'error',
+      0,
+      false,
+      '',
+      null,
+      createHeaderState(),
+      '',
+      false,
+      true,
+      null,
+      0,
+      null,
+      0,
+      null,
+    );
+    return response;
+  }
+
   static json(data, init = undefined) {
     const body = JSON.stringify(data);
-
     if (body === undefined) {
-      throw new TypeError('The data is not JSON serializable');
+      throw new bodyTypeError('The data is not JSON serializable');
     }
-
-    const normalized = normalizeInit(init);
-    const headers = new Headers(normalized.headers);
-    if (!headers.has('content-type')) {
-      headers.set('content-type', 'application/json');
+    if (init === undefined || init === null) {
+      const response = Object.create(Response.prototype);
+      assignResponseSlots(
+        response,
+        'default',
+        200,
+        true,
+        '',
+        null,
+        createHeaderStateWithOne('content-type', 'application/json'),
+        '',
+        false,
+        false,
+        body,
+        -1,
+        null,
+        1,
+        body,
+      );
+      return response;
     }
-    return new Response(body, { ...normalized, headers });
+    const initHeaders = init.headers;
+    const initStatus = init.status;
+    const initStatusText = init.statusText;
+    const initWebSocket = init.webSocket;
+    const hState = createHeaderState();
+    if (initHeaders !== undefined) {
+      initHeadersIntoState(hState, initHeaders);
+    }
+    if (!headerStateHas(hState, 'content-type')) {
+      headerStateSetNormalized(hState, 'content-type', 'application/json');
+    }
+    const response = Object.create(Response.prototype);
+    return constructResponseWithHeaders(
+      response,
+      body,
+      hState,
+      initStatus,
+      initStatusText,
+      initWebSocket,
+    );
   }
 
   static redirect(url, status = 302) {
-    const redirectStatuses = [301, 302, 303, 307, 308];
     const normalizedStatus = Number(status);
-
-    if (!redirectStatuses.includes(normalizedStatus)) {
-      throw new RangeError('Invalid status code');
+    if (
+      normalizedStatus !== 301 &&
+      normalizedStatus !== 302 &&
+      normalizedStatus !== 303 &&
+      normalizedStatus !== 307 &&
+      normalizedStatus !== 308
+    ) {
+      throw new bodyRangeError('Invalid status code');
     }
-    return new Response(null, {
-      status: normalizedStatus,
-      headers: { location: String(url) },
-    });
+    const hState = createHeaderStateWithOne('location', normalizeValue(String(url)));
+    const response = Object.create(Response.prototype);
+    return constructResponseWithHeaders(response, null, hState, normalizedStatus, '', undefined);
   }
 }
 
@@ -1365,11 +2423,8 @@ async function fetchUpgradeRequest(request) {
     ) {
       if (count >= 20) {
         await result.body?.cancel();
-        throw new bodyTypeError('Too many redirects.' + visited.join(', '));
+        throw new bodyTypeError(`Too many redirects.${visited.join(', ')}`);
       }
-      // Drain a redirect without accumulating its body. Each subsequent
-      // transaction re-enters the same native policy/owner checks and
-      // generates a fresh WebSocket nonce for its actual destination.
       if (result.body) {
         const reader = result.body.getReader();
         try {
@@ -1397,13 +2452,15 @@ async function fetchUpgradeRequest(request) {
             maxFetchResponseBodyBytes,
           )
         : result.body;
-    const response = new Response(body, {
+    const responseInit = {
       status: metadata.status,
       statusText: metadata.statusText,
       headers: metadata.headers,
-      url: metadata.url,
-      ...(result.webSocket ? { webSocket: result.webSocket } : {}),
-    });
+    };
+    if (result.webSocket) {
+      responseInit.webSocket = result.webSocket;
+    }
+    const response = new Response(body, responseInit);
     response.url = metadata.url;
     response.redirected = redirected || metadata.redirected;
     return response;
@@ -1436,26 +2493,28 @@ function fetch(input, init = undefined) {
         nativeInit.duplex = 'half';
       }
       if (init !== undefined && init !== null) {
-        Object.assign(nativeInit, normalizeInit(init, true));
+        Object.assign(nativeInit, normalizeRequestInit(init));
       }
     } else if (init !== undefined) {
-      nativeInit = normalizeInit(init, true);
+      nativeInit = normalizeRequestInit(init);
     }
   } catch (error) {
     return Promise.reject(error);
   }
 
   // Prepared Headers retain their raw owned keys for copy operations.
-  // Read the private list, without application getters or public iteration,
+  // Read the private state, without application getters or public iteration,
   // when selecting the existing Upgrade transport.
   const fields = nativeInit?.headers;
-  const ownedFields = headerWeakGet(headerLists, fields);
-  const upgradeValue = ownedFields === undefined ? undefined : headerMapGet(ownedFields, 'upgrade');
-  let upgrade = upgradeValue !== undefined && headerLowerAscii(upgradeValue) === 'websocket';
+  const ownedState = fields !== undefined && fields !== null ? getHeaderState(fields) : undefined;
+  const upgradeValue = ownedState === undefined ? null : headerStateGet(ownedState, 'upgrade');
+  let upgrade = upgradeValue !== null && strToLowerCase.call(upgradeValue) === 'websocket';
   if (Array.isArray(fields)) {
-    for (let index = 0; index < fields.length; index++)
-      if (fields[index][0] === 'upgrade' && headerLowerAscii(fields[index][1]) === 'websocket')
+    for (let index = 0; index < fields.length; index++) {
+      if (fields[index][0] === 'upgrade' && strToLowerCase.call(fields[index][1]) === 'websocket') {
         upgrade = true;
+      }
+    }
   }
   if (upgrade) {
     try {
@@ -1507,9 +2566,10 @@ function fetch(input, init = undefined) {
 
 // Preserve owned raw keys through vendor Request/Response copies without
 // invoking an application replacement of Headers[Symbol.iterator].
-configureOwnedHeadersCloner((init) =>
-  headerWeakGet(headerLists, init) === undefined ? undefined : new Headers(init),
-);
+configureOwnedHeadersCloner((init) => {
+  const owned = weakMapGet.call(headerStates, init);
+  return owned === undefined ? undefined : cloneHeadersFromOwnedState(owned);
+});
 
 Object.defineProperties(globalThis, {
   Headers: { configurable: true, writable: true, value: Headers },

@@ -22,8 +22,11 @@ import 'txiki-polyfills/fetch/polyfill.js';
 import {
   configureFetchLimits,
   createIncomingRequest,
-  bridgeHeaderPairs,
+  bridgeResponseHeaders,
+  bridgeResponseHadContentLength,
   getFastResponseBody,
+  getFastStreamResponseBody,
+  isNullFastResponseBody,
 } from './fetch.js';
 import 'txiki-polyfills/crypto/crypto.js';
 import { CryptoKey } from 'txiki-polyfills/crypto/crypto-key.js';
@@ -419,17 +422,275 @@ function pullRequestBody(state) {
   }
 }
 
+const IntrinsicPromise = Promise;
+const intrinsicPromiseThen = Promise.prototype.then;
+const intrinsicPromiseResolve = Promise.resolve;
+const enqueueMicrotask = globalThis.queueMicrotask;
+const intrinsicApply = Reflect.apply;
+const funcProto = Function.prototype;
+const funcCall = funcProto.call;
+const responsePrototype = Response.prototype;
+const getObjectPrototype = Object.getPrototypeOf;
+
+function promiseThen(promise, onFulfilled, onRejected) {
+  if (funcProto.call === funcCall) {
+    return intrinsicPromiseThen.call(promise, onFulfilled, onRejected);
+  }
+  return intrinsicApply(intrinsicPromiseThen, promise, [onFulfilled, onRejected]);
+}
+
+function settleRequest(state) {
+  if (state.active) {
+    state.active = false;
+    requests.delete(state.id);
+    // WP-02 §6.4: settled signal — the last lifecycle bridge.
+    // Native marks the token terminal; the post-drain reclaim
+    // drops it (or poisons the worker on surviving refs).
+    core.capsidRequestSettled(state.id);
+  }
+}
+
+function failRequest(state, error) {
+  if (!state.cancelled) {
+    core.capsidResponseError(state.id, formatRuntimeError(error));
+  }
+  settleRequest(state);
+}
+
+async function finishResponseAsync(state, response) {
+  const id = state.id;
+  if (state.cancelled) {
+    if (response instanceof Response && response.body) {
+      try {
+        await response.body.cancel(state.cancelReason);
+      } catch {
+        // Cancellation cleanup must not revive the request.
+      }
+    }
+    return;
+  }
+  if (!(response instanceof Response)) {
+    throw new TypeError('application fetch handler must return a Response');
+  }
+
+  const headers = bridgeResponseHeaders(response);
+  const hasContentLength = bridgeResponseHadContentLength();
+  if (response.status === 101) {
+    try {
+      await transferWebSocket(id, response, headers);
+    } catch (error) {
+      // Origin/negotiation failures precede 101. The transfer
+      // path owns post-commit coupling errors and aborts their
+      // transport; it must never append another HTTP response.
+      core.capsidResponseFinal(
+        id,
+        500,
+        'WebSocket transfer failed',
+        [],
+        String(error?.message ?? error),
+      );
+    }
+    return;
+  }
+
+  const body = response.body;
+  if (body && !(body instanceof ReadableStream)) {
+    let bytes = null;
+    if (body instanceof Uint8Array) {
+      bytes = body;
+    } else if (typeof body === 'string') {
+      bytes = body;
+    } else if (body instanceof ArrayBuffer) {
+      bytes = new Uint8Array(body);
+    } else if (body instanceof Blob) {
+      bytes = new Uint8Array(await body.arrayBuffer());
+    } else {
+      bytes = null;
+    }
+    if (bytes !== null) {
+      const fixedCandidate =
+        !hasContentLength &&
+        (typeof bytes === 'string'
+          ? bytes.length <= fixedResponseBodyLimit
+          : bytes.byteLength <= fixedResponseBodyLimit);
+      if (fixedCandidate) {
+        core.capsidResponseFixed(id, response.status, response.statusText, headers, bytes);
+      } else {
+        core.capsidResponseFinal(id, response.status, response.statusText, headers, bytes);
+      }
+      return;
+    }
+  }
+
+  core.capsidResponseHead(id, response.status, response.statusText, headers);
+
+  if (body) {
+    const reader = body.getReader();
+    state.responseReader = reader;
+    try {
+      while (true) {
+        const result = await reader.read();
+        if (result.done || state.cancelled) {
+          break;
+        }
+        // E13a: unblocked writes complete synchronously and
+        // return undefined; only credit-blocked writes
+        // return a promise to await.
+        const pending = core.capsidResponseWrite(id, result.value);
+        if (pending !== undefined) {
+          await pending;
+        }
+      }
+    } finally {
+      if (state.responseReader === reader) {
+        state.responseReader = null;
+      }
+    }
+  }
+  if (!state.cancelled) {
+    core.capsidResponseEnd(id);
+  }
+}
+
+function pumpStreamResponse(state, response, body) {
+  const id = state.id;
+  const headers = bridgeResponseHeaders(response);
+  core.capsidResponseHead(id, response.status, response.statusText, headers);
+  const reader = body.getReader();
+  state.responseReader = reader;
+
+  const onError = (error) => {
+    if (state.responseReader === reader) {
+      state.responseReader = null;
+    }
+    failRequest(state, error);
+  };
+
+  const onChunk = (result) => {
+    if (result.done || state.cancelled) {
+      if (state.responseReader === reader) {
+        state.responseReader = null;
+      }
+      if (!state.cancelled) {
+        try {
+          core.capsidResponseEnd(id);
+        } catch (error) {
+          failRequest(state, error);
+          return;
+        }
+      }
+      settleRequest(state);
+      return;
+    }
+    let pending;
+    try {
+      pending = core.capsidResponseWrite(id, result.value);
+    } catch (error) {
+      onError(error);
+      return;
+    }
+    if (pending !== undefined) {
+      promiseThen(pending, readNext, onError);
+      return;
+    }
+    readNext();
+  };
+
+  const readNext = () => {
+    if (state.cancelled) {
+      if (state.responseReader === reader) {
+        state.responseReader = null;
+      }
+      settleRequest(state);
+      return;
+    }
+    let readPromise;
+    try {
+      readPromise = reader.read();
+    } catch (error) {
+      onError(error);
+      return;
+    }
+    promiseThen(readPromise, onChunk, onError);
+  };
+
+  readNext();
+}
+
+function completeResponse(state, response) {
+  if (!state.cancelled) {
+    try {
+      if (
+        response === null ||
+        typeof response !== 'object' ||
+        (getObjectPrototype(response) !== responsePrototype && !(response instanceof Response))
+      ) {
+        failRequest(state, new TypeError('application fetch handler must return a Response'));
+        return;
+      }
+      if (response.status !== 101) {
+        const fastBody = getFastResponseBody(response);
+        if (fastBody !== null) {
+          const headers = bridgeResponseHeaders(response);
+          const length = typeof fastBody === 'string' ? fastBody.length : fastBody.byteLength;
+          if (length <= fixedResponseBodyLimit && !bridgeResponseHadContentLength()) {
+            core.capsidResponseFixed(
+              state.id,
+              response.status,
+              response.statusText,
+              headers,
+              fastBody,
+            );
+          } else {
+            core.capsidResponseFinal(
+              state.id,
+              response.status,
+              response.statusText,
+              headers,
+              fastBody,
+            );
+          }
+          settleRequest(state);
+          return;
+        }
+        const streamBody = getFastStreamResponseBody(response);
+        if (streamBody !== null) {
+          pumpStreamResponse(state, response, streamBody);
+          return;
+        }
+        if (isNullFastResponseBody(response)) {
+          const headers = bridgeResponseHeaders(response);
+          core.capsidResponseHead(state.id, response.status, response.statusText, headers);
+          core.capsidResponseEnd(state.id);
+          settleRequest(state);
+          return;
+        }
+      }
+    } catch (error) {
+      failRequest(state, error);
+      return;
+    }
+  }
+
+  const pending = finishResponseAsync(state, response);
+  promiseThen(
+    pending,
+    () => settleRequest(state),
+    (error) => failRequest(state, error),
+  );
+}
+
 const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
-  if (requests.has(id)) {
+  if (requests.size !== 0 && requests.has(id)) {
     throw new TypeError(`duplicate request id ${id}`);
   }
 
-  const abortController = new AbortController();
   const hasBody = method !== 'GET' && method !== 'HEAD';
   const state = {
     id,
-    abortController,
-    chunks: [],
+    active: true,
+    abortController: null,
+    chunks: hasBody ? [] : null,
     controller: null,
     ended: !hasBody,
     waiting: false,
@@ -439,7 +700,7 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
   };
   requests.set(id, state);
 
-  let body;
+  let body = null;
   if (hasBody) {
     body = new ReadableStream({
       type: 'bytes',
@@ -456,137 +717,49 @@ const beginRequest = (handler, handlerThis, id, method, url, headerEntries) => {
     });
   }
 
-  const request = createIncomingRequest(url, {
-    method,
-    headers: headerEntries,
-    body,
-    duplex: hasBody ? 'half' : undefined,
-    signal: abortController.signal,
-  });
+  const request = createIncomingRequest(url, method, headerEntries, body, hasBody, state);
 
   // WP-02 §6.2: request identity rides the job-context token captured at
   // enqueue; no JS-side enter/leave is needed (or trusted) anymore.
-  Promise.resolve()
-    .then(() => handler.call(handlerThis, request))
-    .then(async (response) => {
-      if (state.cancelled) {
-        if (response instanceof Response && response.body) {
-          try {
-            await response.body.cancel(state.cancelReason);
-          } catch {
-            // Cancellation cleanup must not revive the request.
-          }
+  enqueueMicrotask(() => {
+    let result;
+    try {
+      result = handler.call(handlerThis, request);
+      if (result !== null && typeof result === 'object') {
+        if (getObjectPrototype(result) === responsePrototype && result.then === undefined) {
+          completeResponse(state, result);
+          return;
         }
-        return;
-      }
-      if (!(response instanceof Response)) {
-        throw new TypeError('application fetch handler must return a Response');
-      }
-
-      const headers = bridgeHeaderPairs(response.headers);
-      if (response.status === 101) {
-        try {
-          await transferWebSocket(id, response, headers);
-        } catch (error) {
-          // Origin/negotiation failures precede 101. The transfer
-          // path owns post-commit coupling errors and aborts their
-          // transport; it must never append another HTTP response.
-          core.capsidResponseFinal(
-            id,
-            500,
-            'WebSocket transfer failed',
-            [],
-            String(error?.message ?? error),
+        if (result instanceof IntrinsicPromise) {
+          promiseThen(
+            result,
+            (response) => completeResponse(state, response),
+            (error) => failRequest(state, error),
           );
+          return;
         }
-        return;
-      }
-
-      // Fast path: a non-streamed body completes the whole
-      // response (head + body + end) in one native call, avoiding
-      // two JS round-trips per request. Streamed bodies keep the
-      // incremental path below.
-      const fastBody = getFastResponseBody(response);
-      if (fastBody !== null) {
-        if (fastBody.length <= fixedResponseBodyLimit) {
-          core.capsidResponseFixed(id, response.status, response.statusText, headers, fastBody);
-        } else {
-          core.capsidResponseFinal(id, response.status, response.statusText, headers, fastBody);
-        }
-        return;
-      }
-
-      const body = response.body;
-      if (body && !(body instanceof ReadableStream)) {
-        let bytes = null;
-        if (body instanceof Uint8Array) {
-          bytes = body;
-        } else if (typeof body === 'string') {
-          bytes = body;
-        } else if (body instanceof ArrayBuffer) {
-          bytes = new Uint8Array(body);
-        } else if (body instanceof Blob) {
-          bytes = new Uint8Array(await body.arrayBuffer());
-        } else {
-          bytes = null;
-        }
-        if (bytes !== null) {
-          const fixedCandidate =
-            typeof bytes === 'string'
-              ? bytes.length <= fixedResponseBodyLimit
-              : bytes.byteLength <= fixedResponseBodyLimit;
-          if (fixedCandidate) {
-            core.capsidResponseFixed(id, response.status, response.statusText, headers, bytes);
-          } else {
-            core.capsidResponseFinal(id, response.status, response.statusText, headers, bytes);
-          }
+        if (result instanceof Response && typeof result.then !== 'function') {
+          completeResponse(state, result);
           return;
         }
       }
-
-      core.capsidResponseHead(id, response.status, response.statusText, headers);
-
-      if (response.body) {
-        const reader = response.body.getReader();
-        state.responseReader = reader;
-        try {
-          while (true) {
-            const result = await reader.read();
-            if (result.done || state.cancelled) {
-              break;
-            }
-            // E13a: unblocked writes complete synchronously and
-            // return undefined; only credit-blocked writes
-            // return a promise to await.
-            const pending = core.capsidResponseWrite(id, result.value);
-            if (pending !== undefined) {
-              await pending;
-            }
-          }
-        } finally {
-          if (state.responseReader === reader) {
-            state.responseReader = null;
-          }
+      if (result !== null && (typeof result === 'object' || typeof result === 'function')) {
+        const thenMethod = result.then;
+        if (typeof thenMethod === 'function') {
+          promiseThen(
+            intrinsicApply(intrinsicPromiseResolve, IntrinsicPromise, [result]),
+            (response) => completeResponse(state, response),
+            (error) => failRequest(state, error),
+          );
+          return;
         }
       }
-      if (!state.cancelled) {
-        core.capsidResponseEnd(id);
-      }
-    })
-    .catch((error) => {
-      if (!state.cancelled) {
-        core.capsidResponseError(id, formatRuntimeError(error));
-      }
-    })
-    .finally(() => {
-      if (requests.get(id) === state) {
-        requests.delete(id);
-        // WP-02 §6.4: settled signal — the last lifecycle bridge.
-        // Native marks the token terminal; the post-drain reclaim
-        // drops it (or poisons the worker on surviving refs).
-        core.capsidRequestSettled(id);
-      }
-    });
+    } catch (error) {
+      failRequest(state, error);
+      return;
+    }
+    completeResponse(state, result);
+  });
 };
 
 const requestChunk = (id, chunk) => {
@@ -621,17 +794,26 @@ const cancelRequest = (id) => {
   if (!state) {
     return;
   }
+  state.active = false;
   requests.delete(id);
   state.cancelled = true;
   state.ended = true;
-  state.chunks.length = 0;
+  if (state.chunks !== null) {
+    state.chunks.length = 0;
+  }
   const reason = new DOMException('Request canceled', 'AbortError');
   state.cancelReason = reason;
-  state.abortController.abort(reason);
+  if (state.abortController !== null) {
+    state.abortController.abort(reason);
+  }
   if (state.responseReader) {
     const reader = state.responseReader;
     state.responseReader = null;
-    Promise.resolve(reader.cancel(reason)).catch(() => {});
+    intrinsicApply(
+      intrinsicPromiseThen,
+      intrinsicApply(intrinsicPromiseResolve, IntrinsicPromise, [reader.cancel(reason)]),
+      [undefined, () => {}],
+    );
   }
   if (state.controller) {
     try {

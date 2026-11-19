@@ -336,12 +336,17 @@ assert.equal(currentStatus.prerelease.channel, '0.3.0-beta');
 assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.3');
 assert.equal(currentStatus.runtime.publicAbi, 7);
 assert.equal(currentStatus.runtime.defaultWireVersion, 3);
-assert.equal(currentStatus.checkout.kind, 'docs-successor');
+assert.equal(currentStatus.checkout.kind, 'runtime-optimization-successor');
 assert.deepEqual(currentStatus.checkout.buildInputChanges, {});
+assert.deepEqual(Object.keys(currentStatus.checkout.runtimeInputChanges).sort(), [
+  'js/bootstrap.js',
+  'js/fetch.js',
+  'js/url.js',
+]);
 assert.equal(
   currentStatus.checkout.releaseQualificationInherited,
   false,
-  'docs commits do not inherit binary qualification beyond the declared release commit',
+  'runtime optimization commits do not inherit binary qualification beyond the declared release commit',
 );
 assert.match(currentStatus.runtime.sourceScope, /qualified 0\.3\.0-beta interface baseline/);
 assert.equal(currentStatus.conformance.referenceProfile, profileV2.id);

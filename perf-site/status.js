@@ -4,7 +4,7 @@ window.CAPSID_SITE_STATUS = {
   "checkout": {
     "baseCommit": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
     "buildInputChanges": {},
-    "changeScope": "documentation and performance-site update after 0.3.0-beta (v0.3.0-beta.3) publication; runtime and build inputs match qualified release source",
+    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, build inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
     "formatters": {
       "clang-format": "23.1.5",
       "prettier": "3.8.3",
@@ -12,9 +12,23 @@ window.CAPSID_SITE_STATUS = {
     },
     "headerSHA256": "54946a795edfd8f9dec7fdca6a66887e9140c28f473d96e4027d9ab17b5caa97",
     "inputManifest": "docs/data/runtime-source-manifest.json",
-    "kind": "docs-successor",
+    "kind": "runtime-optimization-successor",
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf",
-    "releaseQualificationInherited": false
+    "releaseQualificationInherited": false,
+    "runtimeInputChanges": {
+      "js/bootstrap.js": {
+        "currentGitObject": "51cb09f062698a7a6a3d935f432a95f702b9b0ee",
+        "qualifiedGitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67"
+      },
+      "js/fetch.js": {
+        "currentGitObject": "0da7535409e4b62fb9f79451e72bcae9422a9684",
+        "qualifiedGitObject": "6258e4adde36e41ade3e940608839f0332297905"
+      },
+      "js/url.js": {
+        "currentGitObject": "2579ff15f46a8d1be22f14f387027f318b3f3b08",
+        "qualifiedGitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab"
+      }
+    }
   },
   "conformance": {
     "executedFiles": 84,
@@ -254,7 +268,7 @@ window.CAPSID_SITE_STATUS = {
     "sdkPatchCount": 78,
     "sourceCommit": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
     "sourceManifest": "docs/data/runtime-source-manifest.json",
-    "sourceScope": "qualified 0.3.0-beta interface baseline (v0.3.0-beta.3); current checkout runtime inputs match",
+    "sourceScope": "qualified 0.3.0-beta interface baseline (v0.3.0-beta.3); current checkout has JS runtime hot-path optimizations (ABI, wire protocol, C/C++ runtime, and vendor engine unchanged)",
     "sourceTree": "483146d28dc9f16025da332e86a9118cb8813f2e",
     "txiki": {
       "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787",
@@ -277,7 +291,7 @@ window.CAPSID_SITE_STATUS = {
     "version": "0.3.0"
   },
   "schema": 1,
-  "sourceChangeScope": "documentation and performance-site update after 0.3.0-beta (v0.3.0-beta.3) publication; runtime and build inputs match qualified release source",
+  "sourceChangeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, build inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
   "stable": {
     "githubLatest": false,
     "prerelease": false,

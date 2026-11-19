@@ -1,8 +1,8 @@
 const NativeURL = globalThis.URL;
 const fallbackStates = new WeakMap();
+let hasFallbackStates = false;
 
-function toUSVString(value) {
-  const string = String(value);
+function toUSVStringSlow(string) {
   return string.replace(/[\uD800-\uDFFF]/g, (codeUnit, index) => {
     const code = codeUnit.charCodeAt(0);
     if (code <= 0xdbff) {
@@ -18,6 +18,18 @@ function toUSVString(value) {
     }
     return '\uFFFD';
   });
+}
+
+function toUSVString(value) {
+  const string = typeof value === 'string' ? value : String(value);
+  const length = string.length;
+  for (let i = 0; i < length; i++) {
+    const code = string.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdfff) {
+      return toUSVStringSlow(string);
+    }
+  }
+  return string;
 }
 
 function parseInvalidAsciiIdna(input) {
@@ -54,12 +66,59 @@ function parseInvalidAsciiIdna(input) {
   };
 }
 
+const nativeDescriptors = Object.getOwnPropertyDescriptors(NativeURL.prototype);
+const nativeHrefGet = nativeDescriptors.href.get;
+const nativeHrefSet = nativeDescriptors.href.set;
+const nativeOriginGet = nativeDescriptors.origin.get;
+const nativeProtocolGet = nativeDescriptors.protocol.get;
+const nativeUsernameGet = nativeDescriptors.username.get;
+const nativePasswordGet = nativeDescriptors.password.get;
+const nativeHostGet = nativeDescriptors.host.get;
+const nativeHostnameGet = nativeDescriptors.hostname.get;
+const nativePortGet = nativeDescriptors.port.get;
+const nativePathnameGet = nativeDescriptors.pathname.get;
+const nativeSearchGet = nativeDescriptors.search.get;
+const nativeSearchParamsGet = nativeDescriptors.searchParams.get;
+const nativeHashGet = nativeDescriptors.hash.get;
+
 function fallbackValue(object, name, nativeGetter) {
   const state = fallbackStates.get(object);
   return state === undefined ? nativeGetter.call(object) : state[name];
 }
 
-const nativeDescriptors = Object.getOwnPropertyDescriptors(NativeURL.prototype);
+function installFallbackAccessors() {
+  if (hasFallbackStates) {
+    return;
+  }
+  hasFallbackStates = true;
+  const getters = [
+    ['href', nativeHrefGet],
+    ['origin', nativeOriginGet],
+    ['protocol', nativeProtocolGet],
+    ['username', nativeUsernameGet],
+    ['password', nativePasswordGet],
+    ['host', nativeHostGet],
+    ['hostname', nativeHostnameGet],
+    ['port', nativePortGet],
+    ['pathname', nativePathnameGet],
+    ['search', nativeSearchGet],
+    ['searchParams', nativeSearchParamsGet],
+    ['hash', nativeHashGet],
+  ];
+  for (let i = 0; i < getters.length; i++) {
+    const name = getters[i][0];
+    const nativeGetter = getters[i][1];
+    const current = Object.getOwnPropertyDescriptor(URL.prototype, name);
+    Object.defineProperty(URL.prototype, name, {
+      configurable: true,
+      enumerable: current ? current.enumerable : true,
+      get() {
+        return fallbackValue(this, name, nativeGetter);
+      },
+      set: current ? current.set : undefined,
+    });
+  }
+}
 
 class URL extends NativeURL {
   constructor(input, base = undefined) {
@@ -83,6 +142,7 @@ class URL extends NativeURL {
         throw error;
       }
       const object = Object.create(new.target.prototype);
+      installFallbackAccessors();
       fallbackStates.set(object, state);
       return object;
     }
@@ -105,58 +165,6 @@ class URL extends NativeURL {
     }
   }
 
-  get href() {
-    return fallbackValue(this, 'href', nativeDescriptors.href.get);
-  }
-
-  set href(value) {
-    nativeDescriptors.href.set.call(this, toUSVString(value));
-  }
-
-  get origin() {
-    return fallbackValue(this, 'origin', nativeDescriptors.origin.get);
-  }
-
-  get protocol() {
-    return fallbackValue(this, 'protocol', nativeDescriptors.protocol.get);
-  }
-
-  get username() {
-    return fallbackValue(this, 'username', nativeDescriptors.username.get);
-  }
-
-  get password() {
-    return fallbackValue(this, 'password', nativeDescriptors.password.get);
-  }
-
-  get host() {
-    return fallbackValue(this, 'host', nativeDescriptors.host.get);
-  }
-
-  get hostname() {
-    return fallbackValue(this, 'hostname', nativeDescriptors.hostname.get);
-  }
-
-  get port() {
-    return fallbackValue(this, 'port', nativeDescriptors.port.get);
-  }
-
-  get pathname() {
-    return fallbackValue(this, 'pathname', nativeDescriptors.pathname.get);
-  }
-
-  get search() {
-    return fallbackValue(this, 'search', nativeDescriptors.search.get);
-  }
-
-  get searchParams() {
-    return fallbackValue(this, 'searchParams', nativeDescriptors.searchParams.get);
-  }
-
-  get hash() {
-    return fallbackValue(this, 'hash', nativeDescriptors.hash.get);
-  }
-
   toString() {
     return this.href;
   }
@@ -165,6 +173,27 @@ class URL extends NativeURL {
     return this.href;
   }
 }
+
+Object.defineProperty(URL.prototype, 'href', {
+  configurable: true,
+  enumerable: true,
+  get: nativeHrefGet,
+  set(value) {
+    nativeHrefSet.call(this, toUSVString(value));
+  },
+});
+
+Object.defineProperty(URL.prototype, 'origin', {
+  configurable: true,
+  enumerable: true,
+  get: nativeOriginGet,
+});
+
+Object.defineProperty(URL.prototype, 'searchParams', {
+  configurable: true,
+  enumerable: true,
+  get: nativeSearchParamsGet,
+});
 
 for (const name of [
   'protocol',
@@ -177,14 +206,17 @@ for (const name of [
   'search',
   'hash',
 ]) {
-  const descriptor = Object.getOwnPropertyDescriptor(URL.prototype, name);
+  const nativeGetter = nativeDescriptors[name].get;
+  const nativeSetter = nativeDescriptors[name].set;
   Object.defineProperty(URL.prototype, name, {
-    ...descriptor,
+    configurable: true,
+    enumerable: true,
+    get: nativeGetter,
     set(value) {
-      if (fallbackStates.has(this)) {
+      if (hasFallbackStates && fallbackStates.has(this)) {
         throw new TypeError('Cannot mutate a URL with a pass-through IDNA label');
       }
-      nativeDescriptors[name].set.call(this, toUSVString(value));
+      nativeSetter.call(this, toUSVString(value));
     },
   });
 }
