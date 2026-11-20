@@ -432,6 +432,28 @@ class ProducerTests(unittest.TestCase):
         self.assertFalse((self.out / "lane.json").exists())
         self.assertFalse((self.out / "cells.txt").exists())
 
+    def test_v2_allows_up_to_24_pss_reads_while_v1_remains_bounded_at_8(self):
+        sample_low = synthetic_memory("bun", "lowLoad", seconds=15, rate=10, clients=15)
+        extra = [dict(sample_low["pssSamples"][0]) for _ in range(11)]
+        sample_low["pssSamples"] = extra + sample_low["pssSamples"]
+        self.assertEqual(13, len(sample_low["pssSamples"]))
+        from qps_control import checked_memory
+
+        checked_memory(sample_low, "bun", "lowLoad", schema=2)
+
+        sample_too_many = dict(sample_low)
+        sample_too_many["pssSamples"] = [dict(sample_low["pssSamples"][0]) for _ in range(25)]
+        with self.assertRaises(ProbeError):
+            checked_memory(sample_too_many, "bun", "lowLoad", schema=2)
+
+        sample_v1 = synthetic_memory("capsid", "lowLoad", seconds=15, rate=10, clients=15)
+        sample_v1["pssSamples"] = [dict(sample_v1["pssSamples"][0]) for _ in range(7)] + sample_v1[
+            "pssSamples"
+        ]
+        self.assertEqual(9, len(sample_v1["pssSamples"]))
+        with self.assertRaises(ProbeError):
+            checked_memory(sample_v1, "capsid", "lowLoad", schema=1)
+
 
 if __name__ == "__main__":
     unittest.main()

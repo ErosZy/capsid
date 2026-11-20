@@ -249,7 +249,8 @@ def checked_memory(
         raise ProbeError(
             "qps-process", "serving forest differs from the frozen single-worker topology"
         )
-    if not isinstance(samples, list) or not 2 <= len(samples) <= 8:
+    max_reads = 8 if schema == 1 else 24
+    if not isinstance(samples, list) or not 2 <= len(samples) <= max_reads:
         raise ProbeError("qps-memory", "missing bounded stable PSS readings")
     for sample in samples:
         parts = sample.get("processes") if isinstance(sample, dict) else None
