@@ -28,10 +28,10 @@ if args.artifacts:
 
 
 def payload(workload):
-    if workload == "stream":
-        return b"b" * 341 + b"c" * 341 + b"d" * 342
-    size = {"matrix-json-1k": 1024, "matrix-json-16k": 16384}[workload]
-    return json.dumps({"data": "x" * (size - 11)}, separators=(",", ":")).encode()
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bench"))
+    from qps_control import expected_body
+
+    return expected_body(workload)
 
 
 class Server(http.server.ThreadingHTTPServer):
@@ -169,7 +169,7 @@ class LoadgenTests(unittest.TestCase):
                 temp.cleanup()
 
     def test_valid_frozen_payloads_and_independent_byte_claims(self):
-        for workload in ("matrix-json-1k", "matrix-json-16k", "stream"):
+        for workload in ("matrix-json-1k", "matrix-json-16k", "stream", "dynamic-api"):
             with self.subTest(workload=workload):
                 run, rows, verdict, _, observed = self.run_fixture(workload=workload, warm=1)
                 self.assertEqual(0, run.returncode, run.stderr.decode(errors="replace"))

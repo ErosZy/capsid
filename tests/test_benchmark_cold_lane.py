@@ -164,6 +164,7 @@ class ProducerTests(unittest.TestCase):
             "capsid-bytecode-compile",
             "node",
             "bun",
+            "deno",
             "workerd",
         ):
             file = (
@@ -220,6 +221,7 @@ class ProducerTests(unittest.TestCase):
             compiler=self.paths["capsid-bytecode-compile"],
             node=self.paths["node"],
             bun=self.paths["bun"],
+            deno=self.paths["deno"],
             workerd=self.paths["workerd"],
         )
 
@@ -239,6 +241,8 @@ class ProducerTests(unittest.TestCase):
                     if stack.startswith("capsid-")
                     else "node"
                     if stack == "node-jitless"
+                    else "bun"
+                    if stack == "bun-jitless"
                     else stack
                 )
                 source = self.options["apps"] / f"app-{kind}-{size}.mjs"
@@ -271,10 +275,10 @@ class ProducerTests(unittest.TestCase):
         with patch.object(lane, "ColdProbe", self.factory(changed_shared_apps)):
             result = lane.run_lane(self.config)
         self.assertTrue(result["publicationEligible"], "temporary synthetic contract fixture only")
-        self.assertEqual(18, result["cells"])
-        self.assertEqual(108, len(calls))
+        self.assertEqual(24, result["cells"])
+        self.assertEqual(144, len(calls))
         archive = Archive(self.config.out, self.root)
-        self.assertEqual(18, len(archive.manifest["records"]))
+        self.assertEqual(24, len(archive.manifest["records"]))
         self.assertEqual("python-http-exact-v1", archive.manifest["protocol"]["httpClient"])
         self.assertEqual(self.cpus, archive.manifest["clientAffinity"])
         for record in archive.manifest["records"]:
@@ -357,7 +361,7 @@ class ProducerTests(unittest.TestCase):
                 original = self.paths["workerd"].read_bytes()
 
                 def change(adapter, result):
-                    if adapter.calls == 108:
+                    if adapter.calls == 144:
                         target = (
                             self.paths["workerd"]
                             if mode == "binary"

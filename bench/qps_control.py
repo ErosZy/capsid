@@ -1,12 +1,15 @@
 """Frozen QPS payload and round rules shared by the producer and validator."""
 
 import hashlib
+import json
 import math
 
 from measurement_runtime import ProbeError
 
 RESPONSE_VALIDATION = "exact-bytes-v2"
-WORKLOADS = ("matrix-json-1k", "matrix-json-16k", "stream")
+WORKLOADS_V1_V2 = ("matrix-json-1k", "matrix-json-16k", "stream")
+WORKLOADS = ("matrix-json-1k", "matrix-json-16k", "stream", "dynamic-api")
+DYNAMIC_API_QUERY = "tenant=orders&region=us-east&limit=8&offset=16&sort=desc&currency=USD"
 ROOT_ROLES_V1 = {
     "capsid": {"host": "worker"},
     "workerd": {"process": "process"},
@@ -14,18 +17,89 @@ ROOT_ROLES_V1 = {
     "flask": {"master": "worker"},
     "php": {"nginx": "nginx-worker", "fpm-master": "fpm-worker"},
 }
-ROOT_ROLES = {
+ROOT_ROLES_V2 = {
     "capsid": {"host": "worker"},
     "node": {"process": "process"},
     "node-jitless": {"process": "process"},
     "bun": {"process": "process"},
     "workerd": {"process": "process"},
 }
+ROOT_ROLES = {
+    "capsid": {"host": "worker"},
+    "workerd": {"process": "process"},
+    "deno": {"process": "process"},
+    "node-jitless": {"process": "process"},
+    "bun-jitless": {"process": "process"},
+    "node": {"process": "process"},
+    "bun": {"process": "process"},
+}
+
+
+def workloads_for_schema(schema):
+    return WORKLOADS_V1_V2 if schema in (1, 2) else WORKLOADS
+
+
+def _fnv1a32_hex(text):
+    h = 0x811C9DC5
+    for b in text.encode("ascii"):
+        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return f"{h:08x}"
+
+
+def _expected_dynamic_api_body():
+    tenant, region, currency, sort = "orders", "us-east", "USD", "desc"
+    trace, accept, agent = "benchmark-fixed", "application/octet-stream", "capsid-loadgen/1.0"
+    limit, offset = 8, 16
+    items = []
+    subtotal_cents = 0
+    for i in range(limit):
+        rank = offset + limit - 1 - i
+        qty = (rank % 4) + 1
+        unit_cents = 1250 + ((rank * 137) % 900)
+        line_cents = qty * unit_cents
+        subtotal_cents += line_cents
+        items.append(
+            {
+                "id": f"{tenant}-{rank}",
+                "sku": f"SKU-{1000 + rank}",
+                "qty": qty,
+                "unitCents": unit_cents,
+                "lineCents": line_cents,
+                "tags": [region, "priority" if rank % 2 == 0 else "standard"],
+            }
+        )
+    tax_cents = (subtotal_cents * 825 + 5000) // 10000
+    total_cents = subtotal_cents + tax_cents
+    checksum = _fnv1a32_hex(
+        f"{tenant}|{region}|{trace}|{accept}|{agent}|{limit}|{offset}|{sort}|{currency}|{total_cents}"
+    )
+    payload = {
+        "ok": True,
+        "tenant": tenant,
+        "region": region,
+        "currency": currency,
+        "sort": sort,
+        "pagination": {"limit": limit, "offset": offset, "count": len(items)},
+        "request": {"trace": trace, "accept": accept, "agent": agent},
+        "totals": {
+            "subtotalCents": subtotal_cents,
+            "taxCents": tax_cents,
+            "totalCents": total_cents,
+            "checksum": checksum,
+        },
+        "items": items,
+    }
+    return json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+
+_DYNAMIC_API_BODY = _expected_dynamic_api_body()
 
 
 def expected_body(workload):
     if workload == "stream":
         return b"b" * 341 + b"c" * 341 + b"d" * 342
+    if workload == "dynamic-api":
+        return _DYNAMIC_API_BODY
     if workload not in WORKLOADS:
         raise ProbeError("qps-workload", "unknown frozen QPS workload")
     size = 1024 if workload == "matrix-json-1k" else 16384
@@ -151,12 +225,14 @@ def identity(value):
 
 
 def checked_memory(
-    value, stack, phase, *, trickle_seconds=15, trickle_rate=10, expected_clients=15, schema=2
+    value, stack, phase, *, trickle_seconds=15, trickle_rate=10, expected_clients=None, schema=3
 ):
+    if expected_clients is None:
+        expected_clients = len(workloads_for_schema(schema)) * 5
     integer(trickle_seconds, "trickle seconds", 1)
     integer(trickle_rate, "trickle rate", 1)
     integer(expected_clients, "expected load generators", 1)
-    root_roles = ROOT_ROLES_V1 if schema == 1 else ROOT_ROLES
+    root_roles = ROOT_ROLES_V1 if schema == 1 else ROOT_ROLES_V2 if schema == 2 else ROOT_ROLES
     if (
         stack not in root_roles
         or phase not in ("lowLoad", "serving")

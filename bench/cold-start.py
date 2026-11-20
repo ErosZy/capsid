@@ -17,6 +17,7 @@ from cold_probe import ColdProbe, compile_fixture, write_json
 from measurement_runtime import ProbeError
 from perf_evidence import (
     CURRENT_SCHEMA,
+    EXPECTED_STACK_FLAGS_V3,
     PROTOCOL,
     STACKS,
     median,
@@ -46,6 +47,7 @@ def parse_args(argv=None):
         ("compiler", "COMPILE", build / "capsid-bytecode-compile"),
         ("node", "NODE_BIN", shutil.which("node")),
         ("bun", "BUN_BIN", shutil.which("bun")),
+        ("deno", "DENO_BIN", shutil.which("deno")),
         ("workerd", "WORKERD_BIN", shutil.which("workerd")),
     ):
         parser.add_argument("--" + flag, type=Path, default=os.environ.get(env, default))
@@ -57,7 +59,9 @@ def parse_args(argv=None):
     parser.add_argument(
         "--stacks",
         nargs="+",
-        default=os.environ.get("STACKS", "capsid node node-jitless bun workerd").split(),
+        default=os.environ.get(
+            "STACKS", "capsid workerd deno node-jitless bun-jitless node bun"
+        ).split(),
     )
     parser.add_argument("--rounds", type=int, default=os.environ.get("ROUNDS", 5))
     parser.add_argument("--warm", type=int, default=os.environ.get("WARM", 50))
@@ -119,7 +123,7 @@ def parse_args(argv=None):
     for name, path in paths.items():
         if path is None or not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable for {name}: {path}")
-    for attr in ("worker", "cold", "compiler", "node", "bun", "workerd"):
+    for attr in ("worker", "cold", "compiler", "node", "bun", "deno", "workerd"):
         value = getattr(args, attr)
         if value is not None:
             setattr(args, attr, value.resolve())
@@ -133,6 +137,7 @@ def binary_paths(args):
         "capsid-bytecode-compile": args.compiler,
         "node": args.node,
         "bun": args.bun,
+        "deno": args.deno,
         "workerd": args.workerd,
     }
     required = set().union(*(required_binaries("cold-start", stack) for stack in args.stacks))
@@ -144,6 +149,8 @@ def fixture_kind(stack):
         return "capsid"
     if stack == "node-jitless":
         return "node"
+    if stack == "bun-jitless":
+        return "bun"
     return stack
 
 
@@ -401,7 +408,7 @@ def run_lane(args):
             "posture": {"platform": "linux", "mode": "c-abi", "sandbox": "strict"},
             "runner": runner,
             "observedBinarySHA256": before,
-            "stackFlags": {"node-jitless": ["--jitless"]},
+            "stackFlags": EXPECTED_STACK_FLAGS_V3,
             "protocol": dict(
                 PROTOCOL["cold-start"],
                 sutCpuSet=args.cpuset,

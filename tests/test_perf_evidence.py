@@ -104,7 +104,9 @@ class Fixture:
                 "records": [],
             }
             if schema == 2 and lane in ("cold-start", "qps"):
-                m["stackFlags"] = {"node-jitless": ["--jitless"]}
+                m["stackFlags"] = dict(contract.EXPECTED_STACK_FLAGS_V2)
+            elif schema == 3 and lane in ("cold-start", "qps"):
+                m["stackFlags"] = dict(contract.EXPECTED_STACK_FLAGS_V3)
             self.manifests[lane] = m
             if lane == "density":
                 m["protocol"]["caps"] = {"capsid": 2, "workerd": 2}
@@ -133,17 +135,15 @@ class Fixture:
                     }
                     self.write(path / f"binaries/{name}.bin", binary)
                 if lane == "qps":
-                    synthetic_clients = synthetic_memory(stack, "serving")["loadgenProcesses"]
-                    offset = contract.WORKLOADS.index(value) * 5
+                    qps_workloads = contract.workloads_for(schema)
+                    synthetic_clients = synthetic_memory(
+                        stack, "serving", clients=len(qps_workloads) * 5
+                    )["loadgenProcesses"]
+                    offset = qps_workloads.index(value) * 5
                     record["clientProcesses"] = synthetic_clients[offset : offset + 5]
-                    body = (
-                        (b"b" * 341 + b"c" * 341 + b"d" * 342)
-                        if value == "stream"
-                        else json.dumps(
-                            {"data": "x" * ((1024 if value == "matrix-json-1k" else 16384) - 11)},
-                            separators=(",", ":"),
-                        ).encode()
-                    )
+                    from qps_control import expected_body
+
+                    body = expected_body(value)
                     payload = {
                         "workload": value,
                         "response_validation": "exact-bytes-v2",
@@ -249,9 +249,11 @@ class Fixture:
                 m["records"].append(record)
             if lane == "qps":
                 memory = {}
+                qps_clients = len(contract.workloads_for(schema)) * 5
                 for stack in contract.stacks_for(lane, schema=schema):
                     memory[stack] = {
-                        phase: synthetic_memory(stack, phase) for phase in ("lowLoad", "serving")
+                        phase: synthetic_memory(stack, phase, clients=qps_clients)
+                        for phase in ("lowLoad", "serving")
                     }
                     memory[stack]["serving"]["records"] = [
                         {
@@ -496,12 +498,12 @@ class PerformanceEvidenceTests(unittest.TestCase):
         self.assertEqual(point["git"]["commit"], "a" * 40)
         self.assertEqual(point["generation"]["collector"]["commit"], "")
         self.assertEqual(point["verification"]["status"], "verified")
-        self.assertEqual(point["verification"]["contract"], contract.CONTRACT_V2)
+        self.assertEqual(point["verification"]["contract"], contract.CONTRACT_V3)
         self.assertIn("density", point["origins"])
         for name, expected in point["evidence"].items():
             self.assertEqual(digest((f.root / name).read_bytes()), expected)
-        self.assertEqual(len(point["coldStart"]["cells"]), 18)
-        self.assertEqual(len(point["qps"]["cells"]), 15)
+        self.assertEqual(len(point["coldStart"]["cells"]), 24)
+        self.assertEqual(len(point["qps"]["cells"]), 28)
         self.assertTrue(any("/density/" in name for name in point["evidence"]))
         self.assertEqual(point["density"]["capsid"]["cold@10k"]["limit"], "cap")
 
@@ -574,7 +576,7 @@ class PerformanceEvidenceTests(unittest.TestCase):
             ("binaries", {}, "binary identities"),
             ("fixtures", {}, "fixture identities"),
             ("memory", "missing.json", "SHA-256 entry"),
-            ("stackFlags", {}, "node-jitless"),
+            ("stackFlags", {}, "v3 runtime launch flags"),
         ]
         for key, value, error in cases:
             with self.subTest(key=key, value=value), f.transaction():

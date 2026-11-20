@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owned five-stack pure-JS serving lane with distinct trickle and loaded processes."""
+"""Owned seven-stack pure-JS serving lane with distinct trickle and loaded processes."""
 
 import argparse
 from contextlib import contextmanager
@@ -21,6 +21,7 @@ from qps_inputs import snapshot_fixtures
 from qps_probe import QpsProbe
 from perf_evidence import (
     CURRENT_SCHEMA,
+    EXPECTED_STACK_FLAGS_V3,
     PROTOCOL,
     STACKS,
     required_binaries,
@@ -58,6 +59,7 @@ def binary_paths(args):
         "loadgen": args.loadgen,
         "node": args.node,
         "bun": args.bun,
+        "deno": args.deno,
         "workerd": args.workerd,
     }
     required = set().union(*(required_binaries("qps", stack) for stack in args.stacks))
@@ -73,6 +75,7 @@ def parse_args(argv=None):
         ("loadgen", "LOADGEN", build / "benchmark-tools/loadgen"),
         ("node", "NODE_BIN", shutil.which("node")),
         ("bun", "BUN_BIN", shutil.which("bun")),
+        ("deno", "DENO_BIN", shutil.which("deno")),
         ("workerd", "WORKERD_BIN", shutil.which("workerd")),
     ):
         parser.add_argument("--" + flag, type=Path, default=os.environ.get(env, default))
@@ -177,7 +180,7 @@ def parse_args(argv=None):
     for name, path in binary_paths(args).items():
         if path is None or not path.is_file() or not os.access(path, os.X_OK):
             parser.error(f"missing executable for {name}: {path}")
-    for attr in ("host", "worker", "loadgen", "node", "bun", "workerd"):
+    for attr in ("host", "worker", "loadgen", "node", "bun", "deno", "workerd"):
         value = getattr(args, attr)
         if value is not None:
             setattr(args, attr, value.resolve())
@@ -404,7 +407,7 @@ def run_locked(args, lock):
             "posture": {"platform": "linux", "mode": "managed", "sandbox": "strict"},
             "runner": runner,
             "observedBinarySHA256": before,
-            "stackFlags": {"node-jitless": ["--jitless"]},
+            "stackFlags": EXPECTED_STACK_FLAGS_V3,
             "protocol": dict(
                 PROTOCOL["qps"],
                 sutCpuSet=args.cpuset,

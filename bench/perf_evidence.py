@@ -27,30 +27,55 @@ class EvidenceError(ValueError):
 
 CONTRACT_V1 = "capsid-perf-lane-v1"
 CONTRACT_V2 = "capsid-perf-lane-v2"
-CURRENT_SCHEMA = 2
-SUPPORTED_SCHEMAS = (1, 2)
+CONTRACT_V3 = "capsid-perf-lane-v3"
+CURRENT_SCHEMA = 3
+SUPPORTED_SCHEMAS = (1, 2, 3)
 EXPECTED_STACK_FLAGS_V2 = {"node-jitless": ["--jitless"]}
+EXPECTED_STACK_FLAGS_V3 = {
+    "deno": ["--allow-net=127.0.0.1", "--no-prompt", "--no-config"],
+    "node-jitless": ["--jitless"],
+    "bun-jitless": ["env:BUN_JSC_useJIT=0"],
+}
 
 SIZES = ("10k", "100k", "1m")
-WORKLOADS = ("matrix-json-1k", "matrix-json-16k", "stream")
+WORKLOADS_V1_V2 = ("matrix-json-1k", "matrix-json-16k", "stream")
+WORKLOADS = ("matrix-json-1k", "matrix-json-16k", "stream", "dynamic-api")
 STACKS_V1 = {
     "cold-start": ("capsid-source", "capsid-bytecode", "node", "deno", "workerd"),
     "qps": ("capsid", "workerd", "fastapi", "flask", "php"),
     "density": ("capsid", "workerd"),
 }
-STACKS = {
+STACKS_V2 = {
     "cold-start": ("capsid-source", "capsid-bytecode", "node", "node-jitless", "bun", "workerd"),
     "qps": ("capsid", "node", "node-jitless", "bun", "workerd"),
+    "density": ("capsid", "workerd"),
+}
+STACKS = {
+    "cold-start": (
+        "capsid-source",
+        "capsid-bytecode",
+        "workerd",
+        "deno",
+        "node-jitless",
+        "bun-jitless",
+        "node",
+        "bun",
+    ),
+    "qps": ("capsid", "workerd", "deno", "node-jitless", "bun-jitless", "node", "bun"),
     "density": ("capsid", "workerd"),
 }
 
 
 def stacks_for(lane, schema=CURRENT_SCHEMA):
-    return (STACKS_V1 if schema == 1 else STACKS)[lane]
+    return (STACKS_V1 if schema == 1 else STACKS_V2 if schema == 2 else STACKS)[lane]
+
+
+def workloads_for(schema=CURRENT_SCHEMA):
+    return WORKLOADS_V1_V2 if schema in (1, 2) else WORKLOADS
 
 
 def contract_for(schema):
-    return CONTRACT_V1 if schema == 1 else CONTRACT_V2
+    return CONTRACT_V1 if schema == 1 else CONTRACT_V2 if schema == 2 else CONTRACT_V3
 
 
 def protocol_for(lane, schema=CURRENT_SCHEMA):
@@ -304,7 +329,10 @@ def cell_key(lane, cell, schema=CURRENT_SCHEMA):
     need(stack in stacks_for(lane, schema), f"{lane}: unknown stack {stack}")
     field = "workload" if lane == "qps" else "size"
     value = cell.get(field)
-    need(value in (WORKLOADS if lane == "qps" else SIZES), f"{lane}: unknown {field} {value}")
+    need(
+        value in (workloads_for(schema) if lane == "qps" else SIZES),
+        f"{lane}: unknown {field} {value}",
+    )
     if lane == "density":
         need(cell.get("phase") in ("cold", "warm"), "density: phase is required")
         return stack, value, cell["phase"]
@@ -315,7 +343,7 @@ def expected_keys(lane, schema=CURRENT_SCHEMA):
     return {
         (s, v, p) if lane == "density" else (s, v)
         for s in stacks_for(lane, schema)
-        for v in (WORKLOADS if lane == "qps" else SIZES)
+        for v in (workloads_for(schema) if lane == "qps" else SIZES)
         for p in (("cold", "warm") if lane == "density" else (None,))
     }
 
@@ -331,6 +359,8 @@ def required_binaries(lane, stack, schema=CURRENT_SCHEMA):
             names.append("capsid-bytecode-compile")
     elif stack in ("node", "node-jitless"):
         names = ["node"]
+    elif stack in ("bun", "bun-jitless"):
+        names = ["bun"]
     elif schema == 1:
         names = {"fastapi": ["python"], "flask": ["python"], "php": ["php-fpm", "nginx"]}.get(
             stack, [stack]
@@ -570,7 +600,9 @@ def validate_qps_memory(archive, parsed, schema=CURRENT_SCHEMA):
             f"qps: {stack}: missing memory phase",
         )
         try:
-            checked_memory_pair(phases, stack, schema=schema)
+            checked_memory_pair(
+                phases, stack, expected_clients=len(workloads_for(schema)) * 5, schema=schema
+            )
         except ProbeError as exc:
             raise EvidenceError(f"qps: {stack}: {exc}") from exc
         for sample in phases.values():
@@ -617,7 +649,11 @@ def validate_qps_memory(archive, parsed, schema=CURRENT_SCHEMA):
                 finite(sample.get("duration_s"), f"qps: {stack}: low-load duration", 15)
         serving = phases["serving"]
         rounds = serving.get("records")
-        need(isinstance(rounds, list) and len(rounds) == 15, "qps: missing per-client load records")
+        expected_rounds = len(workloads_for(schema)) * 5
+        need(
+            isinstance(rounds, list) and len(rounds) == expected_rounds,
+            "qps: missing per-client load records",
+        )
         seen_clients = set()
         for record in archive.manifest["records"]:
             if record["stack"] != stack:
@@ -756,6 +792,11 @@ def validate_lane(path, repo, lane, parsed, version, release):
         need(
             m.get("stackFlags") == EXPECTED_STACK_FLAGS_V2,
             f"{lane}: missing or conflicting node-jitless launch flags provenance",
+        )
+    elif schema == 3 and lane in ("cold-start", "qps"):
+        need(
+            m.get("stackFlags") == EXPECTED_STACK_FLAGS_V3,
+            f"{lane}: missing or conflicting v3 runtime launch flags provenance",
         )
     text(m.get("session"), f"{lane}: session")
     start = timestamp(m.get("startedAt"), f"{lane}: startedAt")

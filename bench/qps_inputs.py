@@ -13,8 +13,10 @@ def snapshot_fixtures(apps, out, stacks):
         base.append("qps-worker.mjs")
     if {"node", "node-jitless"} & set(stacks):
         base.append("qps-node.mjs")
-    if "bun" in stacks:
+    if {"bun", "bun-jitless"} & set(stacks):
         base.append("qps-bun.mjs")
+    if "deno" in stacks:
+        base.append("qps-deno.mjs")
     for name in base:
         if (apps / name).read_bytes() != (canonical / name).read_bytes():
             raise ProbeError(

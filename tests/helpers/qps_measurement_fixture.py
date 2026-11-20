@@ -4,20 +4,31 @@ import copy
 import hashlib
 
 
-def synthetic_memory(stack, phase, base_pid=None, *, seconds=15, rate=10, clients=15):
+def synthetic_memory(stack, phase, base_pid=None, *, seconds=15, rate=10, clients=20):
     root_roles = {
         "capsid": [("host", "worker")],
-        "node": [("process", "process")],
-        "node-jitless": [("process", "process")],
-        "bun": [("process", "process")],
         "workerd": [("process", "process")],
+        "deno": [("process", "process")],
+        "node-jitless": [("process", "process")],
+        "bun-jitless": [("process", "process")],
+        "node": [("process", "process")],
+        "bun": [("process", "process")],
         "fastapi": [("process", "process")],
         "flask": [("master", "worker")],
         "php": [("nginx", "nginx-worker"), ("fpm-master", "fpm-worker")],
     }[stack]
-    index = ("capsid", "node", "node-jitless", "bun", "workerd", "fastapi", "flask", "php").index(
-        stack
-    )
+    index = (
+        "capsid",
+        "workerd",
+        "deno",
+        "node-jitless",
+        "bun-jitless",
+        "node",
+        "bun",
+        "fastapi",
+        "flask",
+        "php",
+    ).index(stack)
     base = base_pid if base_pid is not None else index * 1000 + (200 if phase == "lowLoad" else 400)
     probe = {"pid": 41, "start": 1, "parent": 1, "session": 41, "state": "S"}
 

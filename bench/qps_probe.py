@@ -1,4 +1,4 @@
-"""Actual five-stack pure-JS QPS runs, with isolated fresh trickle and serving trees."""
+"""Actual seven-stack pure-JS QPS runs, with isolated fresh trickle and serving trees."""
 
 from contextlib import ExitStack
 from dataclasses import asdict
@@ -20,18 +20,29 @@ from density_probe import (
     write_json,
 )
 from measurement_runtime import OwnedGroup, ProbeError, ProcFS, stable_pss
-from qps_control import checked_round, expected_body
-from perf_evidence import read_json, object_pairs
+from qps_control import DYNAMIC_API_QUERY, checked_round, expected_body
+from perf_evidence import EXPECTED_STACK_FLAGS_V3, read_json, object_pairs
 
 
 def exact_request(port, workload, timeout=5):
     body = expected_body(workload)
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
     started = time.monotonic()
-    try:
-        connection.request(
-            "GET", "/@capsid/orders/bench/" + workload, headers={"Connection": "close"}
+    target = "/@capsid/orders/bench/" + workload
+    headers = {"Connection": "close"}
+    if workload == "dynamic-api":
+        target += "?" + DYNAMIC_API_QUERY
+        headers.update(
+            {
+                "User-Agent": "capsid-loadgen/1.0",
+                "Accept": "application/octet-stream",
+                "X-Trace": "benchmark-fixed",
+                "Accept-Encoding": "identity",
+                "Cache-Control": "no-cache",
+            }
         )
+    try:
+        connection.request("GET", target, headers=headers)
         response = connection.getresponse()
         received = response.read(len(body) + 1)
         if response.status != 200 or received != body:
@@ -169,10 +180,23 @@ class QpsProbe:
                 argv.append("--jitless")
             argv += [str(script), str(ports[0])]
             return [("process", "process", argv, ports)]
-        if stack == "bun":
+        if stack in ("bun", "bun-jitless"):
             script = folder / "qps-bun.mjs"
             shutil.copyfile(self.apps / "qps-bun.mjs", script)
             argv = [str(self.binaries["bun"]), str(script), str(ports[0])]
+            return [("process", "process", argv, ports)]
+        if stack == "deno":
+            script = folder / "qps-deno.mjs"
+            shutil.copyfile(self.apps / "qps-deno.mjs", script)
+            argv = [
+                str(self.binaries["deno"]),
+                "run",
+                "--allow-net=127.0.0.1",
+                "--no-prompt",
+                "--no-config",
+                str(script),
+                str(ports[0]),
+            ]
             return [("process", "process", argv, ports)]
         raise ProbeError("qps-stack", "unknown QPS stack")
 
@@ -266,6 +290,13 @@ class QpsProbe:
             folder, roots, clients = Path(temporary), [], []
             (folder / "run").mkdir(mode=0o700)
             plan = self.prepare(folder, stack, ports)
+            deno_dir = None
+            if stack == "deno":
+                deno_dir = Path(
+                    logs.enter_context(
+                        tempfile.TemporaryDirectory(prefix="capsid-deno-", dir="/tmp")
+                    )
+                )
             write_json(
                 archive / "launch.json",
                 {
@@ -273,7 +304,7 @@ class QpsProbe:
                     "phase": phase,
                     "ports": ports,
                     "commands": [argv for _, _, argv, _ in plan],
-                    "runtimeFlags": ["--jitless"] if stack == "node-jitless" else [],
+                    "runtimeFlags": EXPECTED_STACK_FLAGS_V3.get(stack, []),
                     "cpuset": self.cpuset,
                     "mode": "managed-strict" if stack == "capsid" else stack,
                 },
@@ -285,6 +316,11 @@ class QpsProbe:
                     output = logs.enter_context((archive / (role + ".log")).open("wb"))
                     env = dict(os.environ)
                     env.pop("NODE_OPTIONS", None)
+                    env.pop("BUN_JSC_useJIT", None)
+                    if stack == "bun-jitless":
+                        env["BUN_JSC_useJIT"] = "0"
+                    if deno_dir is not None:
+                        env["DENO_DIR"] = str(deno_dir)
                     env["XDG_RUNTIME_DIR"] = str(folder / "run")
                     tree = group.spawn(
                         ["taskset", "-c", self.cpuset, *argv], stdout=output, cwd=folder, env=env

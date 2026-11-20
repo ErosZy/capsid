@@ -22,14 +22,7 @@ from qps_measurement_fixture import synthetic_memory
 
 
 def fixture(stack="capsid", workload="stream", round_no=1):
-    body = (
-        b"b" * 341 + b"c" * 341 + b"d" * 342
-        if workload == "stream"
-        else json.dumps(
-            {"data": "x" * ((1024 if workload == "matrix-json-1k" else 16384) - 11)},
-            separators=(",", ":"),
-        ).encode()
-    )
+    body = control.expected_body(workload)
     claims = {
         "workload": workload,
         "response_validation": "exact-bytes-v2",
@@ -72,9 +65,9 @@ def fixture(stack="capsid", workload="stream", round_no=1):
 
 
 class QpsControlTests(unittest.TestCase):
-    def test_all_five_stacks_three_workloads_and_five_rounds(self):
-        for stack in ("capsid", "node", "node-jitless", "bun", "workerd"):
-            for workload in ("matrix-json-1k", "matrix-json-16k", "stream"):
+    def test_all_seven_stacks_four_workloads_and_five_rounds(self):
+        for stack in ("capsid", "workerd", "deno", "node-jitless", "bun-jitless", "node", "bun"):
+            for workload in ("matrix-json-1k", "matrix-json-16k", "stream", "dynamic-api"):
                 for round_no in range(1, 6):
                     rows, verdict = fixture(stack, workload, round_no)
                     self.assertIs(
@@ -87,6 +80,10 @@ class QpsControlTests(unittest.TestCase):
             body = control.expected_body(workload)
             self.assertEqual(size, len(body))
             self.assertEqual({"data": "x" * (size - 11)}, json.loads(body))
+        dyn = json.loads(control.expected_body("dynamic-api"))
+        self.assertTrue(dyn["ok"])
+        self.assertEqual(8, len(dyn["items"]))
+        self.assertEqual("orders", dyn["tenant"])
         for value in ("", None, "matrix-json-4k", "stream8k"):
             with self.subTest(value=value), self.assertRaises(ProbeError):
                 control.expected_body(value)
@@ -205,14 +202,18 @@ class QpsControlTests(unittest.TestCase):
                 control.checked_round(*fixture(), "capsid", "stream", 1, **kwargs)
 
     def test_actual_memory_shapes_require_all_roles_roots_and_fresh_phases(self):
-        for stack in ("capsid", "node", "node-jitless", "bun", "workerd"):
-            phases = {phase: synthetic_memory(stack, phase) for phase in ("lowLoad", "serving")}
+        for stack in ("capsid", "workerd", "deno", "node-jitless", "bun-jitless", "node", "bun"):
+            phases = {
+                phase: synthetic_memory(stack, phase, clients=20)
+                for phase in ("lowLoad", "serving")
+            }
             self.assertIs(phases, control.checked_memory_pair(phases, stack))
             for phase in phases:
                 self.assertEqual(1024, sum(phases[phase]["roles_kb"].values()))
         for legacy_stack in ("fastapi", "flask", "php"):
             phases = {
-                phase: synthetic_memory(legacy_stack, phase) for phase in ("lowLoad", "serving")
+                phase: synthetic_memory(legacy_stack, phase, clients=15)
+                for phase in ("lowLoad", "serving")
             }
             with self.assertRaises(ProbeError):
                 control.checked_memory_pair(phases, legacy_stack)

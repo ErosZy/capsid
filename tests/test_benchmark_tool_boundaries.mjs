@@ -255,6 +255,37 @@ try {
   assert.match(elements.get('qps-eff-chart').innerHTML, /\/MiB/);
   assert.match(elements.get('qps-callout').innerHTML, /Node\.js \(--jitless\)/);
 
+  const v3 = JSON.parse(JSON.stringify(v2));
+  const v3Point = v3.points[v3.points.length - 1];
+  v3Point.verification = { status: 'verified', contract: 'capsid-perf-lane-v3' };
+  v3Point.qps.cells.push(
+    { stack: 'deno', workload: 'matrix-json-1k', qps: 50000, p50Ms: 1.2, p95Ms: 2.3 },
+    { stack: 'bun-jitless', workload: 'matrix-json-1k', qps: 30000, p50Ms: 2.1, p95Ms: 3.4 },
+    { stack: 'capsid', workload: 'dynamic-api', qps: 12000, p50Ms: 5.0, p95Ms: 7.1 },
+    { stack: 'workerd', workload: 'dynamic-api', qps: 19000, p50Ms: 3.1, p95Ms: 5.2 },
+    { stack: 'deno', workload: 'dynamic-api', qps: 32000, p50Ms: 2.0, p95Ms: 3.3 },
+    { stack: 'node-jitless', workload: 'dynamic-api', qps: 6000, p50Ms: 9.8, p95Ms: 12.1 },
+    { stack: 'bun-jitless', workload: 'dynamic-api', qps: 16000, p50Ms: 3.8, p95Ms: 5.4 },
+    { stack: 'node', workload: 'dynamic-api', qps: 42000, p50Ms: 1.5, p95Ms: 2.6 },
+    { stack: 'bun', workload: 'dynamic-api', qps: 75000, p50Ms: 0.8, p95Ms: 1.4 },
+  );
+  v3Point.qps.servingPssMb.deno = 64.0;
+  v3Point.qps.servingPssMb['bun-jitless'] = 34.0;
+  v3Point.qps.servingPss.deno = [{ role: 'process', mb: 64.0 }];
+  v3Point.qps.servingPss['bun-jitless'] = [{ role: 'process', mb: 34.0 }];
+  v3Point.qps.lowLoadPssMb.deno = 35.0;
+  v3Point.qps.lowLoadPssMb['bun-jitless'] = 24.0;
+  v3Point.qps.lowLoadPss.deno = [{ role: 'process', mb: 35.0 }];
+  v3Point.qps.lowLoadPss['bun-jitless'] = [{ role: 'process', mb: 24.0 }];
+  elements = render(v3);
+  assert.match(elements.get('scorecard-table').innerHTML, /Tier 1 · Isolated/);
+  assert.match(elements.get('scorecard-table').innerHTML, /Permission Sandbox/);
+  assert.match(elements.get('scorecard-table').innerHTML, /Dynamic API/);
+  assert.match(elements.get('scenario-grid').innerHTML, /Choose Capsid/);
+  assert.match(elements.get('qps-eff-tabs').innerHTML, /Fair Tier/);
+  assert.match(elements.get('qps-table').innerHTML, /Bun \(--jitless\)/);
+  assert.match(elements.get('qps-callout').innerHTML, /Dynamic API/);
+
   // Current packed evidence and user selection exercise the actual page,
   // using committed generated assets without inventing raw-file links.
   const current = JSON.parse(JSON.stringify(dataContext.window.CAPSID_PERF_DATA));

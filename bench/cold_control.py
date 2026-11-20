@@ -8,7 +8,8 @@ from measurement_runtime import ProbeError
 
 EXPECTED_BODY = b'{"status":"ok","total":2039,"count":16}'
 HTTP_STACKS_V1 = ("node", "deno", "workerd")
-HTTP_STACKS = ("node", "node-jitless", "bun", "workerd")
+HTTP_STACKS_V2 = ("node", "node-jitless", "bun", "workerd")
+HTTP_STACKS = ("workerd", "deno", "node-jitless", "bun-jitless", "node", "bun")
 
 
 def cpu_selection(text, available):
@@ -46,7 +47,7 @@ def identity(value):
     return value["pid"], value["start"]
 
 
-def checked_round(row, warm_requests, *, observed=None, schema=2):
+def checked_round(row, warm_requests, *, observed=None, schema=3):
     if type(warm_requests) is not int or warm_requests <= 0:
         raise ProbeError("cold-warm", "positive warm request target is required")
     if (
@@ -97,7 +98,8 @@ def checked_round(row, warm_requests, *, observed=None, schema=2):
         ):
             raise ProbeError("cold-identity", "missing strict C-ABI worker identity")
     elif (
-        stack not in (HTTP_STACKS_V1 if schema == 1 else HTTP_STACKS)
+        stack
+        not in (HTTP_STACKS_V1 if schema == 1 else HTTP_STACKS_V2 if schema == 2 else HTTP_STACKS)
         or row.get("transport") != "http"
     ):
         raise ProbeError("cold-transport", "unknown cold stack or measurement transport")

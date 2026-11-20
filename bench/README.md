@@ -18,13 +18,13 @@ rather than being described as still present everywhere.
 | --- | --- |
 | `loadgen/`, `build.sh` | Frozen closed-loop client; exact response bytes, fixed inflight, warm-up and measured phases |
 | `cold-start.sh` / `cold-start.py` / `cold_probe.py` / `cold-start.cc` | Owned strict C-ABI source/bytecode and independent runtime cold probes, discarded + five measured runs, 50 warm requests |
-| `qps-lane.sh` / `qps-lane.py` / `qps_probe.py` / `qps_inputs.py` | Pure-JS five-stack (`capsid`, `node`, `node-jitless`, `bun`, `workerd`) managed/strict serving producer, fresh trickle then loaded forests, raw rounds and recursive PSS |
+| `qps-lane.sh` / `qps-lane.py` / `qps_probe.py` / `qps_inputs.py` | Pure-JS seven-stack (`capsid`, `workerd`, `deno`, `node-jitless`, `bun-jitless`, `node`, `bun`) × four-workload (`matrix-json-1k`, `matrix-json-16k`, `stream`, `dynamic-api`) managed/strict serving producer, fresh trickle then loaded forests, raw rounds and recursive PSS |
 | `density-lane.sh` / `density-lane.py` / `density_probe.py` | Managed/strict cold/warm pool search (`capsid`, `workerd`), per-instance coverage, PSS, original budgets, explicit cap/budget result |
 | `density_conditioning.py` / `density_evidence.py` | Owned dispatch/resume barriers and independent replay of responses, memberships, counters, cleanup and original request ceilings |
-| `collect-perf-point.py` / `perf_evidence.py` | Complete sealed-lane/point validation (`capsid-perf-lane-v2`, plus historical `capsid-perf-lane-v1` replay) and deterministic metric derivation |
+| `collect-perf-point.py` / `perf_evidence.py` | Complete sealed-lane/point validation (`capsid-perf-lane-v3`, plus historical `capsid-perf-lane-v2` and `capsid-perf-lane-v1` replay) and deterministic metric derivation |
 | `perf_archive.py` | Bounded hashed transport restoration; never grants acceptance or repairs a record |
 | `prepare-perf-site.py` | Revalidate complete original evidence and stage charts plus real downloadable archives |
-| `bench-apps/` | Pure-JS QPS applications (`qps-worker.mjs` for Capsid/workerd, `qps-node.mjs` for Node/Node `--jitless`, and `qps-bun.mjs` for Bun) |
+| `bench-apps/` | Pure-JS QPS applications (`qps-worker.mjs` for Capsid/workerd, `qps-deno.mjs` for Deno, `qps-node.mjs` for Node/Node `--jitless`, and `qps-bun.mjs` for Bun/Bun `--jitless`) |
 
 The public controllers expose `--help`; formal mode requires actual clean
 build/session metadata and the full declared protocol. `--observation` is
@@ -34,9 +34,10 @@ for an old/dirty build.
 
 ## Source and Platform Prerequisites
 
-Use the [source-build guide](../docs/building.md) and exact pinned Node, Bun
-and workerd inputs (`node-jitless` runs the same pinned `node` binary with
-`--jitless`). Actual process/PSS/Go/protocol
+Use the [source-build guide](../docs/building.md) and exact pinned Node, Bun,
+Deno and workerd inputs (`node-jitless` runs the same pinned `node` binary with
+`--jitless`; `bun-jitless` runs the same pinned `bun` binary with
+`BUN_JSC_useJIT=0`; `deno` runs with `--allow-net=127.0.0.1 --no-prompt --no-config`). Actual process/PSS/Go/protocol
 measurement requires the Linux posture and CPU/resource prerequisites in the
 spec. Windows can run portable models/transport controls, not substitute for
 native Linux measurement or native Windows product qualification.

@@ -17,6 +17,7 @@ from perf_archive import materialize
 from perf_evidence import (
     CONTRACT_V1,
     CONTRACT_V2,
+    CONTRACT_V3,
     EvidenceError,
     is_link,
     need,
@@ -81,7 +82,7 @@ def prepare_site(repo, data_path, output):
             historical += 1
             continue
         need(
-            verification.get("contract") in (CONTRACT_V1, CONTRACT_V2),
+            verification.get("contract") in (CONTRACT_V1, CONTRACT_V2, CONTRACT_V3),
             "unknown performance evidence contract",
         )
         archives = verification.get("archives")

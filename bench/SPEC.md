@@ -49,19 +49,29 @@ two disagree, this file wins and the docs are stale.
   lane); SUT pinned via `taskset` to `SUT_CPUSET` (default `0-3`);
   ports are reserved by the parent and checked against owned listeners.
 - **Workloads:** `matrix-json-1k`, `matrix-json-16k`, `stream` (1 KiB
-  frozen b/c/d thirds). Payload bytes are shared across all stacks and
-  verified per round.
-- **Serving topology:** one serving worker per pure-JS stack, with the entire
-  service forest counted —
-  capsid: managed coordinator + strict sandbox, one-worker fixed pool,
-  Admin-API blue-green deploy, production stream-window defaults
-  (`CAPSID_MANAGED=1 CAPSID_STRICT=1`);
-  node: single-process built-in `node:http` event loop with HTTP/1.1 keep-alive
-  (`qps-node.mjs`, no third-party framework);
-  node-jitless: identical `node` binary and `qps-node.mjs` fixture launched
-  with `--jitless` (recorded in launch/manifest provenance);
-  bun: single-process built-in `Bun.serve` (`qps-bun.mjs`, no third-party framework);
-  workerd: single process, minimal capnp sharing `qps-worker.mjs` with capsid.
+  frozen b/c/d thirds), and `dynamic-api` (per-request `new URL` query parsing,
+  request header inspection, async microtask step, 8-item dynamic order payload
+  construction + FNV-1a checksum, and `JSON.stringify`). Payload bytes are
+  shared across all stacks and verified byte-for-byte per round.
+- **Serving topology (three explicit reference tiers):** one serving worker per
+  pure-JS stack, with the entire service forest counted —
+  **Tier 1 (Isolated / Sandboxed Web-Standard Runtimes)**:
+  capsid: managed coordinator + strict Linux OS sandbox (Namespaces, Landlock,
+  Seccomp), one-worker fixed pool, Admin-API blue-green deploy, production
+  stream-window defaults (`CAPSID_MANAGED=1 CAPSID_STRICT=1`), QuickJS-NG
+  interpreter (no JIT / no RWX);
+  workerd: single process (V8 Isolate sandbox), minimal capnp sharing
+  `qps-worker.mjs` with capsid;
+  deno: single process (`Deno.serve`, `qps-deno.mjs`) under Deno's permission
+  sandbox (`--allow-net=127.0.0.1 --no-prompt --no-config`, default-deny fs/env/run/ffi);
+  **Tier 2 (Non-JIT Interpreter Peers, unsandboxed)**:
+  node-jitless: pinned `node` binary (`qps-node.mjs`) with `--jitless`
+  (V8 Ignition interpreter only);
+  bun-jitless: pinned `bun` binary (`qps-bun.mjs`) with `BUN_JSC_useJIT=0`
+  (JSC LLInt interpreter only);
+  **Tier 3 (Unsandboxed JIT Ceilings, single-process reference)**:
+  node: built-in `node:http` event loop with HTTP/1.1 keep-alive (`qps-node.mjs`);
+  bun: built-in `Bun.serve` (`qps-bun.mjs`).
 - **Memory:** process-tree PSS (`smaps_rollup`) sampled after the last
   round, decomposed per role; a **trickle phase** (fresh process, 15 s
   at 10 req/s) is measured **before** any load, because V8 growth is
@@ -79,14 +89,14 @@ warm-up prevents measurement; a failed verdict exits nonzero. Formal samples
 record a 30000 ms request timeout; the explicit shorter correctness-fixture
 setting is rejected by publication validation.
 
-The shell entry execs the owned Python controller. The full five-stack pure-JS
-producer (`capsid`, `node`, `node-jitless`, `bun`, `workerd`) implements these
+The shell entry execs the owned Python controller. The full seven-stack pure-JS
+producer (`capsid`, `workerd`, `deno`, `node-jitless`, `bun-jitless`, `node`, `bun`) implements these
 defaults, requires managed/strict posture and keeps every serving root and Go
 client in separate owned sessions. An exact application-readiness response
 precedes traffic and is separate from the 150 trickle responses. Low-load
 cleanup completes before a fresh loaded forest; after traffic, settle for 1 s
 and require two equal positive recursive PSS reads within twenty-four attempts at 1 s
-intervals (`v2`; eight in archived `v1`). Every process, role, client, response, raw sample, configuration and
+intervals (`v2`/`v3`; eight in archived `v1`). Every process, role, client, response, raw sample, configuration and
 cleanup record is retained and sealed.
 
 Managed QPS and density readiness retain the operation ID returned by the single
@@ -97,13 +107,14 @@ not a serving-readiness acknowledgement. This wait stays within the original
 absolute startup deadline; neither deploy nor the first exact business request
 is retried. Failed or malformed operation responses abort the probe.
 
-Formal archives emit `schema: 2` (`capsid-perf-lane-v2`), requiring clean
-measured-build/session metadata, four available CPU indices, all five pure-JS
-stacks, all three workloads, five rounds and independent build provenance.
-Historical `schema: 1` (`capsid-perf-lane-v1`) archives remain replayable
-without modification. The producer self-validates its sealed output. Restricted
-`--observation` output has no `lane.json`; short observations do not qualify a
-formal performance point. See [QPS producer](perf-evidence.md#qps-producer).
+Formal archives emit `schema: 3` (`capsid-perf-lane-v3`), requiring clean
+measured-build/session metadata, four available CPU indices, all seven pure-JS
+stacks, all four workloads (including `dynamic-api`), five rounds and independent
+build provenance. Historical `schema: 1` (`capsid-perf-lane-v1`) and `schema: 2`
+(`capsid-perf-lane-v2`) archives remain replayable without modification. The producer
+self-validates its sealed output. Restricted `--observation` output has no
+`lane.json`; short observations do not qualify a formal performance point. See
+[QPS producer](perf-evidence.md#qps-producer).
 
 ### 2.2 Cold-start lane — `bench/cold-start.sh` + `bench/cold-start.cc`
 
@@ -113,11 +124,13 @@ formal performance point. See [QPS producer](perf-evidence.md#qps-producer).
   ~400 ms because a 50-request curl warm loop was inside the timer).
 - **Fixtures:** real-shaped JS at 10k/100k/1m, byte-aligned across
   runtimes (`gen-cold-start-apps.py`); `node-jitless` reuses the exact
-  `app-node-*.mjs` fixture with `--jitless`; each cell drops one warm-up run
-  and reports the median of five.
+  `app-node-*.mjs` fixture with `--jitless`, `bun-jitless` reuses the exact
+  `app-bun-*.mjs` fixture with `BUN_JSC_useJIT=0`, and `deno` uses
+  `app-deno-*.mjs` with a fresh private `DENO_DIR` and `--allow-net=127.0.0.1 --no-prompt --no-config`;
+  each cell drops one warm-up run and reports the median of five.
 - **capsid:** C-ABI tool with `--strict` (full sandbox in the spawned
-  worker); source and trusted-bytecode paths both measured. Node / Node
-  (`--jitless`) / Bun: stdout READY plus an owned listener, then the first
+  worker); source and trusted-bytecode paths both measured. Deno / Node / Node
+  (`--jitless`) / Bun / Bun (`--jitless`): stdout READY plus an owned listener, then the first
   exact HTTP response. workerd: first owned-listener TCP connect (its isolate
   initializes lazily on the first request, so the ready→first-response span
   carries that cost).

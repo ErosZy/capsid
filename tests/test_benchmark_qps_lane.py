@@ -123,14 +123,9 @@ class PreflightTests(unittest.TestCase):
 
 
 def raw_fixture(stack, workload, round_no, warmup, duration, connections, inflight, timeout):
-    body = (
-        (b"b" * 341 + b"c" * 341 + b"d" * 342)
-        if workload == "stream"
-        else json.dumps(
-            {"data": "x" * ((1024 if workload == "matrix-json-1k" else 16384) - 11)},
-            separators=(",", ":"),
-        ).encode()
-    )
+    from qps_control import expected_body
+
+    body = expected_body(workload)
     claims = {
         "workload": workload,
         "response_validation": "exact-bytes-v2",
@@ -234,6 +229,7 @@ class ProducerTests(unittest.TestCase):
             "loadgen",
             "node",
             "bun",
+            "deno",
             "workerd",
         ):
             self.metadata["binaries"][name] = {k: origin[k] for k in ("commit", "tag", "version")}
@@ -258,7 +254,7 @@ class ProducerTests(unittest.TestCase):
             ",".join(map(str, available[:4])),
             *[
                 v
-                for flag in ("host", "worker", "loadgen", "node", "bun", "workerd")
+                for flag in ("host", "worker", "loadgen", "node", "bun", "deno", "workerd")
                 for v in ("--" + flag, str(executable))
             ],
         ]
@@ -325,7 +321,7 @@ class ProducerTests(unittest.TestCase):
 
     def fixture_snapshot(self, apps, out, stacks):
         fixtures, inputs = {}, {}
-        for name in ("qps-worker.mjs", "qps-node.mjs", "qps-bun.mjs"):
+        for name in ("qps-worker.mjs", "qps-node.mjs", "qps-bun.mjs", "qps-deno.mjs"):
             path = out / "fixtures" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"explicitly synthetic fixture")
@@ -341,14 +337,14 @@ class ProducerTests(unittest.TestCase):
         ):
             lane.main(self.argv)
 
-    def test_full_fifteen_cells_seventy_five_clients_seal_and_real_validator(self):
+    def test_full_twenty_eight_cells_one_hundred_forty_clients_seal_and_real_validator(self):
         self.run_main()
         manifest = json.loads((self.out / "lane.json").read_text())
-        self.assertEqual(2, manifest["schema"])
-        self.assertEqual({"node-jitless": ["--jitless"]}, manifest["stackFlags"])
-        self.assertEqual(15, len(manifest["records"]))
-        self.assertEqual(75, sum(len(r["samples"]) for r in manifest["records"]))
-        self.assertEqual(10, len(self.calls))
+        self.assertEqual(3, manifest["schema"])
+        self.assertEqual(lane.EXPECTED_STACK_FLAGS_V3, manifest["stackFlags"])
+        self.assertEqual(28, len(manifest["records"]))
+        self.assertEqual(140, sum(len(r["samples"]) for r in manifest["records"]))
+        self.assertEqual(14, len(self.calls))
         self.assertTrue(all(a[2] != b[2] for a, b in zip(self.calls, self.calls[1:])))
         self.assertEqual(b"shared inputs remain read-only", self.marker.read_bytes())
         collector_spec = importlib.util.spec_from_file_location(

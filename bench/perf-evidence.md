@@ -29,7 +29,7 @@ labels are retained as historical evidence; they do not meet this contract.
 
 | Field | Meaning |
 |---|---|
-| `schema`, `lane`, `status` | Integer `2` (`capsid-perf-lane-v2`, pure-JS matrix) or legacy `1` (`capsid-perf-lane-v1`, historical replay only); `cold-start`, `qps` or `density`; `complete` |
+| `schema`, `lane`, `status` | Integer `3` (`capsid-perf-lane-v3`, 7-stack pure-JS + `dynamic-api`), `2` (`capsid-perf-lane-v2`, 5-stack pure-JS replay), or legacy `1` (`capsid-perf-lane-v1`, historical replay only); `cold-start`, `qps` or `density`; `complete` |
 | `session` | Shared measurement session identity, recorded by every lane |
 | `startedAt`, `completedAt` | Measurement interval with timezone; intervals must not overlap |
 | `origin` | Measured capsid `commit`, `tag`, `version`, `release`, `clean: true` |
@@ -37,13 +37,13 @@ labels are retained as historical evidence; they do not meet this contract.
 | `command` | Exact command string, including the selected environment parameters |
 | `posture` | Linux/strict; `managed` for QPS/density, `c-abi` for cold start |
 | `protocol` | Frozen lane parameters below, plus explicit `sutCpuSet` |
-| `stackFlags` | Schema `2` (`cold-start` and `qps`): explicit per-stack runtime flags (`{"node-jitless": ["--jitless"]}`) |
+| `stackFlags` | Schema `3` (`cold-start` and `qps`): explicit per-stack runtime flags (`{"deno": ["--allow-net=127.0.0.1", "--no-prompt", "--no-config"], "node-jitless": ["--jitless"], "bun-jitless": ["env:BUN_JSC_useJIT=0"]}`); schema `2`: `{"node-jitless": ["--jitless"]}` |
 | `summary`, `isolation` | `cells.txt`; path to the sealed isolation/cleanup JSON |
 | `binaries` | Named measured binary identities, described below |
 | `fixtures` | Named `{file, sha256}` entries with archived fixture bytes |
 | `records` | One record for every required summary cell |
 | `memory` | QPS only: path to the sealed memory phase records |
-| `runtimeDependencies` | Legacy schema `1` QPS archives only (historical replay); omitted in schema `2` pure-JS archives |
+| `runtimeDependencies` | Legacy schema `1` QPS archives only (historical replay); omitted in schema `2`/`3` pure-JS archives |
 
 `origin.commit` describes the measured build. The collector's checkout and
 generation time are stored separately in `generation`, together with hashes
@@ -68,10 +68,10 @@ including density. There is no mixed-origin publication mode.
 
 ## Protocol and raw records
 
-| Lane | Required coverage (`capsid-perf-lane-v2`) | Frozen parameters |
+| Lane | Required coverage (`capsid-perf-lane-v3`) | Frozen parameters |
 |---|---|---|
-| Cold start | capsid source/bytecode, Node, Node (`--jitless`), Bun, workerd × 10k/100k/1m | five measured rounds after one discard; 50 warm requests |
-| QPS | capsid, Node, Node (`--jitless`), Bun, workerd × JSON 1k/16k/stream | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
+| Cold start | capsid source/bytecode, workerd, Deno, Node (`--jitless`), Bun (`--jitless`), Node, Bun × 10k/100k/1m | five measured rounds after one discard; 50 warm requests |
+| QPS | capsid, workerd, Deno, Node (`--jitless`), Bun (`--jitless`), Node, Bun × JSON 1k/16k/stream/`dynamic-api` | 64 connections/inflight; five rounds of 5 s warmup + 15 s measurement; fresh 10 req/s trickle for 15 s |
 | Density | capsid/workerd × 10k/100k/1m × cold/warm | 2048 MiB; 100 requests per worker/cell in warm phase; two stable reads; two verification retries |
 
 Density uses `warmupConcurrencyPolicy: pool-scaled-burst-v1`, base
@@ -134,12 +134,12 @@ validator requires those identities to match the loaded phase.
   per-process positive PSS samples, role sums, readiness and cleanup evidence.
   Protocol fields require `memoryProtocol: "fresh-owned-forest-v1"`,
   `readinessProtocol: "exact-http-before-traffic-v1"`, two stable reads, at most
-  twenty-four reads (`v2`; eight in archived `v1`), 1 s intervals and 1 s settle. Each phase references its sealed
+  twenty-four reads (`v2`/`v3`; eight in archived `v1`), 1 s intervals and 1 s settle. Each phase references its sealed
   `resultFile`, whose bytes must reproduce the memory record. Low load has
   `beforeMeasuredLoad: true`, all 150 individually verified JSON-1k requests,
   paced dispatch/completion times, and `duration_s >= 15`. Its exact readiness
-  response is separate. Loaded memory excludes the probe and all 15 per-round
-  Go clients; those client identities must match the workload records. All ten
+  response is separate. Loaded memory excludes the probe and all per-round
+  Go clients (20 in `v3`, 15 in `v1`/`v2`); those client identities must match the workload records. All phase
   intervals are disjoint, use one controller and fresh service identities, and
   completely reap their owned forests. Totals/roles must reproduce the summary.
   These are observations in the sampling window. Loaded QPS differs across
@@ -191,13 +191,15 @@ binary, and archive validation alone is not full release qualification.
 ## QPS producer
 
 `qps-lane.sh` execs `qps-lane.py`. Its default is the complete pure-JS
-five-stack (`capsid`, `node`, `node-jitless`, `bun`, `workerd`),
-three-workload protocol above. Capsid always uses managed/strict with a fixed
-one-worker pool. The maintained `qps-worker.mjs` is shared by Capsid and locked
-workerd; `qps-node.mjs` (built-in `node:http` with keep-alive, no third-party
-framework) is shared by `node` and `node-jitless`, with `node-jitless`
-launching the same `node` executable with `--jitless` recorded in `launch.json`
-and `lane.json`; `qps-bun.mjs` runs on Bun's built-in `Bun.serve`.
+seven-stack (`capsid`, `workerd`, `deno`, `node-jitless`, `bun-jitless`, `node`, `bun`),
+four-workload (`matrix-json-1k`, `matrix-json-16k`, `stream`, `dynamic-api`) protocol above.
+Capsid always uses managed/strict with a fixed one-worker pool. The maintained
+`qps-worker.mjs` is shared by Capsid and locked workerd; `qps-deno.mjs` runs
+on Deno's `Deno.serve` under `--allow-net=127.0.0.1 --no-prompt --no-config`;
+`qps-node.mjs` (built-in `node:http` with keep-alive, no third-party framework)
+is shared by `node` and `node-jitless` (`--jitless`); `qps-bun.mjs` (`Bun.serve`)
+is shared by `bun` and `bun-jitless` (`BUN_JSC_useJIT=0`). All non-default
+runtime flags/environment controls are recorded in `launch.json` and `lane.json`.
 Parent port leases, per-phase native temporary paths and pinned recursive
 ownership keep unrelated jobs out of measurements and cleanup. A single
 subreaper lease covers serving roots and transient clients; each tree retains

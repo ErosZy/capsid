@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Generate cold-start fixtures: {10k,100k,1M} x {capsid,node,bun,workerd}.
+"""Generate cold-start fixtures: {10k,100k,1M} x {capsid,node,bun,deno,workerd}.
 
 The bulk of each fixture is REAL JS source — three alternating function
 templates (loop+object literal, class, arrow/map/filter/sort chain) at
 real-bundle AST density, not a string literal. The runtimes load the same
 generated body byte-for-byte; only the entry point differs (capsid export
 default, node http server — shared by node and node-jitless with --jitless,
-Bun.serve, workerd Module Worker). Nominal sizes are targets; the generated
-body stops just past the target, so the actual size is within one template
-(<0.1%) of nominal and is reported.
+Bun.serve — shared by bun and bun-jitless with BUN_JSC_useJIT=0,
+Deno.serve under --allow-net=127.0.0.1, workerd Module Worker). Nominal sizes
+are targets; the generated body stops just past the target, so the actual size
+is within one template (<0.1%) of nominal and is reported.
 
 workerd additionally gets one minimal .capnp config per size that embeds the
 fixture and binds 127.0.0.1:18992.
@@ -121,6 +122,25 @@ def bun_entry():
     )
 
 
+def deno_entry():
+    return (
+        "Deno.serve(\n"
+        "  {\n"
+        '    hostname: "127.0.0.1",\n'
+        "    port: 18993,\n"
+        '    onListen() { console.log("READY"); },\n'
+        "  },\n"
+        "  (req) => {\n"
+        "    const q = fn00000(7);\n"
+        "    return new Response(\n"
+        '      JSON.stringify({ status: "ok", total: q.total, count: q.count }),\n'
+        '      { headers: { "content-type": "application/json" } },\n'
+        "    );\n"
+        "  },\n"
+        ");\n"
+    )
+
+
 def workerd_entry():
     return (
         "export default {\n"
@@ -169,14 +189,16 @@ def main():
         capsid = body + capsid_entry()
         node = body + node_entry()
         bun = body + bun_entry()
+        deno = body + deno_entry()
         workerd = body + workerd_entry()
         p1 = write(outdir, "app-capsid-%s.mjs" % label, capsid)
         p2 = write(outdir, "app-node-%s.mjs" % label, node)
         p3 = write(outdir, "app-bun-%s.mjs" % label, bun)
-        p4 = write(outdir, "app-workerd-%s.mjs" % label, workerd)
+        p4 = write(outdir, "app-deno-%s.mjs" % label, deno)
+        p5 = write(outdir, "app-workerd-%s.mjs" % label, workerd)
         write(outdir, "workerd-%s.capnp" % label, workerd_config("app-workerd-%s.mjs" % label))
         print(
-            "%s: %d top-level units, capsid=%d node=%d bun=%d workerd=%d bytes"
+            "%s: %d top-level units, capsid=%d node=%d bun=%d deno=%d workerd=%d bytes"
             % (
                 label,
                 count,
@@ -184,6 +206,7 @@ def main():
                 os.path.getsize(p2),
                 os.path.getsize(p3),
                 os.path.getsize(p4),
+                os.path.getsize(p5),
             )
         )
 

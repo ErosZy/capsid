@@ -117,6 +117,107 @@ func envInt(name string, fallback int) int {
 	return value
 }
 
+type dynamicApiPagination struct {
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+	Count  int `json:"count"`
+}
+
+type dynamicApiRequest struct {
+	Trace  string `json:"trace"`
+	Accept string `json:"accept"`
+	Agent  string `json:"agent"`
+}
+
+type dynamicApiTotals struct {
+	SubtotalCents int    `json:"subtotalCents"`
+	TaxCents      int    `json:"taxCents"`
+	TotalCents    int    `json:"totalCents"`
+	Checksum      string `json:"checksum"`
+}
+
+type dynamicApiItem struct {
+	ID        string   `json:"id"`
+	SKU       string   `json:"sku"`
+	Qty       int      `json:"qty"`
+	UnitCents int      `json:"unitCents"`
+	LineCents int      `json:"lineCents"`
+	Tags      []string `json:"tags"`
+}
+
+type dynamicApiPayload struct {
+	OK         bool                 `json:"ok"`
+	Tenant     string               `json:"tenant"`
+	Region     string               `json:"region"`
+	Currency   string               `json:"currency"`
+	Sort       string               `json:"sort"`
+	Pagination dynamicApiPagination `json:"pagination"`
+	Request    dynamicApiRequest    `json:"request"`
+	Totals     dynamicApiTotals     `json:"totals"`
+	Items      []dynamicApiItem     `json:"items"`
+}
+
+func fnv1a32Hex(s string) string {
+	var h uint32 = 0x811c9dc5
+	for i := 0; i < len(s); i++ {
+		h ^= uint32(s[i])
+		h *= 0x01000193
+	}
+	return fmt.Sprintf("%08x", h)
+}
+
+func buildDynamicApiExpected() []byte {
+	tenant, region, currency, sortOrder := "orders", "us-east", "USD", "desc"
+	trace, accept, agent := "benchmark-fixed", "application/octet-stream", "capsid-loadgen/1.0"
+	limit, offset := 8, 16
+	items := make([]dynamicApiItem, limit)
+	subtotalCents := 0
+	for i := 0; i < limit; i++ {
+		rank := offset + limit - 1 - i
+		qty := (rank % 4) + 1
+		unitCents := 1250 + ((rank * 137) % 900)
+		lineCents := qty * unitCents
+		subtotalCents += lineCents
+		tag := "standard"
+		if rank%2 == 0 {
+			tag = "priority"
+		}
+		items[i] = dynamicApiItem{
+			ID:        fmt.Sprintf("%s-%d", tenant, rank),
+			SKU:       fmt.Sprintf("SKU-%d", 1000+rank),
+			Qty:       qty,
+			UnitCents: unitCents,
+			LineCents: lineCents,
+			Tags:      []string{region, tag},
+		}
+	}
+	taxCents := (subtotalCents*825 + 5000) / 10000
+	totalCents := subtotalCents + taxCents
+	checksum := fnv1a32Hex(fmt.Sprintf("%s|%s|%s|%s|%s|%d|%d|%s|%s|%d",
+		tenant, region, trace, accept, agent, limit, offset, sortOrder, currency, totalCents))
+	payload := dynamicApiPayload{
+		OK:         true,
+		Tenant:     tenant,
+		Region:     region,
+		Currency:   currency,
+		Sort:       sortOrder,
+		Pagination: dynamicApiPagination{Limit: limit, Offset: offset, Count: len(items)},
+		Request:    dynamicApiRequest{Trace: trace, Accept: accept, Agent: agent},
+		Totals: dynamicApiTotals{
+			SubtotalCents: subtotalCents,
+			TaxCents:      taxCents,
+			TotalCents:    totalCents,
+			Checksum:      checksum,
+		},
+		Items: items,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		fatal("failed to marshal expected dynamic-api payload: " + err.Error())
+	}
+	return encoded
+}
+
 func requestTimedOut(err error) bool {
 	var deadline net.Error
 	return stderrors.As(err, &deadline) && deadline.Timeout()
@@ -262,6 +363,9 @@ func main() {
 			path = "/@capsid/orders/bench/stream64k"
 			expectedLen = 65536
 			expectedByte = byte(0x62)
+		case "dynamic-api":
+			path = "/@capsid/orders/bench/dynamic-api?tenant=orders&region=us-east&limit=8&offset=16&sort=desc&currency=USD"
+			expectedLen = -1
 		case "fixed-1k":
 			// default above
 		default:
@@ -315,10 +419,13 @@ func main() {
 		// interiors of all three thirds, rather than three sentinel offsets.
 		third := expectedLen / 3
 		expectedBuf = []byte(strings.Repeat("b", third) + strings.Repeat("c", third) + strings.Repeat("d", expectedLen-2*third))
+	} else if workload == "dynamic-api" {
+		expectedBuf = buildDynamicApiExpected()
+		expectedLen = len(expectedBuf)
 	} else if expectedLen > 0 {
 		expectedBuf = bytes.Repeat([]byte{expectedByte}, expectedLen)
 	}
-	exactBody := matrixKind != "" || workload == "stream"
+	exactBody := matrixKind != "" || workload == "stream" || workload == "dynamic-api"
 	validation, payloadBytes, expectedSHA := "legacy-v1", 0, ""
 	if exactBody {
 		validation = "exact-bytes-v2"

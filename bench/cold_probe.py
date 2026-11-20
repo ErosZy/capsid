@@ -14,6 +14,7 @@ import time
 
 from cold_control import EXPECTED_BODY, checked_round, identity
 from measurement_runtime import OwnedProcess, PortAllocator, ProbeError, ProcFS, stable_pss
+from perf_evidence import EXPECTED_STACK_FLAGS_V3
 
 
 def write_json(path, value):
@@ -179,7 +180,9 @@ class ColdProbe:
     def prepare_http(self, stack, size, directory, port):
         runtime = directory / "runtime"
         runtime.mkdir()
-        fixture_kind = "node" if stack == "node-jitless" else stack
+        fixture_kind = (
+            "node" if stack == "node-jitless" else "bun" if stack == "bun-jitless" else stack
+        )
         source = (self.apps / f"app-{fixture_kind}-{size}.mjs").read_text(encoding="utf-8")
         if stack in ("node", "node-jitless"):
             old = 'server.listen(18990, "127.0.0.1", () => console.log("READY"));'
@@ -188,10 +191,21 @@ class ColdProbe:
             if stack == "node-jitless":
                 argv.append("--jitless")
             argv.append(str(runtime / "bundle.mjs"))
-        elif stack == "bun":
+        elif stack in ("bun", "bun-jitless"):
             old = "  port: 18991,"
             new = old.replace("18991", str(port))
             argv = [str(self.binaries["bun"]), str(runtime / "bundle.mjs")]
+        elif stack == "deno":
+            old = "    port: 18993,"
+            new = old.replace("18993", str(port))
+            argv = [
+                str(self.binaries["deno"]),
+                "run",
+                "--allow-net=127.0.0.1",
+                "--no-prompt",
+                "--no-config",
+                str(runtime / "bundle.mjs"),
+            ]
         elif stack == "workerd":
             old = None
             config = (
@@ -220,6 +234,7 @@ class ColdProbe:
         directory = self.out / name
         directory.mkdir()
         owned, lease, cleanup, result, failure = None, None, None, None, None
+        deno_dir = None
         deadline = time.monotonic() + self.round_timeout
         stdout_path, stderr_path = directory / "stdout.log", directory / "stderr.log"
         try:
@@ -255,7 +270,7 @@ class ColdProbe:
                 directory / "launch.json",
                 {
                     "command": command,
-                    "runtimeFlags": ["--jitless"] if stack == "node-jitless" else [],
+                    "runtimeFlags": EXPECTED_STACK_FLAGS_V3.get(stack, []),
                     "ports": lease.ports if lease else [],
                     "round": round_no,
                     "stack": stack,
@@ -264,6 +279,12 @@ class ColdProbe:
             )
             env = dict(os.environ)
             env.pop("NODE_OPTIONS", None)
+            env.pop("BUN_JSC_useJIT", None)
+            if stack == "bun-jitless":
+                env["BUN_JSC_useJIT"] = "0"
+            if stack == "deno":
+                deno_dir = Path(tempfile.mkdtemp(prefix="capsid-cold-deno-", dir="/tmp"))
+                env["DENO_DIR"] = str(deno_dir)
             with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
                 if lease is not None:
                     lease.release()
@@ -368,6 +389,8 @@ class ColdProbe:
                     failure = exc
             if lease is not None:
                 lease.release()
+            if deno_dir is not None:
+                shutil.rmtree(deno_dir, ignore_errors=True)
         if failure is None and stack.startswith("capsid-") and owned.process.returncode != 0:
             failure = ProbeError(
                 "cold-tool", "C-ABI tool failed", exitCode=owned.process.returncode
