@@ -453,6 +453,18 @@ for (const [name, old, replacement, diagnostic] of [
     'evidence root resolves the configured build tree',
   ],
   [
+    'driver report destination',
+    'CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-windows/matrix-case-reports',
+    'CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-windows/lost-reports',
+    'directs raw driver reports to the artifact tree',
+  ],
+  [
+    'driver report directory',
+    'New-Item -Path $env:CAPSID_WS_REPORT_DIR -ItemType Directory -Force | Out-Null',
+    'Write-Output $env:CAPSID_WS_REPORT_DIR',
+    'creates the driver report directory before CTest',
+  ],
+  [
     'JUnit path',
     "$junit_path = Join-Path $evidence_root 'windows-junit.xml'",
     "$junit_path = Join-Path $evidence_root 'lost.xml'",
@@ -567,6 +579,7 @@ for (const artifact of [
   'ctest.log',
   'Testing/Temporary/LastTest.log',
   'workerd-compatibility/',
+  'matrix-case-reports/',
 ]) {
   fault(
     `Windows actual ${artifact} evidence must be uploaded`,

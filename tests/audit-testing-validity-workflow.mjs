@@ -1035,6 +1035,19 @@ assert.ok(
   windowsMatrixLines.has('$evidence_root = (Resolve-Path build-windows).Path'),
   'Windows native evidence root resolves the configured build tree',
 );
+assert.match(
+  windowsMatrix,
+  /^          CAPSID_WS_REPORT_DIR: \$\{\{ github\.workspace \}\}\/build-windows\/matrix-case-reports\s*$/m,
+  'Windows native matrix directs raw driver reports to the artifact tree',
+);
+const mkdirDriverReports =
+  'New-Item -Path $env:CAPSID_WS_REPORT_DIR -ItemType Directory -Force | Out-Null';
+assert.ok(
+  windowsMatrixLines.has(mkdirDriverReports) &&
+    windowsMatrix.indexOf(mkdirDriverReports) <
+      windowsMatrix.indexOf('ctest --test-dir build-windows '),
+  'Windows native matrix creates the driver report directory before CTest',
+);
 assert.ok(
   windowsMatrixLines.has("$junit_path = Join-Path $evidence_root 'windows-junit.xml'"),
   'Windows native job retains JUnit evidence at the uploaded absolute path',
@@ -1070,6 +1083,7 @@ for (const fragment of [
   '            build-windows/ctest.log',
   '            build-windows/Testing/Temporary/LastTest.log',
   '            build-windows/workerd-compatibility/',
+  '            build-windows/matrix-case-reports/',
 ])
   assert.ok(
     windowsUpload.includes(fragment),

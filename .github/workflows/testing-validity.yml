@@ -1002,8 +1002,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run Windows host-side matrix
+        env:
+          CAPSID_WS_REPORT_DIR: ${{ github.workspace }}/build-windows/matrix-case-reports
         run: |
           $evidence_root = (Resolve-Path build-windows).Path
+          New-Item -Path $env:CAPSID_WS_REPORT_DIR -ItemType Directory -Force | Out-Null
           $ctest_log = Join-Path $evidence_root 'ctest.log'
           $junit_path = Join-Path $evidence_root 'windows-junit.xml'
           ctest --test-dir build-windows `
@@ -1034,6 +1037,7 @@ jobs:
             build-windows/ctest.log
             build-windows/Testing/Temporary/LastTest.log
             build-windows/workerd-compatibility/
+            build-windows/matrix-case-reports/
 
   hosted-evidence-index:
     if: always()
