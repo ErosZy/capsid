@@ -235,7 +235,9 @@ def derive(root):
             "servingPssMiB": point["qps"]["servingPssMb"]["capsid"],
             "density": point["density"]["capsid"],
             "independentReview": "docs/data/performance-review.json",
-            "measuredSourceManifest": "docs/data/performance-source-manifest.json",
+            "measuredSourceManifest": review.get(
+                "measuredSourceManifest", "docs/data/performance-source-manifest.json"
+            ),
         },
         "historicalPerformancePoints": [
             {

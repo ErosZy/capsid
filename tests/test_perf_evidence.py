@@ -1449,6 +1449,48 @@ class PerformanceEvidenceTests(unittest.TestCase):
             self.assertEqual(report["qualifiedPoints"], 1)
             self.assertEqual(report["evidenceFiles"], len(point["evidence"]))
 
+    def test_prerelease_beta_point_version_binds_to_base_cmake_version(self):
+        with tempfile.TemporaryDirectory(prefix="capsid-perf-beta-") as folder:
+            beta = Fixture(Path(folder).resolve(strict=True), schema=2)
+            for lane in ("cold-start", "qps", "density"):
+                beta.manifests[lane]["origin"]["release"] = "v-test-beta.4"
+                beta.manifests[lane]["origin"]["tag"] = ""
+                for bname, binfo in beta.manifests[lane]["binaries"].items():
+                    if bname.startswith("capsid-") or bname in ("cold-start", "loadgen"):
+                        binfo["tag"] = ""
+                beta.proof(lane)
+            argv = [
+                "--repo",
+                str(beta.root),
+                "--cold-start",
+                str(beta.paths["cold-start"]),
+                "--qps",
+                str(beta.paths["qps"]),
+                "--density",
+                str(beta.paths["density"]),
+                "--version",
+                "test-beta.4",
+                "--release",
+                "v-test-beta.4",
+                "--generated-at",
+                "2026-10-20T04:00:00Z",
+                "--data",
+                str(beta.root / "data.js"),
+            ]
+            with redirect_stdout(io.StringIO()):
+                collector.main(argv)
+            point = collector.load_existing(beta.root / "data.js")["points"][0]
+            self.assertEqual(point["version"], "test-beta.4")
+            self.assertEqual(point["release"], "v-test-beta.4")
+            self.assertEqual(point["verification"]["contract"], contract.CONTRACT_V2)
+            source = beta.root / "perf-site"
+            source.mkdir(exist_ok=True)
+            (source / "index.html").write_text(
+                "<!doctype html><title>beta</title>", encoding="utf-8"
+            )
+            report = site.prepare_site(beta.root, beta.root / "data.js", beta.root / "site-beta")
+            self.assertEqual(report["qualifiedPoints"], 1)
+
 
 def run_isolated_complete_suite():
     """Overlap independent fixtures, not assertions or measured workloads."""

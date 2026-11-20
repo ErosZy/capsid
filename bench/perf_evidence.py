@@ -755,12 +755,13 @@ def validate_lane(path, repo, lane, parsed, version, release):
     end = timestamp(m.get("completedAt"), f"{lane}: completedAt")
     need(end >= start, f"{lane}: invalid measurement interval")
     origin = m.get("origin", {})
+    base_version = version.split("-", 1)[0] if isinstance(version, str) else version
     need(
         isinstance(origin, dict)
         and COMMIT.fullmatch(str(origin.get("commit", "")))
         and origin.get("tag") in ("", release)
         and origin.get("clean") is True
-        and origin.get("version") == version
+        and origin.get("version") in (version, base_version)
         and origin.get("release") == release,
         f"{lane}: missing or conflicting measured source identity",
     )
@@ -826,7 +827,7 @@ def validate_lane(path, repo, lane, parsed, version, release):
         if name.startswith("capsid-") or name in ("cold-start", "loadgen"):
             need(
                 binary["commit"] == origin["commit"]
-                and binary["version"] == version
+                and binary["version"] == origin["version"]
                 and binary["tag"] == origin["tag"],
                 f"{lane}: {name} binary conflicts with measured source",
             )

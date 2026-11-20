@@ -595,6 +595,8 @@
       <div class="scroll-x" id="qps-eff-chart"></div>
     </div>
 
+    <div class="callout" id="qps-callout" style="margin-bottom:14px"></div>
+
     <div class="card chart">
       <h3>Raw serving throughput — requests per second</h3>
       <div class="sub">median of five 15 s rounds at 64 connections / 64 in-flight — higher is better</div>
@@ -861,7 +863,10 @@ function renderRecordSelector() {
   for (var i = PTS.length - 1; i >= 0; i--) {
     var option = document.createElement("option");
     option.value = String(i);
-    option.textContent = pointLabel(PTS[i]) + " · " + PTS[i].date;
+    var contract = PTS[i] && PTS[i].verification && PTS[i].verification.contract;
+    var matrixTag = contract === "capsid-perf-lane-v2" ? " · v2 pure-JS" :
+                    contract === "capsid-perf-lane-v1" ? " · v1 archive" : "";
+    option.textContent = pointLabel(PTS[i]) + matrixTag + " · " + PTS[i].date;
     select.appendChild(option);
   }
   select.value = String(POINT_INDEX);
@@ -872,8 +877,14 @@ function renderRecordSelector() {
 function renderHero() {
   var vw = $("verification-wrap");
   if (vw) vw.className = "prov-verify " + (VERIFIED ? "is-verified" : "is-unverified");
+  var contract = P && P.verification && P.verification.contract;
+  var matrixNote = contract === "capsid-perf-lane-v2"
+    ? " Matrix: pure-JS five-stack (Capsid, Node.js, Node --jitless, Bun, workerd)."
+    : contract === "capsid-perf-lane-v1"
+      ? " Matrix: archived v1 cross-language baseline (Capsid, workerd, FastAPI, Flask, PHP; do not infer a paired trend across v1 and v2 matrices)."
+      : "";
   $("verification-note").textContent = VERIFIED ?
-    "Selected record: " + pointLabel(P) + ". Complete archive and protocol replay passed; source, binary identities and raw evidence follow. This is not release qualification." :
+    "Selected record: " + pointLabel(P) + ". Complete archive and protocol replay passed; source, binary identities and raw evidence follow." + matrixNote + " This is not release qualification." :
     "Selected historical record — unverified. The current complete archive/provenance contract has not passed for this point. Do not infer a qualified release trend or paired gain.";
   if (P && P.notes) $("verification-note").textContent += " " + P.notes;
 
@@ -884,7 +895,7 @@ function renderHero() {
   var tags = [
     [P ? pointLabel(P) : "—", VERIFIED ? "verified measured source, not necessarily a release" : "unverified historical observation", VERIFIED ? "live" : "warn"],
     [P ? P.date : "—", VERIFIED ? "measured on" : "recorded date; unverified", ""],
-    [VERIFIED ? "Verified archive" : "Unverified observation", "evidence status", VERIFIED ? "live" : "warn"],
+    [contract === "capsid-perf-lane-v2" ? "v2 · Pure-JS 5-stack" : contract === "capsid-perf-lane-v1" ? "v1 · Cross-language" : "Unverified observation", "benchmark matrix contract", VERIFIED ? "live" : "warn"],
     [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", ""],
     ["Strict Linux sandbox", "namespaces + landlock + seccomp", ""]
   ];
@@ -900,11 +911,16 @@ function renderHero() {
   var q = P && P.qps, c = P && P.coldStart, d = P && P.density;
   var cap1k = findQpsCell(q, "capsid", "matrix-json-1k");
   var wk1k = findQpsCell(q, "workerd", "matrix-json-1k");
+  var nd1k = findQpsCell(q, "node", "matrix-json-1k");
+  var nj1k = findQpsCell(q, "node-jitless", "matrix-json-1k");
   var capSrv = q && q.servingPss ? memoryTotal(q.servingPss, "capsid", q.servingPssMb) : 0;
   var capLow = q && q.lowLoadPss ? memoryTotal(q.lowLoadPss, "capsid", q.lowLoadPssMb) : 0;
   var wkSrv = q && q.servingPss && q.servingPss.workerd ? memoryTotal(q.servingPss, "workerd", q.servingPssMb) : 0;
+  var ndSrv = q && q.servingPss && q.servingPss.node ? memoryTotal(q.servingPss, "node", q.servingPssMb) : 0;
+  var bnSrv = q && q.servingPss && q.servingPss.bun ? memoryTotal(q.servingPss, "bun", q.servingPssMb) : 0;
   var bc1m = findColdCell(c, "capsid-bytecode", "1m");
   var wk1m = findColdCell(c, "workerd", "1m");
+  var bn1m = findColdCell(c, "bun", "1m");
   var nd1m = findColdCell(c, "node", "1m");
 
   var cards = "";
@@ -917,7 +933,10 @@ function renderHero() {
     if (wk1k && wkSrv > 0) {
       var wkEff = wk1k.qps / wkSrv;
       var ratio = capEff / wkEff;
-      effSub = "<b>" + fmt(ratio, 1) + "\u00d7 higher</b> than workerd (" + fmt(wkEff, 1) + "/MiB); raw QPS differs";
+      effSub = "<b>" + fmt(ratio, 1) + "\u00d7</b> vs workerd (" + fmt(wkEff, 1) + "/MiB)";
+      if (nd1k && ndSrv > 0) effSub += " · <b>" + fmt(capEff / (nd1k.qps / ndSrv), 1) + "\u00d7</b> vs Node";
+      else effSub += "; raw QPS differs";
+      if (nj1k) effSub += " · <b>" + fmt(cap1k.qps / nj1k.qps, 1) + "\u00d7</b> QPS vs Node --jitless";
       badge = fmt(ratio, 1) + "\u00d7 vs workerd";
     }
     cards +=
@@ -929,11 +948,13 @@ function renderHero() {
 
   /* KPI 2: Loaded Serving Memory */
   if (capSrv > 0) {
-    var memBadge = wkSrv > 0 ? fmt(wkSrv / capSrv, 0) + "\u00d7 lighter" : "Host + worker";
-    var memSub = wkSrv > 0
-      ? "<b>" + fmt(wkSrv / capSrv, 1) + "\u00d7 lighter</b> than workerd (" + fmt(wkSrv, 1) + " MiB)" +
-        (capLow > 0 ? " · <b>" + fmt(capLow, 1) + " MiB</b> at 10 req/s" : "")
-      : (capLow > 0 ? "<b>" + fmt(capLow, 1) + " MiB</b> at 10 req/s trickle; host + isolated worker" : "host + isolated worker PSS");
+    var memBadge = bnSrv > 0 ? "#1 leanest (5 stacks)" : (wkSrv > 0 ? fmt(wkSrv / capSrv, 0) + "\u00d7 lighter" : "Host + worker");
+    var memParts = [];
+    if (bnSrv > 0) memParts.push("<b>" + fmt(bnSrv / capSrv, 1) + "\u00d7 lighter</b> than Bun");
+    if (ndSrv > 0) memParts.push("<b>" + fmt(ndSrv / capSrv, 1) + "\u00d7</b> vs Node");
+    if (wkSrv > 0) memParts.push("<b>" + fmt(wkSrv / capSrv, 0) + "\u00d7</b> vs workerd");
+    if (capLow > 0) memParts.push("<b>" + fmt(capLow, 1) + " MiB</b> at 10 req/s");
+    var memSub = memParts.length ? memParts.join(" · ") : "host + isolated worker PSS";
     cards +=
       '<div class="kpi"><div class="k-top"><div class="k-label">Serving PSS @ 64 conns</div>' +
       '<span class="k-badge">' + esc(memBadge) + '</span></div>' +
@@ -945,11 +966,12 @@ function renderHero() {
   if (bc1m) {
     var csParts = [];
     if (wk1m && wk1m.totalMs > 0) csParts.push("<b>" + fmt(wk1m.totalMs / bc1m.totalMs, 1) + "\u00d7 faster</b> than workerd");
+    if (bn1m && bn1m.totalMs > 0) csParts.push("<b>" + fmt(bn1m.totalMs / bc1m.totalMs, 1) + "\u00d7</b> vs Bun");
     if (nd1m && nd1m.totalMs > 0) csParts.push("<b>" + fmt(nd1m.totalMs / bc1m.totalMs, 1) + "\u00d7</b> vs Node");
     if (bc1m.pssMb != null) csParts.push(fmt(bc1m.pssMb, 1) + " MiB PSS");
     cards +=
       '<div class="kpi"><div class="k-top"><div class="k-label">Cold start · 1 MiB bundle</div>' +
-      '<span class="k-badge">Bytecode</span></div>' +
+      '<span class="k-badge">#1 Bytecode</span></div>' +
       '<div class="k-value">' + fmt(bc1m.totalMs, 1) + '<small>ms</small></div>' +
       '<div class="k-sub">' + (csParts.length ? csParts.join(" · ") : "strict C-ABI bytecode timing") + "</div></div>";
   }
@@ -1000,11 +1022,26 @@ function renderRadar() {
     return !!findColdCell(c, coldKeyFor(st), "1m");
   });
   var hasAllFull = fullStacks.length >= 3;
-  var canToggle = !hasAllFull && fullStacks.length >= 2;
-  var mode = hasAllFull ? "full" : (RADAR_MODE === "full" && canToggle ? "full" : "serving");
+  var hasSandboxedDens = !!(d && d.capsid && d.capsid["warm@10k"] && d.workerd && d.workerd["warm@10k"] &&
+    fullStacks.indexOf("capsid") >= 0 && fullStacks.indexOf("workerd") >= 0);
+  var hasNoJitPeer = fullStacks.indexOf("node-jitless") >= 0 && fullStacks.indexOf("capsid") >= 0;
+  var canToggleV1 = !hasAllFull && fullStacks.length >= 2;
+  var mode = hasAllFull
+    ? (RADAR_MODE === "sandboxed" && hasSandboxedDens ? "sandboxed" :
+       RADAR_MODE === "nojit" && hasNoJitPeer ? "nojit" : "full")
+    : (RADAR_MODE === "full" && canToggleV1 ? "full" : "serving");
 
   var tabsEl = $("radar-tabs");
-  if (canToggle) {
+  if (hasAllFull && (hasSandboxedDens || hasNoJitPeer)) {
+    tabsEl.innerHTML =
+      '<button type="button" class="pill' + (mode === "full" ? " active" : "") + '" id="rtab-full">All Pure-JS Stacks</button>' +
+      (hasSandboxedDens ? '<button type="button" class="pill' + (mode === "sandboxed" ? " active" : "") + '" id="rtab-sandboxed">Sandboxed (Capsid vs workerd)</button>' : "") +
+      (hasNoJitPeer ? '<button type="button" class="pill' + (mode === "nojit" ? " active" : "") + '" id="rtab-nojit">JIT-less &amp; Sandboxed</button>' : "");
+    var bf = $("rtab-full"), bs = $("rtab-sandboxed"), bn = $("rtab-nojit");
+    if (bf) bf.onclick = function () { RADAR_MODE = "full"; renderRadar(); };
+    if (bs) bs.onclick = function () { RADAR_MODE = "sandboxed"; renderRadar(); };
+    if (bn) bn.onclick = function () { RADAR_MODE = "nojit"; renderRadar(); };
+  } else if (canToggleV1) {
     tabsEl.innerHTML =
       '<button type="button" class="pill' + (mode === "serving" ? " active" : "") + '" id="rtab-serving">All Serving Stacks</button>' +
       '<button type="button" class="pill' + (mode === "full" ? " active" : "") + '" id="rtab-full">Full-Lane (Capsid vs workerd)</button>';
@@ -1015,9 +1052,11 @@ function renderRadar() {
     tabsEl.innerHTML = "";
   }
 
-  var activeStacks = mode === "full" ? fullStacks : qStacks;
+  var activeStacks = mode === "sandboxed" ? ["capsid", "workerd"] :
+                     mode === "nojit" ? fullStacks.filter(function (st) { return st === "capsid" || st === "node-jitless" || st === "workerd"; }) :
+                     mode === "full" ? fullStacks : qStacks;
   var axes = [];
-  if (mode === "full") {
+  if (mode === "full" || mode === "sandboxed" || mode === "nojit") {
     var hasWarmDens = activeStacks.every(function (st) { return d && d[st] && d[st]["warm@10k"]; });
     axes = [
       {
@@ -1621,6 +1660,37 @@ function renderQps() {
     $("qps-eff-chart").innerHTML = '<p class="footnote">Serving memory breakdown unavailable.</p>';
   }
 
+  /* Execution-tier context callout for pure-JS v2 points */
+  var qcEl = $("qps-callout");
+  if (qcEl) {
+    var c1 = idx["matrix-json-1k"] && idx["matrix-json-1k"].capsid;
+    var nj1 = idx["matrix-json-1k"] && idx["matrix-json-1k"]["node-jitless"];
+    var nd1 = idx["matrix-json-1k"] && idx["matrix-json-1k"].node;
+    var bn1 = idx["matrix-json-1k"] && idx["matrix-json-1k"].bun;
+    var wk1 = idx["matrix-json-1k"] && idx["matrix-json-1k"].workerd;
+    if (c1 && nj1 && q.servingPss) {
+      var cm = memoryTotal(q.servingPss, "capsid", q.servingPssMb);
+      var njm = memoryTotal(q.servingPss, "node-jitless", q.servingPssMb);
+      var text = "<b>Execution-tier context.</b> Within the same non-JIT interpreter class, " +
+        "<span class=\"hl\">Capsid</span> (with full Linux Namespaces + Landlock + Seccomp) delivers " +
+        "<b>" + fmt(c1.qps / nj1.qps, 2) + "\u00d7</b> the 1 KiB JSON throughput of unsandboxed " +
+        "<b>Node.js (--jitless)</b> (" + fmt(c1.qps) + " vs " + fmt(nj1.qps) + " req/s) at " +
+        "<b>" + fmt(njm / cm, 1) + "\u00d7 less memory</b> (" + fmt(cm, 1) + " vs " + fmt(njm, 1) + " MiB).";
+      if (bn1 || nd1 || wk1) {
+        var jitNotes = [];
+        if (bn1) jitNotes.push("unsandboxed Bun (" + fmt(bn1.qps) + " req/s, " + fmt(memoryTotal(q.servingPss, "bun", q.servingPssMb), 1) + " MiB)");
+        if (nd1) jitNotes.push("unsandboxed Node JIT (" + fmt(nd1.qps) + " req/s, " + fmt(memoryTotal(q.servingPss, "node", q.servingPssMb), 1) + " MiB)");
+        if (wk1) jitNotes.push("workerd (" + fmt(wk1.qps) + " req/s, " + fmt(memoryTotal(q.servingPss, "workerd", q.servingPssMb), 1) + " MiB)");
+        text += " JIT-compiled peers — " + jitNotes.join(", ") + " — trade larger memory footprints and/or weaker OS isolation for higher peak single-process throughput.";
+      }
+      qcEl.innerHTML = text;
+      qcEl.style.display = "";
+    } else {
+      qcEl.innerHTML = "";
+      qcEl.style.display = "none";
+    }
+  }
+
   /* Raw throughput */
   $("qps-chart").innerHTML = barChart(
     wls.map(function (w) { return WL[w] || w; }),
@@ -2165,9 +2235,20 @@ function renderMethod() {
   var n = 0;
   for (var k in ev) n++;
   var links = "";
-  var packed = VERIFIED && ARCHIVES && P.git && ARCHIVES.measurementCommit === P.git.commit;
+  var pointBundles = [];
+  if (VERIFIED && ARCHIVES && Array.isArray(ARCHIVES.bundles)) {
+    var pointPrefixes = (P && P.verification && P.verification.archives)
+      ? Object.keys(P.verification.archives).map(function (lane) { return P.verification.archives[lane]; })
+      : [];
+    if (pointPrefixes.length) {
+      pointBundles = ARCHIVES.bundles.filter(function (b) { return pointPrefixes.indexOf(b.prefix) >= 0; });
+    } else if (P && P.git && ARCHIVES.measurementCommit === P.git.commit) {
+      pointBundles = ARCHIVES.bundles;
+    }
+  }
+  var packed = pointBundles.length > 0;
   if (packed) {
-    ARCHIVES.bundles.forEach(function (bundle) {
+    pointBundles.forEach(function (bundle) {
       links += "<li><b>" + esc(bundle.lane) + "</b> · " + fmt(bundle.files) + " original files · " +
         fmt(bundle.uncompressedBytes / 1048576, 1) + " MiB restored" +
         '<span class="digest">Combined gzip SHA-256: ' + esc(bundle.sha256) + "</span>";

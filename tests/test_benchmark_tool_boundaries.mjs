@@ -253,13 +253,19 @@ try {
   assert.match(elements.get('frontier-chart').innerHTML, /HIGH-EFFICIENCY ZONE/);
   assert.match(elements.get('scorecard-table').innerHTML, /OS Sandbox/);
   assert.match(elements.get('qps-eff-chart').innerHTML, /\/MiB/);
+  assert.match(elements.get('qps-callout').innerHTML, /Node\.js \(--jitless\)/);
 
   // Current packed evidence and user selection exercise the actual page,
   // using committed generated assets without inventing raw-file links.
   const current = JSON.parse(JSON.stringify(dataContext.window.CAPSID_PERF_DATA));
-  const acceptedIndex = current.points.findIndex(
-    (point) => point.verification?.status === 'verified',
+  const acceptedPoints = current.points
+    .map((point, index) => ({ point, index }))
+    .filter(({ point }) => point.verification?.status === 'verified');
+  assert.ok(acceptedPoints.length >= 1);
+  acceptedPoints.sort((a, b) =>
+    a.point.date === b.point.date ? a.index - b.index : a.point.date.localeCompare(b.point.date),
   );
+  const { point: acceptedPoint, index: acceptedIndex } = acceptedPoints[acceptedPoints.length - 1];
   const historicalIndex = current.points.findIndex(
     (point) => point.verification?.status !== 'verified',
   );
@@ -277,7 +283,11 @@ try {
     /no matching complete performance measurement/,
   );
   const packedLinks = () => elements.get('method-card').innerHTML;
-  const parts = dataContext.window.CAPSID_PERF_ARCHIVES.bundles.flatMap((bundle) => bundle.parts);
+  const activePrefixes = new Set(Object.values(acceptedPoint.verification?.archives || {}));
+  const activeBundles = dataContext.window.CAPSID_PERF_ARCHIVES.bundles.filter(
+    (bundle) => activePrefixes.size === 0 || activePrefixes.has(bundle.prefix),
+  );
+  const parts = activeBundles.flatMap((bundle) => bundle.parts);
   assert.equal((packedLinks().match(/class="archive-download"/g) || []).length, parts.length);
   for (const part of parts) {
     const href = part.path
