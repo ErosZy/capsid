@@ -81,55 +81,56 @@ window.CAPSID_SITE_STATUS = {
   ],
   "performance": {
     "archiveReleaseLabel": "v0.3.0-beta.4",
-    "contract": "capsid-perf-lane-v2",
+    "contract": "capsid-perf-lane-v3",
     "cpuSet": "0-3",
     "date": "2026-11-20",
     "density": {
       "cold@100k": {
         "count": 503,
         "limit": "budget",
-        "pssMb": 2044.0,
+        "pssMb": 2044.3,
         "unit": "workers"
       },
       "cold@10k": {
         "count": 735,
         "limit": "budget",
-        "pssMb": 2047.0,
+        "pssMb": 2045.6,
         "unit": "workers"
       },
       "cold@1m": {
         "count": 128,
         "limit": "budget",
-        "pssMb": 2043.2,
+        "pssMb": 2043.3,
         "unit": "workers"
       },
       "warm@100k": {
         "count": 503,
         "limit": "budget",
-        "pssMb": 2046.7,
+        "pssMb": 2046.8,
         "unit": "workers"
       },
       "warm@10k": {
         "count": 731,
         "limit": "budget",
-        "pssMb": 2044.9,
+        "pssMb": 2045.2,
         "unit": "workers"
       },
       "warm@1m": {
         "count": 128,
         "limit": "budget",
-        "pssMb": 2043.7,
+        "pssMb": 2043.8,
         "unit": "workers"
       }
     },
-    "displayLabel": "0.3.0-beta.4 development snapshot · 13ffb90",
-    "evidenceFiles": 4015,
+    "displayLabel": "0.3.0-beta.4 development snapshot · 82eaab9",
+    "evidenceFiles": 4533,
     "independentReview": "docs/data/performance-review.json",
-    "lowLoadPssMiB": 14.6,
+    "lowLoadPssMiB": 14.9,
     "machine": {
       "architecture": "x86_64",
       "bun": "1.4.5",
       "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+      "deno": "2.9.8",
       "hostId": "f0385d0aeb8b4fc7e7f699e5a5dfc535e1a6aabf262f2c0ba5b773204ea2c51b",
       "kernel": "6.18.40.1-microsoft-standard-WSL2",
       "logicalCpus": 12,
@@ -142,16 +143,17 @@ window.CAPSID_SITE_STATUS = {
     "physicalHostExclusivityClaimed": false,
     "publishedBetaPerformanceMeasured": false,
     "qps": {
-      "matrix-json-16k": 14000.7,
-      "matrix-json-1k": 21485.0,
-      "stream": 10654.0
+      "dynamic-api": 9974.9,
+      "matrix-json-16k": 13952.2,
+      "matrix-json-1k": 21770.8,
+      "stream": 10756.9
     },
     "representsPublishedRelease": false,
-    "servingPssMiB": 18.4,
-    "session": "local-wsl-v030-beta4-20261120T030323Z-13ffb90c",
-    "sourceCommit": "13ffb90c1b6dffcb20d22ab22bcdc3dc4168f8a2",
+    "servingPssMiB": 18.6,
+    "session": "local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99",
+    "sourceCommit": "82eaab999cfd628dbe1529eb553f63c0ee52a9ea",
     "sourceTag": "",
-    "sourceTree": "729a36495b5d655d4dccd74e38e0a8aa6668bbe1"
+    "sourceTree": "5e61f517d5325704c8dc38e35b0c63193fb91ec1"
   },
   "prerelease": {
     "assets": [

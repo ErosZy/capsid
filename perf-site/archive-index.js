@@ -62,68 +62,68 @@ window.CAPSID_PERF_ARCHIVES = {
       "uncompressedBytes": 2697827520
     },
     {
-      "bytes": 1013368,
-      "files": 899,
+      "bytes": 1360298,
+      "files": 1214,
       "lane": "cold-start",
       "parts": [
         {
-          "bytes": 1013368,
-          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-cold.tar.gz",
-          "sha256": "8acc3d8310ade0d9068ef64db7339a966a9d03c6052e81bc660d902e9b2ef02c"
+          "bytes": 1360298,
+          "path": "perf-site/archives/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-cold.tar.gz",
+          "sha256": "7a8f5b1cd417caa860b169c9b4f5ab97f34344e36041d91b2a68e68bcf36dbf1"
         }
       ],
-      "prefix": "bench/results/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-cold",
-      "sha256": "8acc3d8310ade0d9068ef64db7339a966a9d03c6052e81bc660d902e9b2ef02c",
-      "uncompressedBytes": 35746166
+      "prefix": "bench/results/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-cold",
+      "sha256": "7a8f5b1cd417caa860b169c9b4f5ab97f34344e36041d91b2a68e68bcf36dbf1",
+      "uncompressedBytes": 50854729
     },
     {
-      "bytes": 246791,
-      "files": 350,
+      "bytes": 368277,
+      "files": 576,
       "lane": "qps",
       "parts": [
         {
-          "bytes": 246791,
-          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-qps.tar.gz",
-          "sha256": "d69f4cdf16a339c919f6f82314dedcf0081212129d9575ed93b8ba5b609976ab"
+          "bytes": 368277,
+          "path": "perf-site/archives/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-qps.tar.gz",
+          "sha256": "b64769638b187947b7bc822a8b84b67c482433efefc8a1634bf1d70fd2205bc4"
         }
       ],
-      "prefix": "bench/results/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-qps",
-      "sha256": "d69f4cdf16a339c919f6f82314dedcf0081212129d9575ed93b8ba5b609976ab",
-      "uncompressedBytes": 1544636
+      "prefix": "bench/results/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-qps",
+      "sha256": "b64769638b187947b7bc822a8b84b67c482433efefc8a1634bf1d70fd2205bc4",
+      "uncompressedBytes": 2349617
     },
     {
-      "bytes": 163074048,
-      "files": 2766,
+      "bytes": 159120293,
+      "files": 2743,
       "lane": "density",
       "parts": [
         {
           "bytes": 41943040,
-          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part001",
-          "sha256": "537d7ee04d0310b715f3654c02aa257a6ea342c7005d65d2ecc5e832b94f3213"
+          "path": "perf-site/archives/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-density.tar.gz.part001",
+          "sha256": "d67ebeac68145cc3b1fa4c40d55193cf8b351bae53752d1e85713c6802046f21"
         },
         {
           "bytes": 41943040,
-          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part002",
-          "sha256": "91da0282f0b4ce0716ace78225d3bd14f332abecb35038f0b21f33ebe9fedeaf"
+          "path": "perf-site/archives/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-density.tar.gz.part002",
+          "sha256": "7abb5905fad0267916066ae0ddd3b923e4f06924b683cfbeca46d78537a2ff1f"
         },
         {
           "bytes": 41943040,
-          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part003",
-          "sha256": "369da842ecc3f8562f15eb904427d099f8fb59ac992d1297100ddac3c1e95875"
+          "path": "perf-site/archives/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-density.tar.gz.part003",
+          "sha256": "08ea65405420cda77d141faf3b743acde68dac945a79561a04621f6870c0eac8"
         },
         {
-          "bytes": 37244928,
-          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part004",
-          "sha256": "5bcc0ba9059b73e7931bb702b2ac12d744d2089d35a62b2612a155da9e8381d1"
+          "bytes": 33291173,
+          "path": "perf-site/archives/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-density.tar.gz.part004",
+          "sha256": "159eb154c4e3af2226035b979783aa448954b9aa8134d2d7d876548c90938c73"
         }
       ],
-      "prefix": "bench/results/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density",
-      "sha256": "93cbf5af3e88697f9f65960bb3ea732d6d301987aeff5df28282ad5458594026",
-      "uncompressedBytes": 2776868355
+      "prefix": "bench/results/local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99-density",
+      "sha256": "967495bd2655c56968b91e6563efba7e9fb6a9d68d14826633a89cb5a8af3698",
+      "uncompressedBytes": 2692095654
     }
   ],
   "contract": "capsid-perf-packed-archives-v1",
-  "measurementCommit": "13ffb90c1b6dffcb20d22ab22bcdc3dc4168f8a2",
+  "measurementCommit": "82eaab999cfd628dbe1529eb553f63c0ee52a9ea",
   "schema": 1,
-  "session": "local-wsl-v030-beta4-20261120T030323Z-13ffb90c"
+  "session": "local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99"
 };

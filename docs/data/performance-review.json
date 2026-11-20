@@ -1,10 +1,10 @@
 {
   "complete": true,
-  "session": "local-wsl-v030-beta4-20261120T030323Z-13ffb90c",
-  "productCheckout": "13ffb90c1b6dffcb20d22ab22bcdc3dc4168f8a2",
-  "productTree": "729a36495b5d655d4dccd74e38e0a8aa6668bbe1",
+  "session": "local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99",
+  "productCheckout": "82eaab999cfd628dbe1529eb553f63c0ee52a9ea",
+  "productTree": "5e61f517d5325704c8dc38e35b0c63193fb91ec1",
   "measuredSourceManifest": "docs/data/performance-source-manifest-v030-beta4.json",
-  "contract": "capsid-perf-lane-v2",
+  "contract": "capsid-perf-lane-v3",
   "pointVersion": "0.3.0-beta.4",
   "pointRelease": "v0.3.0-beta.4",
   "wholeLocalSessionAccepted": true,
@@ -12,28 +12,28 @@
   "physicalWindowsHostExclusivityNotClaimed": true,
   "fullPlatformOrReleaseAcceptanceNotClaimed": true,
   "noBaselineRerunOrDataModification": true,
-  "measuredSourceFilesVerified": 5459,
+  "measuredSourceFilesVerified": 5467,
   "lanes": {
     "cold": {
       "passed": true,
-      "sealedFiles": 898,
-      "checksumSHA256": "1b6cecdcf3d63f2dd085e3e31ddd14fd17d6309b51dbc6e757057cdc8b136e08"
+      "sealedFiles": 1213,
+      "checksumSHA256": "6b758dbaf4f9fdbeba14c5b0e1b14275dc418b937c97e1e7ff5221fe923f992c"
     },
     "qps": {
       "passed": true,
-      "sealedFiles": 349,
-      "checksumSHA256": "ba24de4e47b7c134fa045dbf6dcb075c2a30fd8c7374620443ad80c555d2ca9c"
+      "sealedFiles": 575,
+      "checksumSHA256": "87dc70c29c075bd0bd3f17f8f597fab63b9acff554a65a909b7c6ba43c3b7eed"
     },
     "density": {
       "passed": true,
-      "sealedFiles": 2765,
-      "checksumSHA256": "d32e2c1fa3a88e2c35e473a43bf86c568efaa04aa351bba57b34bcd3f5b693e4"
+      "sealedFiles": 2742,
+      "checksumSHA256": "85ac806be759861c1ab74effd311e169bcc81c572019158090d3bf7324b6e9dd"
     }
   },
-  "qualifiedPointSHA256": "b88a51d10d1f5d5e77989b47ea3a2a9456f6bdb442c96ded567e601878100a39",
+  "qualifiedPointSHA256": "1561a970e5bdcb0b68697956c7c8bc579a1048df6e910beb16d356a8451f0d3e",
   "allThreeLanesNonOverlappingQuietSession": true,
   "allTwelveDensityBudgetBoundaries": true,
-  "allEightExecutablesRehashed": true,
+  "allNineExecutablesRehashed": true,
   "allOriginalActualExitsZero": true,
   "previousAcceptedSession": {
     "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
@@ -43,5 +43,5 @@
     "measuredSourceManifest": "docs/data/performance-source-manifest.json",
     "qualifiedPointSHA256": "ea64bab3ba38f8962f77891df87ce6b73fbc76b03485378822123223e83c71f2"
   },
-  "reviewedUTC": "2026-11-20T04:32:34.961672+00:00"
+  "reviewedUTC": "2026-11-20T07:14:26.373322+00:00"
 }

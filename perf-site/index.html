@@ -415,9 +415,11 @@
   }
   .density-ref-pill b { color: var(--text); }
 
-  .eff-cell { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
-  .eff-track { width: 56px; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; display: inline-block; }
+  .eff-cell { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  .eff-track { width: 44px; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; display: inline-block; }
   .eff-fill { height: 100%; border-radius: 99px; display: block; }
+  .scorecard-tbl th, .scorecard-tbl td { padding: 9px 9px; font-size: 12.5px; }
+  .scorecard-tbl thead th { font-size: 10px; letter-spacing: 0.65px; }
 
   /* ---------- methodology ---------- */
   .method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
@@ -828,28 +830,28 @@ var NAME_LONG = {
   "php": "PHP Slim — php-fpm + nginx"
 };
 var ISOLATION = {
-  "capsid": ["OS Sandbox (NS+Landlock+Seccomp)", "strict"],
-  "workerd": ["V8 Isolate", "isolate"],
-  "deno": ["Permission Sandbox (--allow-net)", "perm"],
-  "node-jitless": ["Single Process (No Sandbox · No JIT)", "none"],
-  "bun-jitless": ["Single Process (No Sandbox · No JIT)", "none"],
-  "node": ["Single Process (No Sandbox · JIT)", "none"],
-  "bun": ["Single Process (No Sandbox · JIT)", "none"],
-  "fastapi": ["App Worker (No Sandbox)", "none"],
-  "flask": ["App Worker (No Sandbox)", "none"],
-  "php": ["FPM Pool (No Sandbox)", "none"]
+  "capsid": ["OS Sandbox", "strict", "Linux Namespaces + Landlock + Seccomp"],
+  "workerd": ["V8 Isolate", "isolate", "V8 Isolate process sandbox"],
+  "deno": ["Perm Flags", "perm", "Permission Sandbox (--allow-net=127.0.0.1)"],
+  "node-jitless": ["No Sandbox · No JIT", "none", "Single Process (No Sandbox · V8 --jitless)"],
+  "bun-jitless": ["No Sandbox · No JIT", "none", "Single Process (No Sandbox · JSC BUN_JSC_useJIT=0)"],
+  "node": ["No Sandbox · JIT", "none", "Single Process (No Sandbox · V8 JIT)"],
+  "bun": ["No Sandbox · JIT", "none", "Single Process (No Sandbox · JSC JIT)"],
+  "fastapi": ["App Worker", "none", "App Worker (No Sandbox)"],
+  "flask": ["App Worker", "none", "App Worker (No Sandbox)"],
+  "php": ["FPM Pool", "none", "FPM Pool (No Sandbox)"]
 };
 var TIER = {
-  "capsid": [1, "Tier 1 · Isolated", "t1"],
-  "workerd": [1, "Tier 1 · Isolated", "t1"],
-  "deno": [1, "Tier 1 · Isolated", "t1"],
-  "node-jitless": [2, "Tier 2 · No-JIT Peer", "t2"],
-  "bun-jitless": [2, "Tier 2 · No-JIT Peer", "t2"],
-  "node": [3, "Tier 3 · JIT Ceiling", "t3"],
-  "bun": [3, "Tier 3 · JIT Ceiling", "t3"],
-  "fastapi": [3, "Cross-lang Peer", "t3"],
-  "flask": [3, "Cross-lang Peer", "t3"],
-  "php": [3, "Cross-lang Peer", "t3"]
+  "capsid": [1, "T1 · Isolated", "t1", "Tier 1 · Isolated"],
+  "workerd": [1, "T1 · Isolated", "t1", "Tier 1 · Isolated"],
+  "deno": [1, "T1 · Isolated", "t1", "Tier 1 · Isolated"],
+  "node-jitless": [2, "T2 · No-JIT", "t2", "Tier 2 · Non-JIT Interpreter Peer"],
+  "bun-jitless": [2, "T2 · No-JIT", "t2", "Tier 2 · Non-JIT Interpreter Peer"],
+  "node": [3, "T3 · JIT Ceiling", "t3", "Tier 3 · Unsandboxed JIT Ceiling"],
+  "bun": [3, "T3 · JIT Ceiling", "t3", "Tier 3 · Unsandboxed JIT Ceiling"],
+  "fastapi": [3, "Cross-lang", "t3", "Cross-language Peer"],
+  "flask": [3, "Cross-lang", "t3", "Cross-language Peer"],
+  "php": [3, "Cross-lang", "t3", "Cross-language Peer"]
 };
 var SIZES = ["10k", "100k", "1m"];
 var SZ = { "10k": "10 KiB", "100k": "100 KiB", "1m": "1 MiB" };
@@ -1020,6 +1022,7 @@ function renderHero() {
   var wkSrv = q && q.servingPss && q.servingPss.workerd ? memoryTotal(q.servingPss, "workerd", q.servingPssMb) : 0;
   var dnSrv = q && q.servingPss && q.servingPss.deno ? memoryTotal(q.servingPss, "deno", q.servingPssMb) : 0;
   var ndSrv = q && q.servingPss && q.servingPss.node ? memoryTotal(q.servingPss, "node", q.servingPssMb) : 0;
+  var njSrv = q && q.servingPss && q.servingPss["node-jitless"] ? memoryTotal(q.servingPss, "node-jitless", q.servingPssMb) : 0;
   var bnSrv = q && q.servingPss && q.servingPss.bun ? memoryTotal(q.servingPss, "bun", q.servingPssMb) : 0;
   var qCount = q && q.cells ? stacksOf(q.cells).length : 0;
   var bc1m = findColdCell(c, "capsid-bytecode", "1m");
@@ -1039,10 +1042,9 @@ function renderHero() {
       var wkEff = wk1k.qps / wkSrv;
       var ratio = capEff / wkEff;
       effSub = "<b>" + fmt(ratio, 1) + "\u00d7</b> vs workerd (" + fmt(wkEff, 1) + "/MiB)";
-      if (dn1k && dnSrv > 0) effSub += " · <b>" + fmt(capEff / (dn1k.qps / dnSrv), 1) + "\u00d7</b> vs Deno";
-      else if (nd1k && ndSrv > 0) effSub += " · <b>" + fmt(capEff / (nd1k.qps / ndSrv), 1) + "\u00d7</b> vs Node";
+      if (nd1k && ndSrv > 0) effSub += " · <b>" + fmt(capEff / (nd1k.qps / ndSrv), 1) + "\u00d7</b> vs Node JIT";
       else effSub += "; raw QPS differs";
-      if (nj1k) effSub += " · <b>" + fmt(cap1k.qps / nj1k.qps, 1) + "\u00d7</b> QPS vs Node --jitless";
+      if (nj1k && njSrv > 0) effSub += " · <b>" + fmt(capEff / (nj1k.qps / njSrv), 1) + "\u00d7</b> vs Node --jitless";
       badge = fmt(ratio, 1) + "\u00d7 vs workerd";
     }
     cards +=
@@ -1154,8 +1156,8 @@ function renderRadar() {
     tabsEl.innerHTML =
       (hasTier1Multi ? '<button type="button" class="pill' + (mode === "isolated" ? " active" : "") + '" id="rtab-isolated">Tier 1 · Sandboxed</button>' : "") +
       (hasNoJitPeer ? '<button type="button" class="pill' + (mode === "nojit" ? " active" : "") + '" id="rtab-nojit">Tier 2 · No-JIT</button>' : "") +
-      (hasSandboxedDens ? '<button type="button" class="pill' + (mode === "sandboxed" ? " active" : "") + '" id="rtab-sandboxed">2 GiB Pool (Capsid vs workerd)</button>' : "") +
-      '<button type="button" class="pill' + (mode === "full" ? " active" : "") + '" id="rtab-full">All Pure-JS Stacks</button>';
+      (hasSandboxedDens ? '<button type="button" class="pill' + (mode === "sandboxed" ? " active" : "") + '" id="rtab-sandboxed">2 GiB Pool</button>' : "") +
+      '<button type="button" class="pill' + (mode === "full" ? " active" : "") + '" id="rtab-full">All ' + fullStacks.length + ' Stacks</button>';
     var bi = $("rtab-isolated"), bf = $("rtab-full"), bs = $("rtab-sandboxed"), bn = $("rtab-nojit");
     if (bi) bi.onclick = function () { RADAR_MODE = "isolated"; renderRadar(); };
     if (bf) bf.onclick = function () { RADAR_MODE = "full"; renderRadar(); };
@@ -1637,21 +1639,20 @@ function renderScorecard() {
     return { st: st, c1k: c1k, cdyn: cdyn, srv: srv, low: low, eff: eff, cold1m: cold1m, dens10k: dens10k };
   });
 
-  var head = '<table><thead><tr>' +
+  var head = '<table class="scorecard-tbl"><thead><tr>' +
     '<th scope="col" class="col-left">Runtime</th>' +
-    (isPureJs ? '<th scope="col" class="col-left">Reference tier</th>' : "") +
-    '<th scope="col" class="col-left">Isolation boundary</th>' +
-    '<th scope="col" class="gsep">JSON 1k QPS</th>' +
+    (isPureJs ? '<th scope="col" class="col-left">Tier</th>' : "") +
+    '<th scope="col" class="col-left">Isolation</th>' +
+    '<th scope="col" class="gsep">JSON 1k</th>' +
     (hasDyn ? '<th scope="col">Dynamic API</th>' : "") +
     '<th scope="col">Serving PSS</th>' +
     '<th scope="col">QPS / MiB</th>' +
-    '<th scope="col" class="gsep">1 MiB Cold</th>' +
-    '<th scope="col">1 MiB PSS</th>' +
-    (hasDens ? '<th scope="col" class="gsep">2 GiB Warm (10k)</th>' : "") +
+    '<th scope="col" class="gsep">1M Cold · PSS</th>' +
+    (hasDens ? '<th scope="col" class="gsep">2 GiB Warm</th>' : "") +
     "</tr></thead><tbody>";
 
   var body = rows.map(function (r) {
-    var iso = ISOLATION[r.st] || ["Measured runtime", "none"];
+    var iso = ISOLATION[r.st] || ["Measured runtime", "none", "Measured runtime"];
     var tier = TIER[r.st] || [3, "Reference", "t3"];
     var effHtml = "—";
     if (r.eff != null) {
@@ -1659,8 +1660,11 @@ function renderScorecard() {
       effHtml = '<span class="eff-cell"><span>' + fmt(r.eff, 1) + '</span>' +
         '<span class="eff-track"><span class="eff-fill" style="width:' + pct.toFixed(0) + '%;background:' + (C[r.st] || "#888") + '"></span></span></span>';
     }
-    var srvHtml = r.srv != null
-      ? fmt(r.srv, 1) + " MiB" + (r.low != null ? ' <span class="dim">(' + fmt(r.low, 1) + " low)</span>" : "")
+    var srvTitle = r.low != null ? ' title="At trickle (10 req/s): ' + fmt(r.low, 1) + ' MiB"' : "";
+    var srvHtml = r.srv != null ? fmt(r.srv, 1) + " MiB" : "—";
+    var coldHtml = r.cold1m
+      ? fmt(r.cold1m.totalMs, 1) + " ms" +
+        (r.cold1m.pssMb != null ? ' <span class="dim">/ ' + fmt(r.cold1m.pssMb, 1) + "M</span>" : "")
       : "—";
     var densHtml = r.dens10k
       ? fmt(r.dens10k.count, 0) + ' <span class="dim">' + esc(r.dens10k.unit || "") + "</span>"
@@ -1669,14 +1673,13 @@ function renderScorecard() {
           : "—");
     return '<tr' + (r.st === "capsid" ? ' class="mine"' : "") + ">" +
       '<td><span class="sw" style="background:' + (C[r.st] || "#888") + '"></span>' + esc(NAME[r.st] || r.st) + "</td>" +
-      (isPureJs ? '<td class="col-left"><span class="tier-tag ' + tier[2] + '">' + esc(tier[1]) + "</span></td>" : "") +
-      '<td class="col-left"><span class="iso-badge ' + iso[1] + '">' + esc(iso[0]) + "</span></td>" +
+      (isPureJs ? '<td class="col-left"><span class="tier-tag ' + tier[2] + '" title="' + esc(tier[3] || tier[1]) + '">' + esc(tier[1]) + "</span></td>" : "") +
+      '<td class="col-left"><span class="iso-badge ' + iso[1] + '" title="' + esc(iso[2] || iso[0]) + '">' + esc(iso[0]) + "</span></td>" +
       '<td class="gsep">' + (r.c1k ? fmt(r.c1k.qps, 0) : "—") + "</td>" +
       (hasDyn ? "<td>" + (r.cdyn ? fmt(r.cdyn.qps, 0) : "—") + "</td>" : "") +
-      "<td>" + srvHtml + "</td>" +
+      "<td" + srvTitle + ">" + srvHtml + "</td>" +
       "<td>" + effHtml + "</td>" +
-      '<td class="gsep">' + (r.cold1m ? fmt(r.cold1m.totalMs, 1) + " ms" : "—") + "</td>" +
-      '<td class="dim">' + (r.cold1m && r.cold1m.pssMb != null ? fmt(r.cold1m.pssMb, 1) + " MiB" : "—") + "</td>" +
+      '<td class="gsep">' + coldHtml + "</td>" +
       (hasDens ? '<td class="gsep">' + densHtml + "</td>" : "") +
       "</tr>";
   }).join("");
