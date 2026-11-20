@@ -155,7 +155,7 @@ function upstream(records,value,stage,seen) {
         if(kind==='slow-upstream')keys.push('paused',...(stage==='pause'?[]:['resumed']));
         if(kind==='server-close')keys.push('initialCloseSent');
         fields(item,keys,'complete source transport observation');
-        assert.equal(item.localAddress,'127.0.0.1');assert.equal(item.localPort,target.port);assert.equal(item.error,null);
+        assert.ok(['127.0.0.1','::1'].includes(item.localAddress),'actual loopback address');assert.equal(item.localPort,target.port);assert.equal(item.error,null);
         const route=http?'/held-http':'/proxy',suffix=sibling&&!main?'&sibling=1':'';
         assert.equal(item.request.split('\r\n')[0],`GET ${route}?challenge=${challenge}${suffix} HTTP/1.1`);
         assert.deepEqual(bytes(item.rawRequest),Buffer.from(item.request+'\r\n\r\n','latin1'));

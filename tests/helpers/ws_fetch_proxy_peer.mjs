@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import net from 'node:net';
 import {createHash} from 'node:crypto';
+import {listenLoopbackTcp} from './ws_host_backend.mjs';
 
 export async function fetchProxyPeer(kind, challenge) {
     const records = [], sockets = new Set(), controls = new Map();
-    const listener = net.createServer({allowHalfOpen: true}, socket => {
+    const listener = await listenLoopbackTcp(socket => {
         sockets.add(socket);
         const item = {localAddress: socket.localAddress, localPort: socket.localPort, request: null, rawRequest: null,
             frames: [], sentFrames: [], peerEnded: false, peerReset: false, fixtureEnded: false, fixtureDestroyed: false,
@@ -74,10 +74,9 @@ export async function fetchProxyPeer(kind, challenge) {
             } catch (error) {item.error = error.stack; item.fixtureDestroyed = true; socket.destroy();}
         });
     });
-    await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
-    return {port: listener.address().port, snapshot: () => structuredClone(records),
+    return {port: listener.port, snapshot: () => structuredClone(records),
         resume: () => {for(const [socket,{item}] of controls){item.resumed=true;socket.resume();}},
         abort: () => {for(const [socket,{item}] of controls){item.fixtureDestroyed=true;socket.destroy();}},
         close: () => {for(const {sendFrame,item} of controls.values()){item.initialCloseSent=true;sendFrame(8,Buffer.concat([Buffer.from([3,233]),Buffer.from('bye/'+challenge)]));}},
-        stop: async () => {for (const socket of sockets) socket.destroy(); await new Promise(resolve => listener.close(resolve));}};
+        stop: async () => {for (const socket of sockets) socket.destroy(); await listener.close();}};
 }

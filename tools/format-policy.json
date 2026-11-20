@@ -78,6 +78,7 @@
       ]
     },
     "tests/helpers/ws_fetch_proxy_peer.mjs": {
+      "archive": "tests/fixtures/workerd-ws/ipv4-fetch-capture-inputs.zip",
       "sha256": "623066ce92780484aeb23d1f195176964ac1b0f7198e849b7bc8a6fe4b905ad5",
       "references": ["tests/fixtures/workerd-fetch-proxy-report.json.gz"]
     },
@@ -98,10 +99,12 @@
       ]
     },
     "tests/helpers/ws_fetch_upgrade_lifetime_peer.mjs": {
+      "archive": "tests/fixtures/workerd-ws/ipv4-fetch-capture-inputs.zip",
       "sha256": "74a43ae18f6d91c1100daf44827605ec61c4a1727637fd413346951d4c9ec835",
       "references": ["tests/fixtures/workerd-fetch-upgrade-lifetime-report.json"]
     },
     "tests/helpers/ws_fetch_upgrade_peer.mjs": {
+      "archive": "tests/fixtures/workerd-ws/ipv4-fetch-capture-inputs.zip",
       "sha256": "492ce6fab27d0766317049aefe5b8f654b0ceaa55ffd27621cb9f3e98daddb6b",
       "references": ["tests/fixtures/workerd-fetch-upgrade-report.json"]
     },
@@ -342,6 +345,7 @@
       ]
     },
     "tools/workerd-fetch-proxy-contract.mjs": {
+      "archive": "tests/fixtures/workerd-ws/ipv4-fetch-capture-inputs.zip",
       "sha256": "a081e0b38d5f2863871d4f3fbbdc1fc15c8dae01250f08b1190e82872cef2272",
       "references": ["tests/fixtures/workerd-fetch-proxy-report.json.gz"]
     },
@@ -360,10 +364,12 @@
       ]
     },
     "tools/workerd-fetch-upgrade-contract.mjs": {
+      "archive": "tests/fixtures/workerd-ws/ipv4-fetch-capture-inputs.zip",
       "sha256": "f90b7a15fe1625783e044b76c9256ea4c17145fc6f55175a5113bbae0405303e",
       "references": ["tests/fixtures/workerd-fetch-upgrade-report.json"]
     },
     "tools/workerd-fetch-upgrade-lifetime-contract.mjs": {
+      "archive": "tests/fixtures/workerd-ws/ipv4-fetch-capture-inputs.zip",
       "sha256": "756fe677a4c7f7b82349e0ecd8fa889c834813b0074b5aa4a130b1e8790c58f9",
       "references": ["tests/fixtures/workerd-fetch-upgrade-lifetime-report.json"]
     },

@@ -60,7 +60,7 @@ export function assertFetchUpgradeCase(value, mode) {
     for (const [index, entry] of value.upstream.entries()) {
         fields(entry, ['localAddress', 'localPort', 'request', 'rawRequest', 'frames', 'peerEnded', 'peerReset',
             'fixtureEnded', 'fixtureDestroyed', 'responseStatus', 'events', 'error'], 'complete actual upstream entry');
-        assert.equal(entry.localAddress, '127.0.0.1'); assert.equal(entry.localPort, value.target.port);
+        assert.ok(['127.0.0.1', '::1'].includes(entry.localAddress), 'actual loopback address'); assert.equal(entry.localPort, value.target.port);
         assert.equal(Buffer.from(entry.rawRequest, 'base64').toString('latin1'), entry.request + '\r\n\r\n');
         assert.equal(entry.request.split('\r\n')[0], `GET /${index ? 'redirected' : 'hold'}?challenge=${value.challenge} HTTP/1.1`);
         const actual = headers(entry.request), keys = actual.filter(([name]) => name === 'sec-websocket-key');
@@ -142,6 +142,10 @@ export function assertFetchUpgradeCase(value, mode) {
             state: {kind: value.kind, challenge: value.challenge, trace: ['message', 'fetch'], result: null, socket: null, failure: null, firstBody: null}});
         assert.equal(value.checkpointUpstream.length, 1); assert.equal(value.checkpointUpstream[0].peerEnded, false); assert.equal(value.checkpointUpstream[0].fixtureEnded, false);
     } else {assert.equal(value.checkpoint, null); assert.deepEqual(value.checkpointUpstream, []);}
+    for (const entry of value.checkpointUpstream) {
+        for (const key of ['localAddress', 'localPort', 'request', 'rawRequest'])
+            assert.equal(entry[key], value.upstream[0][key], 'source connection identity retains ' + key);
+    }
     assertWire(value); fields(value.shutdown, ['code', 'signal', 'forced'], 'complete shutdown'); assert.equal(value.shutdown.forced, false);
     if (mode === 'reference') assert.ok(value.shutdown.code === 0 || value.shutdown.signal === 'SIGTERM');
     else assert.deepEqual(value.shutdown, {code: 0, signal: null, forced: false});

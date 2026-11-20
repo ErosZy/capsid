@@ -91,7 +91,10 @@ Never apply a blanket formatter to:
 These are exact-byte inputs or are maintained through their own generators.
 Their omission is deliberate, not permission to normalize them manually.
 `preservedInputs` records exact SHA256 identities and the captures/consumers that
-bind them; CI verifies these bytes as well as refusing their selection. JS AST
+bind them; CI verifies these bytes as well as refusing their selection. If a live
+capture input is intentionally replaced, its `archive` entry points to a ZIP
+containing the original bytes at the original path. The old hash still binds
+the archived source, while new reports fingerprint the live successor. JS AST
 equivalence alone cannot preserve raw source hashes or textual mutation templates.
 Markdown, CMake, shell and existing workflows keep their established styles;
 this command does not claim to provide formatters for every file language.

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import net from 'node:net';
 import {createHash} from 'node:crypto';
+import {listenLoopbackTcp} from './ws_host_backend.mjs';
 
 // A local raw peer keeps the handshake/body open until the driver acts.
 // Every EOF and frame is captured before cleanup can close any connection.
 export async function fetchUpgradeLifetimePeer(kind, challenge, role) {
     const records = [], sockets = new Set(); let acceptPending, sendPending, httpPending;
-    const listener = net.createServer({allowHalfOpen: true}, socket => {
+    const listener = await listenLoopbackTcp(socket => {
         sockets.add(socket);
         const item = {localAddress: socket.localAddress, localPort: socket.localPort, request: null, rawRequest: null,
             responseStatus: null, frames: [], events: [], peerEnded: false, peerReset: false,
@@ -82,10 +82,9 @@ export async function fetchUpgradeLifetimePeer(kind, challenge, role) {
             } catch (error) {item.error = error.stack; item.fixtureDestroyed = true; socket.destroy();}
         });
     });
-    await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
-    return {port: listener.address().port, snapshot: () => structuredClone(records),
+    return {port: listener.port, snapshot: () => structuredClone(records),
         accept: () => {assert.equal(typeof acceptPending, 'function'); const accept = acceptPending; acceptPending = null; accept();},
         respondHttp: () => {assert.equal(typeof httpPending, 'function'); const respond = httpPending; httpPending = acceptPending = null; respond();},
         sendAfterParent: () => {assert.equal(typeof sendPending, 'function'); sendPending();},
-        stop: async () => {for (const socket of sockets) socket.destroy(); await new Promise(resolve => listener.close(resolve));}};
+        stop: async () => {for (const socket of sockets) socket.destroy(); await listener.close();}};
 }

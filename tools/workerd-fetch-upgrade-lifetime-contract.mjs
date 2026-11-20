@@ -72,7 +72,7 @@ function upstream(records,value,stage,nonces) {
     for(const [index,entry] of records.entries()) {
         const role=index?'b':'a',target=value.targets[index],kind=value.kind,two=kind==='two-owners',same=kind.startsWith('same-origin-'),complete=same&&kind.endsWith('-complete');
         fields(entry,['localAddress','localPort','request','rawRequest','responseStatus','frames','events','peerEnded','peerReset','fixtureEnded','fixtureDestroyed','error'],'complete upstream record');
-        assert.equal(entry.localAddress,'127.0.0.1');assert.equal(entry.localPort,target.port);assert.equal(target.host,'localhost');
+        assert.ok(['127.0.0.1','::1'].includes(entry.localAddress),'actual loopback address');assert.equal(entry.localPort,target.port);assert.equal(target.host,'localhost');
         assert.equal(entry.request.split('\r\n')[0],`GET /hold?challenge=${value.challenge}&role=${role} HTTP/1.1`);
         assert.equal(Buffer.from(entry.rawRequest,'base64').toString('latin1'),entry.request+'\r\n\r\n');
         const headers=requestHeaders(entry.request),keys=headers.filter(([name])=>name==='sec-websocket-key');assert.equal(keys.length,1);const key=keys[0][1];
@@ -154,7 +154,7 @@ function assertAwaitLifetimeCase(value,mode,nonces) {
         for(const [index,entry] of entries.entries()) {
             const target=value.targets[index],socket=target.role==='a',ended=socket?stage==='final':stage!=='before'&&(last&&!deferred||['release','final'].includes(stage));
             fields(entry,['localAddress','localPort','request','rawRequest','responseStatus','frames','events','peerEnded','peerReset','fixtureEnded','fixtureDestroyed','error'],'actual independent upstream record');
-            assert.equal(entry.localAddress,'127.0.0.1');assert.equal(entry.localPort,target.port);
+            assert.ok(['127.0.0.1','::1'].includes(entry.localAddress),'actual loopback address');assert.equal(entry.localPort,target.port);
             assert.equal(entry.request.split('\r\n')[0],`GET /hold?challenge=${value.challenge}&role=${target.role} HTTP/1.1`);
             assert.equal(Buffer.from(entry.rawRequest,'base64').toString('latin1'),entry.request+'\r\n\r\n');
             const headers=requestHeaders(entry.request),keys=headers.filter(([name])=>name==='sec-websocket-key');assert.equal(keys.length,1);
@@ -196,7 +196,7 @@ function assertFetchedDisconnectCase(value,mode,nonces) {
     assert.deepEqual(value.upstreamAction,{kind:'fixture-initiated-transport-disposal'},'intentional upstream action is explicit');
     assert.equal(value.upstreamBefore.length,1);assert.deepEqual(value.upstream,value.upstreamBefore,'local fixture disposal does not invent remote EOF or Close bytes');
     const entry=value.upstream[0];fields(entry,['localAddress','localPort','request','rawRequest','responseStatus','frames','events','peerEnded','peerReset','fixtureEnded','fixtureDestroyed','error'],'independent upstream observation');
-    assert.equal(entry.localAddress,'127.0.0.1');assert.equal(entry.localPort,value.target.port);assert.equal(entry.request.split('\r\n')[0],`GET /hold?challenge=${value.challenge}&role=a HTTP/1.1`);
+    assert.ok(['127.0.0.1','::1'].includes(entry.localAddress),'actual loopback address');assert.equal(entry.localPort,value.target.port);assert.equal(entry.request.split('\r\n')[0],`GET /hold?challenge=${value.challenge}&role=a HTTP/1.1`);
     assert.equal(Buffer.from(entry.rawRequest,'base64').toString('latin1'),entry.request+'\r\n\r\n');
     const headers=requestHeaders(entry.request),keys=headers.filter(([name])=>name==='sec-websocket-key');assert.equal(keys.length,1);const nonce=keys[0][1];
     assert.match(nonce,/^[A-Za-z0-9+/]{22}==$/);assert.equal(Buffer.from(nonce,'base64').toString('base64'),nonce);assert.equal(nonces.has(nonce),false,'fresh fetched handshake nonce');nonces.add(nonce);

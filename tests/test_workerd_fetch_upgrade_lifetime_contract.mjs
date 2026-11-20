@@ -58,6 +58,24 @@ function snapshots(value) {
     'upstream',
   ].filter((key) => value[key]);
 }
+test('lifetime snapshots accept IPv6 but reject a changed or non-loopback source address', () => {
+  const value = sample('same-origin-parent-complete');
+  const keys = snapshots(value);
+  for (const key of keys) {
+    for (const entry of value[key]) entry.localAddress = '::1';
+  }
+  assert.doesNotThrow(() => assertFetchUpgradeLifetimeCase(value, 'reference'));
+  value.upstream[0].localAddress = '127.0.0.1';
+  assert.throws(
+    () => assertFetchUpgradeLifetimeCase(value, 'reference'),
+    /immutable actual request/,
+  );
+  value.upstream[0].localAddress = '::2';
+  assert.throws(
+    () => assertFetchUpgradeLifetimeCase(value, 'reference'),
+    /actual loopback address/,
+  );
+});
 function request(entry, mutate) {
   entry.request = mutate(entry.request);
   entry.rawRequest = Buffer.from(entry.request + '\r\n\r\n', 'latin1').toString('base64');

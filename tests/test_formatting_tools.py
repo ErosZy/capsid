@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("capsid_format", ROOT / "tools/format.py")
@@ -57,9 +58,16 @@ class FormattingScopeTests(unittest.TestCase):
         for name, record in POLICY["preservedInputs"].items():
             with self.subTest(name=name):
                 self.assertIsNone(FORMAT.classify(name, POLICY))
-                self.assertEqual(
-                    hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), record["sha256"]
-                )
+                # A live successor may change on purpose, but a capture's source
+                # stays available at the original path inside its source archive.
+                if archive := record.get("archive"):
+                    self.assertIsNone(FORMAT.classify(archive, POLICY))
+                    with ZipFile(ROOT / archive) as source:
+                        self.assertEqual(source.namelist().count(name), 1)
+                        original = source.read(name)
+                else:
+                    original = (ROOT / name).read_bytes()
+                self.assertEqual(hashlib.sha256(original).hexdigest(), record["sha256"])
                 self.assertTrue(record["references"])
                 self.assertTrue(all((ROOT / ref).is_file() for ref in record["references"]))
 

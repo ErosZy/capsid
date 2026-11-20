@@ -407,8 +407,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification. Exact-byte encoding locks, checkout EOL rules and clean Release boundary controls reviewed. Development packaging CPU split and non-inheritance of existing release qualification reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged.",
-      "sha256": "a7aac468ce6ebd639e5d88c76f51a166da3d3f104e248f8346e479588ab1daf3"
+      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification. Exact-byte encoding locks, historical input archives for intentionally replaced capture sources, checkout EOL rules and clean Release boundary controls reviewed. Development packaging CPU split and non-inheritance of existing release qualification reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged.",
+      "sha256": "c540e558079e6e5fb4735856166f34b97f197d1511e573a38a3fb3eeb8f3a82b"
     },
     {
       "path": "docs/framework-compatibility/README.md",

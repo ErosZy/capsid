@@ -442,6 +442,24 @@ for (const kind of ['source-http', 'source-http-request', 'source-http-object'])
     item.events = ['request', 'held-http'];
     assert.throws(() => assertFetchProxyCase(value, 'reference'));
   });
+test('proxy accepts owned IPv6 but rejects a changed or non-loopback source address', () => {
+  const value = sample('source-lifetime');
+  for (const key of [
+    'upstreamBeforeStop',
+    'upstreamAfterStop',
+    'checkpointUpstream',
+    'pauseCheckpoint',
+    'upstreamAfterClientEnd',
+  ]) {
+    for (const entry of value[key] ?? []) entry.localAddress = '::1';
+  }
+  assert.doesNotThrow(() => assertFetchProxyCase(value, 'reference'));
+  value.upstreamAfterStop[0].localAddress = '127.0.0.1';
+  assert.throws(() => assertFetchProxyCase(value, 'reference'), /source connection identity/);
+  value.upstreamAfterStop[0].localAddress = '::ffff:127.0.0.1';
+  assert.throws(() => assertFetchProxyCase(value, 'reference'), /actual loopback address/);
+});
+
 test('request identity cannot change between actual snapshots even with a valid new handshake', () => {
   const value = sample('source-lifetime'),
     item = value.checkpointUpstream[0];

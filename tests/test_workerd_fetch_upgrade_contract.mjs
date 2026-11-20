@@ -379,6 +379,16 @@ for (const kind of [
       });
       assert.throws(() => assertFetchUpgradeCase(value, 'reference'));
     });
+test('upgrade source allows owned IPv6 and retains the same address at its checkpoint', () => {
+  const value = sample('upgrade-non101-stream');
+  value.checkpointUpstream[0].localAddress = value.upstream[0].localAddress = '::1';
+  assert.doesNotThrow(() => assertFetchUpgradeCase(value, 'reference'));
+  value.checkpointUpstream[0].localAddress = '127.0.0.1';
+  assert.throws(() => assertFetchUpgradeCase(value, 'reference'), /source connection identity/);
+  value.checkpointUpstream[0].localAddress = value.upstream[0].localAddress = '::2';
+  assert.throws(() => assertFetchUpgradeCase(value, 'reference'), /actual loopback address/);
+});
+
 test('stream body must be readable while the real peer still holds the remainder', () => {
   for (const field of ['peerEnded', 'fixtureEnded']) {
     const value = sample('upgrade-non101-stream');

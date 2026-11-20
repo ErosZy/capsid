@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import net from 'node:net';
 import {createHash} from 'node:crypto';
+import {listenLoopbackTcp} from './ws_host_backend.mjs';
 
 export async function fetchUpgradePeer(kind, challenge) {
     const records = [], sockets = new Set(); let releaseBody;
-    const listener = net.createServer({allowHalfOpen: true}, socket => {
+    const listener = await listenLoopbackTcp(socket => {
         sockets.add(socket);
         const item = {localAddress: socket.localAddress, localPort: socket.localPort, request: null, rawRequest: null,
             frames: [], peerEnded: false, peerReset: false, fixtureEnded: false, fixtureDestroyed: false,
@@ -91,8 +91,7 @@ export async function fetchUpgradePeer(kind, challenge) {
             } catch (error) {item.error = error.stack; item.fixtureDestroyed = true; socket.destroy();}
         });
     });
-    await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
-    return {port: listener.address().port, snapshot: () => structuredClone(records),
+    return {port: listener.port, snapshot: () => structuredClone(records),
         release: () => {assert.equal(typeof releaseBody, 'function', 'body must reach release checkpoint'); releaseBody();},
-        stop: async () => {for (const socket of sockets) socket.destroy(); await new Promise(resolve => listener.close(resolve));}};
+        stop: async () => {for (const socket of sockets) socket.destroy(); await listener.close();}};
 }
