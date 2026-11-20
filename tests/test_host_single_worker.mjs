@@ -504,6 +504,20 @@ try {
   assert.equal(fixedStringUtf8Overflow.headers['content-length'], undefined);
   assert.equal(fixedStringUtf8Overflow.headers['transfer-encoding'], 'chunked');
 
+  const bodyOwnership = await request(correctness.port, {
+    target: '/@capsid/orders/fetch-body-ownership',
+  });
+  assert.equal(bodyOwnership.status, 200, bodyOwnership.body.toString());
+  assert.deepEqual(JSON.parse(bodyOwnership.body.toString()), {
+    stream: Array.from({ length: 2 }, () => ({
+      aliases: false,
+      observed: [1, 2, 3],
+      sourceByte: 2,
+    })),
+    speciesCalls: 0,
+    clones: Array.from({ length: 6 }, () => ({ observed: [4, 5, 6], copied: [4, 5, 6] })),
+  });
+
   const parallel = await Promise.all(
     Array.from({ length: 16 }, () =>
       request(correctness.port, { target: '/@capsid/orders/fixed' }),

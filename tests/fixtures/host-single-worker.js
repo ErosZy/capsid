@@ -11,6 +11,73 @@ function patternedBytes(size) {
 // worker's own request deadline could fire.
 const cancelObservations = [];
 
+async function observeBodyOwnership() {
+    const wrap = [
+        body => new Response(body),
+        body => new Request('http://public.example/', { method: 'POST', body, duplex: 'half' }),
+    ];
+    const stream = [];
+    for (const makeBody of wrap) {
+        const source = new Uint8Array([1, 2, 3]);
+        const response = makeBody(new ReadableStream({
+            start(controller) {
+                controller.enqueue(source);
+                controller.close();
+            },
+        }));
+        const result = await response.arrayBuffer();
+        const bytes = new Uint8Array(result);
+        source[0] = 99;
+        const observed = [...bytes];
+        bytes[1] = 88;
+        stream.push({ aliases: result === source.buffer, observed, sourceByte: source[1] });
+    }
+
+    const backing = new Uint8Array([99, 4, 5, 6, 88]);
+    const buffer = new Uint8Array([4, 5, 6]).buffer;
+    const inputs = [new Uint8Array(backing.buffer, 1, 3), new DataView(backing.buffer, 1, 3), buffer];
+    const ctors = [Uint8Array, ArrayBuffer];
+    const descriptors = ctors.map(ctor => Object.getOwnPropertyDescriptor(ctor, Symbol.species));
+    const bodies = [];
+    let speciesCalls = 0;
+    try {
+        for (const ctor of ctors) {
+            Object.defineProperty(ctor, Symbol.species, {
+                configurable: true,
+                get() { ++speciesCalls; return ctor; },
+            });
+        }
+        for (const makeBody of wrap) {
+            for (const input of inputs) {
+                const original = makeBody(input);
+                bodies.push([original, original.clone()]);
+            }
+        }
+    } finally {
+        for (const [index, ctor] of ctors.entries()) {
+            const descriptor = descriptors[index];
+            if (descriptor) Object.defineProperty(ctor, Symbol.species, descriptor);
+            else delete ctor[Symbol.species];
+        }
+    }
+
+    backing.fill(0);
+    new Uint8Array(buffer).fill(0);
+    const clones = [];
+    for (const [original, clone] of bodies) {
+        const reader = original.body.getReader();
+        try {
+            const { value } = await reader.read();
+            const observed = [...value];
+            value.fill(0);
+            clones.push({ observed, copied: [...new Uint8Array(await clone.arrayBuffer())] });
+        } finally {
+            reader.releaseLock();
+        }
+    }
+    return { stream, speciesCalls, clones };
+}
+
 export default {
     async fetch(request) {
         const url = new URL(request.url);
@@ -63,6 +130,9 @@ export default {
             return new Response('\u4e2d'.repeat(2048), {
                 headers: { 'content-type': 'text/plain' },
             });
+        }
+        if (url.pathname === '/fetch-body-ownership') {
+            return Response.json(await observeBodyOwnership());
         }
         if (url.pathname === '/echo') {
             const body = new Uint8Array(await request.arrayBuffer());

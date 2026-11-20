@@ -41,8 +41,10 @@ const strToUpperCase = stringPrototype.toUpperCase;
 const strCharCodeAt = stringPrototype.charCodeAt;
 const strSlice = stringPrototype.slice;
 const u8Subarray = Uint8Array.prototype.subarray;
-const u8Slice = Uint8Array.prototype.slice;
-const abSlice = ArrayBuffer.prototype.slice;
+const bodyByteArray = Uint8Array;
+const bodyArrayBuffer = ArrayBuffer;
+const bodyByteSet = bodyByteArray.prototype.set;
+const bodyBytesBuffer = bodyProperty(getPrototypeOf(bodyByteArray.prototype), 'buffer').get;
 const arraySlice = Array.prototype.slice;
 const arrayPush = Array.prototype.push;
 const weakMapPrototype = WeakMap.prototype;
@@ -1149,14 +1151,13 @@ function materializeFastBody(target, exposed) {
 }
 
 function cloneBufferSource(body) {
-  if (body instanceof Uint8Array) {
-    return u8Slice.call(body);
-  }
-  if (body instanceof ArrayBuffer) {
-    return new Uint8Array(abSlice.call(body, 0));
-  }
-  const view = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
-  return u8Slice.call(view);
+  // The captured typed-array constructor copies bytes without consulting species.
+  if (body instanceof bodyByteArray) return new bodyByteArray(body);
+  const view =
+    body instanceof bodyArrayBuffer
+      ? new bodyByteArray(body)
+      : new bodyByteArray(body.buffer, body.byteOffset, body.byteLength);
+  return new bodyByteArray(view);
 }
 
 function initBodyFields(target, body, hState) {
@@ -1191,8 +1192,15 @@ function initBodyFields(target, body, hState) {
     target._bodyFastData = null;
     return;
   }
-  if (body instanceof Uint8Array || body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+  if (
+    body instanceof bodyByteArray ||
+    body instanceof bodyArrayBuffer ||
+    ArrayBuffer.isView(body)
+  ) {
     const bytes = cloneBufferSource(body);
+    // Only the new snapshot belongs to this body; do not retain the source,
+    // which can be another Request or Response's still-owned buffer.
+    target._bodyInit = null;
     target._noBody = false;
     target._bodySize = bytes.byteLength;
     target._bodyStream = null;
@@ -1270,19 +1278,15 @@ async function readAllChunks(stream) {
     totalLength += value.byteLength;
   }
 
-  if (chunks.length === 1) {
-    const only = chunks[0];
-    if (only.byteOffset === 0 && only.byteLength === only.buffer.byteLength) {
-      return only.buffer;
-    }
-  }
-  const result = new Uint8Array(totalLength);
+  // Full-span chunks can still be owned by the producer. A public body
+  // consumer gets its own buffer even when the read yielded just one chunk.
+  const result = new bodyByteArray(totalLength);
   let offset = 0;
   for (let i = 0; i < chunks.length; i++) {
-    result.set(chunks[i], offset);
+    applyIntrinsic(bodyByteSet, result, [chunks[i], offset]);
     offset += chunks[i].byteLength;
   }
-  return result.buffer;
+  return applyIntrinsic(bodyBytesBuffer, result, []);
 }
 
 function decodeUrlEncodedFormData(body) {
@@ -1800,7 +1804,8 @@ class Request {
     }
     let body2 = null;
     if (this._bodyFastKind !== 0) {
-      body2 = this._bodyFastKind === 1 ? this._bodyFastData : u8Slice.call(this._bodyFastData);
+      // Request construction snapshots fixed bytes exactly once.
+      body2 = this._bodyFastData;
     } else if (this._bodyStream instanceof ReadableStream) {
       const [body1, teeBody] = this._bodyStream.tee();
       this._bodyStream = body1;
@@ -2283,7 +2288,8 @@ class Response {
     }
     let body2 = null;
     if (this._bodyFastKind !== 0) {
-      body2 = this._bodyFastKind === 1 ? this._bodyFastData : u8Slice.call(this._bodyFastData);
+      // Response construction snapshots fixed bytes exactly once.
+      body2 = this._bodyFastData;
     } else if (this._bodyStream !== null) {
       if (this._bodyStream.locked) {
         throw new bodyTypeError('This ReadableStream is currently locked to a reader,');

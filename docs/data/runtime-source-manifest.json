@@ -232,7 +232,7 @@
     "js/fetch.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "0da7535409e4b62fb9f79451e72bcae9422a9684"
+      "gitObject": "c6f72774a0169be333c71e013c406f7bfc2d5e62"
     },
     "js/file.js": {
       "mode": "100644",
@@ -3100,7 +3100,7 @@
       "ruff": "0.17.5"
     },
     "releaseQualificationInherited": false,
-    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, build inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
+    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js and Fetch body ownership/copy corrections after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, CMake inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
     "buildInputChanges": {},
     "runtimeInputChanges": {
       "js/bootstrap.js": {
@@ -3109,7 +3109,7 @@
       },
       "js/fetch.js": {
         "qualifiedGitObject": "6258e4adde36e41ade3e940608839f0332297905",
-        "currentGitObject": "0da7535409e4b62fb9f79451e72bcae9422a9684"
+        "currentGitObject": "c6f72774a0169be333c71e013c406f7bfc2d5e62"
       },
       "js/url.js": {
         "qualifiedGitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab",

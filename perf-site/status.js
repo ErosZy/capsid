@@ -4,7 +4,7 @@ window.CAPSID_SITE_STATUS = {
   "checkout": {
     "baseCommit": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
     "buildInputChanges": {},
-    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, build inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
+    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js and Fetch body ownership/copy corrections after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, CMake inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
     "formatters": {
       "clang-format": "23.1.5",
       "prettier": "3.8.3",
@@ -21,7 +21,7 @@ window.CAPSID_SITE_STATUS = {
         "qualifiedGitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67"
       },
       "js/fetch.js": {
-        "currentGitObject": "0da7535409e4b62fb9f79451e72bcae9422a9684",
+        "currentGitObject": "c6f72774a0169be333c71e013c406f7bfc2d5e62",
         "qualifiedGitObject": "6258e4adde36e41ade3e940608839f0332297905"
       },
       "js/url.js": {
@@ -296,7 +296,7 @@ window.CAPSID_SITE_STATUS = {
     "version": "0.3.0"
   },
   "schema": 1,
-  "sourceChangeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, build inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
+  "sourceChangeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js and Fetch body ownership/copy corrections after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, CMake inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
   "stable": {
     "githubLatest": false,
     "prerelease": false,
