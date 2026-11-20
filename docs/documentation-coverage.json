@@ -55,7 +55,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "5f51c5157cd4af590f5b2dc130110a78a3885e146b60d400fb584b6e9a93484d",
+      "sha256": "70606b05ab22a37dda0852ae8bbab132198999ca97e138d5cbdb8ee36db88bf1",
       "review": "Normative protocol constants/budgets retained; status/current acceptance/transport and same-version history caveat corrected."
     },
     {
@@ -63,7 +63,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "acdcd39e8be1f3a8c6965367a1238dbdf6f04532ebfaeec63d3ee562de2a873e",
+      "sha256": "2daa331832ffd7082f308b629c99ccc9adb491697292337084554cd144ad15da",
       "review": "Original complete lane/point/round/response/PSS/identity controls retained; bounded hashed compression is transport only."
     },
     {

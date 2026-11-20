@@ -53,6 +53,13 @@ def contract_for(schema):
     return CONTRACT_V1 if schema == 1 else CONTRACT_V2
 
 
+def protocol_for(lane, schema=CURRENT_SCHEMA):
+    base = dict(PROTOCOL[lane])
+    if lane == "qps" and schema == 1:
+        base["pssMaxReads"] = 8
+    return base
+
+
 PROTOCOL = {
     "cold-start": {
         "rounds": 5,
@@ -74,7 +81,7 @@ PROTOCOL = {
         "memoryProtocol": "fresh-owned-forest-v1",
         "readinessProtocol": "exact-http-before-traffic-v1",
         "pssStableReads": 2,
-        "pssMaxReads": 8,
+        "pssMaxReads": 24,
         "pssIntervalSeconds": 1,
         "pssSettleSeconds": 1,
     },
@@ -772,7 +779,7 @@ def validate_lane(path, repo, lane, parsed, version, release):
     integer(machine.get("logicalCpus"), f"{lane}: logicalCpus")
     protocol = m.get("protocol", {})
     need(isinstance(protocol, dict), f"{lane}: missing protocol")
-    for key, value in PROTOCOL[lane].items():
+    for key, value in protocol_for(lane, schema).items():
         need(
             type(protocol.get(key)) is type(value) and protocol[key] == value,
             f"{lane}: unsupported protocol {key}",

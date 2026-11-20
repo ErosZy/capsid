@@ -85,8 +85,8 @@ defaults, requires managed/strict posture and keeps every serving root and Go
 client in separate owned sessions. An exact application-readiness response
 precedes traffic and is separate from the 150 trickle responses. Low-load
 cleanup completes before a fresh loaded forest; after traffic, settle for 1 s
-and require two equal positive recursive PSS reads within eight attempts at 1 s
-intervals. Every process, role, client, response, raw sample, configuration and
+and require two equal positive recursive PSS reads within twenty-four attempts at 1 s
+intervals (`v2`; eight in archived `v1`). Every process, role, client, response, raw sample, configuration and
 cleanup record is retained and sealed.
 
 Managed QPS and density readiness retain the operation ID returned by the single

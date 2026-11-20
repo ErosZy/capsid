@@ -134,7 +134,7 @@ validator requires those identities to match the loaded phase.
   per-process positive PSS samples, role sums, readiness and cleanup evidence.
   Protocol fields require `memoryProtocol: "fresh-owned-forest-v1"`,
   `readinessProtocol: "exact-http-before-traffic-v1"`, two stable reads, at most
-  eight reads, 1 s intervals and 1 s settle. Each phase references its sealed
+  twenty-four reads (`v2`; eight in archived `v1`), 1 s intervals and 1 s settle. Each phase references its sealed
   `resultFile`, whose bytes must reproduce the memory record. Low load has
   `beforeMeasuredLoad: true`, all 150 individually verified JSON-1k requests,
   paced dispatch/completion times, and `duration_s >= 15`. Its exact readiness

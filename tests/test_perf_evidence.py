@@ -90,7 +90,7 @@ class Fixture:
                 "completedAt": f"2026-10-20T0{offset}:10:00Z",
                 "origin": dict(origin),
                 "machine": dict(machine),
-                "protocol": dict(contract.PROTOCOL[lane], sutCpuSet="0-3"),
+                "protocol": dict(contract.protocol_for(lane, schema), sutCpuSet="0-3"),
                 "posture": {
                     "platform": "linux",
                     "mode": "c-abi" if lane == "cold-start" else "managed",
