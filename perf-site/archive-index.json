@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "contract": "capsid-perf-packed-archives-v1",
-  "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
-  "measurementCommit": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+  "session": "local-wsl-v030-beta4-20261120T030323Z-13ffb90c",
+  "measurementCommit": "13ffb90c1b6dffcb20d22ab22bcdc3dc4168f8a2",
   "bundles": [
     {
       "lane": "cold-start",
@@ -61,6 +61,66 @@
           "path": "perf-site/archives/local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec-density.tar.gz.part004",
           "bytes": 31728429,
           "sha256": "ed6f621bbaa5241a0a5bf8762d77ede7fb93c57c783e628e18750c6a983713e5"
+        }
+      ]
+    },
+    {
+      "lane": "cold-start",
+      "prefix": "bench/results/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-cold",
+      "files": 899,
+      "uncompressedBytes": 35746166,
+      "bytes": 1013368,
+      "sha256": "8acc3d8310ade0d9068ef64db7339a966a9d03c6052e81bc660d902e9b2ef02c",
+      "parts": [
+        {
+          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-cold.tar.gz",
+          "bytes": 1013368,
+          "sha256": "8acc3d8310ade0d9068ef64db7339a966a9d03c6052e81bc660d902e9b2ef02c"
+        }
+      ]
+    },
+    {
+      "lane": "qps",
+      "prefix": "bench/results/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-qps",
+      "files": 350,
+      "uncompressedBytes": 1544636,
+      "bytes": 246791,
+      "sha256": "d69f4cdf16a339c919f6f82314dedcf0081212129d9575ed93b8ba5b609976ab",
+      "parts": [
+        {
+          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-qps.tar.gz",
+          "bytes": 246791,
+          "sha256": "d69f4cdf16a339c919f6f82314dedcf0081212129d9575ed93b8ba5b609976ab"
+        }
+      ]
+    },
+    {
+      "lane": "density",
+      "prefix": "bench/results/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density",
+      "files": 2766,
+      "uncompressedBytes": 2776868355,
+      "bytes": 163074048,
+      "sha256": "93cbf5af3e88697f9f65960bb3ea732d6d301987aeff5df28282ad5458594026",
+      "parts": [
+        {
+          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part001",
+          "bytes": 41943040,
+          "sha256": "537d7ee04d0310b715f3654c02aa257a6ea342c7005d65d2ecc5e832b94f3213"
+        },
+        {
+          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part002",
+          "bytes": 41943040,
+          "sha256": "91da0282f0b4ce0716ace78225d3bd14f332abecb35038f0b21f33ebe9fedeaf"
+        },
+        {
+          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part003",
+          "bytes": 41943040,
+          "sha256": "369da842ecc3f8562f15eb904427d099f8fb59ac992d1297100ddac3c1e95875"
+        },
+        {
+          "path": "perf-site/archives/local-wsl-v030-beta4-20261120T030323Z-13ffb90c-density.tar.gz.part004",
+          "bytes": 37244928,
+          "sha256": "5bcc0ba9059b73e7931bb702b2ac12d744d2089d35a62b2612a155da9e8381d1"
         }
       ]
     }

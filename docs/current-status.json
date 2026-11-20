@@ -70,84 +70,87 @@
       "release": "v0.2.2",
       "status": "unverified-historical-observation",
       "version": "0.2.x"
+    },
+    {
+      "date": "2026-11-16",
+      "release": "v0.3.0",
+      "status": "verified",
+      "version": "0.3.0"
     }
   ],
   "performance": {
-    "archiveReleaseLabel": "v0.3.0",
-    "contract": "capsid-perf-lane-v1",
-    "cpuSet": "0,1,2,3",
-    "date": "2026-11-16",
+    "archiveReleaseLabel": "v0.3.0-beta.4",
+    "contract": "capsid-perf-lane-v2",
+    "cpuSet": "0-3",
+    "date": "2026-11-20",
     "density": {
       "cold@100k": {
-        "count": 510,
+        "count": 503,
         "limit": "budget",
-        "pssMb": 2047.6,
+        "pssMb": 2044.0,
         "unit": "workers"
       },
       "cold@10k": {
-        "count": 746,
+        "count": 735,
         "limit": "budget",
-        "pssMb": 2045.0,
+        "pssMb": 2047.0,
         "unit": "workers"
       },
       "cold@1m": {
         "count": 128,
         "limit": "budget",
-        "pssMb": 2033.0,
+        "pssMb": 2043.2,
         "unit": "workers"
       },
       "warm@100k": {
-        "count": 509,
+        "count": 503,
         "limit": "budget",
-        "pssMb": 2047.1,
+        "pssMb": 2046.7,
         "unit": "workers"
       },
       "warm@10k": {
-        "count": 738,
+        "count": 731,
         "limit": "budget",
-        "pssMb": 2047.0,
+        "pssMb": 2044.9,
         "unit": "workers"
       },
       "warm@1m": {
         "count": 128,
         "limit": "budget",
-        "pssMb": 2034.0,
+        "pssMb": 2043.7,
         "unit": "workers"
       }
     },
-    "displayLabel": "0.3.0 development snapshot · 485b29b",
-    "evidenceFiles": 5123,
+    "displayLabel": "0.3.0-beta.4 development snapshot · 13ffb90",
+    "evidenceFiles": 4015,
     "independentReview": "docs/data/performance-review.json",
-    "lowLoadPssMiB": 14.0,
+    "lowLoadPssMiB": 14.6,
     "machine": {
       "architecture": "x86_64",
+      "bun": "1.4.5",
       "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
-      "deno": "2.9.8",
       "hostId": "f0385d0aeb8b4fc7e7f699e5a5dfc535e1a6aabf262f2c0ba5b773204ea2c51b",
       "kernel": "6.18.40.1-microsoft-standard-WSL2",
       "logicalCpus": 12,
-      "nginx": "1.24.0",
       "node": "24.14.0",
       "nproc": 12,
-      "php_fpm": "8.3.6",
-      "python": "3.12.3",
       "uname": "6.18.40.1-microsoft-standard-WSL2",
       "workerd_version": "workerd 2026-10-10"
     },
-    "measuredSourceManifest": "docs/data/performance-source-manifest.json",
+    "measuredSourceManifest": "docs/data/performance-source-manifest-v030-beta4.json",
     "physicalHostExclusivityClaimed": false,
     "publishedBetaPerformanceMeasured": false,
     "qps": {
-      "matrix-json-16k": 8090.2,
-      "matrix-json-1k": 9341.6,
-      "stream": 6491.7
+      "matrix-json-16k": 14000.7,
+      "matrix-json-1k": 21485.0,
+      "stream": 10654.0
     },
     "representsPublishedRelease": false,
-    "servingPssMiB": 18.0,
-    "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
-    "sourceCommit": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+    "servingPssMiB": 18.4,
+    "session": "local-wsl-v030-beta4-20261120T030323Z-13ffb90c",
+    "sourceCommit": "13ffb90c1b6dffcb20d22ab22bcdc3dc4168f8a2",
     "sourceTag": "",
-    "sourceTree": "25bbf46247b68478a005cf779d884970fb98dc13"
+    "sourceTree": "729a36495b5d655d4dccd74e38e0a8aa6668bbe1"
   },
   "prerelease": {
     "assets": [

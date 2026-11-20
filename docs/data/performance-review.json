@@ -1,35 +1,47 @@
 {
   "complete": true,
-  "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
-  "productCheckout": "485b29be6cc8d0dcdb653ee6226956ddece02948",
-  "productTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+  "session": "local-wsl-v030-beta4-20261120T030323Z-13ffb90c",
+  "productCheckout": "13ffb90c1b6dffcb20d22ab22bcdc3dc4168f8a2",
+  "productTree": "729a36495b5d655d4dccd74e38e0a8aa6668bbe1",
+  "measuredSourceManifest": "docs/data/performance-source-manifest-v030-beta4.json",
+  "contract": "capsid-perf-lane-v2",
+  "pointVersion": "0.3.0-beta.4",
+  "pointRelease": "v0.3.0-beta.4",
   "wholeLocalSessionAccepted": true,
   "newAcceptedSessions": 1,
   "physicalWindowsHostExclusivityNotClaimed": true,
   "fullPlatformOrReleaseAcceptanceNotClaimed": true,
   "noBaselineRerunOrDataModification": true,
-  "all5171SourceBytesAfterActualExitVerified": true,
+  "measuredSourceFilesVerified": 5459,
   "lanes": {
     "cold": {
       "passed": true,
-      "sealedFiles": 742,
-      "checksumSHA256": "52a77bfd3b9a6a520ee0372cbee752175dcef40d61aaa24b1822b0dd2cb797ee"
+      "sealedFiles": 898,
+      "checksumSHA256": "1b6cecdcf3d63f2dd085e3e31ddd14fd17d6309b51dbc6e757057cdc8b136e08"
     },
     "qps": {
       "passed": true,
-      "sealedFiles": 1623,
-      "checksumSHA256": "fe05f98953244fdfaccf2069a21e6e7c133baff8b55a1fb0fc7ba8678fe9fa6d"
+      "sealedFiles": 349,
+      "checksumSHA256": "ba24de4e47b7c134fa045dbf6dcb075c2a30fd8c7374620443ad80c555d2ca9c"
     },
     "density": {
       "passed": true,
-      "sealedFiles": 2755,
-      "checksumSHA256": "c3e48864cb69543bc4f7526abe09352488b0c5d88e841b27dfec1dd82af157f7"
+      "sealedFiles": 2765,
+      "checksumSHA256": "d32e2c1fa3a88e2c35e473a43bf86c568efaa04aa351bba57b34bcd3f5b693e4"
     }
   },
-  "qualifiedPointSHA256": "ea64bab3ba38f8962f77891df87ce6b73fbc76b03485378822123223e83c71f2",
-  "allFourQuietWindowsRecomputed": true,
+  "qualifiedPointSHA256": "b88a51d10d1f5d5e77989b47ea3a2a9456f6bdb442c96ded567e601878100a39",
+  "allThreeLanesNonOverlappingQuietSession": true,
   "allTwelveDensityBudgetBoundaries": true,
-  "allElevenExecutablesRehashed": true,
+  "allEightExecutablesRehashed": true,
   "allOriginalActualExitsZero": true,
-  "reviewedUTC": "2026-11-16T01:32:35.116832+00:00"
+  "previousAcceptedSession": {
+    "session": "local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec",
+    "productCheckout": "485b29be6cc8d0dcdb653ee6226956ddece02948",
+    "productTree": "25bbf46247b68478a005cf779d884970fb98dc13",
+    "contract": "capsid-perf-lane-v1",
+    "measuredSourceManifest": "docs/data/performance-source-manifest.json",
+    "qualifiedPointSHA256": "ea64bab3ba38f8962f77891df87ce6b73fbc76b03485378822123223e83c71f2"
+  },
+  "reviewedUTC": "2026-11-20T04:32:34.961672+00:00"
 }
