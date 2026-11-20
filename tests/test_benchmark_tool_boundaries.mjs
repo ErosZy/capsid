@@ -249,6 +249,10 @@ try {
   assert.doesNotMatch(elements.get('nav-meta').textContent, /unverified/);
   assert.match(elements.get('qps-table').innerHTML, /Node\.js \(--jitless\)/);
   assert.match(elements.get('qps-table').innerHTML, /Bun/);
+  assert.match(elements.get('radar-chart').innerHTML, /<svg/);
+  assert.match(elements.get('frontier-chart').innerHTML, /HIGH-EFFICIENCY ZONE/);
+  assert.match(elements.get('scorecard-table').innerHTML, /OS Sandbox/);
+  assert.match(elements.get('qps-eff-chart').innerHTML, /\/MiB/);
 
   // Current packed evidence and user selection exercise the actual page,
   // using committed generated assets without inventing raw-file links.
@@ -261,6 +265,9 @@ try {
   );
   assert.ok(acceptedIndex >= 0 && historicalIndex >= 0);
   elements = render(current);
+  assert.match(elements.get('radar-chart').innerHTML, /<polygon/);
+  assert.match(elements.get('density-chart').innerHTML, /<svg/);
+  assert.match(elements.get('scorecard-table').innerHTML, /Capsid/);
   const selector = elements.get('record-select');
   assert.equal(selector.children.length, current.points.length);
   assert.equal(selector.value, String(acceptedIndex));

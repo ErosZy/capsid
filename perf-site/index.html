@@ -3,26 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Capsid — Performance</title>
+<title>Capsid — Performance &amp; Density Profile</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2334d399'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='15' font-weight='800' text-anchor='middle' fill='%2306060a'%3EC%3C/text%3E%3C/svg%3E">
-<meta name="description" content="Source-bound Capsid performance: accepted development-snapshot data, complete archived evidence, explicit release boundaries and preserved historical observations.">
+<meta name="description" content="Source-bound Capsid performance: multi-axis efficiency, multi-tenant density, cold start, and process-level memory with complete replay-verified evidence.">
 <style>
   :root {
-    --bg: #09090b;
-    --surface: #101013;
-    --surface-2: #141419;
-    --border: #232329;
-    --border-soft: #1a1a20;
-    --text: #f4f4f5;
-    --text-2: #d4d4d8;
-    --text-3: #9d9da7;
-    --text-4: #63636e;
-    --brand: #34d399;
-    --brand-dim: #10b981;
-    --brand-bg: rgba(52, 211, 153, 0.08);
-    --brand-border: rgba(52, 211, 153, 0.25);
+    --bg: #07080b;
+    --surface: #0e1015;
+    --surface-2: #141821;
+    --surface-3: #1b212e;
+    --border: #202531;
+    --border-soft: #171b24;
+    --border-hi: #2d3546;
+    --text: #f4f5f7;
+    --text-2: #d4d8e1;
+    --text-3: #969fae;
+    --text-4: #687182;
 
-    --s1: #34d399;  /* capsid source  */
+    --brand: #34d399;
+    --brand-strong: #10b981;
+    --brand-deep: #059669;
+    --brand-bg: rgba(52, 211, 153, 0.08);
+    --brand-bg-hi: rgba(52, 211, 153, 0.14);
+    --brand-border: rgba(52, 211, 153, 0.28);
+
+    --warn: #fbbf24;
+    --warn-bg: rgba(251, 191, 36, 0.08);
+    --warn-border: rgba(251, 191, 36, 0.30);
+
+    --s1: #34d399;  /* capsid / capsid source */
     --s2: #0ea371;  /* capsid bytecode */
     --s3: #fbbf24;  /* node */
     --s3b: #f59e0b; /* node --jitless */
@@ -33,223 +42,392 @@
     --s7: #a3e635;  /* flask (historical v1) */
     --s8: #c084fc;  /* php (historical v1) */
 
-    --radius: 10px;
+    --radius: 12px;
+    --radius-sm: 8px;
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
   }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
   body {
-    background: var(--bg); color: var(--text-2);
+    background:
+      radial-gradient(ellipse 85% 420px at 50% -110px, rgba(16, 185, 129, 0.14), transparent 72%),
+      var(--bg);
+    color: var(--text-2);
     font: 400 15px/1.65 var(--font);
-    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
-  ::selection { background: rgba(52, 211, 153, .25); }
+  ::selection { background: rgba(52, 211, 153, 0.28); color: #fff; }
   a { color: var(--brand); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 5px; }
 
-  /* ---------- top nav ---------- */
+  /* ---------- sticky top nav ---------- */
   .nav {
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(9, 9, 11, 0.92);
+    position: sticky; top: 0; z-index: 60;
+    background: rgba(7, 8, 11, 0.92);
     border-bottom: 1px solid var(--border-soft);
   }
-  @supports (backdrop-filter: blur(8px)) {
-    .nav { background: rgba(9, 9, 11, 0.72); backdrop-filter: blur(8px); }
+  @supports (backdrop-filter: blur(12px)) {
+    .nav { background: rgba(7, 8, 11, 0.76); backdrop-filter: blur(12px); }
   }
   .nav-in {
-    max-width: 1160px; margin: 0 auto; padding: 0 32px;
-    height: 56px; display: flex; align-items: center; gap: 8px;
+    max-width: 1200px; margin: 0 auto; padding: 0 28px;
+    height: 58px; display: flex; align-items: center; gap: 8px;
   }
-  .logo { display: flex; align-items: center; gap: 10px; margin-right: 28px; flex-shrink: 0; white-space: nowrap; }
+  .logo { display: flex; align-items: center; gap: 10px; margin-right: 20px; flex-shrink: 0; white-space: nowrap; }
   .logo-mark {
-    width: 22px; height: 22px; border-radius: 6px;
-    background: linear-gradient(135deg, var(--brand) 0%, #0d9488 100%);
+    width: 24px; height: 24px; border-radius: 7px;
+    background: linear-gradient(135deg, #34d399 0%, #0d9488 100%);
+    box-shadow: 0 0 18px rgba(52, 211, 153, 0.30);
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 11px; color: #06060a; font-weight: 800; letter-spacing: -0.5px;
+    font-size: 12px; color: #04130d; font-weight: 800; letter-spacing: -0.5px;
   }
-  .logo-name { font-size: 14.5px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+  .logo-name { font-size: 14.5px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
   .logo-name span { color: var(--text-4); font-weight: 400; }
   .nav-links { display: flex; flex-shrink: 0; gap: 2px; }
   .nav-links a {
-    color: var(--text-3); font-size: 13.5px; font-weight: 500;
-    padding: 6px 12px; border-radius: 6px; white-space: nowrap;
-    transition: color .15s, background .15s;
+    color: var(--text-3); font-size: 13px; font-weight: 500;
+    padding: 6px 11px; border-radius: 7px; white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
   }
   .nav-links a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
-  .nav-meta { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; color: var(--text-4); font-family: var(--mono); white-space: nowrap; }
-  @media (max-width: 1020px) { .nav-meta { display: none; } }
-  @media (max-width: 700px) {
-    .nav-in { height: auto; min-height: 56px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 8px; }
+  .nav-meta {
+    margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    font-size: 12px; color: var(--text-3); font-family: var(--mono); white-space: nowrap;
+    padding: 4px 10px; border-radius: 99px;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .nav-meta.is-verified { border-color: var(--brand-border); color: var(--brand); background: var(--brand-bg); }
+  .nav-meta.is-unverified { border-color: var(--warn-border); color: var(--warn); background: var(--warn-bg); }
+  @media (max-width: 1040px) { .nav-meta { display: none; } }
+  @media (max-width: 720px) {
+    .nav-in { height: auto; min-height: 54px; flex-wrap: wrap; padding: 10px 16px 8px; gap: 4px 6px; }
     .logo { margin-right: 0; }
-    .nav-links { flex-basis: 100%; }
-    .nav-links a { padding-left: 10px; padding-right: 10px; }
-    .wrap section { scroll-margin-top: 104px; }
+    .nav-links { flex-basis: 100%; max-width: 100%; flex-wrap: wrap; gap: 2px 4px; }
+    .nav-links a { padding: 4px 7px; font-size: 12px; }
+    .wrap section { scroll-margin-top: 112px; }
+    .card { padding: 18px 16px; }
   }
 
   /* ---------- layout ---------- */
-  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px 96px; }
-  section { padding-top: 72px; scroll-margin-top: 64px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px 104px; }
+  @media (max-width: 720px) { .wrap { padding: 0 18px 72px; } }
+  section { padding-top: 76px; scroll-margin-top: 68px; }
+  .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 24px; }
   .eyebrow {
-    font-size: 12px; font-weight: 600; letter-spacing: 1.6px;
-    text-transform: uppercase; color: var(--brand); margin-bottom: 12px;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--brand); margin-bottom: 10px;
   }
-  h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); margin-bottom: 10px; }
-  .lede { font-size: 15px; color: var(--text-3); max-width: 68ch; margin-bottom: 32px; line-height: 1.7; }
+  .eyebrow::before {
+    content: ""; width: 16px; height: 2px; border-radius: 2px; background: var(--brand);
+  }
+  h2 { font-size: 27px; font-weight: 750; letter-spacing: -0.6px; color: var(--text); margin-bottom: 8px; line-height: 1.2; }
+  .lede { font-size: 14.5px; color: var(--text-3); max-width: 72ch; line-height: 1.7; }
+  .lede b { color: var(--text-2); font-weight: 600; }
+
+  /* ---------- compact provenance telemetry bar ---------- */
+  .prov-bar {
+    margin-top: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .prov-top {
+    padding: 12px 18px;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .prov-release {
+    font-size: 12.5px; color: var(--text-3); line-height: 1.55; flex: 1 1 300px; min-width: 0;
+  }
+  .prov-release b { color: var(--text-2); font-weight: 600; }
+  .record-controls {
+    display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; max-width: 100%;
+  }
+  .record-controls label {
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase;
+    color: var(--text-4); white-space: nowrap; flex-shrink: 0;
+  }
+  .record-controls select {
+    max-width: 100%; min-width: 0; flex: 0 1 auto;
+    padding: 6px 10px; border: 1px solid var(--border-hi); border-radius: var(--radius-sm);
+    background: var(--surface-2); color: var(--text);
+    font: 500 12px var(--mono); cursor: pointer; text-overflow: ellipsis;
+  }
+  @media (max-width: 600px) {
+    .prov-top { padding: 12px 14px; }
+    .prov-verify { padding: 9px 14px; }
+    .record-controls { width: 100%; }
+    .record-controls select { width: 100%; flex: 1 1 auto; font-size: 11.5px; }
+  }
+  .record-controls select:hover { border-color: var(--brand-border); }
+  .prov-verify {
+    padding: 9px 18px;
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 12.5px; line-height: 1.55; color: var(--text-3);
+    background: var(--brand-bg);
+  }
+  .prov-verify.is-unverified { background: var(--warn-bg); }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0;
+    background: var(--brand); box-shadow: 0 0 8px var(--brand);
+  }
+  .prov-verify.is-unverified .status-dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  #verification-note { color: var(--text-2); }
 
   /* ---------- hero ---------- */
-  .hero { padding: 72px 0 8px; border-bottom: 1px solid var(--border-soft); }
-  .hero-grid { display: grid; grid-template-columns: 5fr 7fr; gap: 48px; align-items: center; }
-  @media (max-width: 960px) { .hero-grid { grid-template-columns: 1fr; } }
-  .hero h1 {
-    font-size: 42px; font-weight: 800; letter-spacing: -1.2px;
-    line-height: 1.12; color: var(--text); margin-bottom: 18px;
+  .hero {
+    padding: 46px 0 42px;
+    border-bottom: 1px solid var(--border-soft);
+    position: relative;
   }
-  .hero h1 em { font-style: normal; color: var(--brand); }
-  .hero p { font-size: 16.5px; color: var(--text-3); max-width: 52ch; line-height: 1.7; }
-  .hero-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 28px; }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 5.1fr) minmax(0, 6.9fr);
+    gap: 36px;
+    align-items: center;
+  }
+  .hero-grid > * { min-width: 0; }
+  @media (max-width: 980px) { .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
+  .hero h1 {
+    font-size: 40px; font-weight: 800; letter-spacing: -1.25px;
+    line-height: 1.12; color: var(--text); margin-bottom: 16px;
+  }
+  @media (max-width: 600px) { .hero h1 { font-size: 31px; letter-spacing: -0.9px; } }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(120deg, #34d399 0%, #2dd4bf 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: var(--brand);
+  }
+  @supports (-webkit-background-clip: text) {
+    .hero h1 em { -webkit-text-fill-color: transparent; }
+  }
+  .hero p { font-size: 15.5px; color: var(--text-3); max-width: 54ch; line-height: 1.72; }
+  .hero p b { color: var(--text-2); font-weight: 600; }
+  .hero-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
   .tag {
-    font-size: 12px; font-weight: 500; font-family: var(--mono);
+    font-size: 11.5px; font-weight: 500; font-family: var(--mono);
     padding: 4px 10px; border-radius: 99px;
-    background: var(--surface-2); border: 1px solid var(--border); color: var(--text-3);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-3);
     white-space: nowrap;
   }
-  .tag b { color: var(--text); font-weight: 600; }
+  .tag b { color: var(--text-2); font-weight: 600; }
   .tag.live { background: var(--brand-bg); border-color: var(--brand-border); color: var(--brand); }
+  .tag.live b { color: var(--brand); }
+  .tag.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+  .tag.warn b { color: var(--warn); }
 
-  .record-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
-  .record-controls label { color: var(--text); font-weight: 600; }
-  .record-controls select { max-width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: 13px var(--font); }
-  .archive-list { padding-left: 20px; margin-top: 12px; }
-  .archive-list li { margin-bottom: 14px; }
-  .archive-list .digest { display: block; overflow-wrap: anywhere; font: 11px var(--mono); color: var(--text-3); }
-
-  /* ---------- kpi cards ---------- */
-  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-  @media (max-width: 960px) { .kpis { grid-template-columns: 1fr; } }
+  /* ---------- 2x2 hero bento KPIs ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 580px) { .kpis { grid-template-columns: 1fr; } }
   .kpi {
     background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
     border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 22px 24px; position: relative; overflow: hidden;
+    padding: 18px 20px; position: relative; overflow: hidden;
+    transition: border-color 0.18s, transform 0.18s;
   }
+  .kpi:hover { border-color: var(--border-hi); }
   .kpi::before {
-    content: ""; position: absolute; top: 0; left: 24px; right: 24px; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--brand-border), transparent);
+    content: ""; position: absolute; top: 0; left: 18px; right: 18px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.10), transparent);
   }
+  .kpi.hero-kpi {
+    border-color: var(--brand-border);
+    background:
+      radial-gradient(ellipse 90% 100% at 100% 0%, rgba(52, 211, 153, 0.12), transparent 65%),
+      linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+  }
+  .kpi.hero-kpi::before {
+    background: linear-gradient(90deg, transparent, var(--brand), transparent);
+  }
+  .kpi .k-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
   .kpi .k-label {
-    font-size: 11.5px; font-weight: 600; letter-spacing: 0.8px;
-    text-transform: uppercase; color: var(--text-4); margin-bottom: 10px;
-    min-height: 3em; line-height: 1.5; white-space: normal;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.85px;
+    text-transform: uppercase; color: var(--text-4);
+  }
+  .kpi .k-badge {
+    font-size: 10.5px; font-weight: 600; font-family: var(--mono);
+    padding: 2px 7px; border-radius: 99px;
+    background: var(--brand-bg); border: 1px solid var(--brand-border); color: var(--brand);
+    white-space: nowrap;
   }
   .kpi .k-value {
-    font-size: 36px; font-weight: 800; letter-spacing: -1px; color: var(--text);
+    font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--text);
     font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap;
   }
-  .kpi .k-value small { font-size: 14px; font-weight: 500; color: var(--text-4); margin-left: 6px; letter-spacing: 0; }
+  .kpi .k-value small { font-size: 13px; font-weight: 500; color: var(--text-4); margin-left: 5px; letter-spacing: 0; }
   .kpi.hero-kpi .k-value { color: var(--brand); }
-  .kpi .k-sub { font-size: 13px; color: var(--text-3); margin-top: 10px; }
-  .kpi .k-sub b { color: var(--text-2); font-weight: 600; }
+  .kpi .k-sub { font-size: 12.5px; color: var(--text-3); margin-top: 8px; line-height: 1.5; }
+  .kpi .k-sub b { color: var(--text); font-weight: 600; }
 
-  /* ---------- card ---------- */
+  /* ---------- cards & grids ---------- */
   .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 24px; margin-bottom: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 14px;
   }
-  .card h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-  .card .sub { font-size: 12.5px; color: var(--text-4); margin-bottom: 16px; }
+  .card.featured {
+    border-color: var(--brand-border);
+    background:
+      radial-gradient(ellipse 60% 180px at 0% 0%, rgba(52, 211, 153, 0.06), transparent 70%),
+      var(--surface);
+  }
+  .card-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .card h3 { font-size: 15px; font-weight: 650; color: var(--text); margin-bottom: 3px; letter-spacing: -0.2px; }
+  .card .sub { font-size: 12.5px; color: var(--text-4); line-height: 1.5; }
+  .card > .sub { margin-bottom: 14px; }
 
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  /* grid items must be allowed to shrink below their content's min width;
-     the scroll-x chart wrappers take over via horizontal scrolling */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .grid-2 > * { min-width: 0; }
   @media (max-width: 960px) { .grid-2 { grid-template-columns: 1fr; } }
 
-  /* ---------- scroll containers ---------- */
+  /* ---------- pill tabs (radar & frontier controls) ---------- */
+  .pills { display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); flex-wrap: wrap; }
+  .pills:empty { display: none; }
+  .pill {
+    border: 0; background: transparent; color: var(--text-3);
+    font: 600 11.5px var(--font); padding: 5px 10px; border-radius: 6px;
+    cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s;
+  }
+  .pill:hover { color: var(--text); }
+  .pill.active { background: var(--brand-bg-hi); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand-border); }
+
+  /* ---------- 4-pillar engineering strip ---------- */
+  .pillars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+  @media (max-width: 1020px) { .pillars { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .pillars { grid-template-columns: 1fr; } }
+  .pillar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 18px 16px;
+  }
+  .pillar .p-idx {
+    font: 700 11px var(--mono); color: var(--brand); letter-spacing: 0.8px;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .pillar .p-idx span { width: 6px; height: 6px; border-radius: 2px; background: var(--brand); display: inline-block; }
+  .pillar h4 { font-size: 14px; font-weight: 650; color: var(--text); margin-bottom: 6px; }
+  .pillar p { font-size: 12.5px; color: var(--text-3); line-height: 1.6; }
+
+  /* ---------- scroll & chart containers ---------- */
   .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  /* charts never render below ~700 css px wide: label text stays legible,
-     narrow containers scroll horizontally instead of shrinking the svg */
   .scroll-x svg { min-width: 700px; }
-  .scroll-x table { min-width: 480px; }
+  .scroll-x table { min-width: 520px; }
+  .chart svg { width: 100%; height: auto; display: block; }
+  .chart-fit svg { width: 100%; height: auto; display: block; min-width: 0; }
+
+  /* ---------- legend ---------- */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 12px; }
+  .legend span { font-size: 12px; color: var(--text-3); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+  /* ---------- tables ---------- */
+  .scroll-x table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    padding: 10px 13px; text-align: right; white-space: nowrap;
+    border-bottom: 1px solid var(--border-soft);
+    font-variant-numeric: tabular-nums; color: var(--text-2);
+  }
+  th:first-child, td:first-child { text-align: left; font-weight: 500; color: var(--text); }
+  thead th {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.75px; text-transform: uppercase;
+    color: var(--text-4); border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0;
+  }
+  thead th:first-child { color: var(--text-3); }
+  td.gsep, th.gsep { border-left: 1px solid var(--border-soft); }
+  tbody tr { transition: background 0.12s; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.mine td { color: var(--brand); font-weight: 600; }
+  tbody tr.mine td.dim, tbody tr.mine td.dim2 { color: var(--brand); opacity: 0.78; }
+  tbody tr.mine { background: linear-gradient(90deg, rgba(52, 211, 153, 0.09), transparent 72%); }
+  tbody tr.mine:hover { background: linear-gradient(90deg, rgba(52, 211, 153, 0.14), transparent 72%); }
+  td.dim { color: var(--text-4); }
+  td.dim2 { color: var(--text-3); }
+  td.col-left, th.col-left { text-align: left; }
+  .tbl-cap { font-size: 12.5px; color: var(--text-4); padding: 0 0 12px; }
+  .sw { width: 8px; height: 8px; border-radius: 3px; display: inline-block; margin-right: 8px; vertical-align: middle; }
+
+  /* ---------- badges & mini bars in scorecard ---------- */
+  .iso-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; font-family: var(--mono);
+    padding: 2px 8px; border-radius: 99px; white-space: nowrap;
+  }
+  .iso-badge.strict { background: var(--brand-bg); border: 1px solid var(--brand-border); color: var(--brand); }
+  .iso-badge.isolate { background: rgba(251, 113, 133, 0.10); border: 1px solid rgba(251, 113, 133, 0.28); color: #fda4af; }
+  .iso-badge.none { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-4); }
+
+  .eff-cell { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .eff-track { width: 56px; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; display: inline-block; }
+  .eff-fill { height: 100%; border-radius: 99px; display: block; }
 
   /* ---------- methodology ---------- */
-  .method-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
-  }
-  @media (max-width: 1020px) { .method-grid { grid-template-columns: 1fr; } }
+  .method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 980px) { .method-grid { grid-template-columns: 1fr; } }
   .m-sub {
-    font-size: 11.5px; font-weight: 600; letter-spacing: 1px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
     text-transform: uppercase; color: var(--text-4); margin-bottom: 14px;
   }
   .proto { list-style: none; display: grid; gap: 14px; }
-  .proto li { font-size: 13.5px; color: var(--text-3); line-height: 1.65; }
+  .proto li { font-size: 13px; color: var(--text-3); line-height: 1.65; }
   .proto b { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; font-size: 13.5px; }
-  .fp { display: grid; grid-template-columns: 108px 1fr; gap: 8px 16px; align-items: baseline; }
+  .fp { display: grid; grid-template-columns: 104px 1fr; gap: 8px 16px; align-items: baseline; }
   .fp dt {
     font-size: 11px; font-weight: 600; letter-spacing: 0.6px;
     text-transform: uppercase; color: var(--text-4); text-align: right;
   }
   .fp dd {
     font-family: var(--mono); font-size: 12px; font-weight: 500;
-    color: var(--text-2); white-space: nowrap; overflow: hidden;
-    text-overflow: ellipsis;
+    color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .fp dd:hover { color: var(--text); }
-
-  /* ---------- legend ---------- */
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 14px; }
-  .legend span { font-size: 12.5px; color: var(--text-3); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
-
-  /* ---------- tables ---------- */
-  .scroll-x table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 480px; }
-  th, td {
-    padding: 9px 14px; text-align: right; white-space: nowrap;
-    border-bottom: 1px solid var(--border-soft);
-    font-variant-numeric: tabular-nums; color: var(--text-2);
+  .archive-list { padding-left: 20px; margin-top: 12px; }
+  .archive-list li { margin-bottom: 14px; font-size: 13px; }
+  .archive-list .digest { display: block; overflow-wrap: anywhere; font: 11px var(--mono); color: var(--text-4); margin-top: 2px; }
+  .archive-download {
+    display: inline-block; margin-top: 6px; margin-right: 10px;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--surface-2); border: 1px solid var(--border-hi);
+    font: 600 12px var(--mono); color: var(--brand);
   }
-  th:first-child, td:first-child { text-align: left; font-weight: 500; color: var(--text); }
-  thead th {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
-    color: var(--text-4); border-bottom: 1px solid var(--border);
-    background: var(--surface); position: sticky; top: 0;
+  .archive-download:hover { border-color: var(--brand-border); background: var(--brand-bg); text-decoration: none; }
+  details summary {
+    cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2);
+    padding: 8px 12px; border-radius: 8px; background: var(--surface-2);
+    border: 1px solid var(--border); display: inline-block;
   }
-  thead th:first-child { color: var(--text-3); }
-  td.gsep, th.gsep { border-left: 1px solid var(--border-soft); }
-  tbody tr { transition: background .12s; }
-  tbody tr:hover { background: var(--surface-2); }
-  tbody tr:last-child td { border-bottom: none; }
-  /* capsid's own row is the product story: brand tint, no winner marking */
-  tbody tr.mine td { color: var(--brand); font-weight: 600; }
-  tbody tr.mine td.dim, tbody tr.mine td.dim2 { color: var(--brand); opacity: 0.75; }
-  tbody tr.mine { background: linear-gradient(90deg, rgba(52,211,153,0.07), transparent 65%); }
-  tbody tr.mine:hover { background: linear-gradient(90deg, rgba(52,211,153,0.12), transparent 65%); }
-  td.dim { color: var(--text-4); }
-  td.dim2 { color: var(--text-3); }
-  .tbl-cap { font-size: 12.5px; color: var(--text-4); padding: 0 0 12px; }
+  details summary:hover { border-color: var(--border-hi); color: var(--text); }
 
-  /* ---------- callout ---------- */
+  /* ---------- callout & footnotes ---------- */
   .callout {
     background: var(--brand-bg); border: 1px solid var(--brand-border);
-    border-radius: var(--radius); padding: 18px 22px;
-    font-size: 14px; color: var(--text-2); line-height: 1.7;
+    border-radius: var(--radius); padding: 16px 20px;
+    font-size: 13.5px; color: var(--text-2); line-height: 1.7;
   }
   .callout b { color: var(--text); }
   .callout .hl { color: var(--brand); font-weight: 700; }
-
-  .footnote { font-size: 12.5px; color: var(--text-4); margin-top: 10px; line-height: 1.6; max-width: 90ch; }
+  .footnote { font-size: 12.5px; color: var(--text-4); margin-top: 10px; line-height: 1.65; max-width: 96ch; }
   .mono { font-family: var(--mono); font-size: 0.92em; color: var(--text-3); }
 
   /* ---------- footer ---------- */
   footer {
-    margin-top: 96px; padding-top: 28px; border-top: 1px solid var(--border-soft);
-    font-size: 13px; color: var(--text-4); line-height: 1.8;
+    margin-top: 88px; padding-top: 26px; border-top: 1px solid var(--border-soft);
+    font-size: 12.5px; color: var(--text-4); line-height: 1.8;
   }
-  footer p { max-width: 88ch; }
-
-  /* ---------- svg charts ---------- */
-  .chart svg { width: 100%; height: auto; display: block; }
-
+  footer p { max-width: 92ch; }
   .noscript { padding: 24px; margin: 24px 0; }
 </style>
 </head>
@@ -262,10 +440,11 @@
       <span class="logo-name">capsid <span>/ performance</span></span>
     </div>
     <div class="nav-links" role="navigation" aria-label="Sections">
+      <a href="#overview">Overview</a>
       <a href="#throughput">Throughput</a>
-      <a href="#memory">Memory</a>
+      <a href="#memory">Memory &amp; Density</a>
       <a href="#cold-start">Cold Start</a>
-      <a href="#method">Methodology</a>
+      <a href="#method">Evidence</a>
     </div>
     <div class="nav-meta" id="nav-meta"></div>
   </div>
@@ -281,52 +460,150 @@
     </div>
   </noscript>
 
-  <div class="callout" id="release-context" role="status" style="margin-top:24px">
-    Release and measured-source context is loading. Stable and experimental
-    release status are separate from a measured development snapshot.
-  </div>
-  <div class="record-controls">
-    <label for="record-select">Measured record</label>
-    <select id="record-select" aria-describedby="verification-note"></select>
-  </div>
-  <div class="callout" id="verification-note" role="status" style="margin-top:16px">
-    Verification status is loading. Read source identities before interpreting numbers.
+  <!-- ================= compact provenance & record bar ================= -->
+  <div class="prov-bar">
+    <div class="prov-top">
+      <div class="prov-release" id="release-context" role="status">
+        Release and measured-source context is loading. Stable and experimental
+        release status are separate from a measured development snapshot.
+      </div>
+      <div class="record-controls">
+        <label for="record-select">Record</label>
+        <select id="record-select" aria-describedby="verification-note"></select>
+      </div>
+    </div>
+    <div class="prov-verify" id="verification-wrap">
+      <span class="status-dot" aria-hidden="true"></span>
+      <div id="verification-note" role="status">
+        Verification status is loading. Read source identities before interpreting numbers.
+      </div>
+    </div>
   </div>
 
   <!-- ================= hero ================= -->
   <div class="hero">
     <div class="hero-grid">
       <div>
-        <div class="eyebrow">Benchmark Record</div>
-        <h1>Isolation that<br><em>outlasts</em> the hype.</h1>
-        <p>Throughput, cold start, and process-level memory under a frozen
-           protocol. Each point states its verification status; historical
-           observations remain available. The latest accepted data is a
-           development snapshot, not a benchmark of published 0.3.0-beta.</p>
+        <div class="eyebrow">Multi-Tenant Runtime Profile</div>
+        <h1>Fast cold starts.<br>Tiny footprint.<br><em>Strict OS isolation.</em></h1>
+        <p>Capsid pairs a compact JavaScript runtime with mandatory Linux
+           <b>Namespaces, Landlock, and Seccomp</b> per tenant worker.
+           Every benchmark below measures the complete isolated serving path
+           under a frozen, replay-verified protocol. The latest accepted data
+           is a development snapshot, not a benchmark of published
+           0.3.0-beta.</p>
+        <div class="hero-tags" id="hero-tags"></div>
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
-    <div class="hero-tags" id="hero-tags"></div>
   </div>
 
-  <!-- ================= throughput ================= -->
+  <!-- ================= 00 overview / comprehensive strength ================= -->
+  <section id="overview">
+    <div class="sec-head">
+      <div>
+        <div class="eyebrow">00 — Comprehensive Strength</div>
+        <h2>Balanced across every production axis</h2>
+        <p class="lede">Single-metric charts hide real operational trade-offs: a runtime can
+           post high raw QPS while consuming hundreds of megabytes per process, skipping OS
+           isolation, or stalling on cold start. Below, every measured stack in this record is
+           compared simultaneously across <b>throughput efficiency (req/s per MiB)</b>,
+           <b>memory footprint</b>, <b>cold-start latency</b>, <b>raw throughput</b>, and
+           <b>isolation posture</b>.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card featured">
+        <div class="card-head">
+          <div>
+            <h3>Multi-axis capability profile</h3>
+            <div class="sub" id="radar-sub">Normalized to 100 = leader in this record on each measured axis</div>
+          </div>
+          <div class="pills" id="radar-tabs"></div>
+        </div>
+        <div class="legend" id="radar-legend"></div>
+        <div class="chart-fit" id="radar-chart"></div>
+        <div class="footnote" id="radar-note"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h3>Throughput vs. memory frontier</h3>
+            <div class="sub">Top-left is ideal: higher req/s inside smaller serving PSS (log X-axis)</div>
+          </div>
+          <div class="pills" id="frontier-tabs"></div>
+        </div>
+        <div class="chart-fit" id="frontier-chart"></div>
+        <div class="footnote" id="frontier-note"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head" style="margin-bottom:8px">
+        <div>
+          <h3>Unified runtime scorecard</h3>
+          <div class="sub">Side-by-side synthesis of every lane measured in the selected record — Capsid highlighted</div>
+        </div>
+      </div>
+      <div class="scroll-x" id="scorecard-table"></div>
+    </div>
+
+    <div class="pillars">
+      <div class="pillar">
+        <div class="p-idx"><span></span>01 / ISOLATION</div>
+        <h4>Mandatory strict sandbox</h4>
+        <p>Linux Namespaces, Landlock filesystem rules, Seccomp syscall filtering, and
+           default-deny egress stay enabled in every measured Capsid run.</p>
+      </div>
+      <div class="pillar">
+        <div class="p-idx"><span></span>02 / STARTUP</div>
+        <h4>Sub-20 ms cold starts</h4>
+        <p>Precompiled QuickJS bytecode eliminates parse overhead across 10 KiB to 1 MiB
+           bundles while keeping process PSS in the low-tens of megabytes.</p>
+      </div>
+      <div class="pillar">
+        <div class="p-idx"><span></span>03 / EFFICIENCY</div>
+        <h4>High throughput per MiB</h4>
+        <p>No multi-hundred-MiB JIT code cache or runaway heap inflation: tight worker
+           footprints translate directly into denser multi-tenant packing.</p>
+      </div>
+      <div class="pillar">
+        <div class="p-idx"><span></span>04 / PROVENANCE</div>
+        <h4>Replay-verified evidence</h4>
+        <p>Every verified point ships complete sealed logs, exact-body checks, recursive
+           process-tree PSS proofs, and SHA-256 archive digests.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 01 throughput ================= -->
   <section id="throughput">
     <div class="eyebrow">01 — Serving</div>
-    <h2>Throughput</h2>
+    <h2>Throughput &amp; memory efficiency</h2>
     <p class="lede">Closed-loop load generation with the repository's frozen
        client: 64 keep-alive connections, 64 in-flight, 5&nbsp;s warm-up plus
        five 15&nbsp;s measured rounds. Every round verifies the exact
-       response body; medians are reported.</p>
+       response body; medians are reported alongside memory-normalized
+       <b>req/s per MiB</b>.</p>
+
+    <div class="card chart featured">
+      <h3>Throughput efficiency — req/s per MiB of serving PSS</h3>
+      <div class="sub">median QPS divided by each stack's loaded process-tree PSS — higher is better (raw QPS and memory both differ across stacks)</div>
+      <div class="legend" id="qps-eff-legend"></div>
+      <div class="scroll-x" id="qps-eff-chart"></div>
+    </div>
 
     <div class="card chart">
-      <h3>Requests per second</h3>
-      <div class="sub">median of rounds — higher is better</div>
+      <h3>Raw serving throughput — requests per second</h3>
+      <div class="sub">median of five 15 s rounds at 64 connections / 64 in-flight — higher is better</div>
       <div class="legend" id="qps-legend"></div>
       <div class="scroll-x" id="qps-chart"></div>
     </div>
 
     <div class="card">
-      <div class="tbl-cap">Median throughput (req/s) — Capsid’s row highlighted</div>
+      <div class="tbl-cap">Median throughput (req/s) and 1 KiB memory efficiency — Capsid’s row highlighted</div>
       <div class="scroll-x" id="qps-table"></div>
     </div>
     <div class="card">
@@ -335,22 +612,33 @@
     </div>
   </section>
 
-  <!-- ================= memory ================= -->
+  <!-- ================= 02 memory & density ================= -->
   <section id="memory">
-    <div class="eyebrow">02 — Density</div>
-    <h2>Serving memory</h2>
+    <div class="eyebrow">02 — Density &amp; Memory</div>
+    <h2>Multi-tenant density &amp; serving memory</h2>
     <p class="lede">Proportional set size from
        <span class="mono">smaps_rollup</span>, decomposed into each stack's
-       real processes. Two windows: an <b>equal-load trickle</b> (10 req/s on
-       a fresh process — same request volume everywhere) and <b>after the
-       last measured round</b> of the 64-connection load. The trickle read is
-       the fair at-rest comparison; the loaded read shows how each runtime
-       behaves under real pressure.</p>
+       real processes. Measured across three views: <b>2048 MiB pool packing</b>,
+       an <b>equal-load trickle</b> (10 req/s on a fresh process), and
+       <b>after the last measured round</b> of 64-connection load.</p>
+
+    <div class="card chart featured">
+      <h3>Observed pool density — 2048 MiB budget</h3>
+      <div class="sub">Final pool counts and process-tree PSS in the sampled
+        window. The cold target is one validated request per worker/cell;
+        the warm target is 100 per worker/cell. Complete archives prove that
+        coverage individually. A probe cap is a lower-bound observation,
+        not a measured maximum. Historical coverage remains unverified.
+        These windows do not establish memory retention under longer traffic.</div>
+      <div class="legend" id="density-legend"></div>
+      <div class="scroll-x" id="density-chart" style="margin-bottom:18px"></div>
+      <div class="scroll-x" id="budget-table"></div>
+    </div>
 
     <div class="card chart">
       <h3>At a trickle — 10 req/s</h3>
       <div class="sub">process-tree PSS after 15 s of gentle traffic on a fresh
-        process, before any load — the at-rest footprint, MiB</div>
+        process, before any load — the at-rest footprint, MiB (lower is better)</div>
       <div class="scroll-x" id="mem-low-chart"></div>
       <div class="legend" id="mem-low-legend" style="margin-top:14px;margin-bottom:0"></div>
     </div>
@@ -365,28 +653,17 @@
     <div class="card chart">
       <h3>Marginal cost per serving worker</h3>
       <div class="sub">the worker process alone — amortized infrastructure
-        (capsid host, nginx, masters) excluded. workerd runs worker and
-        server inside one process, so its bar is that whole process — an
-        upper bound on its per-worker cost. MiB — lower is better</div>
+        (capsid host, nginx, masters) excluded. Single-process runtimes
+        (workerd, Node, Bun) combine server and worker inside one process,
+        so their bar is an upper bound on per-worker cost. MiB — lower is better</div>
       <div class="legend" id="wc-legend"></div>
       <div class="scroll-x" id="worker-cost-chart"></div>
-    </div>
-
-    <div class="card chart">
-      <h3>Observed pool density — 2048 MiB budget</h3>
-      <div class="sub">Final pool counts and process-tree PSS in the sampled
-        window. The cold target is one validated request per worker/cell;
-        the warm target is 100 per worker/cell. Complete archives prove that
-        coverage individually. A probe cap is a lower-bound observation,
-        not a measured maximum. Historical coverage remains unverified.
-        These windows do not establish memory retention under longer traffic.</div>
-      <div class="scroll-x" id="budget-table"></div>
     </div>
 
     <div class="callout" id="mem-callout"></div>
   </section>
 
-  <!-- ================= cold start ================= -->
+  <!-- ================= 03 cold start ================= -->
   <section id="cold-start">
     <div class="eyebrow">03 — Instantiation</div>
     <h2>Cold start &amp; footprint</h2>
@@ -395,6 +672,7 @@
        load the same fixture source, byte-aligned, differing only in the
        entry point.</p>
 
+    <div class="callout" id="cold-callout" style="margin-bottom:18px"></div>
     <div class="legend" id="cold-legend"></div>
 
     <div class="card chart">
@@ -420,7 +698,7 @@
     </div>
   </section>
 
-  <!-- ================= method ================= -->
+  <!-- ================= 04 method ================= -->
   <section id="method">
     <div class="eyebrow">04 — Provenance</div>
     <h2>Methodology &amp; evidence</h2>
@@ -458,14 +736,13 @@ var NAME = {
   "node": "Node.js", "node-jitless": "Node.js (--jitless)", "bun": "Bun", "deno": "Deno", "workerd": "workerd",
   "capsid": "Capsid", "fastapi": "FastAPI", "flask": "Flask", "php": "PHP Slim"
 };
-/* short labels for chart gutters; long forms live in tables & tooltips */
 var SHORT = {
   "capsid-source": "Capsid src", "capsid-bytecode": "Capsid bc",
   "node": "Node.js", "node-jitless": "Node jitless", "bun": "Bun", "deno": "Deno", "workerd": "workerd",
   "capsid": "Capsid", "fastapi": "FastAPI", "flask": "Flask", "php": "PHP Slim"
 };
 var NAME_LONG = {
-  "capsid": "Capsid — single worker",
+  "capsid": "Capsid — single worker (strict sandbox)",
   "node": "Node.js — single process (node:http)",
   "node-jitless": "Node.js (--jitless) — single process (node:http)",
   "bun": "Bun — single process (Bun.serve)",
@@ -473,6 +750,17 @@ var NAME_LONG = {
   "fastapi": "FastAPI — uvicorn",
   "flask": "Flask — gunicorn",
   "php": "PHP Slim — php-fpm + nginx"
+};
+var ISOLATION = {
+  "capsid": ["OS Sandbox (NS+Landlock+Seccomp)", "strict"],
+  "workerd": ["V8 Isolate", "isolate"],
+  "node": ["Single Process (No Sandbox)", "none"],
+  "node-jitless": ["Single Process (No Sandbox)", "none"],
+  "bun": ["Single Process (No Sandbox)", "none"],
+  "deno": ["Single Process", "none"],
+  "fastapi": ["App Worker (No Sandbox)", "none"],
+  "flask": ["App Worker (No Sandbox)", "none"],
+  "php": ["FPM Pool (No Sandbox)", "none"]
 };
 var SIZES = ["10k", "100k", "1m"];
 var SZ = { "10k": "10 KiB", "100k": "100 KiB", "1m": "1 MiB" };
@@ -493,6 +781,8 @@ for (var pi = 0; pi < PTS.length; pi++) {
 }
 var P = null;
 var VERIFIED = false;
+var RADAR_MODE = "auto";
+var FRONTIER_WL = "matrix-json-1k";
 
 function isVerified(point) {
   return !!(point && point.verification && point.verification.status === "verified" &&
@@ -522,13 +812,31 @@ function nice(v) {
   if (!(v > 0)) return 1;
   var b = Math.pow(10, Math.floor(Math.log(v) / Math.LN10));
   var n = v / b;
-  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * b;
+  return (n <= 1 ? 1 : n <= 1.2 ? 1.2 : n <= 1.5 ? 1.5 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 3 ? 3 : n <= 4 ? 4 : n <= 5 ? 5 : n <= 6 ? 6 : n <= 8 ? 8 : 10) * b;
 }
 function stacksOf(cells) {
   var out = [];
   for (var i = 0; i < cells.length; i++)
     if (out.indexOf(cells[i].stack) < 0) out.push(cells[i].stack);
   return out;
+}
+function isCapsidStack(s) {
+  return s === "capsid" || s === "capsid-source" || s === "capsid-bytecode";
+}
+function coldKeyFor(stack) {
+  return stack === "capsid" ? "capsid-bytecode" : stack;
+}
+function findQpsCell(q, stack, workload) {
+  if (!q || !q.cells) return null;
+  for (var i = 0; i < q.cells.length; i++)
+    if (q.cells[i].stack === stack && q.cells[i].workload === workload) return q.cells[i];
+  return null;
+}
+function findColdCell(c, stack, size) {
+  if (!c || !c.cells) return null;
+  for (var i = 0; i < c.cells.length; i++)
+    if (c.cells[i].stack === stack && c.cells[i].size === size) return c.cells[i];
+  return null;
 }
 
 /* ============ release and record scope ============ */
@@ -562,63 +870,638 @@ function renderRecordSelector() {
 
 /* ============ hero ============ */
 function renderHero() {
+  var vw = $("verification-wrap");
+  if (vw) vw.className = "prov-verify " + (VERIFIED ? "is-verified" : "is-unverified");
   $("verification-note").textContent = VERIFIED ?
     "Selected record: " + pointLabel(P) + ". Complete archive and protocol replay passed; source, binary identities and raw evidence follow. This is not release qualification." :
     "Selected historical record — unverified. The current complete archive/provenance contract has not passed for this point. Do not infer a qualified release trend or paired gain.";
   if (P && P.notes) $("verification-note").textContent += " " + P.notes;
+
   var m = (P && P.machine) || {};
   var cpu = (m.cpu || "").replace(/\(R\)|\(TM\)/g, "").trim();
   cpu = cpu.split(" ").slice(-1)[0] || "—";
   var lane = (m.uname || "").indexOf("WSL2") >= 0 ? "WSL2" : "Linux";
   var tags = [
-    [P ? pointLabel(P) : "—", VERIFIED ? "verified measured source, not necessarily a release" : "unverified historical observation", VERIFIED],
-    [P ? P.date : "—", VERIFIED ? "measured on" : "recorded date; unverified", false],
-    [VERIFIED ? "Verified archive" : "Unverified observation", "evidence status", VERIFIED],
-    [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", false]
+    [P ? pointLabel(P) : "—", VERIFIED ? "verified measured source, not necessarily a release" : "unverified historical observation", VERIFIED ? "live" : "warn"],
+    [P ? P.date : "—", VERIFIED ? "measured on" : "recorded date; unverified", ""],
+    [VERIFIED ? "Verified archive" : "Unverified observation", "evidence status", VERIFIED ? "live" : "warn"],
+    [cpu + " \u00b7 " + lane, "cpu \u00b7 lane", ""],
+    ["Strict Linux sandbox", "namespaces + landlock + seccomp", ""]
   ];
   $("hero-tags").innerHTML = tags.map(function (t) {
-    return '<span class="tag' + (t[2] ? " live" : "") + '" title="' +
+    return '<span class="tag' + (t[2] ? " " + t[2] : "") + '" title="' +
            esc(t[1]) + '"><b>' + esc(t[0]) + "</b></span>";
   }).join("");
-  $("nav-meta").textContent = P ? pointLabel(P) + " · " + P.date : "";
 
-  var q = P && P.qps, c = P && P.coldStart;
+  var navMeta = $("nav-meta");
+  navMeta.textContent = P ? pointLabel(P) + " · " + P.date : "";
+  navMeta.className = "nav-meta " + (VERIFIED ? "is-verified" : "is-unverified");
+
+  var q = P && P.qps, c = P && P.coldStart, d = P && P.density;
+  var cap1k = findQpsCell(q, "capsid", "matrix-json-1k");
+  var wk1k = findQpsCell(q, "workerd", "matrix-json-1k");
+  var capSrv = q && q.servingPss ? memoryTotal(q.servingPss, "capsid", q.servingPssMb) : 0;
+  var capLow = q && q.lowLoadPss ? memoryTotal(q.lowLoadPss, "capsid", q.lowLoadPssMb) : 0;
+  var wkSrv = q && q.servingPss && q.servingPss.workerd ? memoryTotal(q.servingPss, "workerd", q.servingPssMb) : 0;
+  var bc1m = findColdCell(c, "capsid-bytecode", "1m");
+  var wk1m = findColdCell(c, "workerd", "1m");
+  var nd1m = findColdCell(c, "node", "1m");
+
   var cards = "";
 
-  if (q && q.cells) {
-    var cap = null;
-    for (var i = 0; i < q.cells.length; i++)
-      if (q.cells[i].stack === "capsid" && q.cells[i].workload === "matrix-json-1k")
-        cap = q.cells[i];
-    if (cap) cards +=
-      '<div class="kpi"><div class="k-label">JSON 1 KiB throughput</div>' +
-      '<div class="k-value">' + fmt(cap.qps) + '<small>req/s</small></div>' +
-      '<div class="k-sub">single worker through the isolated host↔worker IPC path</div></div>';
-  }
-  if (q && q.servingPss && q.servingPss.capsid && q.servingPss.workerd) {
-    var a = memoryTotal(q.servingPss, "capsid", q.servingPssMb);
-    var b = memoryTotal(q.servingPss, "workerd", q.servingPssMb);
+  /* KPI 1: Throughput Efficiency (QPS / MiB) */
+  if (cap1k && capSrv > 0) {
+    var capEff = cap1k.qps / capSrv;
+    var effSub = "<b>" + fmt(cap1k.qps) + " req/s</b> inside <b>" + fmt(capSrv, 1) + " MiB</b> total PSS";
+    var badge = "Efficiency";
+    if (wk1k && wkSrv > 0) {
+      var wkEff = wk1k.qps / wkSrv;
+      var ratio = capEff / wkEff;
+      effSub = "<b>" + fmt(ratio, 1) + "\u00d7 higher</b> than workerd (" + fmt(wkEff, 1) + "/MiB); raw QPS differs";
+      badge = fmt(ratio, 1) + "\u00d7 vs workerd";
+    }
     cards +=
-      '<div class="kpi hero-kpi"><div class="k-label">Memory @ 64 conns</div>' +
-      '<div class="k-value">' + fmt(a, 1) + '<small>MiB PSS</small></div>' +
-      '<div class="k-sub"><b>' + fmt(b / a, 0) + '× lighter</b> than workerd\u2019s ' +
-      fmt(b, 1) + ' MiB in the loaded sampling window; throughput differs</div></div>';
+      '<div class="kpi hero-kpi"><div class="k-top"><div class="k-label">Throughput per MiB</div>' +
+      '<span class="k-badge">' + esc(badge) + '</span></div>' +
+      '<div class="k-value">' + fmt(capEff, 0) + '<small>req/s\u00b7MiB</small></div>' +
+      '<div class="k-sub">' + effSub + "</div></div>";
   }
-  if (c && c.cells) {
-    var bc = null;
-    for (var j = 0; j < c.cells.length; j++)
-      if (c.cells[j].stack === "capsid-bytecode" && c.cells[j].size === "1m") bc = c.cells[j];
-    if (bc) cards +=
-      '<div class="kpi"><div class="k-label">Cold start · 1 MiB</div>' +
-      '<div class="k-value">' + fmt(bc.totalMs, 1) + '<small>ms</small></div>' +
-      '<div class="k-sub">trusted bytecode timing in this observation</div></div>';
+
+  /* KPI 2: Loaded Serving Memory */
+  if (capSrv > 0) {
+    var memBadge = wkSrv > 0 ? fmt(wkSrv / capSrv, 0) + "\u00d7 lighter" : "Host + worker";
+    var memSub = wkSrv > 0
+      ? "<b>" + fmt(wkSrv / capSrv, 1) + "\u00d7 lighter</b> than workerd (" + fmt(wkSrv, 1) + " MiB)" +
+        (capLow > 0 ? " · <b>" + fmt(capLow, 1) + " MiB</b> at 10 req/s" : "")
+      : (capLow > 0 ? "<b>" + fmt(capLow, 1) + " MiB</b> at 10 req/s trickle; host + isolated worker" : "host + isolated worker PSS");
+    cards +=
+      '<div class="kpi"><div class="k-top"><div class="k-label">Serving PSS @ 64 conns</div>' +
+      '<span class="k-badge">' + esc(memBadge) + '</span></div>' +
+      '<div class="k-value">' + fmt(capSrv, 1) + '<small>MiB</small></div>' +
+      '<div class="k-sub">' + memSub + "</div></div>";
+  }
+
+  /* KPI 3: 1 MiB Bytecode Cold Start */
+  if (bc1m) {
+    var csParts = [];
+    if (wk1m && wk1m.totalMs > 0) csParts.push("<b>" + fmt(wk1m.totalMs / bc1m.totalMs, 1) + "\u00d7 faster</b> than workerd");
+    if (nd1m && nd1m.totalMs > 0) csParts.push("<b>" + fmt(nd1m.totalMs / bc1m.totalMs, 1) + "\u00d7</b> vs Node");
+    if (bc1m.pssMb != null) csParts.push(fmt(bc1m.pssMb, 1) + " MiB PSS");
+    cards +=
+      '<div class="kpi"><div class="k-top"><div class="k-label">Cold start · 1 MiB bundle</div>' +
+      '<span class="k-badge">Bytecode</span></div>' +
+      '<div class="k-value">' + fmt(bc1m.totalMs, 1) + '<small>ms</small></div>' +
+      '<div class="k-sub">' + (csParts.length ? csParts.join(" · ") : "strict C-ABI bytecode timing") + "</div></div>";
+  }
+
+  /* KPI 4: 2 GiB Warmed Density (or 1k Throughput fallback) */
+  var dwCap = d && d.capsid && d.capsid["warm@10k"];
+  var dwWk = d && d.workerd && d.workerd["warm@10k"];
+  var dcCap = d && d.capsid && d.capsid["cold@10k"];
+  if (dwCap) {
+    var dBadge = (dcCap && dcCap.count > 0) ? fmt((dwCap.count / dcCap.count) * 100, 0) + "% warm fit" : "2048 MiB";
+    var dSub = "<b>10 KiB warmed</b> (100 req each, strict sandbox)";
+    if (dwWk && dwWk.count > 0)
+      dSub += " · vs <b>" + fmt(dwWk.count, 0) + "</b> workerd cells";
+    else if (cap1k)
+      dSub += " · <b>" + fmt(cap1k.qps) + " req/s</b> single-worker 1k";
+    cards +=
+      '<div class="kpi"><div class="k-top"><div class="k-label">2 GiB warmed pool</div>' +
+      '<span class="k-badge">' + esc(dBadge) + '</span></div>' +
+      '<div class="k-value">' + fmt(dwCap.count, 0) + '<small>workers</small></div>' +
+      '<div class="k-sub">' + dSub + "</div></div>";
+  } else if (cap1k) {
+    cards +=
+      '<div class="kpi"><div class="k-top"><div class="k-label">JSON 1 KiB throughput</div>' +
+      '<span class="k-badge">1 worker</span></div>' +
+      '<div class="k-value">' + fmt(cap1k.qps) + '<small>req/s</small></div>' +
+      '<div class="k-sub">single strict-sandboxed worker through host\u2194worker IPC</div></div>';
   }
   $("kpis").innerHTML = cards;
 }
 
+/* ============ 00 comprehensive overview: radar, frontier, scorecard ============ */
+function renderOverview() {
+  renderRadar();
+  renderFrontier();
+  renderScorecard();
+}
+
+function renderRadar() {
+  var q = P && P.qps, c = P && P.coldStart, d = P && P.density;
+  if (!q || !q.cells || !q.cells.length) {
+    $("radar-chart").innerHTML = '<p class="footnote">No multi-axis data in this record.</p>';
+    $("radar-tabs").innerHTML = "";
+    $("radar-legend").innerHTML = "";
+    return;
+  }
+  var qStacks = stacksOf(q.cells);
+  var fullStacks = qStacks.filter(function (st) {
+    return !!findColdCell(c, coldKeyFor(st), "1m");
+  });
+  var hasAllFull = fullStacks.length >= 3;
+  var canToggle = !hasAllFull && fullStacks.length >= 2;
+  var mode = hasAllFull ? "full" : (RADAR_MODE === "full" && canToggle ? "full" : "serving");
+
+  var tabsEl = $("radar-tabs");
+  if (canToggle) {
+    tabsEl.innerHTML =
+      '<button type="button" class="pill' + (mode === "serving" ? " active" : "") + '" id="rtab-serving">All Serving Stacks</button>' +
+      '<button type="button" class="pill' + (mode === "full" ? " active" : "") + '" id="rtab-full">Full-Lane (Capsid vs workerd)</button>';
+    var b1 = $("rtab-serving"), b2 = $("rtab-full");
+    if (b1) b1.onclick = function () { RADAR_MODE = "serving"; renderRadar(); };
+    if (b2) b2.onclick = function () { RADAR_MODE = "full"; renderRadar(); };
+  } else {
+    tabsEl.innerHTML = "";
+  }
+
+  var activeStacks = mode === "full" ? fullStacks : qStacks;
+  var axes = [];
+  if (mode === "full") {
+    var hasWarmDens = activeStacks.every(function (st) { return d && d[st] && d[st]["warm@10k"]; });
+    axes = [
+      {
+        label: "QPS / MiB", sub: "1k QPS \u00f7 serving PSS",
+        raw: function (st) {
+          var cell = findQpsCell(q, st, "matrix-json-1k");
+          var mem = memoryTotal(q.servingPss, st, q.servingPssMb);
+          return (cell && mem > 0) ? cell.qps / mem : null;
+        },
+        scoreVal: function (v) { return v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " req/s\u00b7MiB"; }
+      },
+      {
+        label: "Cold Speed (1M)", sub: "1 \u00f7 1 MiB cold ms",
+        raw: function (st) {
+          var cell = findColdCell(c, coldKeyFor(st), "1m");
+          return cell && cell.totalMs > 0 ? cell.totalMs : null;
+        },
+        scoreVal: function (v) { return 1 / v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " ms"; }
+      },
+      {
+        label: "Loaded Footprint", sub: "1 \u00f7 64-conn PSS",
+        raw: function (st) {
+          var mem = memoryTotal(q.servingPss, st, q.servingPssMb);
+          return mem > 0 ? mem : null;
+        },
+        scoreVal: function (v) { return 1 / v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " MiB"; }
+      },
+      hasWarmDens ? {
+        label: "2 GiB Warm Pool", sub: "10 KiB warmed count",
+        raw: function (st) { return d[st]["warm@10k"].count; },
+        scoreVal: function (v) { return v; },
+        fmtRaw: function (v) { return fmt(v, 0) + " instances"; }
+      } : {
+        label: "Trickle Footprint", sub: "1 \u00f7 10 req/s PSS",
+        raw: function (st) {
+          var mem = q.lowLoadPss ? memoryTotal(q.lowLoadPss, st, q.lowLoadPssMb) : 0;
+          if (!(mem > 0)) {
+            var cc = findColdCell(c, coldKeyFor(st), "1m");
+            mem = cc && cc.pssMb ? cc.pssMb : 0;
+          }
+          return mem > 0 ? mem : null;
+        },
+        scoreVal: function (v) { return 1 / v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " MiB"; }
+      },
+      {
+        label: "Raw 1k QPS", sub: "median req/s",
+        raw: function (st) {
+          var cell = findQpsCell(q, st, "matrix-json-1k");
+          return cell ? cell.qps : null;
+        },
+        scoreVal: function (v) { return v; },
+        fmtRaw: function (v) { return fmt(v, 0) + " req/s"; }
+      }
+    ];
+  } else {
+    axes = [
+      {
+        label: "QPS / MiB", sub: "1k QPS \u00f7 serving PSS",
+        raw: function (st) {
+          var cell = findQpsCell(q, st, "matrix-json-1k");
+          var mem = memoryTotal(q.servingPss, st, q.servingPssMb);
+          return (cell && mem > 0) ? cell.qps / mem : null;
+        },
+        scoreVal: function (v) { return v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " req/s\u00b7MiB"; }
+      },
+      {
+        label: "Loaded Footprint", sub: "1 \u00f7 64-conn PSS",
+        raw: function (st) {
+          var mem = memoryTotal(q.servingPss, st, q.servingPssMb);
+          return mem > 0 ? mem : null;
+        },
+        scoreVal: function (v) { return 1 / v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " MiB"; }
+      },
+      {
+        label: "At-Rest Footprint", sub: "1 \u00f7 10 req/s PSS",
+        raw: function (st) {
+          var mem = q.lowLoadPss ? memoryTotal(q.lowLoadPss, st, q.lowLoadPssMb) : memoryTotal(q.servingPss, st, q.servingPssMb);
+          return mem > 0 ? mem : null;
+        },
+        scoreVal: function (v) { return 1 / v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " MiB"; }
+      },
+      {
+        label: "Tail Latency", sub: "1 \u00f7 1k p95 ms",
+        raw: function (st) {
+          var cell = findQpsCell(q, st, "matrix-json-1k");
+          return cell && cell.p95Ms > 0 ? cell.p95Ms : null;
+        },
+        scoreVal: function (v) { return 1 / v; },
+        fmtRaw: function (v) { return fmt(v, 1) + " ms p95"; }
+      },
+      {
+        label: "Raw 1k QPS", sub: "median req/s",
+        raw: function (st) {
+          var cell = findQpsCell(q, st, "matrix-json-1k");
+          return cell ? cell.qps : null;
+        },
+        scoreVal: function (v) { return v; },
+        fmtRaw: function (v) { return fmt(v, 0) + " req/s"; }
+      }
+    ];
+  }
+
+  /* Compute best per axis */
+  var axisMax = axes.map(function (ax) {
+    var best = 0;
+    activeStacks.forEach(function (st) {
+      var r = ax.raw(st);
+      if (r != null && r > 0) best = Math.max(best, ax.scoreVal(r));
+    });
+    return best || 1;
+  });
+
+  /* Draw peers first, Capsid on top so emerald profile is unmistakably clear */
+  var drawOrder = activeStacks.filter(function (st) { return st !== "capsid"; });
+  if (activeStacks.indexOf("capsid") >= 0) drawOrder.push("capsid");
+
+  $("radar-legend").innerHTML = activeStacks.map(function (st) {
+    return '<span><i style="background:' + (C[st] || "#888") + '"></i>' + esc(NAME[st] || st) + "</span>";
+  }).join("");
+
+  var W = 540, H = 372, cx = 270, cy = 194, R = 128, N = axes.length;
+  function pt(i, frac) {
+    var ang = -Math.PI / 2 + (2 * Math.PI * i) / N;
+    return [cx + Math.cos(ang) * R * frac, cy + Math.sin(ang) * R * frac];
+  }
+
+  var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="multi-axis runtime capability profile">';
+  s += '<style>' +
+       '.rg{fill:none;stroke:#202531;stroke-width:1}' +
+       '.rg-out{fill:none;stroke:#2d3546;stroke-width:1.2}' +
+       '.rax{stroke:#1d222e;stroke-width:1}' +
+       '.rtk{fill:#687182;font-size:10px;font-family:ui-monospace,monospace}' +
+       '.rlbl{fill:#e4e7ee;font-size:12.5px;font-weight:700}' +
+       '.rsub{fill:#7b8496;font-size:10.5px}' +
+       '</style>';
+
+  /* Concentric rings */
+  [0.25, 0.5, 0.75, 1.0].forEach(function (frac) {
+    var pts = [];
+    for (var i = 0; i < N; i++) {
+      var p = pt(i, frac);
+      pts.push(p[0].toFixed(1) + "," + p[1].toFixed(1));
+    }
+    s += '<polygon class="' + (frac === 1 ? "rg-out" : "rg") + '" points="' + pts.join(" ") + '"/>';
+    var tickAng = -Math.PI / 2 + Math.PI / N;
+    var tx = cx + Math.cos(tickAng) * (R * frac * Math.cos(Math.PI / N));
+    var ty = cy + Math.sin(tickAng) * (R * frac * Math.cos(Math.PI / N));
+    s += '<text class="rtk" x="' + (tx + 2).toFixed(1) + '" y="' + (ty + 3).toFixed(1) + '">' + Math.round(frac * 100) + "</text>";
+  });
+
+  /* Spokes + outer labels */
+  for (var ai = 0; ai < N; ai++) {
+    var outer = pt(ai, 1.0);
+    s += '<line class="rax" x1="' + cx + '" y1="' + cy + '" x2="' + outer[0].toFixed(1) + '" y2="' + outer[1].toFixed(1) + '"/>';
+    var lp = pt(ai, 1.24);
+    var anchor = Math.abs(lp[0] - cx) < 12 ? "middle" : (lp[0] > cx ? "start" : "end");
+    var ly = lp[1] + (ai === 0 ? -4 : (lp[1] > cy ? 6 : 0));
+    s += '<text class="rlbl" x="' + lp[0].toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor + '">' + esc(axes[ai].label) + "</text>";
+    s += '<text class="rsub" x="' + lp[0].toFixed(1) + '" y="' + (ly + 14).toFixed(1) + '" text-anchor="' + anchor + '">' + esc(axes[ai].sub) + "</text>";
+  }
+
+  /* Stack polygons */
+  drawOrder.forEach(function (st) {
+    var isCap = st === "capsid";
+    var col = C[st] || "#888";
+    var coords = [];
+    var details = [];
+    for (var i = 0; i < N; i++) {
+      var r = axes[i].raw(st);
+      var frac = (r != null && r > 0) ? Math.max(0.04, Math.min(1, axes[i].scoreVal(r) / axisMax[i])) : 0.04;
+      var p = pt(i, frac);
+      coords.push(p);
+      details.push({ ax: axes[i], raw: r, pct: (r != null && r > 0) ? (axes[i].scoreVal(r) / axisMax[i]) * 100 : 0, p: p });
+    }
+    var polyPts = coords.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ");
+    var summary = (NAME[st] || st) + ": " + details.map(function (d0) {
+      return d0.ax.label + " " + Math.round(d0.pct) + "/100 (" + (d0.raw != null ? d0.ax.fmtRaw(d0.raw) : "—") + ")";
+    }).join(" · ");
+    s += '<polygon points="' + polyPts + '" fill="' + col + '" fill-opacity="' + (isCap ? "0.24" : "0.08") +
+         '" stroke="' + col + '" stroke-width="' + (isCap ? "2.6" : "1.5") + '" stroke-linejoin="round"' +
+         (isCap ? "" : ' stroke-opacity="0.82"') + '><title>' + esc(summary) + "</title></polygon>";
+    details.forEach(function (d0) {
+      s += '<circle cx="' + d0.p[0].toFixed(1) + '" cy="' + d0.p[1].toFixed(1) + '" r="' + (isCap ? "4.2" : "2.8") +
+           '" fill="' + col + '" stroke="#07080b" stroke-width="1.3"><title>' +
+           esc((NAME[st] || st) + " — " + d0.ax.label + ": " + (d0.raw != null ? d0.ax.fmtRaw(d0.raw) : "—") +
+               " (" + Math.round(d0.pct) + "/100)") + "</title></circle>";
+    });
+  });
+
+  s += "</svg>";
+  $("radar-chart").innerHTML = s;
+  $("radar-note").textContent =
+    "Each spoke is normalized linearly (or inversely for lower-is-better latency/PSS) to 100 = best measured stack in this record. No subjective weights are applied; hover any vertex for raw values.";
+}
+
+function renderFrontier() {
+  var q = P && P.qps;
+  if (!q || !q.cells || !q.cells.length || !q.servingPss) {
+    $("frontier-chart").innerHTML = '<p class="footnote">No throughput/memory data in this record.</p>';
+    $("frontier-tabs").innerHTML = "";
+    return;
+  }
+  var availableWls = WLS.filter(function (w) {
+    return q.cells.some(function (cell) { return cell.workload === w; });
+  });
+  if (availableWls.indexOf(FRONTIER_WL) < 0) FRONTIER_WL = availableWls[0] || "matrix-json-1k";
+
+  var tabsEl = $("frontier-tabs");
+  tabsEl.innerHTML = availableWls.map(function (w) {
+    return '<button type="button" class="pill' + (w === FRONTIER_WL ? " active" : "") + '" id="ftab-' + esc(w) + '">' + esc(WL[w] || w) + "</button>";
+  }).join("");
+  availableWls.forEach(function (w) {
+    var btn = $("ftab-" + w);
+    if (btn) btn.onclick = function () { FRONTIER_WL = w; renderFrontier(); };
+  });
+
+  var sts = stacksOf(q.cells);
+  var pts = [];
+  sts.forEach(function (st) {
+    var cell = findQpsCell(q, st, FRONTIER_WL);
+    var mem = memoryTotal(q.servingPss, st, q.servingPssMb);
+    if (cell && mem > 0) pts.push({ st: st, qps: cell.qps, mem: mem, eff: cell.qps / mem });
+  });
+  if (!pts.length) { $("frontier-chart").innerHTML = ""; return; }
+
+  var minMem = pts.reduce(function (a, b) { return Math.min(a, b.mem); }, Infinity);
+  var maxMem = pts.reduce(function (a, b) { return Math.max(a, b.mem); }, 10);
+  var maxQps = pts.reduce(function (a, b) { return Math.max(a, b.qps); }, 100);
+
+  var xLo = Math.max(5, Math.pow(10, Math.floor(Math.log(minMem * 0.72) / Math.LN10 * 2) / 2));
+  var xHi = Math.max(100, Math.pow(10, Math.ceil(Math.log(maxMem * 1.45) / Math.LN10 * 2) / 2));
+  var logLo = Math.log(xLo) / Math.LN10;
+  var logHi = Math.log(xHi) / Math.LN10;
+  var yHi = nice(maxQps * 1.18);
+
+  var W = 560, H = 372, left = 64, right = 26, top = 28, bottom = 52;
+  var plotW = W - left - right, plotH = H - top - bottom;
+  var padB = 14;
+  function sx(mem) { return left + ((Math.log(mem) / Math.LN10 - logLo) / (logHi - logLo)) * plotW; }
+  function sy(qps) { return top + (plotH - padB) - (qps / yHi) * (plotH - padB - 10); }
+
+  var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="throughput vs serving memory efficiency frontier">';
+  s += '<defs><radialGradient id="sweetSpot" cx="0%" cy="0%" r="80%">' +
+       '<stop offset="0%" stop-color="#34d399" stop-opacity="0.14"/>' +
+       '<stop offset="100%" stop-color="#34d399" stop-opacity="0"/>' +
+       "</radialGradient></defs>";
+  s += '<style>' +
+       '.fg{stroke:#1d222e;stroke-dasharray:3 5}' +
+       '.fiso{fill:none;stroke:#243330;stroke-width:1;stroke-dasharray:4 4}' +
+       '.fisol{fill:#4e7d6c;font-size:10px;font-family:ui-monospace,monospace}' +
+       '.ftk{fill:#7b8496;font-size:11px;font-family:ui-monospace,monospace}' +
+       '.fax{fill:#969fae;font-size:11.5px;font-weight:600}' +
+       '.flbl{fill:#e4e7ee;font-size:12px;font-weight:700}' +
+       '.fsub{fill:#969fae;font-size:10.5px;font-family:ui-monospace,monospace}' +
+       '</style>';
+
+  /* Plot frame + top-left efficiency zone */
+  s += '<rect x="' + left + '" y="' + top + '" width="' + plotW + '" height="' + plotH + '" rx="6" fill="url(#sweetSpot)" stroke="#202531"/>';
+  s += '<text x="' + (left + 10) + '" y="' + (top + 18) + '" fill="#34d399" fill-opacity="0.78" font-size="10.5" font-weight="700" letter-spacing="0.6">HIGH-EFFICIENCY ZONE</text>';
+
+  /* Horizontal Y grid */
+  for (var gy = 0; gy <= 4; gy++) {
+    var qv = (yHi * gy) / 4;
+    var yy = sy(qv);
+    s += '<line class="fg" x1="' + left + '" y1="' + yy.toFixed(1) + '" x2="' + (left + plotW) + '" y2="' + yy.toFixed(1) + '"/>';
+    s += '<text class="ftk" x="' + (left - 8) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end">' + (qv >= 1000 ? fmt(qv / 1000, qv % 1000 === 0 ? 0 : 1) + "k" : fmt(qv, 0)) + "</text>";
+  }
+
+  /* Log X grid ticks */
+  [10, 20, 50, 100, 200, 500, 1000].forEach(function (mv) {
+    if (mv < xLo * 0.99 || mv > xHi * 1.01) return;
+    var xx = sx(mv);
+    s += '<line class="fg" x1="' + xx.toFixed(1) + '" y1="' + top + '" x2="' + xx.toFixed(1) + '" y2="' + (top + plotH) + '"/>';
+    s += '<text class="ftk" x="' + xx.toFixed(1) + '" y="' + (top + plotH + 17) + '" text-anchor="middle">' + mv + " MiB</text>";
+  });
+
+  /* Iso-efficiency curves y = k * x in log-X linear-Y space */
+  [100, 500, 1500].forEach(function (k) {
+    var dPath = "";
+    var lastPt = null;
+    for (var step = 0; step <= 40; step++) {
+      var mVal = Math.pow(10, logLo + ((logHi - logLo) * step) / 40);
+      var qVal = k * mVal;
+      if (qVal > yHi) {
+        var mClip = yHi / k;
+        if (mClip >= xLo && mClip <= xHi) {
+          var pxC = sx(mClip), pyC = sy(yHi);
+          dPath += (dPath ? " L " : "M ") + pxC.toFixed(1) + " " + pyC.toFixed(1);
+          lastPt = [pxC, pyC];
+        }
+        break;
+      }
+      var px = sx(mVal), py = sy(qVal);
+      dPath += (dPath ? " L " : "M ") + px.toFixed(1) + " " + py.toFixed(1);
+      lastPt = [px, py];
+    }
+    if (dPath && lastPt) {
+      s += '<path class="fiso" d="' + dPath + '"/>';
+      var lx = Math.min(left + plotW - 6, Math.max(left + 44, lastPt[0] - 4));
+      var ly = Math.max(top + 28, Math.min(top + plotH - 8, lastPt[1] + 13));
+      s += '<text class="fisol" x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="end">' + fmt(k, 0) + "/MiB</text>";
+    }
+  });
+
+  /* Axis captions */
+  s += '<text class="fax" x="' + (left + plotW / 2) + '" y="' + (H - 10) + '" text-anchor="middle">\u2190 Smaller Serving PSS (MiB, log scale)</text>';
+  s += '<text class="fax" transform="rotate(-90)" x="' + (-(top + plotH / 2)) + '" y="16" text-anchor="middle">Throughput (req/s) \u2192</text>';
+
+  /* Plot stack bubbles (peers first, Capsid on top) with collision-free label placement */
+  pts.sort(function (a, b) { return (a.st === "capsid" ? 1 : 0) - (b.st === "capsid" ? 1 : 0); });
+  var dotCoords = pts.map(function (p) { return { x: sx(p.mem), y: sy(p.qps), r: p.st === "capsid" ? 13 : 9 }; });
+  var placedBoxes = [];
+
+  function boxOverlaps(b1, b2) {
+    return !(b1.x2 < b2.x1 || b1.x1 > b2.x2 || b1.y2 < b2.y1 || b1.y1 > b2.y2);
+  }
+  function boxHitsDot(box, skipIdx) {
+    for (var di = 0; di < dotCoords.length; di++) {
+      if (di === skipIdx) continue;
+      var dc = dotCoords[di];
+      if (dc.x + dc.r >= box.x1 && dc.x - dc.r <= box.x2 && dc.y + dc.r >= box.y1 && dc.y - dc.r <= box.y2)
+        return true;
+    }
+    return false;
+  }
+
+  /* Place Capsid label first so it always gets its cleanest spot, then place highest QPS downwards */
+  var labelOrder = pts.map(function (_, idx2) { return idx2; }).sort(function (ia, ib) {
+    if (pts[ia].st === "capsid") return -1;
+    if (pts[ib].st === "capsid") return 1;
+    return pts[ib].qps - pts[ia].qps;
+  });
+  var labelPlacement = {};
+  labelOrder.forEach(function (idx2) {
+    var p = pts[idx2];
+    var px = dotCoords[idx2].x, py = dotCoords[idx2].y;
+    var nameStr = SHORT[p.st] || p.st;
+    var subStr = fmt(p.eff, 0) + " /MiB";
+    var bw = Math.max(nameStr.length * 7.4, subStr.length * 6.6) + 10;
+    var bh = 28;
+    var cands = [
+      { dx: 12, dy: -22, anc: "start" },
+      { dx: 12, dy: 6, anc: "start" },
+      { dx: -12, dy: -22, anc: "end" },
+      { dx: -12, dy: 6, anc: "end" },
+      { dx: 0, dy: -36, anc: "middle" },
+      { dx: 16, dy: -42, anc: "start" },
+      { dx: -16, dy: -42, anc: "end" },
+      { dx: 24, dy: -16, anc: "start" },
+      { dx: -24, dy: -16, anc: "end" },
+      { dx: 0, dy: 16, anc: "middle" }
+    ];
+    var chosen = null;
+    for (var ci = 0; ci < cands.length; ci++) {
+      var c0 = cands[ci];
+      var tx = px + c0.dx, ty = py + c0.dy;
+      var x1 = c0.anc === "start" ? tx - 2 : (c0.anc === "end" ? tx - bw + 2 : tx - bw / 2);
+      var x2 = x1 + bw;
+      var y1 = ty - 11, y2 = ty + bh - 11;
+      if (x1 < left + 4 || x2 > left + plotW - 4 || y1 < top + 24 || y2 > top + plotH - 4) continue;
+      var box = { x1: x1, y1: y1, x2: x2, y2: y2 };
+      var bad = boxHitsDot(box, idx2);
+      for (var bi = 0; !bad && bi < placedBoxes.length; bi++)
+        if (boxOverlaps(box, placedBoxes[bi])) bad = true;
+      if (!bad) {
+        chosen = { tx: tx, ty: ty, anc: c0.anc, box: box, nudged: ci >= 4 };
+        break;
+      }
+    }
+    if (!chosen) {
+      var alignRight = px > left + plotW * 0.65;
+      var tx2 = alignRight ? Math.max(left + bw + 6, px - 12) : Math.min(left + plotW - bw - 6, px + 12);
+      var ty2 = Math.max(top + 36, Math.min(top + plotH - 18, py - 8));
+      var x1f = alignRight ? tx2 - bw : tx2;
+      chosen = { tx: tx2, ty: ty2, anc: alignRight ? "end" : "start", box: { x1: x1f, y1: ty2 - 11, x2: x1f + bw, y2: ty2 + bh - 11 }, nudged: true };
+    }
+    placedBoxes.push(chosen.box);
+    labelPlacement[idx2] = chosen;
+  });
+
+  pts.forEach(function (p, idx2) {
+    var px = dotCoords[idx2].x, py = dotCoords[idx2].y;
+    var col = C[p.st] || "#888";
+    var isCap = p.st === "capsid";
+    var lp = labelPlacement[idx2];
+    if (lp.nudged) {
+      var lx2 = lp.anc === "start" ? lp.box.x1 : (lp.anc === "end" ? lp.box.x2 : lp.tx);
+      var ly2 = (lp.box.y1 + lp.box.y2) / 2;
+      s += '<line x1="' + px.toFixed(1) + '" y1="' + py.toFixed(1) + '" x2="' + lx2.toFixed(1) + '" y2="' + ly2.toFixed(1) + '" stroke="' + col + '" stroke-opacity="0.45" stroke-width="1"/>';
+    }
+    if (isCap) {
+      s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="15" fill="' + col + '" fill-opacity="0.16"/>';
+      s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="8.5" fill="' + col + '" stroke="#07080b" stroke-width="2">' +
+           '<title>' + esc((NAME[p.st] || p.st) + ": " + fmt(p.qps, 0) + " req/s · " + fmt(p.mem, 1) + " MiB PSS (" + fmt(p.eff, 1) + " req/s·MiB)") + "</title></circle>";
+    } else {
+      s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="6" fill="' + col + '" fill-opacity="0.92" stroke="#07080b" stroke-width="1.5">' +
+           '<title>' + esc((NAME[p.st] || p.st) + ": " + fmt(p.qps, 0) + " req/s · " + fmt(p.mem, 1) + " MiB PSS (" + fmt(p.eff, 1) + " req/s·MiB)") + "</title></circle>";
+    }
+    s += '<text class="flbl" x="' + lp.tx.toFixed(1) + '" y="' + lp.ty.toFixed(1) + '" text-anchor="' + lp.anc + '"' +
+         (isCap ? ' fill="#34d399"' : "") + ">" + esc(SHORT[p.st] || p.st) + "</text>";
+    s += '<text class="fsub" x="' + lp.tx.toFixed(1) + '" y="' + (lp.ty + 13).toFixed(1) + '" text-anchor="' + lp.anc + '"' +
+         (isCap ? ' fill="#34d399"' : "") + ">" + fmt(p.eff, 0) + " /MiB</text>";
+  });
+
+  s += "</svg>";
+  $("frontier-chart").innerHTML = s;
+  $("frontier-note").textContent =
+    "Dashed contours trace constant throughput-per-MiB ratios on " + (WL[FRONTIER_WL] || FRONTIER_WL) +
+    ". Capsid's point includes the host supervisor and strict Linux sandbox worker.";
+}
+
+function renderScorecard() {
+  var q = P && P.qps, c = P && P.coldStart, d = P && P.density;
+  var sts = [];
+  if (q && q.cells) stacksOf(q.cells).forEach(function (st) { if (sts.indexOf(st) < 0) sts.push(st); });
+  if (c && c.cells) {
+    stacksOf(c.cells).forEach(function (st) {
+      var norm = isCapsidStack(st) ? "capsid" : st;
+      if (sts.indexOf(norm) < 0) sts.push(norm);
+    });
+  }
+  if (!sts.length) { $("scorecard-table").innerHTML = ""; return; }
+
+  var hasDens = !!(d && Object.keys(d).length);
+  var maxEff = 0;
+  var rows = sts.map(function (st) {
+    var c1k = findQpsCell(q, st, "matrix-json-1k");
+    var srv = q && q.servingPss && q.servingPss[st] ? memoryTotal(q.servingPss, st, q.servingPssMb) : null;
+    var low = q && q.lowLoadPss && q.lowLoadPss[st] ? memoryTotal(q.lowLoadPss, st, q.lowLoadPssMb) : null;
+    var eff = (c1k && srv && srv > 0) ? c1k.qps / srv : null;
+    if (eff != null && eff > maxEff) maxEff = eff;
+    var cold1m = findColdCell(c, coldKeyFor(st), "1m");
+    var dens10k = d && d[st] && d[st]["warm@10k"];
+    return { st: st, c1k: c1k, srv: srv, low: low, eff: eff, cold1m: cold1m, dens10k: dens10k };
+  });
+
+  var head = '<table><thead><tr>' +
+    '<th scope="col" class="col-left">Runtime</th>' +
+    '<th scope="col" class="col-left">Isolation boundary</th>' +
+    '<th scope="col" class="gsep">JSON 1k QPS</th>' +
+    '<th scope="col">Serving PSS</th>' +
+    '<th scope="col">QPS / MiB</th>' +
+    '<th scope="col" class="gsep">1 MiB Cold</th>' +
+    '<th scope="col">1 MiB PSS</th>' +
+    (hasDens ? '<th scope="col" class="gsep">2 GiB Warm (10k)</th>' : "") +
+    "</tr></thead><tbody>";
+
+  var body = rows.map(function (r) {
+    var iso = ISOLATION[r.st] || ["Measured runtime", "none"];
+    var effHtml = "—";
+    if (r.eff != null) {
+      var pct = maxEff > 0 ? Math.max(4, Math.min(100, (r.eff / maxEff) * 100)) : 0;
+      effHtml = '<span class="eff-cell"><span>' + fmt(r.eff, 1) + '</span>' +
+        '<span class="eff-track"><span class="eff-fill" style="width:' + pct.toFixed(0) + '%;background:' + (C[r.st] || "#888") + '"></span></span></span>';
+    }
+    var srvHtml = r.srv != null
+      ? fmt(r.srv, 1) + " MiB" + (r.low != null ? ' <span class="dim">(' + fmt(r.low, 1) + " low)</span>" : "")
+      : "—";
+    var densHtml = r.dens10k
+      ? fmt(r.dens10k.count, 0) + ' <span class="dim">' + esc(r.dens10k.unit || "") + "</span>"
+      : "—";
+    return '<tr' + (r.st === "capsid" ? ' class="mine"' : "") + ">" +
+      '<td><span class="sw" style="background:' + (C[r.st] || "#888") + '"></span>' + esc(NAME[r.st] || r.st) + "</td>" +
+      '<td class="col-left"><span class="iso-badge ' + iso[1] + '">' + esc(iso[0]) + "</span></td>" +
+      '<td class="gsep">' + (r.c1k ? fmt(r.c1k.qps, 0) : "—") + "</td>" +
+      "<td>" + srvHtml + "</td>" +
+      "<td>" + effHtml + "</td>" +
+      '<td class="gsep">' + (r.cold1m ? fmt(r.cold1m.totalMs, 1) + " ms" : "—") + "</td>" +
+      '<td class="dim">' + (r.cold1m && r.cold1m.pssMb != null ? fmt(r.cold1m.pssMb, 1) + " MiB" : "—") + "</td>" +
+      (hasDens ? '<td class="gsep">' + densHtml + "</td>" : "") +
+      "</tr>";
+  }).join("");
+
+  $("scorecard-table").innerHTML = head + body + "</tbody></table>";
+}
+
 /* ============ chart primitives ============ */
-/* exact row-label width with the page's real font, so chart gutters never
-   clip regardless of platform font metrics */
 var _mctx = null;
 function labelFont() {
   try {
@@ -635,19 +1518,16 @@ function labelW(str) {
 function gutterFor(labels) {
   var w = 0;
   for (var i = 0; i < labels.length; i++) w = Math.max(w, labelW(labels[i]));
-  return Math.max(96, Math.min(200, Math.ceil(w) + 22));
+  return Math.max(98, Math.min(204, Math.ceil(w) + 22));
 }
-var AX = "#1d1d23", TK = "#71717c", GL = "#e4e4e7", INK = "#0a0a0c", INKBG = "#101013";
+var AX = "#1d222e", TK = "#7b8496", GL = "#e4e7ee", INKBG = "#0e1015";
 
 function barChart(rows, series, opts) {
   opts = opts || {};
-  /* Adaptive geometry: every bar keeps >= 8 viewBox units of height and
-     every group gets its own breathing room, so value labels (13u font)
-     never collide regardless of how many stacks are in the lane. */
   var n = Math.max(1, series.length);
-  var rowH = Math.max(48, n * 19 + 16);
+  var rowH = Math.max(48, n * 19 + 18);
   var bh = Math.min(15, Math.max(9, Math.floor((rowH - 8) / n) - 4));
-  var W = 780, top = 38, right = 132;
+  var W = 780, top = 38, right = 148;
   var left = opts.left || gutterFor(rows);
   var H = top + rows.length * rowH + 6;
   var valsAll = [];
@@ -663,15 +1543,15 @@ function barChart(rows, series, opts) {
   var plot = W - left - right;
   var s = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="' + esc(opts.aria || "chart") + '">';
   s += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}' +
-       '.t{fill:' + TK + ';font-size:12px}' +
-       '.l{fill:' + GL + ';font-size:13.5px;font-weight:600}' +
-       '.v{fill:' + GL + ';font-size:13px;font-weight:600}' +
-       '.vi{fill:' + GL + ';font-size:13px;font-weight:700}' +
-       '.vw2{fill:' + TK + ';font-size:11px}</style>';
+       '.t{fill:' + TK + ';font-size:11.5px;font-family:ui-monospace,monospace}' +
+       '.l{fill:' + GL + ';font-size:13px;font-weight:600}' +
+       '.v{fill:' + GL + ';font-size:12.5px;font-weight:600;font-family:ui-monospace,monospace}' +
+       '.vm{fill:#34d399;font-size:12.5px;font-weight:700;font-family:ui-monospace,monospace}' +
+       '.vw2{fill:' + TK + ';font-size:10.5px;font-family:ui-monospace,monospace}</style>';
   for (var g = 0; g <= 4; g++) {
     var x = left + plot * g / 4, gv = mx * g / 4;
     s += '<line class="g" x1="' + x + '" y1="' + top + '" x2="' + x + '" y2="' + (H - 6) + '"/>';
-    s += '<text class="t" x="' + x + '" y="' + (top - 12) + '" text-anchor="middle">' + fmt(gv, gv >= 10 ? 0 : 1) + "</text>";
+    s += '<text class="t" x="' + x + '" y="' + (top - 12) + '" text-anchor="middle">' + (gv === 0 ? "0" : fmt(gv, gv >= 10 ? 0 : 1)) + "</text>";
   }
   for (var r = 0; r < rows.length; r++) {
     var y0 = top + r * rowH;
@@ -681,30 +1561,31 @@ function barChart(rows, series, opts) {
       if (val == null) continue;
       var w = Math.max(2, plot * (val / mx));
       var y = y0 + 8 + k * (bh + 5);
-      /* long bars: label inside the bar tip; short bars: label outside */
-      var lbl = fmt(val, val >= 100 ? 0 : 1);
+      var lbl = fmt(val, val >= 100 ? 0 : 1) + (opts.suffix || "");
+      var vcls = series[k].highlight ? "vm" : "v";
       if (broken && val > mx) {
-        /* outlier beyond the axis: clip, mark the break, print true value */
-        s += '<rect x="' + left + '" y="' + y + '" width="' + plot + '" height="' + bh + '" rx="4" fill="' + series[k].color + '" opacity="0.45"><title>' + esc(series[k].name) + ": " + fmt(val, 1) + " (clipped; axis scaled to the rest)</title></rect>";
+        s += '<rect x="' + left + '" y="' + y + '" width="' + plot + '" height="' + bh + '" rx="4" fill="' + series[k].color + '" opacity="0.48"><title>' + esc(series[k].name) + ": " + fmt(val, 1) + " (clipped; axis scaled to the rest)</title></rect>";
         var bx = left + plot * 0.86;
         s += '<line x1="' + (bx - 4) + '" y1="' + (y + bh + 1) + '" x2="' + (bx + 4) + '" y2="' + (y - 1) + '" stroke="' + INKBG + '" stroke-width="3"></line>';
         s += '<line x1="' + (bx + 4) + '" y1="' + (y + bh + 1) + '" x2="' + (bx + 12) + '" y2="' + (y - 1) + '" stroke="' + INKBG + '" stroke-width="3"></line>';
-        s += '<text class="v" x="' + (left + plot + 8) + '" y="' + (y + bh / 2 - 1) + '">' + fmt(val, 0) + "</text>";
+        s += '<text class="' + vcls + '" x="' + (left + plot + 8) + '" y="' + (y + bh / 2 - 1) + '">' + fmt(val, 0) + (opts.suffix || "") + "</text>";
         s += '<text class="vw2" x="' + (left + plot + 8) + '" y="' + (y + bh / 2 + 11) + '">clipped \u00b7 ' + fmt(val / mx, 0) + "\u00d7 axis</text>";
       } else {
-        s += '<rect x="' + left + '" y="' + y + '" width="' + w + '" height="' + bh + '" rx="4" fill="' + series[k].color + '" opacity="0.95"><title>' + esc(series[k].name) + ": " + fmt(val, 1) + "</title></rect>";
-        s += '<text class="v" x="' + (left + w + 8) + '" y="' + (y + bh - 4) + '">' + lbl + "</text>";
+        s += '<rect x="' + left + '" y="' + y + '" width="' + w + '" height="' + bh + '" rx="4" fill="' + series[k].color + '" opacity="' + (series[k].highlight ? "1" : "0.88") + '"><title>' + esc(series[k].name) + ": " + fmt(val, 1) + (opts.suffix || "") + "</title></rect>";
+        s += '<text class="' + vcls + '" x="' + (left + w + 8) + '" y="' + (y + bh - 3) + '">' + lbl + "</text>";
       }
     }
   }
   return s + "</svg>";
 }
 
-/* ============ throughput ============ */
+/* ============ 01 throughput ============ */
 function renderQps() {
   var q = P && P.qps;
   if (!q || !q.cells || !q.cells.length) {
     $("qps-table").innerHTML = '<p class="footnote">No throughput data.</p>';
+    $("qps-eff-chart").innerHTML = "";
+    $("qps-eff-legend").innerHTML = "";
     return;
   }
   var idx = {};
@@ -714,42 +1595,71 @@ function renderQps() {
   var wls = WLS.filter(function (w) { return idx[w]; });
   var sts = stacksOf(q.cells);
 
-  $("qps-legend").innerHTML = sts.map(function (s2) {
+  var legHtml = sts.map(function (s2) {
     return "<span><i style=\"background:" + (C[s2] || "#888") + "\"></i>" +
            esc(NAME_LONG[s2] || NAME[s2] || s2) + "</span>";
   }).join("");
+  $("qps-legend").innerHTML = legHtml;
+  $("qps-eff-legend").innerHTML = legHtml;
 
+  /* Memory-normalized throughput (req/s per MiB) */
+  if (q.servingPss) {
+    $("qps-eff-chart").innerHTML = barChart(
+      wls.map(function (w) { return WL[w] || w; }),
+      sts.map(function (s2) {
+        var mem = memoryTotal(q.servingPss, s2, q.servingPssMb);
+        return {
+          name: NAME[s2] || s2, color: C[s2] || "#888", highlight: s2 === "capsid",
+          values: wls.map(function (w) {
+            return (idx[w][s2] && mem > 0) ? idx[w][s2].qps / mem : null;
+          })
+        };
+      }),
+      { aria: "throughput per MiB of serving memory by workload", suffix: "/MiB" }
+    );
+  } else {
+    $("qps-eff-chart").innerHTML = '<p class="footnote">Serving memory breakdown unavailable.</p>';
+  }
+
+  /* Raw throughput */
   $("qps-chart").innerHTML = barChart(
     wls.map(function (w) { return WL[w] || w; }),
     sts.map(function (s2) {
       return {
-        name: NAME[s2] || s2, color: C[s2] || "#888",
+        name: NAME[s2] || s2, color: C[s2] || "#888", highlight: s2 === "capsid",
         values: wls.map(function (w) { return idx[w][s2] ? idx[w][s2].qps : null; })
       };
     }),
     { aria: "throughput by workload" }
   );
 
-  /* throughput table: rows = stacks */
+  /* Throughput table: rows = stacks + 1k QPS/MiB column */
   var head = '<table><thead><tr><th scope="col">Stack</th>';
   wls.forEach(function (w, i) {
     head += '<th scope="col"' + (i ? ' class="gsep"' : "") + ">" + esc(WL[w] || w) + "</th>";
   });
+  if (q.servingPss) head += '<th scope="col" class="gsep">1k QPS / MiB</th>';
   head += "</tr></thead><tbody>";
   var body = "";
   sts.forEach(function (s2) {
     body += '<tr' + (s2 === "capsid" ? ' class="mine"' : "") + "><td>" +
+            '<span class="sw" style="background:' + (C[s2] || "#888") + '"></span>' +
             esc(NAME_LONG[s2] || NAME[s2] || s2) + "</td>";
     wls.forEach(function (w, i) {
       var x = idx[w][s2];
       body += "<td" + (i ? ' class="gsep"' : "") + ">" +
               (x ? fmt(x.qps) : "—") + "</td>";
     });
+    if (q.servingPss) {
+      var c1k = idx["matrix-json-1k"] && idx["matrix-json-1k"][s2];
+      var mem = memoryTotal(q.servingPss, s2, q.servingPssMb);
+      body += '<td class="gsep">' + (c1k && mem > 0 ? fmt(c1k.qps / mem, 1) : "—") + "</td>";
+    }
     body += "</tr>";
   });
   $("qps-table").innerHTML = head + body + "</tbody></table>";
 
-  /* latency table: rows = stacks, p50/p95 per workload */
+  /* Latency table */
   var lh = '<table><thead><tr><th rowspan="2" scope="col">Stack</th>';
   wls.forEach(function (w, i) {
     lh += '<th colspan="2" scope="colgroup"' + (i ? ' class="gsep"' : "") + ">" + esc(WL[w] || w) + "</th>";
@@ -762,6 +1672,7 @@ function renderQps() {
   var lb = "";
   sts.forEach(function (s2) {
     lb += '<tr' + (s2 === "capsid" ? ' class="mine"' : "") + "><td>" +
+          '<span class="sw" style="background:' + (C[s2] || "#888") + '"></span>' +
           esc(NAME_LONG[s2] || NAME[s2] || s2) + "</td>";
     wls.forEach(function (w, i) {
       var x = idx[w][s2];
@@ -774,16 +1685,18 @@ function renderQps() {
   $("qps-latency").innerHTML = lh + lb + "</tbody></table>";
 }
 
-/* ============ serving memory ============ */
+/* ============ 02 serving memory & density ============ */
 var RC = {
   "host": "#34d399", "cw": "#0ea371", "proc": "#fb7185",
   "nodep": "#fbbf24", "nodej": "#f59e0b", "bunp": "#f472b6",
+  "fap": "#22d3ee",
   "ngx": "#c084fc", "ngxw": "#9d6bdf", "fpmm": "#a3e635", "fpmw": "#7fb829",
-  "pym": "#fbbf24", "pyw": "#d9a322"
+  "pym": "#a3e635", "pyw": "#65a30d"
 };
 var RL = {
   "host": "capsid host", "cw": "capsid worker", "proc": "workerd process",
   "nodep": "node process", "nodej": "node --jitless process", "bunp": "bun process",
+  "fap": "fastapi process",
   "ngx": "nginx", "ngxw": "nginx worker", "fpmm": "php-fpm master",
   "fpmw": "php-fpm child", "pym": "python master", "pyw": "python worker"
 };
@@ -802,13 +1715,12 @@ function rk(st, role) {
     if (st === "node") return "nodep";
     if (st === "node-jitless") return "nodej";
     if (st === "bun") return "bunp";
+    if (st === "fastapi") return "fap";
     return "proc";
   }
   return role;
 }
 
-/* Prefer the measured whole-tree total: individually rounded roles can
-   differ by 0.1 MiB. Older observations may only have component records. */
 function memoryTotal(sp, stack, totals) {
   if (totals && typeof totals[stack] === "number" && isFinite(totals[stack]) && totals[stack] > 0)
     return totals[stack];
@@ -817,20 +1729,18 @@ function memoryTotal(sp, stack, totals) {
   return total;
 }
 
-/* stacked serving-memory chart; axis-break for outliers (see note) */
 function memStackedChart(sp, chartId, legendId, measuredTotals) {
   var sts = [];
   for (var k in sp) sts.push(k);
 
   var W = 780, rowH = 44, top = 38;
-  var right = 132;
+  var right = 148;
   var left = gutterFor(sts.map(function (s2) { return SHORT[s2] || s2; }));
   var H = top + sts.length * rowH + 4;
   var tot = {};
   sts.forEach(function (s2) {
     tot[s2] = memoryTotal(sp, s2, measuredTotals);
   });
-  /* bars ranked small to large */
   sts.sort(function (a, b) { return tot[a] - tot[b]; });
   var others = sts.filter(function (s2) { return s2 !== "workerd"; });
   var mxOther = 0;
@@ -841,11 +1751,11 @@ function memStackedChart(sp, chartId, legendId, measuredTotals) {
                   : nice(Math.max(mxOther, wk) * 1.05 || 1);
   var plot = W - left - right;
   var out = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="serving memory by stack">';
-  out += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}.t{fill:' + TK + ';font-size:12px}' +
-         '.l{fill:' + GL + ';font-size:13.5px;font-weight:600}' +
-         '.v{fill:' + GL + ';font-size:13px;font-weight:700}' +
-         '.vw{fill:' + GL + ';font-size:13px;font-weight:700}' +
-         '.vw2{fill:' + TK + ';font-size:11px}</style>';
+  out += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}.t{fill:' + TK + ';font-size:11.5px;font-family:ui-monospace,monospace}' +
+         '.l{fill:' + GL + ';font-size:13px;font-weight:600}.lm{fill:#34d399;font-size:13px;font-weight:700}' +
+         '.v{fill:' + GL + ';font-size:12.5px;font-weight:700;font-family:ui-monospace,monospace}' +
+         '.vm{fill:#34d399;font-size:12.5px;font-weight:700;font-family:ui-monospace,monospace}' +
+         '.vw2{fill:' + TK + ';font-size:10.5px;font-family:ui-monospace,monospace}</style>';
   for (var g = 0; g <= 4; g++) {
     var x = left + plot * g / 4;
     out += '<line class="g" x1="' + x + '" y1="' + top + '" x2="' + x + '" y2="' + (H - 6) + '"/>';
@@ -855,15 +1765,17 @@ function memStackedChart(sp, chartId, legendId, measuredTotals) {
   sts.forEach(function (s2) {
     var y0 = top + sts.indexOf(s2) * rowH, cx = left;
     var myTot = tot[s2];
-    out += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[s2] || s2) + "</text>";
+    var isCap = s2 === "capsid";
+    out += '<text class="' + (isCap ? "lm" : "l") + '" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[s2] || s2) + "</text>";
     if (broken && s2 === "workerd") {
       var bw = plot;
-      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + bw + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC.proc || "#888") + '" opacity="0.45"><title>workerd: ' + fmt(myTot, 1) + " MiB (clipped; axis scaled to the other stacks)</title></rect>";
+      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + bw + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC.proc || "#888") + '" opacity="0.48"><title>workerd: ' + fmt(myTot, 1) + " MiB (clipped; axis scaled to the other stacks)</title></rect>";
       var bx = left + plot * 0.86, by1 = y0 + 9, by2 = y0 + rowH - 13;
       out += '<line x1="' + (bx - 5) + '" y1="' + by2 + '" x2="' + (bx + 5) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
       out += '<line x1="' + (bx + 4) + '" y1="' + by2 + '" x2="' + (bx + 14) + '" y2="' + by1 + '" stroke="' + INKBG + '" stroke-width="3"></line>';
       out += '<text class="v" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 - 3) + '">' + fmt(myTot, 1) + " MiB</text>";
       out += '<text class="vw2" x="' + (left + bw + 9) + '" y="' + (y0 + rowH / 2 + 13) + '">clipped \u00b7 ' + fmt(myTot / mx, 0) + "\u00d7 axis</text>";
+      if (keys.indexOf("proc") < 0) keys.push("proc");
       return;
     }
     sp[s2].forEach(function (p) {
@@ -873,7 +1785,7 @@ function memStackedChart(sp, chartId, legendId, measuredTotals) {
       out += '<rect x="' + cx.toFixed(1) + '" y="' + (y0 + 10) + '" width="' + w.toFixed(1) + '" height="' + (rowH - 24) + '" rx="4" fill="' + (RC[key] || "#888") + '"><title>' + esc(RL[key] || p.role) + ": " + fmt(p.mb, 1) + " MiB</title></rect>";
       cx += w;
     });
-    out += '<text class="v" x="' + (cx + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(myTot, 1) + " MiB</text>";
+    out += '<text class="' + (isCap ? "vm" : "v") + '" x="' + (cx + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(myTot, 1) + " MiB</text>";
   });
   out += "</svg>";
   $(chartId).innerHTML = out;
@@ -882,7 +1794,6 @@ function memStackedChart(sp, chartId, legendId, measuredTotals) {
   }).join("");
 }
 
-/* per-worker marginal cost: the serving worker process only */
 function workerPart(parts) {
   if (!parts) return null;
   var t = 0, found = false;
@@ -899,7 +1810,6 @@ function renderWorkerCost(sp, spLow) {
     if (!sp[st] && !(spLow && spLow[st])) return;
     var wl, wt;
     if (st === "workerd" || st === "node" || st === "node-jitless" || st === "bun") {
-      /* single process: worker + server share it — an upper bound */
       var t1 = 0, t2 = 0;
       (sp[st] || []).forEach(function (x) { t1 += x.mb; });
       wl = sp[st] ? t1 : null;
@@ -925,38 +1835,63 @@ function renderWorkerCost(sp, spLow) {
   });
   if (!rows.length) { $("worker-cost-chart").innerHTML = ""; return; }
   $("wc-legend").innerHTML =
-    '<span><i style="background:#71717c"></i>at 10 req/s</span>' +
+    '<span><i style="background:#687182"></i>at 10 req/s</span>' +
     '<span><i style="background:#34d399"></i>under 64-conn load</span>';
   $("worker-cost-chart").innerHTML = barChart(
     rows,
     [
-      { name: "at 10 req/s", color: "#71717c", values: trickle },
-      { name: "under 64-conn load", color: "#34d399", values: load },
+      { name: "at 10 req/s", color: "#687182", values: trickle },
+      { name: "under 64-conn load", color: "#34d399", values: load, highlight: true }
     ],
-    { aria: "marginal memory cost per serving worker" }
+    { aria: "marginal memory cost per serving worker", suffix: " MiB" }
   );
 }
 
 function renderBudget(sp, spLow) {
   var el = $("budget-table");
+  var chartEl = $("density-chart");
+  var legEl = $("density-legend");
   if (!el) return;
   var dens = (P && P.density) || {};
-  var pssCells = (P && P.coldStart && P.coldStart.cells) || [];
-  var pss = {};
-  pssCells.forEach(function (c) {
-    if (c.pssMb != null) pss[c.stack + "@" + c.size] = c.pssMb;
-  });
   var host = 4.3;
   var hostRoles = (spLow && spLow.capsid) || [];
   hostRoles.forEach(function (x) { if (x.role === "host") host = x.mb; });
-  var budget = 2048 - host;
   var sizes = ["10k", "100k", "1m"];
   var kinds = [
-    ["capsid", "cold", "Capsid workers · initialized", true],
-    ["capsid", "warm", VERIFIED ? "Capsid workers · warmed (100 req each)" : "Capsid workers · warmed (coverage unverified)", true],
-    ["workerd", "cold", "workerd cells · initialized", false],
-    ["workerd", "warm", VERIFIED ? "workerd cells · warmed (100 req each)" : "workerd cells · warmed (coverage unverified)", false]
+    ["capsid", "cold", "Capsid workers · initialized", true, "#0ea371"],
+    ["capsid", "warm", VERIFIED ? "Capsid workers · warmed (100 req each)" : "Capsid workers · warmed (coverage unverified)", true, "#34d399"],
+    ["workerd", "cold", "workerd cells · initialized", false, "#fda4af"],
+    ["workerd", "warm", VERIFIED ? "workerd cells · warmed (100 req each)" : "workerd cells · warmed (coverage unverified)", false, "#fb7185"]
   ];
+
+  /* Visual pool-density bar chart when density cells are present */
+  var activeKinds = kinds.filter(function (k) {
+    return sizes.some(function (z) { return dens[k[0]] && dens[k[0]][k[1] + "@" + z]; });
+  });
+  if (chartEl && legEl) {
+    if (activeKinds.length) {
+      legEl.innerHTML = activeKinds.map(function (k) {
+        return '<span><i style="background:' + k[4] + '"></i>' + esc(k[2]) + "</span>";
+      }).join("");
+      chartEl.innerHTML = barChart(
+        sizes.map(function (z) { return SZ[z] || z; }),
+        activeKinds.map(function (k) {
+          return {
+            name: k[2], color: k[4], highlight: k[0] === "capsid" && k[1] === "warm",
+            values: sizes.map(function (z) {
+              var cell = dens[k[0]] && dens[k[0]][k[1] + "@" + z];
+              return cell ? cell.count : null;
+            })
+          };
+        }),
+        { aria: "observed pool counts under 2048 MiB budget" }
+      );
+    } else {
+      legEl.innerHTML = "";
+      chartEl.innerHTML = "";
+    }
+  }
+
   var head = '<table><thead><tr><th scope="col">Worker kind</th>';
   sizes.forEach(function (z) {
     head += '<th scope="col">' + esc(z === "1m" ? "1 MiB" : z.replace("k", " KiB")) + "</th>";
@@ -964,7 +1899,8 @@ function renderBudget(sp, spLow) {
   head += "</tr></thead><tbody>";
   var measured = 0;
   kinds.forEach(function (k) {
-    var row = '<tr' + (k[3] ? ' class="mine"' : "") + "><td>" + esc(k[2]) + "</td>";
+    var row = '<tr' + (k[3] ? ' class="mine"' : "") + "><td>" +
+              '<span class="sw" style="background:' + k[4] + '"></span>' + esc(k[2]) + "</td>";
     sizes.forEach(function (z) {
       var cell = dens[k[0]] && dens[k[0]][k[1] + "@" + z];
       if (cell) {
@@ -980,10 +1916,10 @@ function renderBudget(sp, spLow) {
   });
   var cap = measured
     ? "observed final pools under 2048 MiB — final PSS in parentheses; cap-reached entries are lower bounds"
-    : "floor((2048 − " + fmt(host, 1) +
-      " MiB host) ÷ cold worker PSS) — theoretical ceiling";
-  el.innerHTML = head + "</tbody></table>" + '<div class="tbl-cap">' + cap + "</div>" +
-    (measured ? '<div class="footnote" style="margin-top:12px">' +
+    : "floor((2048 \u2212 " + fmt(host, 1) +
+      " MiB host) \u00f7 cold worker PSS) — theoretical ceiling";
+  el.innerHTML = head + "</tbody></table>" + '<div class="tbl-cap" style="padding-top:10px">' + cap + "</div>" +
+    (measured ? '<div class="footnote" style="margin-top:6px">' +
       (VERIFIED ? "Cold and warm rows have separate per-worker coverage records. " :
       "Historical per-worker coverage and search limits have not been revalidated. ") +
       "Memory observations apply to these sampling windows. Loaded QPS differs between stacks, " +
@@ -993,7 +1929,11 @@ function renderBudget(sp, spLow) {
 function renderMem() {
   var sp = P && P.qps && P.qps.servingPss;
   var spLow = P && P.qps && P.qps.lowLoadPss;
-  if (!sp) { $("mem-chart").innerHTML = ""; return; }
+  if (!sp) {
+    $("mem-chart").innerHTML = "";
+    renderBudget(null, null);
+    return;
+  }
   memStackedChart(sp, "mem-chart", "mem-legend", P.qps.servingPssMb);
   if (spLow) memStackedChart(spLow, "mem-low-chart", "mem-low-legend", P.qps.lowLoadPssMb);
   renderWorkerCost(sp, spLow);
@@ -1009,13 +1949,18 @@ function renderMem() {
       ? "At an identical <b>10 req/s</b> — the same request volume for " +
         "every stack, so heap growth and GC timing cannot skew the read — "
       : "Under the full 64-connection load — where workerd also completes " +
-        "several times more requests than Capsid in the same window — ";
+        "more requests than Capsid in the same window — ";
     var msg = "<b>Density is the product.</b> " + phase +
       "Capsid's full serving path — one host plus one <b>isolated tenant " +
       "worker</b> — holds <span class=\"hl\">" + fmt(ca, 1) + " MiB</span> " +
-      "resident: " + fmt(cw / ca, 1) + "× less than workerd's single " +
+      "resident: " + fmt(cw / ca, 1) + "\u00d7 less than workerd's single " +
       "process (" + fmt(cw, 1) + " MiB).";
-    if (spc.php) {
+    if (spc.node) {
+      var nd = memoryTotal(spc, "node", totals);
+      msg += " Node.js holds " + fmt(nd, 1) + " MiB (" + fmt(nd / ca, 1) + "\u00d7 Capsid)";
+      if (spc.bun) msg += " and Bun holds " + fmt(memoryTotal(spc, "bun", totals), 1) + " MiB";
+      msg += " without OS sandbox isolation.";
+    } else if (spc.php) {
       var ph = memoryTotal(spc, "php", totals);
       msg += ph < ca
         ? " The php-fpm pool sits at " + fmt(ph, 1) + " MiB."
@@ -1034,21 +1979,22 @@ function renderMem() {
     var dw = P.density && P.density.workerd && P.density.workerd["warm@10k"];
     if (dc && dw && dc.limit === "budget" && dw.limit === "budget") {
       $("mem-callout").innerHTML +=
-        " The measured warmed 10k pools (100 req/worker, 2048 MiB whole-tree budget) contain " +
-        "<b>" + fmt(dc.count) + "</b> Capsid workers and <b>" + fmt(dw.count) +
-        "</b> workerd cells; see the measured-density table below.";
+        " The measured warmed 10 KiB pools (100 req/worker, 2048 MiB whole-tree budget) contain " +
+        "<b>" + fmt(dc.count) + "</b> Capsid workers versus <b>" + fmt(dw.count) +
+        "</b> workerd cells.";
     }
     $("mem-callout").innerHTML +=
       " Scheduling, kernel memory, CPU quota, and per-app heap sit on top of these counts.";
   }
 }
 
-/* ============ cold start ============ */
+/* ============ 03 cold start ============ */
 function renderCold() {
   var c = P && P.coldStart;
   var cells = c && c.cells ? c.cells : [];
   if (!cells.length) {
     $("cold-table").innerHTML = '<p class="footnote">No cold-start data.</p>';
+    $("cold-callout").innerHTML = "";
     return;
   }
   var by = {};
@@ -1057,6 +2003,29 @@ function renderCold() {
   });
   var sizes = SIZES.filter(function (z) { return by[z]; });
   var sts = stacksOf(cells);
+
+  /* Cold-start insight banner */
+  var bc10 = by["10k"] && by["10k"]["capsid-bytecode"];
+  var bc1m = by["1m"] && by["1m"]["capsid-bytecode"];
+  var wk1m = by["1m"] && by["1m"]["workerd"];
+  var nd1m = by["1m"] && by["1m"]["node"];
+  var bn1m = by["1m"] && by["1m"]["bun"];
+  if (bc1m) {
+    var parts = [];
+    if (wk1m) parts.push("<b>" + fmt(wk1m.totalMs / bc1m.totalMs, 1) + "\u00d7 faster</b> than workerd (" + fmt(wk1m.totalMs, 1) + " ms)");
+    if (bn1m) parts.push("<b>" + fmt(bn1m.totalMs / bc1m.totalMs, 1) + "\u00d7 faster</b> than Bun (" + fmt(bn1m.totalMs, 1) + " ms)");
+    if (nd1m) parts.push("<b>" + fmt(nd1m.totalMs / bc1m.totalMs, 1) + "\u00d7 faster</b> than Node (" + fmt(nd1m.totalMs, 1) + " ms)");
+    $("cold-callout").innerHTML =
+      "<b>Instant scale-from-zero with strict isolation.</b> At a 1 MiB bundle, " +
+      "<span class=\"hl\">Capsid · bytecode</span> reaches first validated response in " +
+      "<span class=\"hl\">" + fmt(bc1m.totalMs, 1) + " ms</span>" +
+      (bc1m.pssMb != null ? " and <b>" + fmt(bc1m.pssMb, 1) + " MiB PSS</b>" : "") +
+      (parts.length ? " — " + parts.join(", ") + "." : ".") +
+      (bc10 ? " At 10 KiB it finishes in <b>" + fmt(bc10.totalMs, 1) + " ms</b>" +
+        (bc10.pssMb != null ? " (" + fmt(bc10.pssMb, 1) + " MiB PSS)" : "") + "." : "");
+  } else {
+    $("cold-callout").innerHTML = "";
+  }
 
   $("cold-legend").innerHTML = sts.map(function (s2) {
     return '<span><i style="background:' + (C[s2] || "#888") + '"></i>' +
@@ -1067,21 +2036,21 @@ function renderCold() {
     sizes.map(function (z) { return SZ[z]; }),
     sts.map(function (s2) {
       return {
-        name: NAME[s2] || s2, color: C[s2] || "#888",
+        name: NAME[s2] || s2, color: C[s2] || "#888", highlight: isCapsidStack(s2),
         values: sizes.map(function (z) { return by[z][s2] ? by[z][s2].totalMs : null; })
       };
     }),
-    { aria: "cold start ms by size" }
+    { aria: "cold start ms by size", suffix: " ms" }
   );
   $("cold-pss-chart").innerHTML = barChart(
     sizes.map(function (z) { return SZ[z]; }),
     sts.map(function (s2) {
       return {
-        name: NAME[s2] || s2, color: C[s2] || "#888",
+        name: NAME[s2] || s2, color: C[s2] || "#888", highlight: isCapsidStack(s2),
         values: sizes.map(function (z) { return by[z][s2] ? by[z][s2].pssMb : null; })
       };
     }),
-    { aria: "runtime memory by size" }
+    { aria: "runtime memory by size", suffix: " MiB" }
   );
 
   var head = '<table><thead><tr><th rowspan="2" scope="col">Runtime</th>';
@@ -1096,8 +2065,9 @@ function renderCold() {
   head += "</tr></thead><tbody>";
   var body = "";
   sts.forEach(function (s2) {
-    var mine = s2 === "capsid-source" || s2 === "capsid-bytecode";
+    var mine = isCapsidStack(s2);
     body += '<tr' + (mine ? ' class="mine"' : "") + "><td>" +
+            '<span class="sw" style="background:' + (C[s2] || "#888") + '"></span>' +
             esc(NAME[s2] || s2) + "</td>";
     sizes.forEach(function (z, i) {
       var x = by[z][s2];
@@ -1117,8 +2087,6 @@ function renderCold() {
   if (warms.length) {
     var coldOrigin = P && P.origins && P.origins["cold-start"];
     var exactHttp = !!(coldOrigin && coldOrigin.protocol && coldOrigin.protocol.httpClient === "python-http-exact-v1");
-    /* collapse per-size samples into one median per stack: sizes differ by
-       <0.03 ms, the interesting axis is stack vs measurement floor */
     var per = {};
     warms.forEach(function (x) {
       (per[x.stack] = per[x.stack] || []).push(x.warmMs);
@@ -1131,44 +2099,44 @@ function renderCold() {
     };
     var vals = sts2.map(function (st) { return { st: st, v: med(per[st]) }; });
     vals.sort(function (a, b) { return a.v - b.v; });
-    var floors = vals.filter(function (d) {
-      return d.st !== "capsid-source" && d.st !== "capsid-bytecode";
-    }).map(function (d) { return d.v; });
+    var floors = vals.filter(function (d0) {
+      return !isCapsidStack(d0.st);
+    }).map(function (d0) { return d0.v; });
     var floor = floors.length ? med(floors) : 5.5;
 
-    var W = 780, rowH = 42, top = 44, right = 132;
-    var left = gutterFor(vals.map(function (d) { return SHORT[d.st] || d.st; }));
+    var W = 780, rowH = 42, top = 44, right = 148;
+    var left = gutterFor(vals.map(function (d0) { return SHORT[d0.st] || d0.st; }));
     var H = top + vals.length * rowH + 6;
-    var maximumWarm = vals.reduce(function (maximum, d) { return Math.max(maximum, d.v); }, 1);
-    var mx = nice(exactHttp ? maximumWarm * 1.15 : Math.max(floor * 1.15, 1));
+    var maximumWarm = vals.reduce(function (maximum, d0) { return Math.max(maximum, d0.v); }, 0);
+    var mx = nice(exactHttp ? Math.max(maximumWarm * 1.15, 0.1) : Math.max(floor * 1.15, 1));
     var plot = W - left - right;
     var fx = left + plot * (floor / mx);
     var out = '<svg viewBox="0 0 ' + W + " " + H + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="warm request latency by runtime">';
     out += '<style>.g{stroke:' + AX + ';stroke-dasharray:3 5}' +
            '.fl{stroke:#fbbf24;stroke-dasharray:6 5;stroke-width:1.5}' +
-           '.ft{fill:#fbbf24;font-size:12px;font-weight:600}' +
-           '.t{fill:' + TK + ';font-size:12px}' +
-           '.l{fill:' + GL + ';font-size:13.5px;font-weight:600}' +
-           '.v{fill:' + GL + ';font-size:13px;font-weight:700}' +
-           '.vf{fill:' + TK + ';font-size:13px;font-weight:600}</style>';
+           '.ft{fill:#fbbf24;font-size:11.5px;font-weight:600;font-family:ui-monospace,monospace}' +
+           '.t{fill:' + TK + ';font-size:11.5px;font-family:ui-monospace,monospace}' +
+           '.l{fill:' + GL + ';font-size:13px;font-weight:600}.lm{fill:#34d399;font-size:13px;font-weight:700}' +
+           '.v{fill:' + GL + ';font-size:12.5px;font-weight:700;font-family:ui-monospace,monospace}' +
+           '.vm{fill:#34d399;font-size:12.5px;font-weight:700;font-family:ui-monospace,monospace}' +
+           '.vf{fill:' + TK + ';font-size:12.5px;font-weight:600}</style>';
     for (var g2 = 0; g2 <= 4; g2++) {
       var xx = left + plot * g2 / 4, gv = mx * g2 / 4;
       out += '<line class="g" x1="' + xx + '" y1="' + top + '" x2="' + xx + '" y2="' + (H - 6) + '"/>';
-      out += '<text class="t" x="' + xx + '" y="' + (top - 12) + '" text-anchor="middle">' + fmt(gv, 1) + "</text>";
+      out += '<text class="t" x="' + xx + '" y="' + (top - 12) + '" text-anchor="middle">' + (gv === 0 ? "0" : fmt(gv, mx < 1 ? 2 : 1)) + "</text>";
     }
-    /* measurement floor marker */
     if (!exactHttp) {
       out += '<line class="fl" x1="' + fx + '" y1="' + (top - 4) + '" x2="' + fx + '" y2="' + (H - 6) + '"/>';
-      out += '<text class="ft" x="' + (fx + 8) + '" y="' + (top - 12) + '">curl floor \u2248 ' + fmt(floor, 1) + ' ms</text>';
+      out += '<text class="ft" x="' + (fx + 8) + '" y="' + (top - 12) + '">curl floor \u2248 ' + fmt(floor, 1) + " ms</text>";
     }
-    vals.forEach(function (d, i2) {
+    vals.forEach(function (d0, i2) {
       var y0 = top + i2 * rowH;
-      var isCap = d.st === "capsid-source" || d.st === "capsid-bytecode";
-      var w = Math.max(2, plot * (d.v / mx));
-      out += '<text class="l" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[d.st] || d.st) + "</text>";
-      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + w + '" height="' + (rowH - 24) + '" rx="4" fill="' + (C[d.st] || "#888") + '"><title>' + esc(NAME[d.st] || d.st) + ": " + fmt(d.v, 2) + " ms</title></rect>";
+      var isCap = isCapsidStack(d0.st);
+      var w = Math.max(2, plot * (d0.v / mx));
+      out += '<text class="' + (isCap ? "lm" : "l") + '" x="' + (left - 14) + '" y="' + (y0 + rowH / 2 + 5) + '" text-anchor="end">' + esc(SHORT[d0.st] || d0.st) + "</text>";
+      out += '<rect x="' + left + '" y="' + (y0 + 10) + '" width="' + w + '" height="' + (rowH - 24) + '" rx="4" fill="' + (C[d0.st] || "#888") + '"><title>' + esc(NAME[d0.st] || d0.st) + ": " + fmt(d0.v, 2) + " ms</title></rect>";
       if (isCap || exactHttp) {
-        out += '<text class="v" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(d.v, 2) + " ms</text>";
+        out += '<text class="' + (isCap ? "vm" : "v") + '" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">' + fmt(d0.v, 2) + " ms</text>";
       } else {
         out += '<text class="vf" x="' + (left + w + 9) + '" y="' + (y0 + rowH / 2 + 5) + '">\u2248 floor (unresolved)</text>';
       }
@@ -1190,7 +2158,7 @@ function renderCold() {
   }
 }
 
-/* ============ methodology ============ */
+/* ============ 04 methodology ============ */
 function renderMethod() {
   var m = (P && P.machine) || {};
   var ev = (P && P.evidence) || {};
@@ -1221,8 +2189,6 @@ function renderMethod() {
         '</a> <span class="digest">' + esc(ev[name]) + "</span></li>";
     });
   }
-  /* dl rows: label column fixed, value ellipsized to one line with the
-     full text in the title tooltip — no wrapping, no column drift */
   var fpRows = [
     ["CPU", m.cpu],
     ["Kernel", m.uname],
@@ -1241,6 +2207,12 @@ function renderMethod() {
     if (v === "absent" || v === "n/a") v = "not measured";
     return "<dt>" + esc(r[0]) + '</dt><dd title="' + esc(v) + '">' + esc(v) + "</dd>";
   }).join("");
+
+  var isPureJs = !!(P && P.verification && P.verification.contract === "capsid-perf-lane-v2");
+  var memDesc = isPureJs
+    ? "PSS from smaps_rollup, summed recursively over each stack's pinned process tree (capsid host/worker, node, node --jitless, bun, workerd). workerd runs untuned self-hosted V8 defaults, not a tuned production limit."
+    : "PSS from smaps_rollup, decomposed per process (host/worker, nginx/php-fpm, python master/worker). workerd runs an untuned V8 whose heap grows under sustained load with no return observed within the sampling windows — its bar is the self-hosted default, not a tuned production limit.";
+
   $("method-card").innerHTML =
     '<div class="method-grid">' +
       "<div>" +
@@ -1249,15 +2221,10 @@ function renderMethod() {
           "<li><b>Throughput</b>frozen repository load generator, closed " +
           "loop, 64 connections / 64 in-flight, 5 s warm-up, five 15 s " +
           "rounds, exact-body verification every round.</li>" +
-          "<li><b>Cold start</b>start → ready → first response; warm-up " +
+          "<li><b>Cold start</b>start \u2192 ready \u2192 first response; warm-up " +
           "discarded, median of five; identical fixture source across " +
           "runtimes, only the entry point differs.</li>" +
-          "<li><b>Memory</b>PSS from smaps_rollup, decomposed per process " +
-          "(host/worker, nginx/php-fpm, python master/worker). workerd runs " +
-          "an untuned V8 whose heap grows under sustained load with no " +
-          "return observed within the sampling windows — its bar is the " +
-          "self-hosted default, not a " +
-          "tuned production limit.</li>" +
+          "<li><b>Memory</b>" + memDesc + "</li>" +
         "</ol>" +
       "</div>" +
       "<div>" +
@@ -1280,7 +2247,10 @@ function renderMethod() {
 function selectPoint(index) {
   P = PTS[index] || null;
   VERIFIED = isVerified(P);
+  RADAR_MODE = "auto";
+  FRONTIER_WL = "matrix-json-1k";
   renderHero();
+  renderOverview();
   renderQps();
   renderMem();
   renderCold();
