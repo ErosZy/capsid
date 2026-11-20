@@ -143,7 +143,7 @@ for (const sample of readOrdinaryFetchSamples().flatMap((report) => report.cases
       (value) => (value.upstream[0].sent += 'AA=='),
       (value) => (value.upstream[0].rawRequest += 'AA=='),
       (value) => (value.upstream[0].bytes += 1),
-      (value) => (value.upstream[0].localAddress = '::1'),
+      (value) => (value.upstream[0].localAddress = '::2'),
       (value) => (value.upstream[0].localPort += 1),
       (value) => (value.upstream[0].request += '\r\nUpgrade: websocket'),
       (value) => (value.beforeAction[0].sent = ''),
@@ -205,6 +205,19 @@ for (const sample of readOrdinaryFetchSamples().flatMap((report) => report.cases
     }
   });
 }
+test('gated and finite localhost sources accept IPv6 loopback without losing socket identity', () => {
+  const samples = readOrdinaryFetchSamples();
+  for (const shard of ['gated', 'views']) {
+    const value = samples.find((report) => report.shard === shard).cases[0];
+    value.beforeAction[0].localAddress = value.upstream[0].localAddress = '::1';
+    assert.doesNotThrow(() => assertOrdinaryFetchCase(value, 'reference'));
+    value.upstream[0].localAddress = '127.0.0.1';
+    reject(
+      () => assertOrdinaryFetchCase(value, 'reference'),
+      /source identity retained: localAddress/,
+    );
+  }
+});
 test('reject equally wrong reference and every product backend', () => {
   for (const [index, shard] of ordinaryFetchShards.entries()) {
     const m = matrix();

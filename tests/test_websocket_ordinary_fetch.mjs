@@ -1,13 +1,12 @@
 import { waitForWorkerdListen } from './helpers/workerd_listener_control.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { startCapsid, stopCapsid } from './helpers/ws_host_backend.mjs';
+import { startCapsid, stopCapsid, listenLoopbackTcp } from './helpers/ws_host_backend.mjs';
 import { responseSession } from './helpers/ws_response_client.mjs';
 import {
   root,
@@ -113,7 +112,7 @@ async function startFiniteUpstream(kind, challenge, role) {
         (_, index) => (index * 29 + 17) % 251,
       ),
     );
-  const listener = net.createServer({ allowHalfOpen: true }, (socket) => {
+  const listener = await listenLoopbackTcp((socket) => {
     const item = {
       request: null,
       rawRequest: '',
@@ -209,12 +208,8 @@ async function startFiniteUpstream(kind, challenge, role) {
       }
     });
   });
-  await new Promise((resolve, reject) => {
-    listener.once('error', reject);
-    listener.listen(0, '127.0.0.1', resolve);
-  });
   return {
-    port: listener.address().port,
+    port: listener.port,
     records,
     snapshot() {
       return structuredClone(records);
@@ -224,7 +219,7 @@ async function startFiniteUpstream(kind, challenge, role) {
         item.fixtureDestroyed = true;
         socket.destroy();
       }
-      await new Promise((resolve) => listener.close(resolve));
+      await listener.close();
     },
   };
 }
@@ -239,7 +234,7 @@ async function startGatedUpstream(kind, challenge, role) {
   const sockets = new Map(),
     records = [];
   let active;
-  const listener = net.createServer({ allowHalfOpen: true }, (socket) => {
+  const listener = await listenLoopbackTcp((socket) => {
     assert.ok(!active, 'one actual ordinary HTTP connection');
     let input = Buffer.alloc(0),
       offset = 0;
@@ -329,12 +324,8 @@ async function startGatedUpstream(kind, challenge, role) {
       }
     });
   });
-  await new Promise((resolve, reject) => {
-    listener.once('error', reject);
-    listener.listen(0, '127.0.0.1', resolve);
-  });
   return {
-    port: listener.address().port,
+    port: listener.port,
     records,
     snapshot() {
       return structuredClone(records);
@@ -357,7 +348,7 @@ async function startGatedUpstream(kind, challenge, role) {
         item.fixtureDestroyed = true;
         socket.destroy();
       }
-      await new Promise((resolve) => listener.close(resolve));
+      await listener.close();
     },
   };
 }
@@ -521,10 +512,17 @@ for (const [key, name] of Object.entries(ordinaryFetchInputPaths))
   );
 assert.equal(fileDigest(reference ?? host), binaries.host);
 if (!reference) assert.equal(fileDigest(worker), binaries.worker);
-report.complete = report.cases.every(
-  (value) => !value.failure && !value.cleanupFailure && value.shutdown?.forced === false,
+const failures = report.cases.filter(
+  (value) => value.failure || value.cleanupFailure || value.shutdown?.forced !== false,
 );
+report.complete = failures.length === 0;
 save();
+for (const { id, failure, cleanupFailure, shutdown } of failures) {
+  console.error(`FAIL: ${id} (report: ${destination})`);
+  if (failure) console.error(failure);
+  if (cleanupFailure) console.error(cleanupFailure);
+  if (shutdown?.forced) console.error('forced shutdown');
+}
 validateOrdinaryFetchReport(report, {
   lock,
   inputs,

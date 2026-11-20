@@ -576,7 +576,7 @@ function upstream(records, value, terminal) {
     );
     assert.equal(entry.rawRequest, Buffer.from(entry.request + '\r\n\r\n').toString('base64'));
     assert.equal(entry.bytes, Buffer.byteLength(entry.request + '\r\n\r\n'));
-    assert.equal(entry.localAddress, '127.0.0.1');
+    assert.ok(['127.0.0.1', '::1'].includes(entry.localAddress), 'actual loopback address');
     assert.equal(entry.localPort, port);
     assert.equal(entry.fixtureDestroyed, false);
     assert.equal(entry.peerReset, false);
