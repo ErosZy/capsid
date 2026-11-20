@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedDate": "2026-11-18",
+  "reviewedDate": "2026-11-20",
   "sourceBaseline": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
   "meaning": "Reviewed means current maintained claims or explicit historical disposition reviewed; not every page rewritten, every command executed, or historical result requalified.",
   "counts": {
@@ -23,7 +23,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "192803e10f40e3b0756055b1b8e3270580d2d6a04a7353b818fbca8aa39c4a5a",
+      "sha256": "68c6504c87a23ec2e032cae00f9f066ea852a1f3419e771275c676a2029e5d63",
       "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim. Formatting setup and qualified-release versus formatting-checkout boundary reviewed. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
@@ -143,7 +143,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "026a8a00f98b42b2ce7aa7c6e398a20f78e70fff45699b85ba53034dbf44bd8d",
+      "sha256": "256f2d1165b9e889e814d27407fd3e260bdfe6411708b8013d0cdd9dbd36be39",
       "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures. Formatting setup and qualified-release versus formatting-checkout boundary reviewed. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
     },
     {
@@ -583,7 +583,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "b0f09119f894f1c814a87b26b4478fa4697df44bcaac461e899d5f2c774d3071",
+      "sha256": "1b2c6899f8c7f21fc2cf3f2a1d0b69fffb4c82f1f02281dc9afce2ecb75967a7",
       "review": "Accepted 485b29b whole-session source/tree/CPU/protocol/data, unchanged older observations, compressed full evidence and non-paired comparison limits."
     },
     {
@@ -767,7 +767,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "44bce7808299940520e356d544ea865e6d5bf3e685dee06aca78bee03192f360",
+      "sha256": "b3d37706e1493936368bd45942431cd126d8b4cce94bc0b81c4c814064f0e1aa",
       "review": "Actual generated files, complete restore/replay commands, source/release boundaries, dev push branch and genuine deployment requirements."
     },
     {

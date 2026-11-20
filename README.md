@@ -14,7 +14,7 @@ listeners, routing, capabilities, resource limits and worker lifetime.
 > strict sandboxing provides the production isolation boundary; native macOS
 > and Windows support is for trusted development and integration.
 >
-> Documentation/data reviewed **2026-11-18** for `dev/v0.3.0`.
+> Documentation/data reviewed **2026-11-20** for `dev/v0.3.0`.
 > [Current status and data scope](docs/current-status.md) separates the published
 > beta, current source interface, measured development snapshot and dated history.
 
@@ -155,13 +155,18 @@ The ordinary suite is not represented as all-passing.
   their recorded source, build, machine and protocol. Historical v0.2.2 numbers
   are not 0.3.0-beta measurements.
 
-**Latest accepted local measurement:** snapshot `485b29b`, 2026-11-16, i5-12400F
-under WSL2. JSON 1/16 KiB and stream throughput: **9341.6 / 8090.2 / 6491.7 QPS**;
-service-tree PSS: **14.0 MiB** trickle / **18.0 MiB** loaded. Warm density under
-the original 2048 MiB budget: **738 / 509 / 128 workers** at 10/100 KiB/1 MiB.
-These are source-bound snapshot results, **not 0.3.0-beta benchmarks or a formal
-paired improvement over v0.2.2**. The complete sealed archives and provenance
-are linked from the [performance reference](docs/performance-benchmarks.md).
+**Latest accepted local measurement:** `0.3.0-beta.4` development snapshot
+`82eaab9`, 2026-11-20, i5-12400F under WSL2 (`capsid-perf-lane-v3`, pure-JS
+seven-stack matrix across three reference tiers). JSON 1/16 KiB, stream 1 KiB
+and `dynamic-api` throughput: **21,770.8 / 13,952.2 / 10,756.9 / 9,974.9 QPS**;
+service-tree PSS: **14.9 MiB** trickle / **18.6 MiB** loaded (**1,170.5 QPS/MiB**
+at 1 KiB); 1 MiB bytecode cold start: **18.5 ms / 15.2 MiB**. Warm density under
+the 2048 MiB budget: **731 / 503 / 128 strict-sandbox workers** at 10/100 KiB/1 MiB
+(versus **604 / 553 / 219** `workerd` cells). These are source-bound snapshot
+results, **not published 0.3.0-beta (`v0.3.0-beta.3`) benchmarks or a formal
+paired improvement over archived `v1` (`485b29b`) or historical `v0.2.2`**. The
+complete sealed archives (`v3` and preserved `v1`) and provenance are linked from
+the [performance reference](docs/performance-benchmarks.md).
 
 For pinned C/C++, JavaScript and Python formatting commands, see
 [source formatting](docs/formatting.md).

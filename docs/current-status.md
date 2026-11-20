@@ -1,20 +1,23 @@
 # Current Status and Data Scope
 
-Reviewed 2026-11-18. This is the current reader-facing status, not another
+Reviewed 2026-11-20. This is the current reader-facing status, not another
 execution diary. The [machine-readable status](current-status.json) is generated
 from committed source locks, the captured GitHub release metadata and validated
 measurement archives. Historical reviews retain their original dates and values.
 
 ## Development Checkout
 
-The development line now reflects the published `0.3.0-beta` (`v0.3.0-beta.3`)
-source (`af8acc1a7710b6344bdf85d1f6b0b067e0fabe89`) plus subsequent
-documentation and `perf-site` synchronization (`docs-successor`).
+The development line builds on the published `0.3.0-beta` (`v0.3.0-beta.3`)
+source (`af8acc1a7710b6344bdf85d1f6b0b067e0fabe89`) with pure-JS hot-path
+runtime optimizations in `js/bootstrap.js`, `js/fetch.js`, and `js/url.js`
+(`runtime-optimization-successor`) plus `capsid-perf-lane-v3` benchmark and
+`perf-site` updates. Public C ABI v7, FetchRPC wire protocol, C/C++ runtime,
+build inputs, and `vendor/txiki.js` (QuickJS-NG 0.15.1) remain unchanged.
 The machine status keeps qualified-release digests (`headerSHA256`,
 `protocolSHA256`, and `qualifiedReleaseFiles`) aligned with the published
 `v0.3.0-beta.3` release while setting `releaseQualificationInherited:false`:
-later documentation or site edits do not requalify a binary or generate a new
-performance result. See [source formatting](formatting.md) for exact-byte
+later JS, benchmark, or documentation edits do not inherit binary qualification
+for `v0.3.0-beta.3`. See [source formatting](formatting.md) for exact-byte
 exclusions and [package architecture](releases.md#development-package-matrix)
 for the five-platform archive matrix.
 
@@ -93,35 +96,43 @@ reported as complete WPT, browser or workerd conformance.
 
 ## Latest Accepted Local Performance Record
 
-The latest complete accepted local session was measured on **2026-11-16** at
-private development snapshot `485b29be6cc8d0dcdb653ee6226956ddece02948`, tree
-`25bbf46247b68478a005cf779d884970fb98dc13`. It is **not a measurement of 0.3.0-beta
-or the later documentation commit**, and its archival `release: v0.3.0` label
-does not mean a stable v0.3.0 release existed.
+The latest complete accepted local session was measured on **2026-11-20** at
+`0.3.0-beta.4` development snapshot `82eaab999cfd628dbe1529eb553f63c0ee52a9ea`,
+tree `5e61f517d5325704c8dc38e35b0c63193fb91ec1`, under `capsid-perf-lane-v3`
+(pure-JS seven-stack matrix across three reference tiers plus `dynamic-api`).
+It is **not a measurement of published `v0.3.0-beta.3`**; its `release` label
+`v0.3.0-beta.4` has an empty `sourceTag` until a release tag is qualified.
 
 | Metric | Recorded Capsid value |
 | --- | ---: |
-| JSON 1 KiB QPS | 9341.6 |
-| JSON 16 KiB QPS | 8090.2 |
-| Stream 1 KiB QPS | 6491.7 |
-| Low-load service-tree PSS | 14.0 MiB |
-| Loaded service-tree PSS | 18.0 MiB |
-| Warm workers at 10 KiB / 100 KiB / 1 MiB, 2048 MiB budget | 738 / 509 / 128 |
+| JSON 1 KiB QPS | 21,770.8 |
+| JSON 16 KiB QPS | 13,952.2 |
+| Stream 1 KiB QPS | 10,756.9 |
+| Dynamic API QPS | 9,974.9 |
+| Low-load service-tree PSS | 14.9 MiB |
+| Loaded service-tree PSS | 18.6 MiB |
+| Warm workers at 10 KiB / 100 KiB / 1 MiB, 2048 MiB budget | 731 / 503 / 128 |
 
-Session: `local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`.
+Session: `local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99`.
 Machine: i5-12400F, 12 logical CPUs, measured CPU set 0–3 under WSL2. All three
-original lanes, four quiet windows and independent source/binary/raw-record
-review passed. Physical Windows-host exclusivity is **not** claimed.
+lanes (`cold`, `qps`, `density`), quiet windows and independent source/binary/
+raw-record review passed (`4533` sealed evidence files). Physical Windows-host
+exclusivity is **not** claimed.
 
-The site now includes the complete 5123 sealed evidence files in hashed,
-compressed transports. Staging restores and revalidates the original bytes and
-point; compression is not a substitute for acceptance. Historical v0.2.2 values
-remain unchanged and unverified under the current archive contract; no formal
-paired gain or universal slowdown is inferred across those different records.
+The archived `v1` cross-language baseline (`485b29be6cc8d0dcdb653ee6226956ddece02948`,
+2026-11-16, session `local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
+`5123` sealed evidence files; Capsid `9341.6 / 8090.2 / 6491.7 QPS`, `14.0 / 18.0 MiB`,
+`738 / 509 / 128` warm workers) remains preserved unchanged in `perf-site/data.js`
+and `perf-site/archives/` alongside the new `v3` bundles (`9656` total verified
+evidence files across 6 compressed transports). Historical `v0.2.2` values remain
+unchanged and unverified under the current archive contract; no formal paired
+trend is inferred across different matrix contracts (`v1` vs `v3`) or unverified
+historical points.
 
 Read the [performance reference](performance-benchmarks.md),
-[original accepted review](data/performance-review.json),
-[measured source manifest](data/performance-source-manifest.json) and
+[latest accepted review](data/performance-review.json),
+[measured `v3` source manifest](data/performance-source-manifest-v030-beta4.json),
+[archived `v1` source manifest](data/performance-source-manifest.json) and
 [site/transport instructions](../perf-site/README.md).
 
 ## Documentation Coverage and Historical Records

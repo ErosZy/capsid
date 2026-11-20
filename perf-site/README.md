@@ -1,9 +1,13 @@
 # Performance History Site
 
-Updated 2026-11-18. The site defaults to the latest **accepted measured
-snapshot**, not to an assumed benchmark of the latest release. Stable remains
-v0.2.2; 0.3.0-beta is published, but has no matching complete performance session.
-The current measured snapshot is `485b29b`, completed 2026-11-16 under WSL2.
+Updated 2026-11-20. The site defaults to the latest **accepted measured
+snapshot**, not to an assumed benchmark of the latest published release. Stable
+remains `v0.2.2`; published `v0.3.0-beta.3` has no matching complete performance
+session. The latest accepted local measurement is `0.3.0-beta.4` development
+snapshot `82eaab9` (`capsid-perf-lane-v3`, pure-JS seven-stack + `dynamic-api`),
+completed 2026-11-20 under WSL2. The archived `v1` cross-language measurement
+(`485b29b`, 2026-11-16) and historical unverified `v0.2.2` observation remain
+preserved and selectable in the top record switcher.
 See [current status](../docs/current-status.md) and
 [performance methodology/data](../docs/performance-benchmarks.md).
 
@@ -11,18 +15,19 @@ See [current status](../docs/current-status.md) and
 
 | Path | Role |
 | --- | --- |
-| `index.html` | Self-contained SVG charts and explicit source/verification labels |
-| `data.js` | Collector-generated immutable historical points plus the validated latest point |
+| `index.html` | Self-contained SVG charts, three-tier reference UX, scenario guide, and explicit source/verification labels |
+| `data.js` | Collector-generated immutable historical points plus verified `v1` (`485b29b`) and `v3` (`82eaab9`) points |
 | `status.js` | Generated release/source/measurement context from `tools/refresh-documentation-data.py` |
 | `archive-index.json` / generated `archive-index.js` | Hashed compressed transport/part index and its UI projection for complete sealed evidence |
-| `archives/` | Full original lane bytes in deterministic gzip/TAR transports, split below GitHub's per-file limit |
+| `archives/` | Full original lane bytes for both `v3` and archived `v1` in deterministic gzip/TAR transports, split `<= 40 MiB` |
 
-The latest point's original archive label is `v0.3.0`, but its tag is empty and
-its measured commit is `485b29be6cc8d0dcdb653ee6226956ddece02948`. The UI must
-call it a development snapshot, not a stable v0.3.0 or 0.3.0-beta result. The
-historical v0.2.2 point remains unchanged and unverified under the current full
-contract. Do not draw a qualified release trend or paired optimization claim
-across those different records.
+The latest point's archive label is `v0.3.0-beta.4`, with an empty `sourceTag`
+and measured commit `82eaab999cfd628dbe1529eb553f63c0ee52a9ea`. The UI labels it
+as a development snapshot until a release tag is separately qualified. The
+archived `v1` point (`485b29be6cc8d0dcdb653ee6226956ddece02948`) and historical
+`v0.2.2` point remain unchanged. Do not draw a qualified release trend or paired
+optimization claim across different matrix contracts (`v1` vs `v3`) or
+unverified historical records.
 
 ## Prepare the Site
 
@@ -35,12 +40,14 @@ python3 bench/prepare-perf-site.py --repo . --output /path/to/new-site-output
 ```
 
 The output must be new and outside `perf-site`. Allow at least 8 GiB of scratch
-space: the complete evidence contains 5123 files and about 2.74 GB of raw bytes,
-transported in about 163 MB. The compressed records are not reduced samples.
+space: the combined dual-version evidence contains `9656` files (`4533` `v3` +
+`5123` `v1`) and about `5.49 GiB` of raw bytes, transported in about `310 MiB`
+across 6 compressed bundles. The compressed records are not reduced samples.
 The stager restores the original portable namespace and invokes the ordinary
-complete lane/point validators. It checks source/binary/session identity,
-posture, raw rounds, responses, PSS/ownership/cleanup, checksums, metric replay
-and exact downloadable transport bytes before publishing anything.
+complete lane/point validators for every verified point. It checks
+source/binary/session identity, posture, raw rounds, responses,
+PSS/ownership/cleanup, checksums, metric replay and exact downloadable
+transport bytes before publishing anything.
 
 Extraction accepts only bounded regular portable members. Links, traversal,
 absolute/drive/ADS paths, duplicate/case-aliased names, missing parts, conflicting
@@ -59,21 +66,22 @@ This is **replay**, not a new measurement:
 ```sh
 python3 bench/perf_archive.py --repo . --output /path/to/new-archive-root
 ARCHIVES=/path/to/new-archive-root
-SESSION=local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec
+SESSION=local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99
 GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 python3 bench/collect-perf-point.py --repo "$ARCHIVES" \
   --cold-start "$ARCHIVES/bench/results/${SESSION}-cold" \
   --qps "$ARCHIVES/bench/results/${SESSION}-qps" \
   --density "$ARCHIVES/bench/results/${SESSION}-density" \
-  --version 0.3.0 --release v0.3.0 --generated-at "$GENERATED_AT" --check
+  --version 0.3.0-beta.4 --release v0.3.0-beta.4 --generated-at "$GENERATED_AT" --check
 ```
 
-The frozen `--release v0.3.0` here matches the archive's original label; do not
-replace it with 0.3.0-beta to relabel a different binary. On Windows use the full
-Python runtime and PowerShell paths/variables; the CLI itself is portable.
-The `runtime-nonportable.tar` inside an original density record remains an
-opaque verified member: its Linux generation names are streamed/checked by the
-ordinary validator, never extracted as Windows filenames.
+To replay the archived `v1` cross-language point, pass
+`SESSION=local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
+`--version 0.3.0`, and `--release v0.3.0` (matching its original frozen archive
+label). On Windows use the full Python runtime and PowerShell paths/variables;
+the CLI itself is portable. The `runtime-nonportable.tar` inside an original
+density record remains an opaque verified member: its Linux generation names are
+streamed/checked by the ordinary validator, never extracted as Windows filenames.
 
 ## Producing a New Measurement
 
