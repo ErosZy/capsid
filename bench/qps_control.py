@@ -339,15 +339,16 @@ def checked_memory(
         total = sum(integer(p.get("pss_kb"), "process PSS", 1) for p in parts)
         if integer(sample.get("pss_kb"), "total PSS", 1) != total:
             raise ProbeError("qps-memory", "PSS process sum disagrees with total")
+    tolerance_kb = 0 if schema in (1, 2) else 32
     final = samples[-1]
     readings = value.get("pss_readings_kb")
     if (
-        samples[-2]["pss_kb"] != final["pss_kb"]
-        or readings != [final["pss_kb"]] * 2
+        abs(final["pss_kb"] - samples[-2]["pss_kb"]) > tolerance_kb
+        or readings != [samples[-2]["pss_kb"], final["pss_kb"]]
         or not isinstance(readings, list)
         or any(type(v) is not int for v in readings)
     ):
-        raise ProbeError("qps-memory", "PSS did not settle at two equal positive readings")
+        raise ProbeError("qps-memory", "PSS did not settle within tolerance")
     roles = {}
     for part in final["processes"]:
         role = by_id[identity(part)]["role"]

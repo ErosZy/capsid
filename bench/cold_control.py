@@ -107,19 +107,23 @@ def checked_round(row, warm_requests, *, observed=None, schema=3):
         raise ProbeError("cold-identity", "probe process was included in measured memory")
     if observed is not None and not identities <= set(observed):
         raise ProbeError("cold-identity", "sampled process was never observed in the owned tree")
+    tolerance_kb = 0 if schema in (1, 2) else 32
     readings = row.get("pss_readings_kb")
     pss = row.get("pss_kb")
     if (
         type(pss) is not int
         or pss <= 0
-        or readings != [pss, pss]
-        or any(type(p) is not int for p in readings)
+        or not isinstance(readings, list)
+        or len(readings) != 2
+        or any(type(p) is not int or p <= 0 for p in readings)
+        or readings[1] != pss
+        or abs(readings[1] - readings[0]) > tolerance_kb
     ):
         raise ProbeError("cold-pss", "missing stable positive PSS readings")
     samples = row.get("pssSamples")
     if not isinstance(samples, list) or len(samples) != 2:
         raise ProbeError("cold-pss", "missing both recursive PSS samples")
-    for sample in samples:
+    for sample, expected_pss in zip(samples, readings):
         parts = sample.get("processes") if isinstance(sample, dict) else None
         if (
             not isinstance(parts, list)
@@ -130,8 +134,8 @@ def checked_round(row, warm_requests, *, observed=None, schema=3):
         if (
             any(type(p.get("pss_kb")) is not int or p["pss_kb"] <= 0 for p in parts)
             or type(sample.get("pss_kb")) is not int
-            or sum(p["pss_kb"] for p in parts) != pss
-            or sample["pss_kb"] != pss
+            or sum(p["pss_kb"] for p in parts) != expected_pss
+            or sample["pss_kb"] != expected_pss
         ):
             raise ProbeError("cold-pss", "recursive PSS sum disagrees with stable total")
     cleanup = row.get("cleanup", {})

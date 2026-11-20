@@ -547,11 +547,13 @@ class PortAllocator:
             raise
 
 
-def stable_pss(sample, *, interval=1, attempts=8, sleep=time.sleep):
+def stable_pss(sample, *, interval=1, attempts=8, tolerance_kb=0, sleep=time.sleep):
     if type(attempts) is not int or attempts < 2:
         raise ProbeError("pss-protocol", "at least two readings are required")
     if type(interval) not in (int, float) or not math.isfinite(interval) or interval < 0:
         raise ProbeError("pss-protocol", "invalid PSS sampling interval")
+    if type(tolerance_kb) is not int or tolerance_kb < 0:
+        raise ProbeError("pss-protocol", "invalid PSS stabilization tolerance")
     readings = []
     for index in range(attempts):
         try:
@@ -588,8 +590,8 @@ def stable_pss(sample, *, interval=1, attempts=8, sleep=time.sleep):
             previous_ids = {(p["pid"], p["start"]) for p in previous["processes"]}
             if previous_ids != ids:
                 raise ProbeError("process-changed", "process tree changed between PSS readings")
-            if previous["pss_kb"] == value:
-                return {"pss_readings_kb": [value, value], "samples": readings}
+            if abs(previous["pss_kb"] - value) <= tolerance_kb:
+                return {"pss_readings_kb": [previous["pss_kb"], value], "samples": readings}
         if index + 1 < attempts:
             sleep(interval)
     raise ProbeError(

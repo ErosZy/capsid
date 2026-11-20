@@ -112,7 +112,7 @@ validator requires those identities to match the loaded phase.
   scheduling overhead, never a shortened measurement window.
 - **Cold start:** one JSONL file with rounds 1–5, each carrying `ok: true`,
   `warm_n: 50`, `ready_ms`, `total_ms`, `warm_ms`, positive `pss_kb`, and two
-  equal `pss_readings_kb`. The summary is replayed from the five rounds;
+  consecutive `pss_readings_kb` within `pssToleranceKb` (`<= 32 KiB` in `v3`, exact equality in `v1`/`v2`). The summary is replayed from the five rounds;
   total must include readiness and end at the first validated response.
 - **Density:** one final verification JSONL record per cell, with explicit
   stack/size/phase, `status: "ok"`, `finalVerification: true`, count/unit,
@@ -133,7 +133,8 @@ validator requires those identities to match the loaded phase.
   `serving`, with `method: "recursive-process-tree-pss"`, pinned roots/members,
   per-process positive PSS samples, role sums, readiness and cleanup evidence.
   Protocol fields require `memoryProtocol: "fresh-owned-forest-v1"`,
-  `readinessProtocol: "exact-http-before-traffic-v1"`, two stable reads, at most
+  `readinessProtocol: "exact-http-before-traffic-v1"`, two settled reads
+  (`pssToleranceKb: 32` in `v3`, exact `0 KiB` in `v1`/`v2`), at most
   twenty-four reads (`v2`/`v3`; eight in archived `v1`), 1 s intervals and 1 s settle. Each phase references its sealed
   `resultFile`, whose bytes must reproduce the memory record. Low load has
   `beforeMeasuredLoad: true`, all 150 individually verified JSON-1k requests,

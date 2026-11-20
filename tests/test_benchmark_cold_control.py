@@ -69,6 +69,31 @@ class ControlTests(unittest.TestCase):
         bun_jitless_row.update(warm_latencies_ms=[1, 3], warm_ms=2)
         with self.assertRaises(ProbeError):
             control.checked_round(bun_jitless_row, 2, observed={(201, 10001)}, schema=2)
+        settled = synthetic_round("bun-jitless", "10k", 1, warm=2)
+        settled.update(
+            warm_latencies_ms=[1, 3],
+            warm_ms=2,
+            pss_kb=1040,
+            pss_readings_kb=[1024, 1040],
+            pssSamples=[
+                {"pss_kb": 1024, "processes": [dict(settled["measurementRoot"], pss_kb=1024)]},
+                {"pss_kb": 1040, "processes": [dict(settled["measurementRoot"], pss_kb=1040)]},
+            ],
+        )
+        self.assertIs(settled, control.checked_round(settled, 2, observed={(201, 10001)}, schema=3))
+        with self.assertRaises(ProbeError):
+            control.checked_round(settled, 2, observed={(201, 10001)}, schema=2)
+        drift = copy.deepcopy(settled)
+        drift.update(
+            pss_kb=1064,
+            pss_readings_kb=[1024, 1064],
+            pssSamples=[
+                {"pss_kb": 1024, "processes": [dict(drift["measurementRoot"], pss_kb=1024)]},
+                {"pss_kb": 1064, "processes": [dict(drift["measurementRoot"], pss_kb=1064)]},
+            ],
+        )
+        with self.assertRaises(ProbeError):
+            control.checked_round(drift, 2, observed={(201, 10001)}, schema=3)
 
     def test_bad_timings_counts_and_correctness_are_rejected(self):
         mutations = [

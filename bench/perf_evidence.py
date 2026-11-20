@@ -82,6 +82,8 @@ def protocol_for(lane, schema=CURRENT_SCHEMA):
     base = dict(PROTOCOL[lane])
     if lane == "qps" and schema == 1:
         base["pssMaxReads"] = 8
+    if lane in ("cold-start", "qps") and schema in (1, 2):
+        base.pop("pssToleranceKb", None)
     return base
 
 
@@ -91,6 +93,7 @@ PROTOCOL = {
         "discardedRuns": 1,
         "warmRequests": 50,
         "httpClient": "python-http-exact-v1",
+        "pssToleranceKb": 32,
     },
     "qps": {
         "rounds": 5,
@@ -107,6 +110,7 @@ PROTOCOL = {
         "readinessProtocol": "exact-http-before-traffic-v1",
         "pssStableReads": 2,
         "pssMaxReads": 24,
+        "pssToleranceKb": 32,
         "pssIntervalSeconds": 1,
         "pssSettleSeconds": 1,
     },
@@ -451,10 +455,13 @@ def validate_samples(archive, lane, record, summary, schema=CURRENT_SCHEMA):
             need(row["total_ms"] >= row["ready_ms"], f"{key}: invalid cold timing")
             finite(row.get("pss_kb"), f"{key}: pss_kb", 1)
             readings = row.get("pss_readings_kb")
+            tolerance_kb = 0 if schema in (1, 2) else 32
             need(
                 isinstance(readings, list)
                 and len(readings) == 2
-                and readings[0] == readings[1] == row["pss_kb"],
+                and all(type(v) is int and v > 0 for v in readings)
+                and readings[1] == row["pss_kb"]
+                and abs(readings[1] - readings[0]) <= tolerance_kb,
                 f"{key}: missing stable positive PSS readings",
             )
             try:

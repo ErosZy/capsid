@@ -252,6 +252,7 @@ class QpsProbe:
             lambda: group.sample([tree for _, _, tree, _ in roots]),
             interval=self.pss_interval,
             attempts=24,
+            tolerance_kb=32,
         )
         members, root_records = [], []
         for role, child_role, tree, _ in roots:

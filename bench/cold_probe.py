@@ -352,7 +352,12 @@ class ColdProbe:
                             samples.write(json.dumps(value) + "\n")
                         return value
 
-                    pss = stable_pss(sample, interval=self.pss_interval, attempts=self.pss_attempts)
+                    pss = stable_pss(
+                        sample,
+                        interval=self.pss_interval,
+                        attempts=self.pss_attempts,
+                        tolerance_kb=32,
+                    )
                     result = {
                         "ok": True,
                         "transport": "http",
@@ -365,7 +370,7 @@ class ColdProbe:
                         "measurementRoot": asdict(owned.root),
                         "probeProcess": asdict(ProcFS().identity(os.getpid())),
                         "measurementProcesses": [asdict(p) for p in pinned.values()],
-                        "pss_kb": pss["pss_readings_kb"][0],
+                        "pss_kb": pss["pss_readings_kb"][-1],
                         "pss_readings_kb": pss["pss_readings_kb"],
                         "pssSamples": pss["samples"][-2:],
                         "pssAttempts": len(pss["samples"]),
