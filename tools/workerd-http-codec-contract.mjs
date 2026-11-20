@@ -408,7 +408,9 @@ export function assertHttpCodecSourceEntries(entries, value, terminal) {
   assert.deepEqual(headers, [['host', 'localhost:' + port]]);
   assert.equal(entry.rawRequest, Buffer.from(entry.request + '\r\n\r\n').toString('base64'));
   assert.equal(entry.bytes, Buffer.byteLength(entry.request + '\r\n\r\n'));
-  assert.equal(entry.localAddress, '127.0.0.1');
+  const listeningAddresses =
+    value.targets[0].host === '127.0.0.1' ? ['127.0.0.1'] : ['127.0.0.1', '::1'];
+  assert.ok(listeningAddresses.includes(entry.localAddress), 'actual listening address');
   assert.equal(entry.localPort, port);
   assert.equal(entry.sent, reply.packet);
   assert.equal(entry.held, false);

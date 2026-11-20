@@ -289,8 +289,9 @@ void shared_service_budget(const char* worker) {
     rb.expect_exit = true;
     require(pb->recycle_worker(previous), "replacement exercises shared budget inheritance");
     require(wait_until([&] {
-                return previous->exited() && pb->ready_workers() == 1 &&
-                       pb->current_worker() != previous && budget->channels() == 0;
+                auto* current = pb->current_worker();
+                return previous->exited() && pb->ready_workers() == 1 && current != nullptr &&
+                       current != previous && budget->channels() == 0;
             }),
             "recycle releases old service slot before replacement READY");
     rb.expect_exit = false;
@@ -359,8 +360,9 @@ void replace_live(const char* worker, bool crash) {
             "old executor closes actual socket on crash/recycle");
     require(wait_until(
                 [&] {
-                    return previous->exited() && pool->ready_workers() == 1 &&
-                           pool->current_worker() != previous;
+                    auto* current = pool->current_worker();
+                    return previous->exited() && pool->ready_workers() == 1 && current != nullptr &&
+                           current != previous;
                 },
                 std::chrono::seconds(10)),
             "same generation replacement reaches READY");

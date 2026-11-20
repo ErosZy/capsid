@@ -138,7 +138,7 @@ for (const sample of readHttpCodecSamples(lock).flatMap((report) => report.cases
         (value) => (value.upstream[0].sent += 'AA=='),
         (value) => (value.upstream[0].rawRequest += 'AA=='),
         (value) => (value.upstream[0].bytes += 1),
-        (value) => (value.upstream[0].localAddress = '::1'),
+        (value) => (value.upstream[0].localAddress = '::2'),
         (value) => (value.upstream[0].localPort += 1),
         (value) => (value.upstream[0].request += '\r\nUpgrade: websocket'),
         (value) => (value.beforeAction[0].sent = ''),
@@ -378,4 +378,18 @@ for (const [name, mutate] of [
     const value = structuredClone(resetCase);
     mutate(value);
     reject(() => assertHttpCodecSourceEntries(value.failureUpstream, value, true));
+  });
+test('localhost codec source accepts actual owned IPv6 loopback without changing HTTP semantics', () => {
+  const sample = readHttpCodecSamples(lock)[0].cases[0];
+  const value = structuredClone(sample);
+  for (const key of ['beforeAction', 'upstream'])
+    for (const entry of value[key]) entry.localAddress = '::1';
+  assert.doesNotThrow(() => assertHttpCodecCase(value, 'reference'));
+});
+for (const address of ['::2', '::ffff:127.0.0.1', 'fe80::1'])
+  test('codec source rejects unowned IPv6 address ' + address, () => {
+    const sample = readHttpCodecSamples(lock)[0].cases[0];
+    const value = structuredClone(sample);
+    value.upstream[0].localAddress = address;
+    reject(() => assertHttpCodecCase(value, 'reference'), /actual listening address/);
   });

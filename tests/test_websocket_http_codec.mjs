@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { startCapsid, stopCapsid } from './helpers/ws_host_backend.mjs';
+import { startCapsid, stopCapsid, listenLoopbackTcp } from './helpers/ws_host_backend.mjs';
 import { waitForWorkerdListen } from './helpers/workerd_listener_control.mjs';
 import { responseSession } from './helpers/ws_response_client.mjs';
 import {
@@ -101,7 +100,7 @@ async function startCodecUpstream(id, challenge) {
     reply = httpCodecReply(id, challenge);
   const sockets = /* @__PURE__ */ new Map(),
     records = [];
-  const listener = net.createServer({ allowHalfOpen: true }, (socket) => {
+  const listener = await listenLoopbackTcp((socket) => {
     const item = {
       request: null,
       rawRequest: '',
@@ -164,12 +163,8 @@ async function startCodecUpstream(id, challenge) {
       }
     });
   });
-  await new Promise((resolve, reject) => {
-    listener.once('error', reject);
-    listener.listen(0, '127.0.0.1', resolve);
-  });
   return {
-    port: listener.address().port,
+    port: listener.port,
     records,
     snapshot() {
       return structuredClone(records);
@@ -179,7 +174,7 @@ async function startCodecUpstream(id, challenge) {
         item.fixtureDestroyed = true;
         socket.destroy();
       }
-      await new Promise((resolve) => listener.close(resolve));
+      await listener.close();
     },
   };
 }
