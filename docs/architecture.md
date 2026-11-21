@@ -103,7 +103,7 @@ Compile-time conditions, authenticated module/origin/resource gates and the
 profile-specific final-binary positive/negative audits jointly support the
 boundary. "Unreachable by convention" is not a security mechanism.
 
-The final artifact retains `quickjs-turbo` (QuickJS-NG 0.15.1-derived, using a zero-JIT native register-frame interpreter on Linux x86-64 and a portable C fallback on sanitizer and non-Linux-x86-64 builds), libuv, WAMR, the Web API implementation, and the DNS/TLS/HTTP client required for standard `fetch()`. mimalloc is optional and disabled by default. The vendor trees (`vendor/txiki.js` and `vendor/quickjs-turbo`) are not modified in place: CMake creates an overlay in the build directory and applies `patches/txiki/` in order.
+The final artifact retains `quickjs-turbo` (QuickJS-NG 0.15.1-derived, using a zero-JIT native register-frame interpreter on Linux x86-64, Linux ARM64 and macOS Intel x86-64 non-sanitizer Ninja builds, and a portable C fallback with Hybrid GC and C-level backports on Apple Silicon, Windows MSVC and sanitizer builds), libuv, WAMR, the Web API implementation, and the DNS/TLS/HTTP client required for standard `fetch()`. mimalloc is optional and disabled by default. The vendor trees (`vendor/txiki.js` and `vendor/quickjs-turbo`) are not modified in place: CMake creates an overlay in the build directory and applies `patches/txiki/` in order.
 
 ## Security Boundary
 

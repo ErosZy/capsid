@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 53cc1ea..96220e3 100644
+index 53cc1ea..b045ad9 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -246,7 +246,39 @@ add_executable(tjsc EXCLUDE_FROM_ALL
+@@ -246,7 +246,44 @@ add_executable(tjsc EXCLUDE_FROM_ALL
  ### Dependencies
  ###
  
@@ -22,20 +22,25 @@ index 53cc1ea..96220e3 100644
 +set(QJS_HYBRID_GC ON CACHE BOOL "" FORCE)
 +if(BUILD_WITH_ASAN OR BUILD_WITH_UBSAN OR CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
 +    set(QJS_FRAME_BACKEND "PORTABLE" CACHE STRING "" FORCE)
-+elseif(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$"))
++elseif(NOT (
++    (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|aarch64|arm64|ARM64)$")
++    OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")))
 +    set(QJS_FRAME_BACKEND "PORTABLE" CACHE STRING "" FORCE)
 +elseif(NOT DEFINED QJS_FRAME_BACKEND)
 +    set(QJS_FRAME_BACKEND "AUTO" CACHE STRING "" FORCE)
 +endif()
 +set(_capsid_saved_ipo "${CMAKE_INTERPROCEDURAL_OPTIMIZATION}")
-+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
-+   AND CMAKE_C_COMPILER_ID STREQUAL "GNU"
-+   AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 13
++if(((CMAKE_SYSTEM_NAME STREQUAL "Linux"
++     AND CMAKE_C_COMPILER_ID STREQUAL "GNU"
++     AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 13)
++    OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin"
++        AND CMAKE_C_COMPILER_ID MATCHES "Clang"
++        AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$"))
 +   AND CMAKE_SIZEOF_VOID_P EQUAL 8
 +   AND NOT CMAKE_CROSSCOMPILING
 +   AND NOT (QJS_FRAME_BACKEND STREQUAL "PORTABLE"))
-+    # Linux native x86-64 register-frame assembly VM does not admit LTO on libqjs;
-+    # keep LTO active for tjs and capsid-worker while building libqjs natively.
++    # Native register-frame assembly VMs (Linux x86-64/ARM64, macOS x86-64)
++    # do not admit LTO on libqjs; keep LTO active for tjs and capsid-worker.
 +    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
 +endif()
 +add_subdirectory(deps/quickjs/vm EXCLUDE_FROM_ALL)
@@ -83,7 +88,7 @@ index aa09e00..40ddc94 100644
      b = p->u.func.function_bytecode;
      sf->is_strict_mode = b->is_strict_mode;
 diff --git a/deps/quickjs/vm/CMakeLists.txt b/deps/quickjs/vm/CMakeLists.txt
-index 526661d..115960c 100644
+index d2574ae..618d1bc 100644
 --- a/deps/quickjs/vm/CMakeLists.txt
 +++ b/deps/quickjs/vm/CMakeLists.txt
 @@ -100,6 +100,7 @@ message(
@@ -94,8 +99,7 @@ index 526661d..115960c 100644
      check_c_compiler_flag(${FLAG} COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
      if(COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
          add_compile_options("$<$<COMPILE_LANGUAGE:C>:${FLAG}>")
-@@ -470,7 +471,8 @@ if(QJS_FRAME_BACKEND_EFFECTIVE STREQUAL "WIN64")
-     endif()
+@@ -471,7 +472,8 @@ if(QJS_FRAME_BACKEND_EFFECTIVE STREQUAL "WIN64")
  endif()
  target_include_directories(
      qjs
@@ -104,6 +108,20 @@ index 526661d..115960c 100644
 +    PUBLIC $<BUILD_INTERFACE:${QJS_UPSTREAM_DIR}>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
  target_link_libraries(qjs PUBLIC ${qjs_libs})
+ 
+diff --git a/deps/quickjs/vm/asm/arm64/common/register-property-ic.inc b/deps/quickjs/vm/asm/arm64/common/register-property-ic.inc
+index 861fd26..9efb93a 100644
+--- a/deps/quickjs/vm/asm/arm64/common/register-property-ic.inc
++++ b/deps/quickjs/vm/asm/arm64/common/register-property-ic.inc
+@@ -199,6 +199,8 @@
+     ldr x12, [x5, #ARM_OFF_JSPropertyICWay_epoch]
+     cmp x11, x12
+     b.ne .Lproperty_pic_slow
++    ldr x7, [x0, #ARM_OFF_JSObject_prop]
++    cbz x7, .Lproperty_pic_slow
+     ldr x7, [x5, #ARM_OFF_JSPropertyICWay_transition]
+     ldrb w13, [x7, #ARM_OFF_JSShape_is_hashed]
+     tst w13, #ARM_CONST_JS_IC_PROTO_WEAK
 diff --git a/deps/quickjs/vm/cmake/QuickJSUpstreamPin.cmake b/deps/quickjs/vm/cmake/QuickJSUpstreamPin.cmake
 index b5fb006..23c1841 100644
 --- a/deps/quickjs/vm/cmake/QuickJSUpstreamPin.cmake
@@ -119,6 +137,160 @@ index b5fb006..23c1841 100644
      "quickjs-opcode.h:0054b0c45fd091afa308c3fb93b5862e0b071235918d3d73e413d23fce388bbc"
      "quickjs-atom.h:66654ae6533d15073ea527979c453709d7ed83162142c656095a10dcef737a60"
      "quickjs-c-atomics.h:29883c742a5c512278fce54d19b1b9af949006e1d7dfc9ffa2e0946b184d8c5c"
+diff --git a/deps/quickjs/vm/cmake/arm64/Interpreter.cmake b/deps/quickjs/vm/cmake/arm64/Interpreter.cmake
+index 1ce8b75..53aa427 100644
+--- a/deps/quickjs/vm/cmake/arm64/Interpreter.cmake
++++ b/deps/quickjs/vm/cmake/arm64/Interpreter.cmake
+@@ -442,7 +442,7 @@ add_custom_command(
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/common/backports/hybrid_gc.py"
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/common/backports/keyed_async.py"
+             "${CMAKE_CURRENT_BINARY_DIR}/generated/backports/BACKPORTS.json"
+-            "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
++            "${CMAKE_BINARY_DIR}/compile_commands.json"
+     VERBATIM)
+ add_custom_target(qjs-aarch64-vm-inputs DEPENDS "${qjs_arm_vm_dir}/VM.json")
+ set_source_files_properties("${qjs_arm_vm_core}" PROPERTIES GENERATED TRUE)
+diff --git a/deps/quickjs/vm/cmake/arm64/InterpreterOptions.cmake b/deps/quickjs/vm/cmake/arm64/InterpreterOptions.cmake
+index 16501f7..eb72fec 100644
+--- a/deps/quickjs/vm/cmake/arm64/InterpreterOptions.cmake
++++ b/deps/quickjs/vm/cmake/arm64/InterpreterOptions.cmake
+@@ -1,13 +1,13 @@
+-# Explicit opt-in; qualification is bound to a source, toolchain and actual image.
++# Linux AArch64 AAPCS64 native backend (glibc and musl); supports AUTO fallback.
++set(frame_unavailable "")
+ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux"
+    OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8
+    OR NOT CMAKE_C_COMPILER_ID STREQUAL "GNU"
+    OR CMAKE_C_COMPILER_VERSION VERSION_LESS 13
+    OR NOT CMAKE_GENERATOR STREQUAL "Ninja"
+    OR CMAKE_VERSION VERSION_LESS 3.20)
+-    message(FATAL_ERROR "LINUX_AARCH64 requires Linux LP64, GCC 13+, CMake 3.20+ and Ninja")
+-endif()
+-if(BUILD_SHARED_LIBS
++    set(frame_unavailable "LINUX_AARCH64 requires Linux LP64, GCC 13+, CMake 3.20+ and Ninja")
++elseif(BUILD_SHARED_LIBS
+    OR QJS_BUILD_CLI_STATIC
+    OR QJS_ENABLE_ASAN
+    OR QJS_ENABLE_MSAN
+@@ -20,50 +20,65 @@ if(BUILD_SHARED_LIBS
+    OR CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO
+    OR CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL
+    OR NOT QJS_BACKPORT_CONTEXT_OOM)
+-    message(
+-        FATAL_ERROR
+-            "LINUX_AARCH64 currently requires static qjs, source overlays, no LTO/sanitizers or old VM diagnostics"
+-    )
+-endif()
+-if("${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_FLAGS_MINSIZEREL}"
++    set(frame_unavailable
++        "LINUX_AARCH64 currently requires static qjs, source overlays, no LTO/sanitizers or old VM diagnostics")
++elseif("${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_FLAGS_MINSIZEREL}"
+    MATCHES
+    "-mabi=|-fpack-struct|-fshort-enums|-flto|-fsanitize")
+-    message(FATAL_ERROR "LINUX_AARCH64 does not admit ABI-altering, LTO or sanitizer flags")
+-endif()
+-if("${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_FLAGS_MINSIZEREL}"
++    set(frame_unavailable "LINUX_AARCH64 does not admit ABI-altering, LTO or sanitizer flags")
++elseif("${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_FLAGS_MINSIZEREL}"
+    MATCHES
+-   "-Ofast|-ffast-math|-ffinite-math-only|-funsafe-math-optimizations|-fno-signed-zeros|-freciprocal-math|-fassociative-math|-fno-trapping-math|-fsingle-precision-constant"
+-)
+-    message(
+-        FATAL_ERROR
+-            "LINUX_AARCH64 requires IEEE double arithmetic, signed zero and NaN semantics; unsafe floating-point flags are not qualified"
+-    )
++   "-Ofast|-ffast-math|-ffinite-math-only|-funsafe-math-optimizations|-fno-signed-zeros|-freciprocal-math|-fassociative-math|-fno-trapping-math|-fsingle-precision-constant")
++    set(frame_unavailable
++        "LINUX_AARCH64 requires IEEE double arithmetic, signed zero and NaN semantics; unsafe floating-point flags are not qualified")
+ endif()
+-foreach(required REGISTER_ABI INTERNAL_ENTRY)
+-    if(DEFINED QJS_INTERP_FRAME_${required} AND NOT QJS_INTERP_FRAME_${required})
+-        message(
+-            FATAL_ERROR
+-                "LINUX_AARCH64 requires register ABI and internal entry; select PORTABLE to disable them"
+-        )
++if(NOT frame_unavailable)
++    foreach(required REGISTER_ABI INTERNAL_ENTRY)
++        if(DEFINED QJS_INTERP_FRAME_${required} AND NOT QJS_INTERP_FRAME_${required})
++            set(frame_unavailable
++                "LINUX_AARCH64 requires register ABI and internal entry; select PORTABLE to disable them")
++        endif()
++    endforeach()
++    foreach(unsupported TAIL_ENTRY INLINE_WINDOW ITERATOR_LITERAL LEAF_ENTRY)
++        if(QJS_INTERP_FRAME_${unsupported})
++            set(frame_unavailable
++                "LINUX_AARCH64 has not implemented ${unsupported}; omit this option for the experimental tier")
++        endif()
++    endforeach()
++endif()
++if(NOT frame_unavailable)
++    include(CheckCSourceCompiles)
++    unset(QJS_AARCH64_VM_TARGET CACHE)
++    check_c_source_compiles(
++        "#include <fenv.h>\n#if !defined(__aarch64__) || !defined(__linux__) || !defined(__LP64__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__\n#error Linux AArch64 LE LP64 required\n#endif\n#if defined(__ARM_FEATURE_BTI_DEFAULT) || defined(__ARM_FEATURE_PAC_DEFAULT)\n#error BTI/PAC not qualified\n#endif\n_Static_assert(FE_TONEAREST == 0, \"FPCR nearest\");\nint main(void){return 0;}"
++        QJS_AARCH64_VM_TARGET)
++    if(NOT QJS_AARCH64_VM_TARGET)
++        set(frame_unavailable "LINUX_AARCH64 requires an actual AArch64 LE LP64 compiler without BTI/PAC")
+     endif()
+-endforeach()
+-foreach(unsupported TAIL_ENTRY INLINE_WINDOW ITERATOR_LITERAL LEAF_ENTRY)
+-    if(QJS_INTERP_FRAME_${unsupported})
+-        message(
+-            FATAL_ERROR
+-                "LINUX_AARCH64 has not implemented ${unsupported}; omit this option for the experimental tier"
+-        )
++    find_package(Python3 3.10 QUIET COMPONENTS Interpreter)
++    if(NOT Python3_Interpreter_FOUND)
++        set(frame_unavailable "LINUX_AARCH64 requires Python 3.10 or newer")
+     endif()
+-endforeach()
+-include(CheckCSourceCompiles)
+-unset(QJS_AARCH64_VM_TARGET CACHE)
+-check_c_source_compiles(
+-    "#include <features.h>\n#if !defined(__GLIBC__)\n#error First AArch64 backend requires glibc\n#endif\n#if !defined(__aarch64__) || !defined(__linux__) || !defined(__LP64__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__\n#error Linux AArch64 LE LP64 required\n#endif\n#if defined(__ARM_FEATURE_BTI_DEFAULT) || defined(__ARM_FEATURE_PAC_DEFAULT)\n#error BTI/PAC not qualified\n#endif\nint main(void){return 0;}"
+-    QJS_AARCH64_VM_TARGET)
+-if(NOT QJS_AARCH64_VM_TARGET)
+-    message(FATAL_ERROR "LINUX_AARCH64 requires an actual AArch64 LE LP64 compiler without BTI/PAC")
+ endif()
+-find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
++if(frame_unavailable)
++    if(frame_requested STREQUAL "LINUX_AARCH64")
++        message(FATAL_ERROR "QJS_FRAME_BACKEND=LINUX_AARCH64: ${frame_unavailable}. Use PORTABLE or AUTO for fallback.")
++    endif()
++    message(STATUS "QuickJS frame AUTO fallback: ${frame_unavailable}")
++    set(QJS_ENABLE_INTERP_FRAME OFF)
++    set(QJS_FRAME_BACKEND_EFFECTIVE PORTABLE)
++    set(QJS_INTERP_FRAME_REGISTER_ABI OFF)
++    set(QJS_INTERP_FRAME_INTERNAL_ENTRY OFF)
++    foreach(feature DIAGNOSTICS TAIL_ENTRY INLINE_WINDOW ITERATOR_LITERAL LEAF_ENTRY GLOBAL_BINDING)
++        set(QJS_INTERP_FRAME_${feature} OFF)
++    endforeach()
++    message(STATUS "QuickJS frame backend: PORTABLE (requested ${frame_requested})")
++    file(
++        WRITE "${CMAKE_CURRENT_BINARY_DIR}/interpreter-backend.json"
++        "{\"schema\":1,\"requested\":\"${frame_requested}\",\"effective\":\"PORTABLE\",\"fallback_reason\":\"${frame_unavailable}\"}\n"
++    )
++    return()
++endif()
+ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ set(QJS_ENABLE_INTERP_FRAME ON)
+ set(QJS_FRAME_BACKEND_EFFECTIVE LINUX_AARCH64)
+diff --git a/deps/quickjs/vm/cmake/common/InterpreterOptions.cmake b/deps/quickjs/vm/cmake/common/InterpreterOptions.cmake
+index 44e9e9d..a1f649e 100644
+--- a/deps/quickjs/vm/cmake/common/InterpreterOptions.cmake
++++ b/deps/quickjs/vm/cmake/common/InterpreterOptions.cmake
+@@ -69,7 +69,10 @@ if(NOT frame_requested MATCHES "^(PORTABLE|AUTO|WIN64|LINUX_X86_64|LINUX_AARCH64
+     )
+ endif()
+ 
+-if(frame_requested STREQUAL "LINUX_AARCH64")
++if(frame_requested STREQUAL "LINUX_AARCH64"
++   OR (frame_requested STREQUAL "AUTO"
++       AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
++       AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$"))
+     include("${CMAKE_CURRENT_LIST_DIR}/../arm64/InterpreterOptions.cmake")
+     return()
+ endif()
 diff --git a/deps/quickjs/vm/cmake/x86/linux/Interpreter.cmake b/deps/quickjs/vm/cmake/x86/linux/Interpreter.cmake
 index 750499e..dfec78e 100644
 --- a/deps/quickjs/vm/cmake/x86/linux/Interpreter.cmake
@@ -132,6 +304,360 @@ index 750499e..dfec78e 100644
      WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
      COMMENT "Measure Linux private ABI and generate native C/ELF sources"
      VERBATIM)
+diff --git a/deps/quickjs/vm/cmake/x86/macos/Interpreter.cmake b/deps/quickjs/vm/cmake/x86/macos/Interpreter.cmake
+index 20c0258..4e0f978 100644
+--- a/deps/quickjs/vm/cmake/x86/macos/Interpreter.cmake
++++ b/deps/quickjs/vm/cmake/x86/macos/Interpreter.cmake
+@@ -141,7 +141,7 @@ add_custom_command(
+             "${QJS_UPSTREAM_DIR}/quickjs-opcode.h"
+             "${QJS_UPSTREAM_DIR}/quickjs-atom.h"
+             "${CMAKE_CURRENT_BINARY_DIR}/generated/backports/BACKPORTS.json"
+-            "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
++            "${CMAKE_BINARY_DIR}/compile_commands.json"
+     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+     COMMENT "Measure macOS private ABI and generate native C/Mach-O sources"
+     VERBATIM)
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/admission.json b/deps/quickjs/vm/src/arm64/linux/abi/admission.json
+index b32d28d..de91b39 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/admission.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/admission.json
+@@ -2,14 +2,14 @@
+   "schema": 1,
+   "target": "Linux AArch64 LE LP64/glibc/GCC/AAPCS64",
+   "source_owners": {
+-    "quickjs.c": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++    "quickjs.c": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+     "quickjs-opcode.h": "0054b0c45fd091afa308c3fb93b5862e0b071235918d3d73e413d23fce388bbc",
+     "src/common/call/quickjs-interpreter-loop.inc": "008dff05decf1449550fb9410e4c36ed6027347a8774ceda827c6409bf040e2f",
+     "src/common/call/interpreter-context-types.inc": "d06023f6c75af07582cb92c09c842575fa6e8f5a7d3e0d95f648220ab6078b31",
+     "src/common/call/large-code-policy.inc": "400f532cbcba9e505a142768f8ddbfb1a8b54e99b60297ec75dff963979d1061",
+     "src/common/regexp/interpreter-literal.inc": "1afa968ea62f8ff247c984aeb81a12ef3c5f903419056c450207b648f0dd4b69",
+     "tools/common/elf/admission_c.py": "c288e4ff83321d2de1eca92b40efe11de39c3d6b420c8819f8f5df68b534f272",
+-    "tools/arm64/vm/admission.py": "78a873014502d940bcc076ac0d584a82f60116b7b93586747ab27743b63abe27",
++    "tools/arm64/vm/admission.py": "29a0175c1c9f1f378e6198cf50c3453e6ce74c01b9f3d8defd1ae3fa950f8145",
+     "asm/arm64/common/register-regexp.inc": "44c0517fcb2e46cc6287575c20ecf25bb5760aa9593aaa057218e3b5309ce882"
+   },
+   "opcode": "Actual compiler OP_regexp;source definition1byte/pop2/push1/no immediate",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/async-generator.json b/deps/quickjs/vm/src/arm64/linux/abi/async-generator.json
+index a1ed886..1af981c 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/async-generator.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/async-generator.json
+@@ -1,6 +1,6 @@
+ {
+   "schema": 1,
+-  "source_sha256": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++  "source_sha256": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+   "cutils_sha256": "b93331edd1bf86e1c0b516657d0b16b95bba5f24d799d9824df16f903173b5c2",
+   "async_generator": {
+     "source_functions": {
+@@ -20,7 +20,7 @@
+   },
+   "target": "Linux AArch64 LE LP64/glibc/GCC/AAPCS64",
+   "source_owners": {
+-    "tools/common/elf/c_workers.py": "940ab7ac0b5105daef04449fe41d97052c81f1bb2adf576952a9370aeeb34ac4",
++    "tools/common/elf/c_workers.py": "c98c0079240f9e503b2ea5aa98fe9554e05438023080462eb46ccf4d3cf5a5df",
+     "tools/common/c_extract/generator_capability_c.py": "f8e07c3b5f8d2a48e9a5cc280bda5872466a9171ef746083fc43b6ec56b27fbe",
+     "src/common/promise/generator-capability.inc": "b88f5c22036b994813478e44c621c12bf20031bc5a2bcca2a58187fdea6d4aad"
+   },
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/comparisons.json b/deps/quickjs/vm/src/arm64/linux/abi/comparisons.json
+index 1162f63..7534da2 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/comparisons.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/comparisons.json
+@@ -14,7 +14,7 @@
+   "new_strong_roots": 0,
+   "extra_allocations": 0,
+   "hardware_performance_qualified": false,
+-  "pinned_core_sha256": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++  "pinned_core_sha256": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+   "retained_strict_slow_sha256": "bf460cd0a834f1ef64d1078f6baa85518c367c0d5b94ce1c937d27fee505a70c",
+   "string_bits": {
+     "JSString.len": [
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/constructors.json b/deps/quickjs/vm/src/arm64/linux/abi/constructors.json
+index 0c5f3b1..1918b31 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/constructors.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/constructors.json
+@@ -2,7 +2,7 @@
+   "schema": 1,
+   "target": "Linux AArch64 LE LP64/glibc/GCC",
+   "source_owners": {
+-    "tools/common/elf/constructors_c.py": "bf1fd246a51de98405458144cb4810065feeb0f6f25dd59da3ef3b4a91cf690d",
++    "tools/common/elf/constructors_c.py": "e062455065f30ad428cd01a60bd1114d4fd7da29bca2d45b43ac9d8d9b75e2a6",
+     "tools/common/elf/forwarding_c.py": "e9f25448e9748e64f8b7cf563194491fc7fd4361291267ecea7fec3dff06788e",
+     "tools/common/c_extract/construct_continuation_c.py": "e46aa712957a389d30bccc38a5b78451f50e953acc05df4e58d803e5184af4c0",
+     "tools/common/c_extract/iterator_c.py": "0554c241dc5c6214a70ba221b6f30ae106bb125403b1b9891488e4bf400cd679",
+@@ -15,8 +15,8 @@
+     "src/common/call/quickjs-interpreter-ops.inc": "51f551fbbb7a2afc99221abcde7259d0dd31dff432a9e1f3b52fa81ac91330e6",
+     "src/common/kernel/construct.inc": "c9e65be7e5d6205bd2ccd71a4ba866958decf0c085c02d2f1cb8e840d09cac3e",
+     "asm/arm64/common/register-constructors.inc": "531799cc9be9470c8e8f9f7c0aeeb1470d93885c90c99552caf3b8009a771594",
+-    "tools/common/backports/bellard_backports.py": "040c59abf23330d4665927ed4a1d3f925ef9e7fffb8988407de5778b1018e63d",
+-    "tools/common/c_extract/slow_direct_c.py": "3b8507cb929e082905605b5143047c6cdc641c14e060d3434117ffb514135e7d",
++    "tools/common/backports/bellard_backports.py": "612bd4ee628075fe9f2e66175c5fd91276a2e0211be5b409815e0b44349efa02",
++    "tools/common/c_extract/slow_direct_c.py": "df39b21efdfd96996e8d3489f2fe98e7f6dfa5ea5ef38ea349f6847fea39b558",
+     "tools/common/c_extract/call_forward_c.py": "04acb7c0a43daef064cf5831b1b583e04756c5a77cc167335c34c7c159bde57f"
+   },
+   "scope": "Complete ordinary root3 construction/return and original complete catch/iterator/append/apply cleanup dependency",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/fast-vm.json b/deps/quickjs/vm/src/arm64/linux/abi/fast-vm.json
+index 99bedf7..06d6530 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/fast-vm.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/fast-vm.json
+@@ -3,13 +3,13 @@
+   "default_enabled": true,
+   "cmake_option": "QJS_AARCH64_FAST_VM",
+   "source_owners": {
+-    "quickjs.c": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
+-    "quickjs.h": "8011dd97fbeb1cc551020f90dde4b4f21f83a6145b6254b5e815f6d885ed3874",
++    "quickjs.c": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
++    "quickjs.h": "734c76d4cdbb942ece7ed993fb437701f1c05f919b92def618f55e32dc8beeb3",
+     "quickjs-opcode.h": "0054b0c45fd091afa308c3fb93b5862e0b071235918d3d73e413d23fce388bbc",
+     "asm/arm64/linux/interpreter.S": "caf2819f1081525458669f6eed9b4f09ef174e58bd3709d81d3e851cb43823c0",
+     "asm/arm64/common/register-ops.inc": "7aad6f2b49041f5bb8c924e7816ae544af650bff771d3216f5d7c3ea53c1ada4",
+     "asm/arm64/common/register-scalar-ops.inc": "a283cad5653d0342a7931486478a882f3e5fd479aed4aaabdd8b18bdbe6c2c52",
+-    "asm/arm64/common/register-property-ic.inc": "135d5fb9fe0df8a2e1cb128c9139cc8caf27bae60692cf3a258f670d2268c3a5",
++    "asm/arm64/common/register-property-ic.inc": "7656774dc47995230d5b081acef3e6f19a13ecf0c63e1e4c075cb917201bbd4e",
+     "asm/arm64/common/register-property-hints.inc": "fbdaabe9e17ff785333025815ad5ea647afcd6e9b788df458d5b4cb6cae56ef7",
+     "asm/arm64/common/register-call.inc": "c26cbd35bd93236f6b9b7bfe5f020cabc07b73da9fa46558c824be74cabf753a",
+     "asm/arm64/common/register-constructors.inc": "531799cc9be9470c8e8f9f7c0aeeb1470d93885c90c99552caf3b8009a771594",
+@@ -24,7 +24,7 @@
+     "tools/arm64/vm/number_dataflow.py": "4706d912a71260b5c967e058f91d25a1de4515a6e7aa4647e50b1e96d14f9cc6",
+     "src/common/property/inline-properties.h": "9e2b405fa3071595d1674af0284bd81012e53ed6bedd2bd9f4d0297e4c846da8",
+     "src/common/property/inline-closure-properties.inc": "5e1bcfd5566739c4ad44d5eb19f66abc425afaacaca18e1b3cf8701ccf464b3b",
+-    "src/common/property/inline-property-ic-storage.inc": "d69028d5bfe4fd8759b0b69437ba6eb70c1bd8b91a0cd8b0d821fbbb6a6552bb",
++    "src/common/property/inline-property-ic-storage.inc": "311bfccbd864179abf95cc46f47acc49eb2cd8f568f04732f5b5e7703127b9c7",
+     "src/common/property/fast-transition-resize.inc": "13308575c0bcc8f2f6012c6b36a6609ab7fd29e59bc053ca523470a74847f9e3",
+     "src/common/property/fast-get-field.inc": "e1b93b745161544367befbcce6888c4603447865043cf4e9d9acffde227d29a6",
+     "src/common/value/instanceof-fast.inc": "08863820af5fb83e6c1c3f7d4570b9ecdccf388c9477d52984a3916313d392c5",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/global-bindings.json b/deps/quickjs/vm/src/arm64/linux/abi/global-bindings.json
+index b682daf..777780b 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/global-bindings.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/global-bindings.json
+@@ -9,7 +9,7 @@
+     "src/common/call/interpreter-context-types.inc": "d06023f6c75af07582cb92c09c842575fa6e8f5a7d3e0d95f648220ab6078b31",
+     "src/common/property/global-binding-cell.inc": "367241f4e3466cd43d975cec9ff2333ebf1cb9e6bace43edd56887ba982fdcc2",
+     "src/common/property/property-ic.h": "5606d8ccbd8fbbeafc5b129df402febf49011faef84472ffcab66018125f7702",
+-    "src/common/property/property-ic.inc": "fe1a151295a3ab439eebbcf5979b646a369efea6597f42c565f98dae3f992442",
++    "src/common/property/property-ic.inc": "ad28db8a7d45866f09dfe6bf0778b1c427b4ecb0ede58d71c449a0ece4e0cf5a",
+     "src/common/property/property-ic-lifetime.inc": "68578bb940fbfe8d56b2b43fefbaa291475d0766ad13e9e3920a979ed3350388",
+     "asm/arm64/common/register-global-bindings.inc": "ffda4341bfd788db0a29e80d2e14f489e550d4593d5bb61a54393d7660bbe814"
+   },
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/indexed.json b/deps/quickjs/vm/src/arm64/linux/abi/indexed.json
+index c563bb1..399edf3 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/indexed.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/indexed.json
+@@ -3,7 +3,7 @@
+   "target": "Linux AArch64 LE LP64 GCC",
+   "source_owners": {
+     "tools/common/elf/indexed_ops_c.py": "fe5c87b478a5747fea2e85aa0ab7d549c5b4713de51d0f0d79e75fa785da5f28",
+-    "tools/common/c_extract/slow_direct_c.py": "3b8507cb929e082905605b5143047c6cdc641c14e060d3434117ffb514135e7d",
++    "tools/common/c_extract/slow_direct_c.py": "df39b21efdfd96996e8d3489f2fe98e7f6dfa5ea5ef38ea349f6847fea39b558",
+     "tools/common/c_extract/array_append_c.py": "fc2c4a2d8bc3b0a53aefc9bfae06b48fd9bae81fdc6270a86e78cf5a29cff5c8",
+     "tools/common/c_extract/publish_boundary_c.py": "e1d8f1d7e91ae80ba8af1f34b4a92f69d5f1549b45c3c8d09e8683da69277fc9",
+     "src/common/value/instanceof.c": "b6436a90383e0c799ce2621296ea5873f5173d7e90dff4f477ba95d219736b8b",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/iterators.json b/deps/quickjs/vm/src/arm64/linux/abi/iterators.json
+index 74029f6..bbf6468 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/iterators.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/iterators.json
+@@ -6,7 +6,7 @@
+     "src/common/call/interpreter-context-types.inc": "d06023f6c75af07582cb92c09c842575fa6e8f5a7d3e0d95f648220ab6078b31",
+     "src/common/call/quickjs-interpreter-register.h": "c9c63178bb3300dd2f6f0c45cefcf72c8117f0681827f0e74043a66f9169b3e3",
+     "tools/common/elf/arguments_c.py": "a8e31ca1840b84115ce1da3ef64f8f0823d8b3d8cb7e02d05576a9c24df69daf",
+-    "tools/common/elf/iterators_c.py": "93d4f6c94093522b4e09c17ff8569bbcacc390c4bf3612ac7c4f29440434240a",
++    "tools/common/elf/iterators_c.py": "50151a4b2b9ea14d04d545d12750b190499552bf9aa0dc57222a4f7fb3ff3f08",
+     "tools/common/c_extract/iterator_c.py": "0554c241dc5c6214a70ba221b6f30ae106bb125403b1b9891488e4bf400cd679",
+     "tools/common/c_extract/varargs_c.py": "88bf454180cf5b59818c8d8967d70a441b976f73b03675e9ffc32bc974a5e144"
+   },
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/json.json b/deps/quickjs/vm/src/arm64/linux/abi/json.json
+index 19acfe8..7072ccf 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/json.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/json.json
+@@ -2,7 +2,7 @@
+   "schema": 1,
+   "target": "Linux AArch64 LE LP64/glibc/GCC/AdvSIMD/AAPCS64",
+   "source_owners": {
+-    "quickjs.c": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++    "quickjs.c": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+     "cutils.h": "b93331edd1bf86e1c0b516657d0b16b95bba5f24d799d9824df16f903173b5c2",
+     "tools/common/elf/json_workers.py": "427325a34c2c5d562e4268ca97bf9ecde09edea81fee246c2191126a97672d75",
+     "tools/arm64/workers/json_worker.py": "adcafa68baa8bdac6e7a7744e41817b32070a8d9b59b8e48bcbd3871a3b21764",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/linear-return.json b/deps/quickjs/vm/src/arm64/linux/abi/linear-return.json
+index 0333245..5a8f81a 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/linear-return.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/linear-return.json
+@@ -6,7 +6,7 @@
+     "asm/arm64/common/register-host-return.inc": "b6a1a7a85064aef13734c74faad28ea855105e8cd8e06824e41150e063125439",
+     "src/common/call/quickjs-interpreter-loop.inc": "008dff05decf1449550fb9410e4c36ed6027347a8774ceda827c6409bf040e2f",
+     "tools/arm64/vm/publication.py": "6ab668624903dcdaac8007208a6cc4eaae84fdf7f8c0205ac28e120aac163044",
+-    "tools/common/elf/constructors_c.py": "bf1fd246a51de98405458144cb4810065feeb0f6f25dd59da3ef3b4a91cf690d"
++    "tools/common/elf/constructors_c.py": "e062455065f30ad428cd01a60bd1114d4fd7da29bca2d45b43ac9d8d9b75e2a6"
+   },
+   "protocol": "Detach each consumed slot before release; ascending callee then exact original expanded pop and publication token, then ascending caller pending operands. x23/x24 cursor/end and x28 flags survive typed Free; original state.result owns return across reentry; all pre-consumption declines retain original owner; no partial replay.",
+   "physical_frame_growth": 0,
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/null-proto.json b/deps/quickjs/vm/src/arm64/linux/abi/null-proto.json
+index bfe5db3..dbc6556 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/null-proto.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/null-proto.json
+@@ -3,7 +3,7 @@
+   "target": "Linux/glibc/GCC AAPCS64",
+   "source_owners": {
+     "tools/common/elf/null_proto_c.py": "dae5c11c44cf48128e64c3973af7989312cd58970fec7e8c10559682612301ba",
+-    "tools/common/c_extract/null_arena_c.py": "e367fae11e3c7066ddea6c0cb5a03169cf8863ba1f58c37f6d187e02c7906c73",
++    "tools/common/c_extract/null_arena_c.py": "59a913242a10ad9ae6354f29df74ce735b13f88ce458955e4bcc0b728121dd23",
+     "src/common/linux/interpreter-null-proto.inc": "cd3ec0149063a62fe20e93238e24aae15cc76291c10c6ae7b2744d5ecc7f64a8",
+     "src/common/call/interpreter-slow-host.inc": "9ff6491b530105e0f3025d768fb280a49481f5fbd9d3627a8bfdb672660b3853",
+     "src/common/call/interpreter-current-function-null.inc": "e4b605a7966e3ebb0f55373ecb6a07373b48c930b057363839d073b0d5f1890c",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/number-dataflow.json b/deps/quickjs/vm/src/arm64/linux/abi/number-dataflow.json
+index a19fd55..3369f1b 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/number-dataflow.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/number-dataflow.json
+@@ -19,7 +19,7 @@
+     "asm/arm64/common/register-numeric.inc": "40e18b074ad4df7baca5a9f2472bbdafbd66ce37573432c5009189040d8b1041",
+     "asm/arm64/common/register-ops.inc": "7aad6f2b49041f5bb8c924e7816ae544af650bff771d3216f5d7c3ea53c1ada4",
+     "asm/arm64/common/register-property-hints.inc": "fbdaabe9e17ff785333025815ad5ea647afcd6e9b788df458d5b4cb6cae56ef7",
+-    "asm/arm64/common/register-property-ic.inc": "135d5fb9fe0df8a2e1cb128c9139cc8caf27bae60692cf3a258f670d2268c3a5",
++    "asm/arm64/common/register-property-ic.inc": "7656774dc47995230d5b081acef3e6f19a13ecf0c63e1e4c075cb917201bbd4e",
+     "asm/arm64/common/register-property-primitives.inc": "fa3c1600226b8f54420d1634a2f6997cb75d297a2043a7c355416b02f23d5946",
+     "asm/arm64/common/register-property-prototypes.inc": "03c941170d31327cd0729baea089ddf5ac661660edf17f1f640d5bd5665f7b46",
+     "asm/arm64/common/register-reference-stores.inc": "30db27b7371ceec79b04505a50f5b9b63a1e7c790226ca6baa9d14fdee285a10",
+@@ -33,13 +33,13 @@
+     "asm/arm64/common/register-varargs.inc": "5f57f79164c20f2940fc29923c4d8bf161a991d3676f45cf6178ae78f4945264",
+     "asm/arm64/linux/interpreter.S": "caf2819f1081525458669f6eed9b4f09ef174e58bd3709d81d3e851cb43823c0",
+     "quickjs-opcode.h": "0054b0c45fd091afa308c3fb93b5862e0b071235918d3d73e413d23fce388bbc",
+-    "quickjs.c": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++    "quickjs.c": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+     "tools/arm64/vm/number_dataflow.py": "4706d912a71260b5c967e058f91d25a1de4515a6e7aa4647e50b1e96d14f9cc6",
+     "tools/arm64/vm/publication.py": "6ab668624903dcdaac8007208a6cc4eaae84fdf7f8c0205ac28e120aac163044",
+     "tools/arm64/vm/vm_source.py": "a404ef51dae5f14f15edc6cee4dc83d5e0c71b607f2e0a1db47591913c66152e",
+     "tools/arm64/vm/value_flow.py": "852199711ab7fd0e3f81f7177569a19c1c2200b1caece845dda78d3f3f4163ca",
+     "tools/arm64/vm/linear_return.py": "339bba44b508e7e06f50df74b8d042bbf96fb7165b74829fc046d88559c59c13",
+-    "src/arm64/linux/abi/linear-return.json": "d48c883f1f1a4372cdca7fee847fce9453d0399a2656a1a2fd39597384fd1676"
++    "src/arm64/linux/abi/linear-return.json": "021d54d27ee3be325fa3786c6edfe9c5fa26b5e483d09f38af895f93b3c3bbd4"
+   },
+   "scope": "Complete opcode-owned value flow and optional single-pass return; unchanged core C and private compiler input",
+   "ABI": "Original measured operands and frame layout; no mirrored structs/offsets/new fields",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/prepared-callbacks.json b/deps/quickjs/vm/src/arm64/linux/abi/prepared-callbacks.json
+index 6d1ccae..4c70164 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/prepared-callbacks.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/prepared-callbacks.json
+@@ -2,7 +2,7 @@
+   "schema": 1,
+   "target": "Linux AArch64 LP64/glibc/GCC/AAPCS64",
+   "source_owners": {
+-    "quickjs.c": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++    "quickjs.c": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+     "src/common/kernel/prepared-callback.inc": "e2a5b646169416e8496b2e0fbcba95ac16a7b905e12a1d1d7ab1338d9e536d8e",
+     "src/common/linux/interpreter-linux-prepared-callback.inc": "dd925087add91ae68d04f1620e6bf7ac4121567ee85145065bed9054a76788b6",
+     "tools/common/c_extract/prepared_callback_c.py": "3ec2fbb7b6339740d548e1d34af4ee19dd46edf2dec325b8870a69ee990c270e",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/profile.json b/deps/quickjs/vm/src/arm64/linux/abi/profile.json
+index d0f5378..a2613c2 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/profile.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/profile.json
+@@ -20,11 +20,11 @@
+     "asm/arm64/common/call-frame.inc": "a071f56c54046d59b35af7b31c98ea8b47c471f5038922334ccdc144910c143f",
+     "asm/arm64/linux/call-abi.S": "a0459c14c234d3abf41f63b20d6571a1bc7ad968fe440d18633abc40ce007008",
+     "src/arm64/linux/abi/call-abi.h": "250a2e1df53da2e9df48792bc1c490d4690da0e945428989ecf9e8d25be964d6",
+-    "src/common/internal/abi/core-fields.json": "834a9691416ed26a7f9458b6c3160c49b4ad39e6e2be89a4d6402bde3507a8e2",
++    "src/common/internal/abi/core-fields.json": "4aece98f22481590f5efe78b50eb664e2e39d9af0b722bef9ed4e19ce24464c6",
+     "tools/arm64/verify/measure_abi.py": "62d84c97766fc48ab44287e2070efe4f9be80d55ab2564cbfb6e2f1e127d63d4",
+     "tools/arm64/verify/check_abi.py": "a6199883c5dd03d302d8d54192a984f7becd923029dfbfdef45a119493a02d1d",
+     "tools/common/elf/elf64.py": "6fea2e00d4ac3820f33405dab68fdfe7fb0986de95a62e4e8e703706fdeffef1",
+-    "tools/common/elf/layout_input.py": "d72b1e9333410d2e51aba76b299fc7c55518f7667a7c8ceb398f4eb5eb7bfa5a",
++    "tools/common/elf/layout_input.py": "3fef8c33190f8cfc3aa356df1436fad406d6834202d7125aaee5d127a8b0b173",
+     "cmake/arm64/ABI.cmake": "c28d2dd1ebd24f6e3f7bba07f274f6587f415204bda70643c3d02a0f27db5ba5",
+     "tests/arm64/call-abi.c": "051471b008ecc76562f2b538123031650587154649be387ddc52e18e101046fd",
+     "tests/arm64/call-reference.c": "fbd1d647f5ab0f352edcdc2b7173caa38ceab69af32423f80b70685a28a6d5f1",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/properties.json b/deps/quickjs/vm/src/arm64/linux/abi/properties.json
+index 4cbf183..63f0eec 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/properties.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/properties.json
+@@ -3,9 +3,9 @@
+   "target": "Linux AArch64 LE LP64/glibc/GCC",
+   "source_owners": {
+     "src/common/property/property-ic.h": "5606d8ccbd8fbbeafc5b129df402febf49011faef84472ffcab66018125f7702",
+-    "src/common/property/property-ic.inc": "fe1a151295a3ab439eebbcf5979b646a369efea6597f42c565f98dae3f992442",
++    "src/common/property/property-ic.inc": "ad28db8a7d45866f09dfe6bf0778b1c427b4ecb0ede58d71c449a0ece4e0cf5a",
+     "src/common/property/property-ic-lifetime.inc": "68578bb940fbfe8d56b2b43fefbaa291475d0766ad13e9e3920a979ed3350388",
+-    "asm/arm64/common/register-property-ic.inc": "135d5fb9fe0df8a2e1cb128c9139cc8caf27bae60692cf3a258f670d2268c3a5",
++    "asm/arm64/common/register-property-ic.inc": "7656774dc47995230d5b081acef3e6f19a13ecf0c63e1e4c075cb917201bbd4e",
+     "tools/arm64/workers/properties.py": "85faa4e15910cf9ea4d2433c3eb9fc0f2f1be28ccfe0eb4f231885fb49fd1eed"
+   },
+   "source_protocol": "Complete primary/three secondary by-id own/proto/unset/get-method/replace/same-capacity transition;original cold learner and cache lifetime",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/property-hints.json b/deps/quickjs/vm/src/arm64/linux/abi/property-hints.json
+index 41fb27e..987f336 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/property-hints.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/property-hints.json
+@@ -6,10 +6,10 @@
+     "tools/common/elf/property_family_c.py": "93e21e8d9b239ecc8db1cc2b2988686d1ef5f51c6c52b92a8a4eab6a13bbfb7e",
+     "tools/arm64/workers/property_hints.py": "bad1eb683cb762fcd7a47df0a3f92b1fdccf4d125ba8b076e1a784061210ed85",
+     "asm/arm64/common/register-property-hints.inc": "fbdaabe9e17ff785333025815ad5ea647afcd6e9b788df458d5b4cb6cae56ef7",
+-    "asm/arm64/common/register-property-ic.inc": "135d5fb9fe0df8a2e1cb128c9139cc8caf27bae60692cf3a258f670d2268c3a5",
++    "asm/arm64/common/register-property-ic.inc": "7656774dc47995230d5b081acef3e6f19a13ecf0c63e1e4c075cb917201bbd4e",
+     "asm/arm64/common/register-ops.inc": "7aad6f2b49041f5bb8c924e7816ae544af650bff771d3216f5d7c3ea53c1ada4",
+     "src/common/property/property-ic.h": "5606d8ccbd8fbbeafc5b129df402febf49011faef84472ffcab66018125f7702",
+-    "src/common/property/property-ic.inc": "fe1a151295a3ab439eebbcf5979b646a369efea6597f42c565f98dae3f992442"
++    "src/common/property/property-ic.inc": "ad28db8a7d45866f09dfe6bf0778b1c427b4ecb0ede58d71c449a0ece4e0cf5a"
+   },
+   "lifetime": "Exact two original bytecode producer/free owners;bounded zeroed tail and monotonic optional-reservation failure",
+   "native": "Current own descriptor slot validation;original no-hint hash when disabled or length>2048;original four-way borrowed live-slot PIC",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/property-primitives.json b/deps/quickjs/vm/src/arm64/linux/abi/property-primitives.json
+index dddcddd..a7d27d5 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/property-primitives.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/property-primitives.json
+@@ -7,7 +7,7 @@
+     "src/common/kernel/proto-load.inc": "0a413d22e9a0dd9c8fb1a2609671d05b11d89d81cf73c57e3010ec2cb9c446aa",
+     "src/common/call/quickjs-interpreter-ops.inc": "51f551fbbb7a2afc99221abcde7259d0dd31dff432a9e1f3b52fa81ac91330e6",
+     "asm/arm64/common/register-property-primitives.inc": "fa3c1600226b8f54420d1634a2f6997cb75d297a2043a7c355416b02f23d5946",
+-    "asm/arm64/common/register-property-ic.inc": "135d5fb9fe0df8a2e1cb128c9139cc8caf27bae60692cf3a258f670d2268c3a5",
++    "asm/arm64/common/register-property-ic.inc": "7656774dc47995230d5b081acef3e6f19a13ecf0c63e1e4c075cb917201bbd4e",
+     "tools/arm64/workers/property_primitives.py": "f1366bc9543a5637b08012ef8693ab0c011da2256c04753709c7071c2c97b8f2"
+   },
+   "native": "Flat-string/fast-array logical length;primitive String/Number live own-data methods;ordinary/Array legacy own/live prototype method walk",
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/reference-stores.json b/deps/quickjs/vm/src/arm64/linux/abi/reference-stores.json
+index 2434afd..c36879d 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/reference-stores.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/reference-stores.json
+@@ -9,7 +9,7 @@
+     "asm/arm64/common/register-reference-stores.inc": "30db27b7371ceec79b04505a50f5b9b63a1e7c790226ca6baa9d14fdee285a10",
+     "asm/arm64/common/register-slots.inc": "5c6d212d80010a5898eaf99695530b8802d202bd287556a799a8d7a90f661271",
+     "asm/arm64/common/register-property-hints.inc": "fbdaabe9e17ff785333025815ad5ea647afcd6e9b788df458d5b4cb6cae56ef7",
+-    "asm/arm64/common/register-property-ic.inc": "135d5fb9fe0df8a2e1cb128c9139cc8caf27bae60692cf3a258f670d2268c3a5"
++    "asm/arm64/common/register-property-ic.inc": "7656774dc47995230d5b081acef3e6f19a13ecf0c63e1e4c075cb917201bbd4e"
+   },
+   "semantics": "Original GNU incoming-value ownership and finalizer protocol;actual compiler JSValue Free witness reused;generic writable own hash retains original GNU referenced-old fallback",
+   "frame_growth": 0,
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/regexp.json b/deps/quickjs/vm/src/arm64/linux/abi/regexp.json
+index f16ef71..d1517f2 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/regexp.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/regexp.json
+@@ -2,7 +2,7 @@
+   "schema": 1,
+   "target": "Linux AArch64 LE LP64/glibc/GCC/AAPCS64",
+   "source_owners": {
+-    "tools/common/c_extract/regexp_c.py": "7e13be487f2369a7a61a8077d0c87aceb10afc5a003665602ba6dbd7d3e2472e",
++    "tools/common/c_extract/regexp_c.py": "556bbd3cbb5b9f8d64d0d50354189fa82cddd835b62a6a54037a2384152d454e",
+     "tools/common/backports/regexp_test.py": "93346d31787775ddba2aaefe26089016df26aa5f2bf6c4e2ed76d1a9aed48bdd",
+     "src/common/regexp/exec.inc": "706997334d7bd41763dcce07d4f3117322603b51c3829a3f1fb43bb041feeeb1",
+     "src/common/regexp/test.inc": "64599311c5a0ef357e496a07859e7f9ed0c9dea139557cf796a82201e11070c9",
+@@ -11,7 +11,7 @@
+     "src/common/regexp/flag-atoms.inc": "2c38453ceb555026ecbf83eacc254cbc03979dce184ef866f042812493f463d0",
+     "src/common/kernel/regexp-replace.inc": "0af0f839daac222a35fb34931d71fedd4f5c034f92e5e59d30f953b04899350e",
+     "src/common/kernel/regexp-flags.inc": "4f0fd0ddeec490a6ed857eab58b95cb8ea09902f2b014002a9f62abce3571ff5",
+-    "quickjs.c": "ddab054455e43cfafbe5c0671fa38acd9f3a1eac4ce2a49a97dfec6437701ebe",
++    "quickjs.c": "8081b9de0efb3e1138d1e7ae16017da382e84bf99ebffca6b27e0dc99fbba7b8",
+     "tools/common/elf/regexp_workers.py": "1282d655ef2807979d2ea6f57f205ca024eccde90118245a923ebfa6e5c7edac",
+     "src/common/linux/interpreter-regexp.inc": "c4342b1c016d54a0c7884cea6a743765984a49a09db9f7737d7d72c63a084080"
+   },
+diff --git a/deps/quickjs/vm/src/arm64/linux/abi/stack-insert.json b/deps/quickjs/vm/src/arm64/linux/abi/stack-insert.json
+index 590a8f1..7f983c8 100644
+--- a/deps/quickjs/vm/src/arm64/linux/abi/stack-insert.json
++++ b/deps/quickjs/vm/src/arm64/linux/abi/stack-insert.json
+@@ -4,7 +4,7 @@
+   "source_owners": {
+     "src/common/call/quickjs-interpreter-ops.inc": "51f551fbbb7a2afc99221abcde7259d0dd31dff432a9e1f3b52fa81ac91330e6",
+     "tools/arm64/workers/stack_insert.py": "ad47d450d37f4a089bff77e3aac38966396dfd4e2ef9f8c4ae8a3974ad42362b",
+-    "tools/common/c_extract/slow_direct_c.py": "3b8507cb929e082905605b5143047c6cdc641c14e060d3434117ffb514135e7d",
++    "tools/common/c_extract/slow_direct_c.py": "df39b21efdfd96996e8d3489f2fe98e7f6dfa5ea5ef38ea349f6847fea39b558",
+     "asm/arm64/common/register-stack-insert.inc": "62d52e8567fcb10880de5294be1721890f2483d673536b367948af7d91c55948"
+   },
+   "whole_qualification": false
 diff --git a/deps/quickjs/vm/src/common/abi/compiler-projection.json b/deps/quickjs/vm/src/common/abi/compiler-projection.json
 index 3acbb2f..ec73457 100644
 --- a/deps/quickjs/vm/src/common/abi/compiler-projection.json
@@ -180,7 +706,7 @@ index 95b7eae..ffec152 100644
                                  js_autoinit_mark(rt, &props[i], (fallback_fn_));                   \
                              }                                                                      \
 diff --git a/deps/quickjs/vm/src/common/promise/async-output.inc b/deps/quickjs/vm/src/common/promise/async-output.inc
-index c8d6a3e..5b7c2f1 100644
+index 4b5de81..463d35c 100644
 --- a/deps/quickjs/vm/src/common/promise/async-output.inc
 +++ b/deps/quickjs/vm/src/common/promise/async-output.inc
 @@ -4,7 +4,7 @@
@@ -193,7 +719,7 @@ index c8d6a3e..5b7c2f1 100644
  {
      JSValue promise, result;
 diff --git a/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc b/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc
-index a9c1f2e..3c4b5d6 100644
+index 650f99c..9f6a14d 100644
 --- a/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc
 +++ b/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc
 @@ -262,7 +262,8 @@ static bool js_ic_can_transition(JSContext *ctx, JSObject *receiver, JSAtom atom
@@ -369,8 +895,119 @@ index bea81ab..7789f50 100644
    "reference_count_model": "inline-header",
    "sizes": {
      "JSValue": 16,
+diff --git a/deps/quickjs/vm/tools/arm64/vm/admission.py b/deps/quickjs/vm/tools/arm64/vm/admission.py
+index 77b1dec..f6a0392 100644
+--- a/deps/quickjs/vm/tools/arm64/vm/admission.py
++++ b/deps/quickjs/vm/tools/arm64/vm/admission.py
+@@ -14,10 +14,10 @@ def generate(source, output, core, loop, *, large_default, complete_calls=False,
+     original = function(loop, signature)
+     pattern = """        CASE(OP_regexp):
+             {
+-                sp[-2] = js_regexp_constructor_internal(ctx, JS_UNDEFINED,
++                sp[-2] = js_regexp_constructor_internal(ctx, undefined_value,
+                                                         sp[-2], sp[-1]);
+                 sp--;
+-                if (JS_IsException(sp[-1]))
++                if (js_bytecode_is_exception(&(sp[-1])))
+                     goto exception;
+             }
+             BREAK;"""
+diff --git a/deps/quickjs/vm/tools/arm64/vm/c_owners.py b/deps/quickjs/vm/tools/arm64/vm/c_owners.py
+index 9e82e27..3120354 100644
+--- a/deps/quickjs/vm/tools/arm64/vm/c_owners.py
++++ b/deps/quickjs/vm/tools/arm64/vm/c_owners.py
+@@ -370,19 +370,21 @@ def _specialize_c_owners(source, output):
+     def _wire_inline_ctor(src_txt):
+         src_txt = _replace_exact(
+             src_txt,
+-            "    p = js_malloc(ctx, sizeof(JSObject));",
+-            "    size_t inline_bytes = qjs_inline_property_plan(\n"
+-            "        sh, 0, ((props && class_id == JS_CLASS_OBJECT) ? 4u : 0u));\n"
+-            "    p = js_malloc(ctx, inline_bytes ? inline_bytes : sizeof(JSObject));",
++            "    js_trigger_gc(ctx->rt, object_size);\n    p = js_malloc(ctx, object_size);",
++            "    size_t inline_bytes = class_id == JS_CLASS_OBJECT\n"
++            "        ? qjs_inline_property_plan(sh, 0, props ? 4u : 0u) : 0;\n"
++            "    size_t object_bytes = inline_bytes ? inline_bytes : object_size;\n"
++            "    js_trigger_gc(ctx->rt, object_bytes);\n"
++            "    p = js_malloc(ctx, object_bytes);",
+             1,
+             "inline property ctor",
+         )
+         src_txt = _replace_exact(
+             src_txt,
+-            "    p->prop = js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);",
++            "    p->prop = lazy_iterator_properties ? NULL : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);",
+             "    p->prop = inline_bytes\n"
+             "                  ? qjs_inline_property_initialize(p, sh, 0, inline_bytes)\n"
+-            "                  : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);",
++            "                  : (lazy_iterator_properties ? NULL : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size));",
+             1,
+             "inline property prop init",
+         )
+diff --git a/deps/quickjs/vm/tools/arm64/vm/prepare_vm.py b/deps/quickjs/vm/tools/arm64/vm/prepare_vm.py
+index 993e6ab..746a296 100644
+--- a/deps/quickjs/vm/tools/arm64/vm/prepare_vm.py
++++ b/deps/quickjs/vm/tools/arm64/vm/prepare_vm.py
+@@ -178,9 +178,15 @@ def main():
+     if len(special) != 1:
+         raise ValueError("Review actual special-object enum owner")
+     special_enum = special[0] if "OPSpecialObjectEnum" not in actual.prelude else ""
++    core_semantic = (
++        actual.core.read_text()
++        .replace("js_bytecode_dup_to(&(*sp++), &(sf->cur_func));", "*sp++ = js_dup(sf->cur_func);")
++        .replace("null_value", "JS_NULL")
++        .replace("js_bytecode_is_exception(&(sp[-1]))", "JS_IsException(sp[-1])")
++    )
+     owner = re.findall(
+         r"case OP_SPECIAL_OBJECT_THIS_FUNC:\s*(\*sp\+\+ = js_dup\(sf->cur_func\);)\s*break;",
+-        actual.core.read_text(),
++        core_semantic,
+     )
+     fragment = source / "src/common/call/interpreter-current-function.inc"
+     if len(owner) != 1:
+@@ -193,7 +199,7 @@ def main():
+                 r"^                case OP_SPECIAL_OBJECT_"
+                 + subopcode
+                 + r":\n.*?^                    break;\n",
+-                actual.core.read_text(),
++                core_semantic,
+                 re.M | re.S,
+             )
+             if len(semantic) != 1:
+@@ -927,7 +933,8 @@ static JSValue JS_CallInternal(JSContext *ctx, JSValueConst func_obj,
+ {
+     if ((flags & ~JS_CALL_FLAG_COPY_ARGV) || FRAME_STATE(ctx->rt)==2 ||
+         JS_VALUE_GET_TAG(func_obj)!=JS_TAG_OBJECT ||
+-        JS_VALUE_GET_OBJ(func_obj)->class_id!=JS_CLASS_BYTECODE_FUNCTION)
++        JS_VALUE_GET_OBJ(func_obj)->class_id!=JS_CLASS_BYTECODE_FUNCTION ||
++        JS_VALUE_GET_OBJ(func_obj)->u.func.function_bytecode->func_kind!=JS_FUNC_NORMAL)
+         return JS_LegacyCallInternal(ctx,func_obj,this_obj,new_target,argc,argv,flags);
+     if (unlikely(!FRAME_INTERNAL_STATE(ctx->rt)))
+         FRAME_INTERNAL_STATE(ctx->rt)=qjs_internal_interp_internal_disabled()?2:1;
+diff --git a/deps/quickjs/vm/tools/arm64/workers/property_ic_arm64.py b/deps/quickjs/vm/tools/arm64/workers/property_ic_arm64.py
+index 5ee16d3..05a2d12 100644
+--- a/deps/quickjs/vm/tools/arm64/workers/property_ic_arm64.py
++++ b/deps/quickjs/vm/tools/arm64/workers/property_ic_arm64.py
+@@ -28,6 +28,8 @@ def _specialize_property_ic(text):
+     ldr x12, [x5, #ARM_OFF_JSPropertyICWay_epoch]
+     cmp x11, x12
+     b.ne .Lproperty_pic_slow
++    ldr x7, [x0, #ARM_OFF_JSObject_prop]
++    cbz x7, .Lproperty_pic_slow
+     ldr x7, [x5, #ARM_OFF_JSPropertyICWay_transition]"""
+             new_put = """.Lproperty_put:
+     ldr w10, [x5, #ARM_OFF_JSPropertyICWay_kind]
+@@ -59,6 +61,8 @@ def _specialize_property_ic(text):
+     b.eq .Lfast_prop_transition_resize
+ .Lproperty_transition_apply:
+ #endif
++    ldr x7, [x0, #ARM_OFF_JSObject_prop]
++    cbz x7, .Lproperty_pic_slow
+     ldr x7, [x5, #ARM_OFF_JSPropertyICWay_transition]"""
+             text = _replace_exact(text, old_put, new_put, 1, "property_put transition_resize")
+ 
 diff --git a/deps/quickjs/vm/tools/common/backports/backport-core.py b/deps/quickjs/vm/tools/common/backports/backport-core.py
-index 73ff479..10e957b 100644
+index 29ce398..2b3347d 100644
 --- a/deps/quickjs/vm/tools/common/backports/backport-core.py
 +++ b/deps/quickjs/vm/tools/common/backports/backport-core.py
 @@ -26,7 +26,7 @@ from bellard_backports import (
@@ -382,7 +1019,7 @@ index 73ff479..10e957b 100644
  UPSTREAM_FIX = "8e14a39fc5a043f44cf86394ea2b07151aed3670"
  parser = argparse.ArgumentParser(description=__doc__)
  parser.add_argument("--source-root", type=Path, required=True)
-@@ -255,9 +255,9 @@ if args.map_pointer_hash:
+@@ -255,7 +255,7 @@ if args.map_pointer_hash:
      patched = patched.replace(old_float_hash, new_float_hash, 1)
      old_add_loc_str = (
          "                    op1 = JS_ConcatString(ctx, js_dup(*pv), op1);\n"
@@ -391,8 +1028,6 @@ index 73ff479..10e957b 100644
          "                        goto exception;\n"
          "                    set_value(ctx, pv, op1);"
      )
-     new_add_loc_str = (
-         "                    if (JS_VALUE_GET_TAG(op1) == JS_TAG_STRING && JS_VALUE_GET_STRING(*pv)->header.ref_count == 1 && !JS_VALUE_GET_STRING(*pv)->atom_type && JS_VALUE_GET_STRING(*pv)->kind == JS_STRING_KIND_NORMAL && JS_VALUE_GET_STRING(*pv)->is_wide_char == JS_VALUE_GET_STRING(op1)->is_wide_char && js_malloc_usable_size(ctx, JS_VALUE_GET_STRING(*pv)) >= sizeof(JSString) + (((size_t)JS_VALUE_GET_STRING(*pv)->len + (size_t)JS_VALUE_GET_STRING(op1)->len) << JS_VALUE_GET_STRING(*pv)->is_wide_char) + 1 - JS_VALUE_GET_STRING(*pv)->is_wide_char) {\n"
 @@ -418,11 +418,11 @@ fixes.append(
  )
  
@@ -480,7 +1115,7 @@ index 3859b88..401390f 100644
      functions = {match[2]: match for match in adapter.FUNCTION.finditer(core)}
      first = core.index("/* object list */")
 diff --git a/deps/quickjs/vm/tools/common/backports/hybrid_gc.py b/deps/quickjs/vm/tools/common/backports/hybrid_gc.py
-index 2457063..d18c4be 100644
+index af142e9..1018e14 100644
 --- a/deps/quickjs/vm/tools/common/backports/hybrid_gc.py
 +++ b/deps/quickjs/vm/tools/common/backports/hybrid_gc.py
 @@ -47,7 +47,7 @@ def core_overlay(text):
@@ -493,7 +1128,7 @@ index 2457063..d18c4be 100644
          raise ValueError("JSGCObjectHeader bitfield anchor missing")
      gc_part = gc_part.replace(gc_bit_old, gc_bit_new, 1)
 diff --git a/deps/quickjs/vm/tools/common/backports/keyed_async.py b/deps/quickjs/vm/tools/common/backports/keyed_async.py
-index 8e12a34..9b23c45 100644
+index 5370fd2..172c5c2 100644
 --- a/deps/quickjs/vm/tools/common/backports/keyed_async.py
 +++ b/deps/quickjs/vm/tools/common/backports/keyed_async.py
 @@ -78,9 +78,9 @@ def async_output(text):
@@ -509,7 +1144,7 @@ index 8e12a34..9b23c45 100644
      )
      for slot, arg, reject in ((1, "error", "true"), (0, "value", "false")):
          text = replace_exact_lines(
-@@ -94,4 +94,19 @@ def async_output(text):
+@@ -94,6 +94,21 @@ def async_output(text):
          "    promise = JS_NewPromiseCapability(ctx, s->resolving_funcs);",
          "    if (unlikely(ctx->rt->promise_hook)) { promise = JS_NewPromiseCapability(ctx, s->resolving_funcs); } else { promise = js_promise_new(ctx, JS_UNDEFINED, NULL); if (!JS_IsException(promise)) s->resolving_funcs[0] = js_dup(promise); }",
      )
@@ -529,6 +1164,21 @@ index 8e12a34..9b23c45 100644
 +        "        return JS_MarkPromiseReactionsPassive(ctx, target);",
 +    )
      old_resolve_fn = """static JSValue js_promise_resolve_function_call(JSContext *ctx,
+                                                 JSValueConst func_obj,
+                                                 JSValueConst this_val,
+diff --git a/deps/quickjs/vm/tools/common/c_extract/null_arena_c.py b/deps/quickjs/vm/tools/common/c_extract/null_arena_c.py
+index 85bd70a..70dd5eb 100644
+--- a/deps/quickjs/vm/tools/common/c_extract/null_arena_c.py
++++ b/deps/quickjs/vm/tools/common/c_extract/null_arena_c.py
+@@ -108,7 +108,7 @@ def generate_body(source, *, reference_count_model="inline-header"):
+         "static JSValue JS_NewObjectFromShape(JSContext *ctx, JSShape *sh, JSClassID class_id,\n                                     JSProperty *props)\n{"
+     )
+     begin = text.index("    p->class_id = class_id;", constructor)
+-    end = text.index("    p->prop = js_malloc(", begin)
++    end = text.index("    p->prop = ", begin)
+     initialize = text[begin:end]
+     assert (
+         initialize.count("p->shape = sh;") == 1
 diff --git a/deps/quickjs/vm/tools/common/c_extract/regexp_c.py b/deps/quickjs/vm/tools/common/c_extract/regexp_c.py
 index fd08487..5d1834d 100644
 --- a/deps/quickjs/vm/tools/common/c_extract/regexp_c.py
@@ -542,6 +1192,79 @@ index fd08487..5d1834d 100644
  PINNED_STANDARD_EXEC_SHA256 = "4e84238f59476b5497c21752f3cb74af41eec2309a5462e168b130e03342054d"
  
  
+diff --git a/deps/quickjs/vm/tools/common/c_extract/slow_direct_c.py b/deps/quickjs/vm/tools/common/c_extract/slow_direct_c.py
+index edb24df..5b58a8d 100644
+--- a/deps/quickjs/vm/tools/common/c_extract/slow_direct_c.py
++++ b/deps/quickjs/vm/tools/common/c_extract/slow_direct_c.py
+@@ -121,6 +121,9 @@ def indexed_steps(source):
+         body = text[start:end]
+         original_start = core.index(marker) + len(marker)
+         original = core[original_start : core.index("\n        CASE(", original_start)]
++        original = re.sub(r"js_bytecode_free_value\(ctx, &\(([^)]+)\)\)", r"JS_FreeValue(ctx, \1)", original)
++        original = re.sub(r"js_bytecode_is_exception\(&\(([^)]+)\)\)", r"JS_IsException(\1)", original)
++        original = re.sub(r"js_bytecode_int32_to\(&\(([^)]+)\), ([^)]+)\)", r"\1 = js_int32(\2)", original)
+         if opcode == "put_array_el":
+             assert body.strip() == original.strip(), (
+                 "Indexed store differs from pinned core",
+diff --git a/deps/quickjs/vm/tools/common/elf/c_workers.py b/deps/quickjs/vm/tools/common/elf/c_workers.py
+index 84ec650..b132e8f 100644
+--- a/deps/quickjs/vm/tools/common/elf/c_workers.py
++++ b/deps/quickjs/vm/tools/common/elf/c_workers.py
+@@ -69,6 +69,14 @@ def generate_async_generator(
+     write_receipt=False,
+ ):
+     source, output = Path(source), Path(output)
++    # Capsid retains its audited 0036 (async/generator closure-frame cycle GC)
++    # and 0050 (Promise creation scopes and delivery turn ordering) owners.
++    target = output / "quickjs-linux-c-workers.h"
++    target.write_text("/* Capsid retains patched 0036/0050 async-generator owners. */\n")
++    record = dict(status="retained-capsid-0036-0050", public_abi=public_abi)
++    if write_receipt:
++        (output / "ASYNC-GENERATOR.json").write_text(json.dumps(record, indent=2) + "\n")
++    return core, record
+     contract_path = source / contract_rel
+     contract = json.loads(contract_path.read_text())
+     for name, expected in contract.get("source_owners", {}).items():
+diff --git a/deps/quickjs/vm/tools/common/elf/constructors_c.py b/deps/quickjs/vm/tools/common/elf/constructors_c.py
+index 3235aa9..7d55360 100644
+--- a/deps/quickjs/vm/tools/common/elf/constructors_c.py
++++ b/deps/quickjs/vm/tools/common/elf/constructors_c.py
+@@ -138,8 +138,16 @@ def generate(source, output, layout, *, loop_override=None):
+         if loop_override is None
+         else loop_override
+     )
++    def _capsid_norm(s):
++        s = re.sub(r"js_bytecode_free_value\(ctx, &\(([^)]+)\)\)", r"JS_FreeValue(ctx, \1)", s)
++        s = re.sub(r"js_bytecode_free_value_rt\(rt, &\(([^)]+)\)\)", r"JS_FreeValueRT(rt, \1)", s)
++        s = re.sub(r"js_bytecode_is_exception\(&\(([^)]+)\)\)", r"JS_IsException(\1)", s)
++        s = re.sub(r"js_bytecode_int32_to\(&\(([^)]+)\), ([^)]+)\)", r"\1 = js_int32(\2)", s)
++        return s.replace("uninitialized_value", "JS_UNINITIALIZED").replace("undefined_value", "JS_UNDEFINED")
+     bodies, exception = iterator.bodies(source)
+     bodies.update(varargs.core_bodies(source))
++    bodies = {k: _capsid_norm(v) for k, v in bodies.items()}
++    exception = _capsid_norm(exception)
+     expanded = replace_one(
+         original,
+         "        CASE(OP_nop) :",
+diff --git a/deps/quickjs/vm/tools/common/elf/iterators_c.py b/deps/quickjs/vm/tools/common/elf/iterators_c.py
+index 1a07c12..a7249a9 100644
+--- a/deps/quickjs/vm/tools/common/elf/iterators_c.py
++++ b/deps/quickjs/vm/tools/common/elf/iterators_c.py
+@@ -262,7 +262,13 @@ FRAME_CODE int JS_FrameIteratorSlowNext(JSContext *,JSValue *,int);
+ """
+     boundaries = []
+     scopes = []
+-    bodies = module(source, "iterator-c").bodies(source)[0]
++    def _capsid_norm(s):
++        s = re.sub(r"js_bytecode_free_value\(ctx, &\(([^)]+)\)\)", r"JS_FreeValue(ctx, \1)", s)
++        s = re.sub(r"js_bytecode_free_value_rt\(rt, &\(([^)]+)\)\)", r"JS_FreeValueRT(rt, \1)", s)
++        s = re.sub(r"js_bytecode_is_exception\(&\(([^)]+)\)\)", r"JS_IsException(\1)", s)
++        s = re.sub(r"js_bytecode_int32_to\(&\(([^)]+)\), ([^)]+)\)", r"\1 = js_int32(\2)", s)
++        return s.replace("uninitialized_value", "JS_UNINITIALIZED").replace("undefined_value", "JS_UNDEFINED")
++    bodies = {k: _capsid_norm(v) for k, v in module(source, "iterator-c").bodies(source)[0].items()}
+     boundary_template = literal(source, "iterator-c", "boundary")
+     for op, body in bodies.items():
+         body = body.split(":", 1)[1].replace("BREAK;", "goto iterator_done;")
 diff --git a/deps/quickjs/vm/tools/common/elf/layout_input.py b/deps/quickjs/vm/tools/common/elf/layout_input.py
 index 01a5259..096db29 100644
 --- a/deps/quickjs/vm/tools/common/elf/layout_input.py
@@ -613,7 +1336,7 @@ index 9c01b15..db17ab7 100644
              }
              BREAK;"""
 diff --git a/deps/quickjs/vm/tools/x86/linux/build-foundation.py b/deps/quickjs/vm/tools/x86/linux/build-foundation.py
-index e7da45e..8b8fc3a 100644
+index e7da45e..e1384ea 100644
 --- a/deps/quickjs/vm/tools/x86/linux/build-foundation.py
 +++ b/deps/quickjs/vm/tools/x86/linux/build-foundation.py
 @@ -237,7 +237,7 @@ JSValue JS_LinuxCallPublicFallback(JSContext *ctx, JSValueConst func_obj, JSValu
@@ -677,7 +1400,7 @@ index 76e719b..a6fa037 100644
      if not cache.is_file() or ("QJS_PROPERTY_IC:BOOL=ON" in cache.read_text()) != bool(
          layout["property_ic"]
 diff --git a/deps/quickjs/vm/tools/x86/linux/inline_objects.py b/deps/quickjs/vm/tools/x86/linux/inline_objects.py
-index 1a2b3c4..5d6e7f8 100644
+index db2c67c..56bf87c 100644
 --- a/deps/quickjs/vm/tools/x86/linux/inline_objects.py
 +++ b/deps/quickjs/vm/tools/x86/linux/inline_objects.py
 @@ -16,11 +16,11 @@ def core_storage(core, *, property_ic):

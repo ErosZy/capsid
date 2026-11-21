@@ -23,12 +23,12 @@ extern "C" {
 
 namespace {
 
-#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))
+#if (defined(__linux__) || defined(__APPLE__)) && (defined(__GNUC__) || defined(__clang__))
 __attribute__((constructor(101))) void configure_quickjs_turbo_density_defaults() {
     // Run before quickjs-turbo's default-priority constructor
-    // (js_linux_property_configure) so per-function inline hint tails
-    // (~634 KiB/worker across bootstrap.js) and first-touch Property IC
-    // slabs (~196 KiB/worker) are not eagerly allocated at worker startup.
+    // (js_linux_property_configure / js_arm_own_startup) so per-function inline
+    // hint tails (~634 KiB/worker across bootstrap.js) and first-touch Property
+    // IC slabs (~196 KiB/worker) are not eagerly allocated at worker startup.
     // Leave explicit overrides intact via overwrite=0.
     (void)setenv("QJS_DISABLE_NATIVE_OWN_BYTECODE", "1", 0);
     (void)setenv("QJS_DISABLE_PROPERTY_IC", "1", 0);

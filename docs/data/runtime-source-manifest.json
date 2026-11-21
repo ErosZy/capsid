@@ -707,7 +707,7 @@
     "patches/txiki/0079-quickjs-turbo-integration.patch": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "fdca90d423702e8ba40b52b3d0a8153947f45f2e"
+      "gitObject": "c7ae54454a246f1eab2b46cea33ffc4c33a4d407"
     },
     "patches/web-streams/0001-workerd-byte-profile.patch": {
       "mode": "100644",
@@ -1372,7 +1372,7 @@
     "src/worker_main.cc": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "56c43ee6bb305ca37d064a1404c49f8687619a43"
+      "gitObject": "28488ea39576734425c8031cff04a8825c06f726"
     },
     "src/worker_runtime.cc": {
       "mode": "100644",
@@ -3156,13 +3156,13 @@
     "runtimeInputChanges": {
       "src/worker_main.cc": {
         "qualifiedGitObject": "ca11b33af2ef4c135f4ab7a26cd0268152309264",
-        "currentGitObject": "56c43ee6bb305ca37d064a1404c49f8687619a43"
+        "currentGitObject": "28488ea39576734425c8031cff04a8825c06f726"
       }
     },
     "vendorPatchChanges": {
       "patches/txiki/0079-quickjs-turbo-integration.patch": {
         "qualifiedGitObject": null,
-        "currentGitObject": "fdca90d423702e8ba40b52b3d0a8153947f45f2e"
+        "currentGitObject": "c7ae54454a246f1eab2b46cea33ffc4c33a4d407"
       },
       "vendor/quickjs-turbo": {
         "qualifiedGitObject": null,

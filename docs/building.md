@@ -15,7 +15,7 @@ matrix or proving production isolation.
 | JavaScript tooling | Node.js/npm for the build-time tools; use the CI-pinned Node 24.14.0 for reference tests |
 | Crypto library | OpenSSL 3.0+ as required by the CMake targets; release/sanitizer CI pins its provider separately |
 | Host networking | Boost and c-ares 1.27+ |
-| `quickjs-turbo` VM overlay (`dev/v0.3.1`) | Python 3.10+ and GNU binutils (`readelf`, `objdump`) for the Linux x86-64 GCC 13+ native register-frame interpreter; other targets and sanitizer builds use the portable C backend |
+| `quickjs-turbo` VM overlay (`dev/v0.3.1`) | Python 3.10+ and GNU binutils (`readelf`, `objdump`) for Linux x86-64/ARM64 (GCC 13+, Ninja) or Xcode CLI tools (`otool`, `dwarfdump`) for macOS Intel x86-64 (Clang, Ninja) native register-frame interpreters; Apple Silicon, Windows MSVC and sanitizer builds use the portable C backend |
 | Full interoperability tests | Full CPython 3.12.3 with `venv`/`pip`, Node 24.14.0, an independent OpenSSL CLI and locked workerd/client assets |
 
 The CMake dependency minimum is not a claim that every provider version has the

@@ -58,13 +58,13 @@ window.CAPSID_SITE_STATUS = {
     "releaseQualificationInherited": false,
     "runtimeInputChanges": {
       "src/worker_main.cc": {
-        "currentGitObject": "56c43ee6bb305ca37d064a1404c49f8687619a43",
+        "currentGitObject": "28488ea39576734425c8031cff04a8825c06f726",
         "qualifiedGitObject": "ca11b33af2ef4c135f4ab7a26cd0268152309264"
       }
     },
     "vendorPatchChanges": {
       "patches/txiki/0079-quickjs-turbo-integration.patch": {
-        "currentGitObject": "fdca90d423702e8ba40b52b3d0a8153947f45f2e",
+        "currentGitObject": "c7ae54454a246f1eab2b46cea33ffc4c33a4d407",
         "qualifiedGitObject": null
       },
       "vendor/quickjs-turbo": {

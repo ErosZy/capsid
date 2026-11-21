@@ -16,12 +16,16 @@ The current `dev/v0.3.1` checkout is an `engine-integration-successor`
 (`v0.15.1-turbo.4`, commit `f0a10640033a024213fb77333e6c84367a81ab26`) through
 `patches/txiki/0079-quickjs-turbo-integration.patch` (79 SDK patches total)
 while keeping the public C ABI v7 and FetchRPC v3/v4 wire protocol unchanged.
-On Linux x86-64 (GCC 13+, non-sanitizer builds) it enables the zero-JIT native
-register-frame interpreter (`LINUX_X86_64`) with a portable C fallback on
-sanitizers and other platforms, and sets process-startup density defaults
+On non-sanitizer Ninja builds it auto-enables the zero-JIT native register-frame
+interpreter across every source-level backend supported by `quickjs-turbo`:
+Linux x86-64 (`LINUX_X86_64`, GCC 13+, glibc/musl), Linux ARM64
+(`LINUX_AARCH64`, GCC 13+, glibc/musl without default BTI/PAC) and macOS Intel
+x86-64 (`MACOS_X86_64`, AppleClang/Clang), with automatic fallback to the
+portable C backend (`PORTABLE`, retaining Hybrid GC and C-level backports) on
+Apple Silicon, Windows MSVC and sanitizers. Process-startup density defaults
 (`QJS_DISABLE_NATIVE_OWN_BYTECODE=1`, `QJS_DISABLE_PROPERTY_IC=1`, overridable
-via environment) in `src/worker_main.cc` to preserve high-density worker
-packing. The derived release qualification and sealed benchmark records below
+via environment) are applied in `src/worker_main.cc` on Linux and macOS to
+preserve high-density worker packing. The derived release qualification and sealed benchmark records below
 describe the tagged `v0.3.0-beta.5` release, not new qualification for
 `dev/v0.3.1` commits. See [source formatting](formatting.md) for exact-byte
 exclusions and [package architecture](releases.md#development-package-matrix)

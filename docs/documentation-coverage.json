@@ -87,7 +87,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "e3007cb7f7c9d6e69b34f90461db2d476b1a16fc1cd7c72bf124bc2e4bc5aaf9",
+      "sha256": "87b12a82dc0a2eedfedfe25cd93c764cabf5b85525906ef444b8f36d12175b7a",
       "review": "Library/distribution/Host split, ABI7, default v3/explicit v4, bounded Host-owned channels and native/strict boundaries."
     },
     {
@@ -111,7 +111,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "0906177f8c0cf153e34abddf71886fe60d91794a5e8e6f3415112639fd8ba78e",
+      "sha256": "72c37fc81928adb69fc62d295766d42144070b049731296ef15907e2571563c3",
       "review": "Pinned beta.5 source checkout, native toolchains, development versus clean Release builds, package CPU distinctions and installed SDK targets."
     },
     {
@@ -143,7 +143,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "3bb16539fe3a8d8e2e5932990c3719f51c41d87aef9ed24cc7f42f3b02451cc5",
+      "sha256": "67908a6e1df85180188d24c9e071d03de18380152df8ba0039bfa396e5241d51",
       "review": "Exact beta.5 source and five-platform release evidence, distinct GitHub Latest, non-inheritance, five raw WPT failures and source-bound measurements."
     },
     {
