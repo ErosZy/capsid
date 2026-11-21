@@ -17,6 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read # Read the current run's artifact metadata before deployment.
   contents: read
   pages: write
   id-token: write
@@ -31,6 +32,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      # Reruns retain previous uploads under the same workflow run ID.
+      PAGES_ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Check generated documentation and site status
@@ -42,8 +46,33 @@ jobs:
           python3 -B bench/prepare-perf-site.py --repo .
           --output "${{ runner.temp }}/capsid-perf-site"
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+      - id: upload
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
           path: ${{ runner.temp }}/capsid-perf-site
+      - name: Wait for the uploaded Pages artifact to become visible
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          : "${PAGES_ARTIFACT_ID:?Pages upload did not return an artifact ID}"
+          for attempt in {1..10}; do
+            if visible_id="$(gh api --method GET \
+                "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+                -f "name=$PAGES_ARTIFACT_NAME" \
+                --jq 'select(.total_count == 1) | .artifacts[] | select(.expired == false) | .id')" \
+                && [[ "$visible_id" == "$PAGES_ARTIFACT_ID" ]]; then
+              echo "Pages artifact $PAGES_ARTIFACT_NAME ($PAGES_ARTIFACT_ID) is visible."
+              exit 0
+            fi
+            if (( attempt < 10 )); then sleep 3; fi
+          done
+          echo "::error::Pages artifact $PAGES_ARTIFACT_NAME ($PAGES_ARTIFACT_ID) is not visible."
+          exit 1
       - id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}
