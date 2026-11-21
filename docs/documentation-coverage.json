@@ -23,15 +23,15 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "68c6504c87a23ec2e032cae00f9f066ea852a1f3419e771275c676a2029e5d63",
-      "review": "Product, release channels, security/defaults, current compatibility and explicitly source-bound latest measurement; no beta.2 performance claim. Formatting setup and qualified-release versus formatting-checkout boundary reviewed. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
+      "sha256": "b9b9d860c8868fef29dfd6cc3c5aee80c16247b022746e483e53950c46c409ad",
+      "review": "Product, public beta.5 download, unchanged GitHub Latest and explicit stable channel, security defaults, compatibility and source-bound performance evidence."
     },
     {
       "path": "ROADMAP.md",
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "8056a3d6bcc3cc0481c25f12e813d8123777efad3745e906ab9697e5f6c999ee",
+      "sha256": "25b874f67220a030fb3f45cae3bfb4f100a9d2ad1feca89b706ca71cd4fccfd8",
       "review": "Delivered negotiated-v4/WebSocket foundation separated from future waitUntil/Binding-v2/Wrangler work; connection owner is not general background authority."
     },
     {
@@ -39,7 +39,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "05ac0902f457d029c7faddc20e9d43e4678f70d7a6aef0b5761a65238a8c3db7",
+      "sha256": "85970e9d0c40572c7a716803ba78944045c77fa9c7032b28e5903e65019c4658",
       "review": "Linux-only strict production boundary, native trusted-dev limits, credential reporting and recognized-but-unenforced App PID field."
     },
     {
@@ -47,7 +47,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "795f17f684b677cb55daa48924ed71a665aeb5e692dcfb68c21133ff38fe3d7b",
+      "sha256": "b0a122a02355ded6c0bd8b88a9dd3886714e78439d4f8c0cc848f7fe6ac19fb6",
       "review": "Implemented producers, source prerequisites, current accepted snapshot, transport replay, legacy replacement warning and full-session obligations."
     },
     {
@@ -55,7 +55,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "30eb2b2d5e34a57bc16fcae9de3d760bad0343fff398df67c4d0351f98a7e761",
+      "sha256": "390fff32c7b3600c93a8ca8161de2334d9d6cc8851be57f77a3f27d58093d14e",
       "review": "Normative protocol constants/budgets retained; status/current acceptance/transport and same-version history caveat corrected."
     },
     {
@@ -63,7 +63,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "746fa05e5c57a851c39356ebe490a7a616176ef4b161e5bff67c2738c16ea1af",
+      "sha256": "00ebbaee336fcb8ca3ae020d4509976dc893c9764a3a3b75a2a3aab8e4184492",
       "review": "Original complete lane/point/round/response/PSS/identity controls retained; bounded hashed compression is transport only."
     },
     {
@@ -71,7 +71,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "24db503212117604c7410fe77219e0d94852d44cdc711b54cc643386f1b012a0",
+      "sha256": "978b04a1f9df1bd31fab9098fea48b8ece26ab48a4dd92c71ba49c99293e7756",
       "review": "Task navigation, current status entry, per-file review and exact historical sources; no journal treated as a current procedure. Formatting setup and qualified-release versus formatting-checkout boundary reviewed."
     },
     {
@@ -111,8 +111,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "5f27d870cd970d737fa37ff2c2ddf686e4b2a87b1a3a21814362c49160a5e20e",
-      "review": "CMake/dependency/pinned-source setup, Debug versus clean Release, native toolchains and actual installed SDK targets. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
+      "sha256": "8f98a34a1e3d40e09fd1e047ce740e06c93d174e73858a45302960933765a660",
+      "review": "Pinned beta.5 source checkout, native toolchains, development versus clean Release builds, package CPU distinctions and installed SDK targets."
     },
     {
       "path": "docs/capability-policy.md",
@@ -143,8 +143,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "256f2d1165b9e889e814d27407fd3e260bdfe6411708b8013d0cdd9dbd36be39",
-      "review": "Generated-source/release/qualification/measurement distinctions, actual beta attempts/assets and five retained raw WPT failures. Formatting setup and qualified-release versus formatting-checkout boundary reviewed. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
+      "sha256": "771bac04e7e1f65f85a7ca06e80ff4700f70d46d7fd2e988687fd9f68754e8a3",
+      "review": "Exact beta.5 source and five-platform release evidence, distinct GitHub Latest, non-inheritance, five raw WPT failures and source-bound measurements."
     },
     {
       "path": "docs/evidence/v0.3.0/2026-11-12-byob-density/qualification-before.md",
@@ -407,8 +407,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "review": "Pinned source-formatting setup/write/check/CI, shared scope exclusions and no inherited binary/performance qualification. Exact-byte encoding locks, historical input archives for intentionally replaced capture sources, checkout EOL rules and clean Release boundary controls reviewed. Development packaging CPU split and non-inheritance of existing release qualification reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged.",
-      "sha256": "c540e558079e6e5fb4735856166f34b97f197d1511e573a38a3fb3eeb8f3a82b"
+      "review": "Pinned formatters, exact-byte exclusions and capture archives, beta.5 qualification boundary and clean Release checks.",
+      "sha256": "c8f2cb7a0526b0a3b25f1de9a02c950c403d32c34d600c8d17c471e85a9c7b2a"
     },
     {
       "path": "docs/framework-compatibility/README.md",
@@ -455,7 +455,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "9782f7b3dbb3ebf7406b891b729e84fbea106c464199fa1d4bfa1b58edb18057",
+      "sha256": "d931e13e265457a1b0d168fe160d73672c29d68db290738f5d4c2e75ef54eee6",
       "review": "Complete trusted-local CLI/app/policy/READY/request; unchanged commands match prior actual Windows/Linux published-binary smoke, not macOS execution."
     },
     {
@@ -463,7 +463,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "80863f503ab9e954d4760e8f71e667375f060e4dde91ba4fe71fd3682d34013a",
+      "sha256": "226b4f352fecdaa1cf4f4352e7a1d72ab5e2f56ef164dc3bb05e16561ea1a1c1",
       "review": "Historical dispositions, six captured source files/hashes/483 aliases, dated reviews/plans and source-bound evidence rules."
     },
     {
@@ -535,7 +535,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "2a6a99b639cabeb7d83387f7f36e1ff5f892e514668e50b4e2eb439acfea572d",
+      "sha256": "538cadbf5cc151cfadd7bc8294893ef5c41275dee8d370e5b2055c0fd254a51e",
       "review": "Current Host architecture/ownership/authority, experimental deployment and separate build/test/performance qualification scopes."
     },
     {
@@ -583,8 +583,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "1b2c6899f8c7f21fc2cf3f2a1d0b69fffb4c82f1f02281dc9afce2ecb75967a7",
-      "review": "Accepted 485b29b whole-session source/tree/CPU/protocol/data, unchanged older observations, compressed full evidence and non-paired comparison limits."
+      "sha256": "aa51778ceae5c871094aa002cf623f52e329c73296f33cd8dec50f9d9a8dcdb6",
+      "review": "Accepted 82eaab9 source/CPU/protocol evidence, unchanged historical records and no claim of beta.5 performance or formal paired improvement."
     },
     {
       "path": "docs/platform-support.md",
@@ -599,8 +599,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "c400fa4ab7bcbc2af6999570126c2bad8b2106773ddccf229f49005d3748ecef",
-      "review": "Captured stable/beta flags, actual asset architectures/names/digests, installer channel selection, checksums and build identity limits. Development Linux musl CPU packaging, legacy x86 installer compatibility and unchanged published-release scope reviewed. Native Intel/Apple-Silicon package split and exact macOS CPU selection reviewed; existing Releases unchanged."
+      "sha256": "409bca639d06b2778a61aea434a40fcd0225e1404cf7d6040fab36d60b1d2d30",
+      "review": "Public beta.5 with unchanged GitHub Latest and stable channel, exact asset inventory, explicit installer tag, checksums and build identity limits."
     },
     {
       "path": "docs/superpowers/plans/2026-08-16-binding-v1-security-audit-remediation.md",
@@ -623,8 +623,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "3546cd55531f2424658f94f398c13e3c14c242e0022c0b31e796ba1d353ac135",
-      "review": "Current developer/CI/profile commands, missing-prerequisite and raw-failure semantics, instrumented providers and source-bound acceptance."
+      "sha256": "c12bb00f8f6035c106d6d60bcff0fa96a2c50eb9e8a7c949c5d56c0a57d0790a",
+      "review": "Current developer and CI commands, pinned profiles and original failures, source-bound acceptance and independent tag attempt."
     },
     {
       "path": "docs/testing.md",
@@ -639,8 +639,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "4fd789ac807791d17a628dc970c0030dd7abaeddbb47d02505a1685f81241352",
-      "review": "Actual published beta.2 source/runs/packages/attempt ledger and source-bound performance/standards limits; full historical qualification text retained separately."
+      "sha256": "ff5f5db9089248728493d21f13663137cf29e392aa67cfa59ea48889e88b2264",
+      "review": "Published beta.5 source, CI attempt ledger, verified packages, prior unpublished beta.4 and retained historical records; no standards or performance inheritance."
     },
     {
       "path": "docs/v0.3.0-fetchrpc-v4-plan.md",
@@ -767,8 +767,8 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "b3d37706e1493936368bd45942431cd126d8b4cce94bc0b81c4c814064f0e1aa",
-      "review": "Actual generated files, complete restore/replay commands, source/release boundaries, dev push branch and genuine deployment requirements."
+      "sha256": "dce30f15cd698ae2a85957ef497f14e7476c9a01629d64773e02669edc097720",
+      "review": "Generated files, verified archive replay, current prerelease versus measured source boundaries and deployment requirements."
     },
     {
       "path": "release-notes/v0.2.0-rc.07.md",
@@ -816,15 +816,23 @@
       "reviewed": true,
       "hashMode": "canonical-lf-text",
       "sha256": "f5d0b4f559cc90f8f5b86cd26a7d0277cfbc6929c5480540d3d1166629fcd61b",
-      "review": "Dated v0.3.0-beta.2 release notes (now marked Pre-release); superseded for current beta channel selection by v0.3.0-beta.3."
+      "review": "Dated v0.3.0-beta.2 release notes (now marked Pre-release); see the current release guide for beta channel selection."
     },
     {
       "path": "release-notes/v0.3.0-beta.3.md",
-      "kind": "current-reference",
+      "kind": "release-history",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
       "sha256": "ff6b929b1e985689ccfe82c9ff3fb70d9792cc17e9d25526145caca9cf767508",
-      "review": "Published 0.3.0-beta (v0.3.0-beta.3) release notes, five-platform native archive hashes, verification run links, and installation/compatibility limits."
+      "review": "Preserved beta.3 release notes and original verification; GitHub Latest is recorded separately from current beta selection."
+    },
+    {
+      "path": "release-notes/v0.3.0-beta.5.md",
+      "kind": "current-reference",
+      "reviewed": true,
+      "hashMode": "canonical-lf-text",
+      "sha256": "a8c9e425693e77b787ce06fa7cb1f0ecb105fb670a891c04ebec96541aad2265",
+      "review": "Current experimental release notes with canonical repository links, explicit tag selection, exact source and package hashes, and separate conformance and performance claims."
     }
   ]
 }

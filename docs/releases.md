@@ -5,27 +5,25 @@ the stable channel's support or isolation guarantees.
 
 ## Release Channels
 
-As recorded by the 2026-11-18 release capture:
+As recorded by the 2026-11-21 release capture:
 
 | Channel | Version | Meaning |
 | --- | --- | --- |
-| Experimental prerelease (GitHub Latest) | [0.3.0-beta](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.3) | Current GitHub Latest release (tag `v0.3.0-beta.3`); public C ABI v7; runtime version string `0.3.0` |
-| Stable | [v0.2.2](https://github.com/ErosZy/capsid/releases/tag/v0.2.2) | Stable `0.2.x` line; install explicitly with `v0.2.2` |
-| Earlier beta tags | [v0.3.0-beta.2](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.2), `v0.3.0-beta.1` | `v0.3.0-beta.2` is marked Pre-release; `v0.3.0-beta.1` failed before builds/tests with no Release assets |
+| Experimental prerelease | [v0.3.0-beta.5](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5) | Select this tag explicitly. Public C ABI v7; runtime version `0.3.0`. |
+| Stable | [v0.2.2](https://github.com/rowanellis-113/capsid/releases/tag/v0.2.2) | Stable `0.2.x` line; select this tag explicitly. |
 
-The current `0.3.0-beta` (`v0.3.0-beta.3`) release is published as GitHub
-`Latest` (`draft:false`, `prerelease:false`, `make_latest:true`) while `v0.2.2`
-remains the stable `0.2.x` release. Its qualified product commit is
-`af8acc1a7710b6344bdf85d1f6b0b067e0fabe89`.
-The [qualification record](v0.3.0-current-qualification.md) and
-[final verification](evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json)
-retain the exact gates, verified assets and earlier preserved records
-(including [beta2-publication-final-r1.json](evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json)).
-A later documentation edit is not a new qualification of the release binary.
+GitHub's [Latest](https://github.com/rowanellis-113/capsid/releases/latest) is a separate default download, not a
+selector for either channel above. See [current status](current-status.md#release-and-development-channels)
+for its recorded value. The qualified product commit for `v0.3.0-beta.5` is
+`c7a80b9bdafe36d415a440be7ed3384f7830d4f8`.
+See the [release notes](../release-notes/v0.3.0-beta.5.md),
+[qualification record](v0.3.0-current-qualification.md) and
+[final verification](evidence/v0.3.0/2026-11-21-beta5-publication/beta5-publication-final-r1.json) for the exact gates, verified assets and earlier
+records. A later documentation edit does not qualify a new binary.
 
 ## Published Packages
 
-`0.3.0-beta` (`v0.3.0-beta.3`) carries five native archives, each with its
+`0.3.0-beta` (`v0.3.0-beta.5`) carries five native archives, each with its
 original `.sha256` sidecar, plus `install.sh` (11 verified assets total):
 
 | Platform | Archive | Scope |
@@ -37,7 +35,7 @@ original `.sha256` sidecar, plus `install.sh` (11 verified assets total):
 | Windows x86_64 | `capsid-0.3.0-windows-x86_64.zip` | Native MSVC/static-CRT development/integration |
 
 The archive filename contains runtime version `0.3.0`; the Release tag selects
-`v0.3.0-beta.3`. Do not infer a `0.3.0` stable-production channel from that
+`v0.3.0-beta.5`. Do not infer a `0.3.0` stable-production channel from that
 filename.
 
 <a id="development-package-matrix"></a>
@@ -86,33 +84,29 @@ of exhaustive transitive license inventory or general SPDX certification.
 ## Install on Linux or macOS
 
 The installer selects the matching published OS/architecture asset, verifies its
-SHA-256 sidecar and installs under `$HOME/.local` by default.
+SHA-256 sidecar and installs under `$HOME/.local` by default. The examples
+specify both the current repository and a release tag so they do not rely on
+an older installer's repository default or GitHub's `latest` selection.
 
-Current `0.3.0-beta` (GitHub `latest`, resolving to `v0.3.0-beta.3`):
-
-```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/latest/download/install.sh | bash
-```
-
-Explicit `0.3.0-beta` tag (`v0.3.0-beta.3`):
+Current experimental prerelease (`v0.3.0-beta.5`):
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.3/install.sh \
-  | bash -s -- v0.3.0-beta.3
+curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5/install.sh \
+  | CAPSID_REPO=rowanellis-113/capsid bash -s -- v0.3.0-beta.5
 ```
 
 Custom prefix:
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.3/install.sh \
-  | bash -s -- --prefix "$HOME/opt/capsid-beta" v0.3.0-beta.3
+curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5/install.sh \
+  | CAPSID_REPO=rowanellis-113/capsid bash -s -- --prefix "$HOME/opt/capsid-beta" v0.3.0-beta.5
 ```
 
 Explicit stable `v0.2.2`:
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.2.2/install.sh \
-  | bash -s -- v0.2.2
+curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.2.2/install.sh \
+  | CAPSID_REPO=rowanellis-113/capsid bash -s -- v0.2.2
 ```
 
 You can download and inspect `install.sh` before running it instead of piping it

@@ -1,35 +1,35 @@
 # Current Status and Data Scope
 
-Reviewed 2026-11-20. This is the current reader-facing status, not another
+Reviewed 2026-11-21. This is the current reader-facing status, not another
 execution diary. The [machine-readable status](current-status.json) is generated
 from committed source locks, the captured GitHub release metadata and validated
 measurement archives. Historical reviews retain their original dates and values.
 
 ## Development Checkout
 
-The development line builds on the published `0.3.0-beta` (`v0.3.0-beta.3`)
-source (`af8acc1a7710b6344bdf85d1f6b0b067e0fabe89`) with pure-JS hot-path
-runtime optimizations in `js/bootstrap.js`, `js/fetch.js`, and `js/url.js`
-(`runtime-optimization-successor`) plus `capsid-perf-lane-v3` benchmark and
-`perf-site` updates. Public C ABI v7, FetchRPC wire protocol, C/C++ runtime,
-build inputs, and `vendor/txiki.js` (QuickJS-NG 0.15.1) remain unchanged.
-The machine status keeps qualified-release digests (`headerSHA256`,
-`protocolSHA256`, and `qualifiedReleaseFiles`) aligned with the published
-`v0.3.0-beta.3` release while setting `releaseQualificationInherited:false`:
-later JS, benchmark, or documentation edits do not inherit binary qualification
-for `v0.3.0-beta.3`. See [source formatting](formatting.md) for exact-byte
-exclusions and [package architecture](releases.md#development-package-matrix)
-for the five-platform archive matrix.
+The published prerelease `v0.3.0-beta.5` includes the pure-JS hot-path changes
+in `js/bootstrap.js`, `js/fetch.js` and `js/url.js`, including isolated Fetch
+body buffers and a single snapshot when cloning a fixed byte body. These
+changes leave the public C ABI v7, FetchRPC wire protocol, C/C++ runtime,
+CMake build inputs and pinned `vendor/txiki.js` (QuickJS-NG 0.15.1) unchanged.
+
+The current docs-only checkout retains the qualified runtime input hashes
+for `v0.3.0-beta.5` but sets `releaseQualificationInherited:false`: the derived
+status describes the actual tagged release, not new qualification for later
+commits. See [source formatting](formatting.md) for exact-byte exclusions
+and [package architecture](releases.md#development-package-matrix) for the
+five-platform archive matrix.
 
 ## Release and Development Channels
 
 | Item | Current recorded value | Boundary |
 | --- | --- | --- |
 | Development branch | `dev/v0.3.0` | Documentation/data changes do not requalify a binary |
-| Experimental prerelease (GitHub Latest) | `0.3.0-beta` ([v0.3.0-beta.3](https://github.com/ErosZy/capsid/releases/tag/v0.3.0-beta.3)) | Published as GitHub `Latest`; not a stable-production recommendation |
-| Stable `0.2.x` release | `v0.2.2` | Remains the stable `0.2.x` channel; install explicitly with `v0.2.2` |
+| Experimental prerelease | [v0.3.0-beta.5](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5) | Current beta; install by tag |
+| GitHub Latest (recorded default) | [v0.3.0-beta.3](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.3) | Earlier release, not the current beta or stable line |
+| Stable `0.2.x` release | [v0.2.2](https://github.com/rowanellis-113/capsid/releases/tag/v0.2.2) | Install by tag |
 | Beta runtime version | `0.3.0` | An archive/runtime string, not a stable-channel claim |
-| Qualified beta source | `af8acc1a7710b6344bdf85d1f6b0b067e0fabe89` | Tree `483146d28dc9f16025da332e86a9118cb8813f2e`; 5460 frozen git entries |
+| Qualified beta source | `c7a80b9bdafe36d415a440be7ed3384f7830d4f8` | Tree `876e29c2792899b654310fea72aac979bd8bb48f`; 5469 frozen git entries |
 | Public interface | C ABI v7; capability policy v2 | Existing layouts remain frozen; new interfaces are additive |
 | Protocol | FetchRPC v3 by default; explicit negotiated v4 | Never mix versions on one connection |
 | Pinned vendor | txiki.js `v26.6.0`, 78 SDK patches | No vendor upgrade is implied by this documentation refresh |
@@ -64,15 +64,17 @@ All of these bind to the beta source above, not to a later docs/data commit:
 
 | Required scope | Actual GitHub Actions run |
 | --- | --- |
-| Full Release/LTO, sanitizer/provider, native platform, fuzz/index qualification | [44246646875](https://github.com/ErosZy/capsid/actions/runs/44246646875) |
-| Pinned formatter and protected-input controls | [44246646886](https://github.com/ErosZy/capsid/actions/runs/44246646886) |
-| Five-platform Release validation and native packaging (all 13 jobs passed, attempt 1) | [44272321448](https://github.com/ErosZy/capsid/actions/runs/44272321448) |
+| Full Release/LTO, sanitizer/provider, native platform, fuzz/index qualification | [44778427101, attempt 2](https://github.com/rowanellis-113/capsid/actions/runs/44778427101/attempts/2) |
+| Pinned formatter and protected-input controls | [44778427087](https://github.com/rowanellis-113/capsid/actions/runs/44778427087) |
+| Five-platform tag Release validation and native packaging (all 13 jobs passed, attempt 1) | [44851404278](https://github.com/rowanellis-113/capsid/actions/runs/44851404278) |
 
-All 11 published `0.3.0-beta` (`v0.3.0-beta.3`) assets match the verified
-archives and sidecars from run `44272321448` plus `install.sh` at `af8acc1`,
-recorded in [beta3-publication-final-r1.json](evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json).
+All 11 published `v0.3.0-beta.5` assets match the five original archives and
+sidecars from run `44851404278` plus `install.sh` at `c7a80b9`, as recorded
+in [the final publication review](evidence/v0.3.0/2026-11-21-beta5-publication/beta5-publication-final-r1.json).
 
-Earlier beta tags remain preserved for traceability: `v0.3.0-beta.2`
+`v0.3.0-beta.4` remains tagged at `07db439` with no published Release.
+[`v0.3.0-beta.3`'s record](evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json) remains separate.
+Other earlier beta tags are preserved: `v0.3.0-beta.2`
 (`87ed4630fa57e360ac0a3a8158218398250c8035`, marked Pre-release, with
 [beta2-publication-final-r1.json](evidence/v0.3.0/2026-11-13-ci-resumption/beta2-publication-final-r1.json))
 and the failed `v0.3.0-beta.1` tag (`16f4354d353e6ab044394efe85438f040741c033`,
@@ -100,8 +102,8 @@ The latest complete accepted local session was measured on **2026-11-20** at
 `0.3.0-beta.4` development snapshot `82eaab999cfd628dbe1529eb553f63c0ee52a9ea`,
 tree `5e61f517d5325704c8dc38e35b0c63193fb91ec1`, under `capsid-perf-lane-v3`
 (pure-JS seven-stack matrix across three reference tiers plus `dynamic-api`).
-It is **not a measurement of published `v0.3.0-beta.3`**; its `release` label
-`v0.3.0-beta.4` has an empty `sourceTag` until a release tag is qualified.
+It is **not a measurement of published `v0.3.0-beta.5`**. Its archive label is
+`v0.3.0-beta.4`, but the measured commit was untagged and `sourceTag` is empty.
 
 | Metric | Recorded Capsid value |
 | --- | ---: |

@@ -4,7 +4,8 @@ Start with the task you want to complete. User guides explain how to use Capsid;
 references define its contracts; dated reviews preserve what was observed for
 specific inputs. A historical review is not a current deployment instruction.
 
-The stable line is `0.2.2`; `0.3.0-beta` is an experimental prerelease.
+The stable release is [`v0.2.2`](https://github.com/rowanellis-113/capsid/releases/tag/v0.2.2);
+[`v0.3.0-beta.5`](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5) is the current experimental prerelease.
 [Current status and data scope](current-status.md) is the maintained entry point
 for delivered scope, source identities and the latest accepted measurement.
 [Release selection](releases.md) explains the channels. The

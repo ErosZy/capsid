@@ -1,8 +1,8 @@
 # Performance archive contract
 
-> Reviewed 2026-11-18. The latest accepted complete local record is snapshot
-> 485b29b, not the 0.3.0-beta binary; see [current status](../docs/current-status.md).
-> This contract and its original raw assertions/budgets remain mandatory.
+> See the [performance reference](../docs/performance-benchmarks.md) for the
+> latest accepted record. Archive acceptance applies to the measured binary,
+> not the published prerelease. Original raw assertions and budgets still apply.
 
 `collect-perf-point.py` publishes only complete archives under
 `bench/results/`. Its parser helpers are separate from publication. A

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "sourceCommit": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
-  "sourceTree": "483146d28dc9f16025da332e86a9118cb8813f2e",
-  "semantics": "sourceCommit/sourceTree/qualifiedReleaseFiles identify the qualified release only. files fingerprint the separately reviewed development checkout; packaging changes do not inherit binary or new-CPU qualification.",
+  "sourceCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
+  "sourceTree": "876e29c2792899b654310fea72aac979bd8bb48f",
+  "semantics": "sourceCommit/sourceTree/qualifiedReleaseFiles identify the qualified release only. files fingerprint the separately reviewed development checkout, which does not inherit binary qualification.",
   "files": {
     "CMakeLists.txt": {
       "mode": "100644",
@@ -1739,7 +1739,7 @@
     "js/bootstrap.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67"
+      "gitObject": "51cb09f062698a7a6a3d935f432a95f702b9b0ee"
     },
     "js/dom-exception.js": {
       "mode": "100644",
@@ -1774,7 +1774,7 @@
     "js/fetch.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "6258e4adde36e41ade3e940608839f0332297905"
+      "gitObject": "c6f72774a0169be333c71e013c406f7bfc2d5e62"
     },
     "js/file.js": {
       "mode": "100644",
@@ -1819,7 +1819,7 @@
     "js/url.js": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab"
+      "gitObject": "2579ff15f46a8d1be22f14f387027f318b3f3b08"
     },
     "js/wasm.js": {
       "mode": "100644",
@@ -3092,29 +3092,16 @@
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf"
   },
   "checkout": {
-    "kind": "runtime-optimization-successor",
-    "baseCommit": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
+    "kind": "docs-successor",
+    "baseCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
     "formatters": {
       "clang-format": "23.1.5",
       "prettier": "3.8.3",
       "ruff": "0.17.5"
     },
     "releaseQualificationInherited": false,
-    "changeScope": "pure-JS hot-path runtime optimizations in js/bootstrap.js, js/fetch.js, and js/url.js and Fetch body ownership/copy corrections after 0.3.0-beta (v0.3.0-beta.3); public C ABI v7, FetchRPC wire protocol, C/C++ runtime, CMake inputs, and vendor/txiki.js (QuickJS-NG 0.15.1) remain unchanged",
+    "changeScope": "documentation and verified release metadata following v0.3.0-beta.5; tagged runtime, ABI, wire, CMake and vendor inputs unchanged",
     "buildInputChanges": {},
-    "runtimeInputChanges": {
-      "js/bootstrap.js": {
-        "qualifiedGitObject": "bff712239dfacdae40c57bbe0c908329bd00eb67",
-        "currentGitObject": "51cb09f062698a7a6a3d935f432a95f702b9b0ee"
-      },
-      "js/fetch.js": {
-        "qualifiedGitObject": "6258e4adde36e41ade3e940608839f0332297905",
-        "currentGitObject": "c6f72774a0169be333c71e013c406f7bfc2d5e62"
-      },
-      "js/url.js": {
-        "qualifiedGitObject": "af30ce26e8ed7ed849f54126a6ba8b19c88927ab",
-        "currentGitObject": "2579ff15f46a8d1be22f14f387027f318b3f3b08"
-      }
-    }
+    "runtimeInputChanges": {}
   }
 }

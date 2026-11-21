@@ -183,6 +183,7 @@ Any infrastructure-only retry needs explicit scope and authorization. Retain the
 original outcome and attempt provenance; never present a retried execution as
 first-attempt evidence or rerun unrelated successful jobs.
 
-For the published beta's exact results and the authorized macOS capacity retry,
-see [release qualification](v0.3.0-current-qualification.md). For formal
+For the published beta's exact results, including the distinction between the
+branch retry and first-attempt tag qualification, see
+[release qualification](v0.3.0-current-qualification.md). For formal
 performance acceptance, use the separate [benchmark methodology](performance-benchmarks.md).

@@ -1,8 +1,8 @@
 # Performance History Site
 
-Updated 2026-11-20. The site defaults to the latest **accepted measured
+The [performance site](https://rowanellis-113.github.io/capsid/) defaults to the latest **accepted measured
 snapshot**, not to an assumed benchmark of the latest published release. Stable
-remains `v0.2.2`; published `v0.3.0-beta.3` has no matching complete performance
+remains `v0.2.2`; published `v0.3.0-beta.5` has no matching complete performance
 session. The latest accepted local measurement is `0.3.0-beta.4` development
 snapshot `82eaab9` (`capsid-perf-lane-v3`, pure-JS seven-stack + `dynamic-api`),
 completed 2026-11-20 under WSL2. The archived `v1` cross-language measurement
@@ -23,7 +23,7 @@ See [current status](../docs/current-status.md) and
 
 The latest point's archive label is `v0.3.0-beta.4`, with an empty `sourceTag`
 and measured commit `82eaab999cfd628dbe1529eb553f63c0ee52a9ea`. The UI labels it
-as a development snapshot until a release tag is separately qualified. The
+as a development snapshot; later releases do not change that identity. The
 archived `v1` point (`485b29be6cc8d0dcdb653ee6226956ddece02948`) and historical
 `v0.2.2` point remain unchanged. Do not draw a qualified release trend or paired
 optimization claim across different matrix contracts (`v1` vs `v3`) or

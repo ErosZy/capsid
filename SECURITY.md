@@ -22,7 +22,7 @@ TLS, external gateways, host firewalls, secret lifecycle, and OS hardening are n
 
 Do not disclose details of unfixed vulnerabilities in public Issues, Discussions, Pull Requests, or benchmark artifacts.
 
-Prefer GitHub's [private vulnerability reporting](https://github.com/ErosZy/capsid/security/advisories/new). If that entry point is temporarily unavailable, create an Issue without technical details and ask the maintainers to establish a private contact channel.
+Prefer GitHub's [private vulnerability reporting](https://github.com/rowanellis-113/capsid/security/advisories/new). If that entry point is temporarily unavailable, create an Issue without technical details and ask the maintainers to establish a private contact channel.
 
 Please include as much of the following as possible in your report:
 

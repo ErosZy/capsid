@@ -181,7 +181,6 @@ for (const permissionName of Object.keys(capabilityManifest.permissions)) {
 }
 
 for (const requiredFragment of [
-  '> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta`. Public C ABI v7.',
   'cmake --install build-release',
   '<capsid/runtime.hpp>',
   'When `egress_policy == NULL`, all egress Fetch requests are denied.',
@@ -333,20 +332,42 @@ const profileV2 = JSON.parse(
 );
 assert.equal(currentStatus.developmentBranch, 'dev/v0.3.0');
 assert.equal(currentStatus.prerelease.channel, '0.3.0-beta');
-assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.3');
+assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.5');
+assert.equal(currentStatus.prerelease.draft, false);
+assert.equal(currentStatus.prerelease.prerelease, true);
+assert.equal(currentStatus.prerelease.githubLatest, false);
+assert.equal(currentStatus.githubLatest.tag, 'v0.3.0-beta.3');
+for (const [label, release] of [
+  ['Stable', currentStatus.stable],
+  ['Prerelease', currentStatus.prerelease],
+]) {
+  assert.ok(
+    readme.includes(`> **${label}**: [\`${release.tag}\`](${release.url})`),
+    `README.md must link the recorded ${label.toLowerCase()} release explicitly`,
+  );
+}
+assert.ok(readme.includes(`Public C ABI v${currentStatus.runtime.publicAbi}.`));
+const { repository } = JSON.parse(
+  await readFile(path.join(root, 'docs/data/release-status.json'), 'utf8'),
+);
+const installer = currentStatus.prerelease.assets.find((asset) => asset.name === 'install.sh');
+assert.ok(
+  readme.includes(`curl -fsSL ${installer.browser_download_url}`) &&
+    readme.includes(`| CAPSID_REPO=${repository} bash -s -- ${currentStatus.prerelease.tag}`),
+  'install the tagged prerelease from the recorded repository instead of relying on defaults',
+);
+assert.equal(currentStatus.runtime.sourceCommit, currentStatus.prerelease.sourceCommit);
+assert.equal(currentStatus.runtime.sourceTree, currentStatus.prerelease.sourceTree);
 assert.equal(currentStatus.runtime.publicAbi, 7);
 assert.equal(currentStatus.runtime.defaultWireVersion, 3);
-assert.equal(currentStatus.checkout.kind, 'runtime-optimization-successor');
+assert.equal(currentStatus.checkout.kind, 'docs-successor');
+assert.equal(currentStatus.checkout.baseCommit, currentStatus.prerelease.sourceCommit);
 assert.deepEqual(currentStatus.checkout.buildInputChanges, {});
-assert.deepEqual(Object.keys(currentStatus.checkout.runtimeInputChanges).sort(), [
-  'js/bootstrap.js',
-  'js/fetch.js',
-  'js/url.js',
-]);
+assert.deepEqual(currentStatus.checkout.runtimeInputChanges, {});
 assert.equal(
   currentStatus.checkout.releaseQualificationInherited,
   false,
-  'runtime optimization commits do not inherit binary qualification beyond the declared release commit',
+  'documentation successors do not inherit binary qualification beyond the tagged release',
 );
 assert.match(currentStatus.runtime.sourceScope, /qualified 0\.3\.0-beta interface baseline/);
 assert.equal(currentStatus.conformance.referenceProfile, profileV2.id);

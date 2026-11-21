@@ -116,18 +116,15 @@ normative security references.
 
 ## Validation and Performance Boundary
 
-The published beta source passed its declared full/sanitizer/native/fuzz/soak
-and actual-package acceptance. Known raw WPT failures and genuine skips remain
-visible; neither full standards conformance nor every historical causal issue
-is claimed closed. Native Windows/macOS integration is separate from production
-isolation. See [qualification](v0.3.0-current-qualification.md).
+The published `v0.3.0-beta.5` source passed its declared [CI and native package gates](v0.3.0-current-qualification.md).
+Known raw WPT failures and genuine skips remain visible; neither full standards
+conformance nor every historical causal issue is claimed closed. Native
+Windows/macOS integration is separate from production isolation.
 
-The benchmark controllers are implemented and their latest accepted local
-three-lane session belongs to measured snapshot `485b29b`. It is not 0.3.0-beta
-performance evidence. Diagnostic samples, an implementation milestone, selected
-CTest success or a matching source tree cannot stand in for the declared
-whole-session protocol and binary/source identity. See
-[performance methodology/data](performance-benchmarks.md).
+The [latest accepted measurement](performance-benchmarks.md) belongs to its
+recorded development snapshot, not the published prerelease. Diagnostic samples,
+an implementation milestone, selected CTest success or a matching source tree
+cannot stand in for the declared whole-session protocol and binary/source identity.
 
 ## Historical source and preserved anchors
 

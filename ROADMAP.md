@@ -214,9 +214,9 @@ See the [embedding reference](docs/host-integration.md) for size negotiation,
 channel ACKs, counted Close reasons and optional capabilities.
 
 This delivery does not imply complete standards conformance, every historical
-R1–R9 causal closure, native Windows/macOS production isolation or 0.3.0-beta
-performance measurement. The latest accepted local performance record belongs
-to measured snapshot `485b29b`, not the published 0.3.0-beta binary.
+R1–R9 causal closure, native Windows/macOS production isolation or benchmark
+results for `v0.3.0-beta.5`. The [accepted measurement](docs/performance-benchmarks.md)
+belongs to its own development snapshot.
 
 Acceptance: real client/server interoperability, fragmented messages, slow
 consumers, simultaneous close, half-close where applicable, invalid frames,

@@ -1,10 +1,9 @@
 # Benchmark Tools, Records and Publication
 
-Updated 2026-11-18. All three producers are implemented. The latest complete
-accepted local session is `local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
-measured snapshot `485b29b`, not the published 0.3.0-beta binary. See
-[current status](../docs/current-status.md) and
-[current performance data](../docs/performance-benchmarks.md).
+All three benchmark producers are implemented. The [performance charts](https://rowanellis-113.github.io/capsid/)
+display source-bound observations, not benchmarks of the published prerelease.
+See [current performance data](../docs/performance-benchmarks.md) for the latest
+accepted session and the preserved earlier measurements.
 
 The normative [SPEC.md](SPEC.md) defines the protocol; [perf-evidence.md](perf-evidence.md)
 defines the sealed record/acceptance contract. Scripts, declarations and test

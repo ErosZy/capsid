@@ -26,9 +26,9 @@ def digest(path):
 
 def derive(root):
     release = load(root / "docs/data/release-status.json")
-    publication_path = (
-        "docs/evidence/v0.3.0/2026-11-18-beta3-publication/beta3-publication-final-r1.json"
-    )
+    beta = release["prerelease"]
+    github_latest = release["githubLatest"]
+    publication_path = beta["publicationEvidence"]
     publication = load(root / publication_path)
     wpt = load(root / "tests/wpt/manifest.json")
     reference = load(root / "tests/wpt/workerd-default-profile-v2.json")
@@ -41,11 +41,18 @@ def derive(root):
     version = re.search(r"\bVERSION\s+([0-9]+\.[0-9]+\.[0-9]+)", cmake)[1]
     abi = int(re.search(r"#define CAPSID_ABI_VERSION\s+(\d+)", header)[1])
     wire = int(re.search(r"\bkVersion\s*=\s*(\d+)", protocol)[1])
-    assert (
-        publication["published"]
-        and publication["productCheckout"] == release["prerelease"]["sourceCommit"]
-    )
-    assert version == release["prerelease"]["runtimeVersion"] and abi == 7 and wire == 3
+    assert release["readOnly"] is True and release["noReleaseOrTagMutation"] is True
+    assert publication["published"] and publication["allRequiredCiGatesAndNativePackagesPassed"]
+    assert publication["productCheckout"] == beta["sourceCommit"]
+    assert publication["productTree"] == beta["sourceTree"]
+    for key in ("tag", "releaseId", "draft", "prerelease", "githubLatest", "assets"):
+        assert publication[key] == beta[key], (
+            f"release capture differs from verified publication: {key}"
+        )
+    assert beta["draft"] is False and len(beta["assets"]) == 11
+    assert beta["githubLatest"] == (github_latest["tag"] == beta["tag"])
+    assert not (beta["prerelease"] and beta["githubLatest"])
+    assert version == beta["runtimeVersion"] and abi == 7 and wire == 3
     # Bind the API/source description to its declared release, rather than just
     # relabeling a changed runtime tree with the old qualified commit.
     source_paths = ["src", "include", "js", "patches", "cmake", "CMakeLists.txt", "vendor"]
@@ -60,6 +67,7 @@ def derive(root):
         "packaging-successor",
         "runtime-optimization-successor",
     }
+    assert checkout["baseCommit"] == publication["productCheckout"]
     assert checkout["releaseQualificationInherited"] is False
     qualified_files = source_manifest["qualifiedReleaseFiles"]
     current_files = source_manifest["files"]
@@ -163,10 +171,11 @@ def derive(root):
         "capabilityPolicyVersion": capability["policy_version"],
         "headerSHA256": source_manifest["qualifiedReleaseDigests"]["headerSHA256"],
         "protocolSHA256": source_manifest["qualifiedReleaseDigests"]["protocolSHA256"],
-        "sourceScope": (
-            "qualified 0.3.0-beta interface baseline (v0.3.0-beta.3); current checkout has JS runtime hot-path optimizations (ABI, wire protocol, C/C++ runtime, and vendor engine unchanged)"
+        "sourceScope": f"qualified 0.3.0-beta interface baseline ({beta['tag']}); "
+        + (
+            "current checkout has declared JS runtime changes"
             if actual_runtime_changes
-            else "qualified 0.3.0-beta interface baseline (v0.3.0-beta.3); current checkout runtime inputs match"
+            else "current checkout runtime inputs match"
         ),
         "sourceManifest": "docs/data/runtime-source-manifest.json",
         "appPidLimitFieldEnforced": False,
@@ -189,7 +198,8 @@ def derive(root):
             "inputManifest": "docs/data/runtime-source-manifest.json",
         },
         "stable": release["stable"],
-        "prerelease": release["prerelease"],
+        "githubLatest": github_latest,
+        "prerelease": beta,
         "runtime": runtime,
         "qualification": {
             "sourceCommit": publication["productCheckout"],

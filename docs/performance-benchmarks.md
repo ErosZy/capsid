@@ -1,7 +1,7 @@
 # Performance: Current Measurements and Methodology
 
 Reviewed 2026-11-20. The latest accepted local measurement is a **development
-snapshot** (`0.3.0-beta.4`, `82eaab9`), not a published `v0.3.0-beta.3` or
+snapshot** (`0.3.0-beta.4`, `82eaab9`), not a published `v0.3.0-beta.5` or
 stable `v0.3.0` benchmark. The [current status](current-status.md) and
 [generated data](current-status.json) separate release identity, measured
 source, qualification and historical data.
@@ -18,10 +18,10 @@ source, qualification and historical data.
 | Machine/lane | i5-12400F; 12 logical CPUs; measured set 0–3; WSL2 Linux |
 | Runtime posture | Clean Release/LTO (`CAPSID_USE_MIMALLOC=OFF`); strict C-ABI cold workers; managed/strict serving and density |
 | Record status | All three lanes (`4533` sealed files) and whole-session independent review accepted |
-| Published `v0.3.0-beta.3` | Source `af8acc1`; **not measured by this session** |
+| Published `v0.3.0-beta.5` | Source `c7a80b9`; **not measured by this session** |
 
-The archive label is `v0.3.0-beta.4`, with an empty `sourceTag` until a release
-tag is separately qualified. Source-tree equality does not change a binary's
+The archive label is `v0.3.0-beta.4`, but its measured commit was untagged and
+its `sourceTag` is empty. Source-tree equality does not change a binary's
 embedded commit or make a later binary performance-equivalent. This record does
 not qualify its measured snapshot for release or close all historical runtime
 issues.

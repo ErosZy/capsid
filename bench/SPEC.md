@@ -1,15 +1,10 @@
 # Performance benchmark & perf-site specification
 
-> Reviewed 2026-11-18. The latest accepted local record is measured snapshot
-> 485b29b (2026-11-16), not 0.3.0-beta. See [current status](../docs/current-status.md).
-> Protocol constants and original measurement budgets below are unchanged.
-
-This document is the normative spec for the performance measurement
-system behind <https://eroszy.github.io/capsid/>: the three benchmark
-lanes, the data pipeline into `perf-site/data.js`, the evidence rules,
-and the site's rendering conventions. `docs/performance-benchmarks.md`
-holds the current conclusion-level data and cites this spec; when the
-two disagree, this file wins and the docs are stale.
+This document defines the measurement protocol for the [performance charts](https://rowanellis-113.github.io/capsid/):
+the three benchmark lanes, the data pipeline into `perf-site/data.js`, the
+evidence rules and the site's rendering conventions. See the [performance reference](../docs/performance-benchmarks.md)
+for the latest accepted source and results. A measurement belongs to its
+recorded source, not to a later published prerelease.
 
 ## 1. Principles
 
@@ -27,7 +22,7 @@ two disagree, this file wins and the docs are stale.
    and its legacy CLI replaces a repeated version. That is not permission to
    overwrite a published accepted record: a future remeasurement needs a
    reviewed separate series/schema/archive plan retaining the old result.
-   The current update adds the first 0.3.0 record and leaves 0.2.x values exact.
+   The archived `v1` point and historical `0.2.x` values remain unchanged.
    A clean untagged source can qualify the existing archive contract, but must
    be visibly labeled a measured development snapshot, never a released binary.
 5. **Production posture.** Serving and density measure capsid through the

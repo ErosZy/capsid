@@ -537,8 +537,7 @@
            <b>Namespaces, Landlock, and Seccomp</b> per tenant worker.
            Every benchmark below measures the complete isolated serving path
            under a frozen, replay-verified protocol. The latest accepted data
-           is a development snapshot, not a benchmark of published
-           0.3.0-beta.</p>
+           is a development snapshot, not a benchmark of the published prerelease.</p>
         <div class="hero-tags" id="hero-tags"></div>
       </div>
       <div class="kpis" id="kpis"></div>
@@ -945,13 +944,13 @@ function renderReleaseContext() {
   }
   var s = STATUS;
   $("release-context").innerHTML = "<b>Release status:</b> stable " +
-    '<a href="' + esc(s.stable.url) + '">' + esc(s.stable.tag) + "</a>; experimental " +
-    '<a href="' + esc(s.prerelease.url) + '">' + esc(s.prerelease.channel || "0.3.0-beta") + "</a>." +
+    '<a href="' + esc(s.stable.url) + '">' + esc(s.stable.tag) + "</a>; experimental prerelease " +
+    '<a href="' + esc(s.prerelease.url) + '">' + esc(s.prerelease.tag) + "</a>." +
     " Latest accepted local measurement: <b>" + esc(s.performance.displayLabel) + "</b>, " + esc(s.performance.date) + "." +
     (s.performance.publishedBetaPerformanceMeasured ? "" :
-      " <b>Published 0.3.0-beta has no matching complete performance measurement.</b>") +
+      " <b>Published " + esc(s.prerelease.tag) + " has no matching complete performance measurement.</b>") +
     " The archival v0.3.0 label is not a stable-release claim. " +
-    '<a href="https://github.com/ErosZy/capsid/blob/dev/v0.3.0/docs/current-status.md">Sources and limits</a>' +
+    '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/current-status.md">Sources and limits</a>' +
     " · status captured " + esc(s.asOfUTC.slice(0, 10)) + ".";
 }
 function renderRecordSelector() {
@@ -2641,7 +2640,7 @@ function renderMethod() {
       ' archived files rehashed before staging. Binary identities are recorded in each lane manifest.</div>' +
       (packed ? '<p class="footnote">Complete compressed transport; restore into a new scratch root, then replay the ordinary validators. ' +
         '<a href="evidence-index.json">Full original file/digest index</a> · <a href="archive-index.json">Transport/part index</a> · ' +
-        '<a href="https://github.com/ErosZy/capsid/blob/dev/v0.3.0/perf-site/README.md">Replay instructions</a></p>' : "") +
+        '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/perf-site/README.md">Replay instructions</a></p>' : "") +
       '<details style="margin-top:12px"><summary>Archive downloads and SHA-256</summary>' +
       '<ul class="archive-list">' + links + "</ul></details>" :
       '<div class="footnote" style="margin-top:20px">Historical observation: the current provenance and ' +

@@ -11,9 +11,9 @@ provide that production isolation boundary.
 
 ## 1. Obtain the Tools
 
-These commands target the current source interface and the **0.3.0-beta**
-package. Install it via the [releases and installation](releases.md) guide,
-or follow [building from source](building.md). Stable `v0.2.2` remains
+These commands target the **`v0.3.0-beta.5`** prerelease. Install that exact tag
+via the [releases and installation](releases.md) guide or follow
+[building from source](building.md). Stable `v0.2.2` remains
 available as an explicit tag; this tutorial does not requalify `v0.2.2`.
 
 Keep `capsid-host` and `capsid-worker` from the same build together. A runtime

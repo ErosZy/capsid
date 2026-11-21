@@ -1,7 +1,7 @@
 ![Capsid](logo.png)
 
-[![Testing validity](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/ErosZy/capsid/actions/workflows/testing-validity.yml)
-[![Release](https://img.shields.io/github/v/release/ErosZy/capsid?label=release)](https://github.com/ErosZy/capsid/releases)
+[![Testing validity](https://github.com/rowanellis-113/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/rowanellis-113/capsid/actions/workflows/testing-validity.yml)
+[![Prerelease v0.3.0-beta.5](https://img.shields.io/badge/prerelease-v0.3.0--beta.5-orange)](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Run generated JavaScript behind a Host-controlled boundary.** Capsid is an
@@ -9,12 +9,13 @@ embeddable runtime for self-contained ESM applications exporting a Web-standard
 `fetch(request)` handler. Applications run in worker processes; the Host owns
 listeners, routing, capabilities, resource limits and worker lifetime.
 
-> **Stable**: `0.2.2`. **Prerelease**: `0.3.0-beta`. Public C ABI v7.
+> **Prerelease**: [`v0.3.0-beta.5`](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5).
+> **Stable**: [`v0.2.2`](https://github.com/rowanellis-113/capsid/releases/tag/v0.2.2). Public C ABI v7.
 > The beta is experimental, not a stable-production recommendation. Only Linux
 > strict sandboxing provides the production isolation boundary; native macOS
 > and Windows support is for trusted development and integration.
 >
-> Documentation/data reviewed **2026-11-20** for `dev/v0.3.0`.
+> Documentation/data reviewed **2026-11-21** for `dev/v0.3.0`.
 > [Current status and data scope](docs/current-status.md) separates the published
 > beta, current source interface, measured development snapshot and dated history.
 
@@ -26,15 +27,15 @@ listeners, routing, capabilities, resource limits and worker lifetime.
 - **Embed in your own C/C++ Host:** [Host integration](docs/host-integration.md).
 - **Find a reference or design record:** [Documentation index](docs/README.md).
 
-Install the current `0.3.0-beta` release (currently set as the GitHub `latest`
-release, or pinned explicitly to `v0.3.0-beta.3`; pass `v0.2.2` for stable `0.2.2`):
+On Linux or macOS, select the beta by tag rather than using GitHub's default
+release download:
 
 ```sh
-curl -fsSL https://github.com/ErosZy/capsid/releases/download/v0.3.0-beta.3/install.sh \
-  | bash -s -- v0.3.0-beta.3
+curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5/install.sh \
+  | CAPSID_REPO=rowanellis-113/capsid bash -s -- v0.3.0-beta.5
 ```
 
-Published `0.3.0-beta` packages are available for Linux musl (`x86_64` and `arm64`),
+This prerelease provides native packages for Linux musl (`x86_64` and `arm64`),
 macOS (`arm64` and `x86_64`) and Windows (`x86_64`).
 See the [installation guide](docs/releases.md) for channel selection, architecture
 matching, SHA-256 verification, Windows extraction and package contents.
@@ -151,7 +152,7 @@ The ordinary suite is not represented as all-passing.
 - [Release qualification](docs/v0.3.0-current-qualification.md): source-bound
   beta results, original failures and remaining limits.
 - [Performance methodology](docs/performance-benchmarks.md) and
-  [historical charts](https://eroszy.github.io/capsid/): measurements belong to
+  [performance charts](https://rowanellis-113.github.io/capsid/): measurements belong to
   their recorded source, build, machine and protocol. Historical v0.2.2 numbers
   are not 0.3.0-beta measurements.
 
@@ -163,7 +164,7 @@ service-tree PSS: **14.9 MiB** trickle / **18.6 MiB** loaded (**1,170.5 QPS/MiB*
 at 1 KiB); 1 MiB bytecode cold start: **18.5 ms / 15.2 MiB**. Warm density under
 the 2048 MiB budget: **731 / 503 / 128 strict-sandbox workers** at 10/100 KiB/1 MiB
 (versus **604 / 553 / 219** `workerd` cells). These are source-bound snapshot
-results, **not published 0.3.0-beta (`v0.3.0-beta.3`) benchmarks or a formal
+results, **not benchmarks of published `v0.3.0-beta.5` or a formal
 paired improvement over archived `v1` (`485b29b`) or historical `v0.2.2`**. The
 complete sealed archives (`v3` and preserved `v1`) and provenance are linked from
 the [performance reference](docs/performance-benchmarks.md).

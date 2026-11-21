@@ -25,11 +25,11 @@ See [testing](testing-guide.md) and the
 
 ## 1. Prepare a Checkout
 
-For the published `0.3.0-beta` source:
+For the published `v0.3.0-beta.5` source:
 
 ```sh
-git clone --branch v0.3.0-beta.3 --recurse-submodules \
-  https://github.com/ErosZy/capsid.git
+git clone --branch v0.3.0-beta.5 --recurse-submodules \
+  https://github.com/rowanellis-113/capsid.git
 cd capsid
 ```
 
