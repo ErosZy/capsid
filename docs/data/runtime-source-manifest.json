@@ -22,7 +22,7 @@
     "cmake/AuditTxikiVendor.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "25735a0ef0cec0347445d2d7bb90d82b949d55bc"
+      "gitObject": "6b471da34c89fb352092f41d197b43293da1d3b2"
     },
     "cmake/AuditWasmLimits.cmake": {
       "mode": "100644",
@@ -57,22 +57,22 @@
     "cmake/ComputeBuildIdentity.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "779a996b249be3258016501d2e600f5fcc437aa5"
+      "gitObject": "754ea157a03a549d005a270d43231a5ea3198f55"
     },
     "cmake/ComputeTxikiOverlayKey.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "0e9685d176f999771cf39a052e181748f129f05f"
+      "gitObject": "6b167aa78ab7665910d3a0cef69870f44601be70"
     },
     "cmake/GeneratePackageArtifacts.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "631f6984cf3eefee775d60d110c6e6f1f6fa2e5e"
+      "gitObject": "68f120b740379eedfdcf0bf037384da5ab697b12"
     },
     "cmake/PrepareTxiki.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "b0c739af56565bfcca9cb66155789f81b8cb0fee"
+      "gitObject": "5eaddf03f05d1004171a2faa25cdaeac9fe35482"
     },
     "cmake/ReadPackageAsanRuntime.cmake": {
       "mode": "100644",
@@ -112,12 +112,12 @@
     "cmake/TestTxikiOverlayConfigureDependencies.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "59f0d6f1cead5f0c4eb912f29d9cd214c7cda2b4"
+      "gitObject": "4ddc5a3695fb6acb88df558caea6e5bec3e0628f"
     },
     "cmake/TestTxikiOverlayKey.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "fc7fb138c1b7fe5b2768c0caccfd5094b2def236"
+      "gitObject": "922f01db51b96537b4f369af40bc9d721af9d9d4"
     },
     "cmake/TestWasmLimitsNegative.cmake": {
       "mode": "100644",
@@ -137,7 +137,7 @@
     "cmake/ValidatePackageMetadata.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "b9efe575c80b3e96719e48ca688c46cd329c7f25"
+      "gitObject": "a2e1e053275147481cf224b95c7600cbe0ad25fe"
     },
     "cmake/WindowsAsanRuntime.cmake": {
       "mode": "100644",
@@ -157,12 +157,12 @@
     "cmake/build_tests.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "5922883fb2ea6a77dbd41d0128e62dd710399830"
+      "gitObject": "2451164fc5d59cb85b2637952d5283a4bcd662b3"
     },
     "cmake/build_worker.cmake": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "835fe8a6629217083865717108594237fc25d2ca"
+      "gitObject": "ffec3b8c56876c0912e1df4b825291c61b8d1da4"
     },
     "cmake/capability_manifest_hash.h.in": {
       "mode": "100644",
@@ -703,6 +703,11 @@
       "mode": "100644",
       "kind": "blob",
       "gitObject": "36347e5a20608c0a88391dbc111c166d9bb05451"
+    },
+    "patches/txiki/0079-quickjs-turbo-integration.patch": {
+      "mode": "100644",
+      "kind": "blob",
+      "gitObject": "403e7a1eebf71c969e8accdb31d3d1dbcc081568"
     },
     "patches/web-streams/0001-workerd-byte-profile.patch": {
       "mode": "100644",
@@ -1367,7 +1372,7 @@
     "src/worker_main.cc": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "ca11b33af2ef4c135f4ab7a26cd0268152309264"
+      "gitObject": "56c43ee6bb305ca37d064a1404c49f8687619a43"
     },
     "src/worker_runtime.cc": {
       "mode": "100644",
@@ -1508,6 +1513,11 @@
       "mode": "100644",
       "kind": "blob",
       "gitObject": "f1026af14baa76ee5de4d635ba1291a21be03e98"
+    },
+    "vendor/quickjs-turbo": {
+      "mode": "160000",
+      "kind": "commit",
+      "gitObject": "fb7a53b6fb06edd46a431224fdd839b71fe0b629"
     },
     "vendor/txiki.js": {
       "mode": "160000",
@@ -3092,7 +3102,7 @@
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf"
   },
   "checkout": {
-    "kind": "docs-successor",
+    "kind": "engine-integration-successor",
     "baseCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
     "formatters": {
       "clang-format": "23.1.5",
@@ -3100,8 +3110,64 @@
       "ruff": "0.17.5"
     },
     "releaseQualificationInherited": false,
-    "changeScope": "documentation and verified release metadata following v0.3.0-beta.5; tagged runtime, ABI, wire, CMake and vendor inputs unchanged",
-    "buildInputChanges": {},
-    "runtimeInputChanges": {}
+    "changeScope": "dev/v0.3.1 quickjs-turbo v0.15.1-turbo.3 integration with density defaults (QJS_DISABLE_NATIVE_OWN_BYTECODE + QJS_DISABLE_PROPERTY_IC), build/overlay/SBOM wiring, workerd_reader_scope_contract_controls timeout increase, and workflow branch transition; tagged v0.3.0-beta.5 binaries and measurements remain unchanged",
+    "buildInputChanges": {
+      "cmake/AuditTxikiVendor.cmake": {
+        "qualifiedGitObject": "25735a0ef0cec0347445d2d7bb90d82b949d55bc",
+        "currentGitObject": "6b471da34c89fb352092f41d197b43293da1d3b2"
+      },
+      "cmake/ComputeBuildIdentity.cmake": {
+        "qualifiedGitObject": "779a996b249be3258016501d2e600f5fcc437aa5",
+        "currentGitObject": "754ea157a03a549d005a270d43231a5ea3198f55"
+      },
+      "cmake/ComputeTxikiOverlayKey.cmake": {
+        "qualifiedGitObject": "0e9685d176f999771cf39a052e181748f129f05f",
+        "currentGitObject": "6b167aa78ab7665910d3a0cef69870f44601be70"
+      },
+      "cmake/GeneratePackageArtifacts.cmake": {
+        "qualifiedGitObject": "631f6984cf3eefee775d60d110c6e6f1f6fa2e5e",
+        "currentGitObject": "68f120b740379eedfdcf0bf037384da5ab697b12"
+      },
+      "cmake/PrepareTxiki.cmake": {
+        "qualifiedGitObject": "b0c739af56565bfcca9cb66155789f81b8cb0fee",
+        "currentGitObject": "5eaddf03f05d1004171a2faa25cdaeac9fe35482"
+      },
+      "cmake/TestTxikiOverlayConfigureDependencies.cmake": {
+        "qualifiedGitObject": "59f0d6f1cead5f0c4eb912f29d9cd214c7cda2b4",
+        "currentGitObject": "4ddc5a3695fb6acb88df558caea6e5bec3e0628f"
+      },
+      "cmake/TestTxikiOverlayKey.cmake": {
+        "qualifiedGitObject": "fc7fb138c1b7fe5b2768c0caccfd5094b2def236",
+        "currentGitObject": "922f01db51b96537b4f369af40bc9d721af9d9d4"
+      },
+      "cmake/ValidatePackageMetadata.cmake": {
+        "qualifiedGitObject": "b9efe575c80b3e96719e48ca688c46cd329c7f25",
+        "currentGitObject": "a2e1e053275147481cf224b95c7600cbe0ad25fe"
+      },
+      "cmake/build_tests.cmake": {
+        "qualifiedGitObject": "5922883fb2ea6a77dbd41d0128e62dd710399830",
+        "currentGitObject": "2451164fc5d59cb85b2637952d5283a4bcd662b3"
+      },
+      "cmake/build_worker.cmake": {
+        "qualifiedGitObject": "835fe8a6629217083865717108594237fc25d2ca",
+        "currentGitObject": "ffec3b8c56876c0912e1df4b825291c61b8d1da4"
+      }
+    },
+    "runtimeInputChanges": {
+      "src/worker_main.cc": {
+        "qualifiedGitObject": "ca11b33af2ef4c135f4ab7a26cd0268152309264",
+        "currentGitObject": "56c43ee6bb305ca37d064a1404c49f8687619a43"
+      }
+    },
+    "vendorPatchChanges": {
+      "patches/txiki/0079-quickjs-turbo-integration.patch": {
+        "qualifiedGitObject": null,
+        "currentGitObject": "403e7a1eebf71c969e8accdb31d3d1dbcc081568"
+      },
+      "vendor/quickjs-turbo": {
+        "qualifiedGitObject": null,
+        "currentGitObject": "fb7a53b6fb06edd46a431224fdd839b71fe0b629"
+      }
+    }
   }
 }

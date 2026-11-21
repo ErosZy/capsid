@@ -1,3 +1,6 @@
 [submodule "vendor/txiki.js"]
 	path = vendor/txiki.js
 	url = https://github.com/saghul/txiki.js
+[submodule "vendor/quickjs-turbo"]
+	path = vendor/quickjs-turbo
+	url = https://github.com/rowanellis-113/quickjs-turbo

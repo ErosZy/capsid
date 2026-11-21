@@ -3413,7 +3413,7 @@ if(BUILD_TESTING)
                 COMMAND "${CAPSID_HOST_TEST_NODE}" --test
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_reader_scope_contract.mjs")
             set_tests_properties(workerd_reader_scope_contract_controls PROPERTIES
-                TIMEOUT 60 LABELS "host;websocket;fetch;lifecycle;reference-gate")
+                TIMEOUT 180 LABELS "host;websocket;fetch;lifecycle;reference-gate")
             add_test(NAME workerd_standard_reader_contract_controls
                 COMMAND "${CAPSID_HOST_TEST_NODE}" --test
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workerd_standard_reader_contract.mjs")

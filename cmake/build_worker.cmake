@@ -8,6 +8,7 @@ if(CAPSID_BUILD_WORKER)
         OUT_PATCHES CAPSID_TXIKI_PATCHES
         OUT_GIT_DEPENDENCIES CAPSID_TXIKI_GIT_DEPENDENCIES
         VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js"
+        QUICKJS_TURBO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/quickjs-turbo"
         PATCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/patches/txiki"
         PREPARE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareTxiki.cmake"
     )
@@ -66,6 +67,7 @@ if(CAPSID_BUILD_WORKER)
         execute_process(
             COMMAND "${CMAKE_COMMAND}"
                 "-DCAPSID_VENDOR_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js"
+                "-DCAPSID_QUICKJS_TURBO_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/vendor/quickjs-turbo"
                 "-DCAPSID_VENDOR_OVERLAY=${CAPSID_TXIKI_OVERLAY}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PrepareTxiki.cmake"
             RESULT_VARIABLE CAPSID_PREPARE_RESULT
@@ -101,6 +103,7 @@ if(CAPSID_BUILD_WORKER)
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/miniz/*"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/libwebsockets/include/*"
         "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/libwebsockets/lib/*"
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/quickjs-turbo/vm/*"
     )
 
     # Use APPEND so this does not overwrite the CMAKE_CONFIGURE_DEPENDS entries

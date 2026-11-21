@@ -176,20 +176,20 @@ function(capsid_generate_build_identity)
         endif()
         execute_process(
             COMMAND "${CGBI_GIT}" -C
-                "${CMAKE_CURRENT_SOURCE_DIR}/vendor/txiki.js/deps/quickjs"
+                "${CMAKE_CURRENT_SOURCE_DIR}/vendor/quickjs-turbo"
                 rev-parse HEAD
             OUTPUT_VARIABLE CGBI_ACTUAL_QUICKJS_COMMIT
             OUTPUT_STRIP_TRAILING_WHITESPACE
             RESULT_VARIABLE CGBI_QUICKJS_RESULT)
         if(NOT CGBI_QUICKJS_RESULT EQUAL 0)
             message(FATAL_ERROR
-                "Cannot resolve the QuickJS gitlink for build identity")
+                "Cannot resolve the quickjs-turbo revision for build identity")
         endif()
         if(NOT CGBI_ACTUAL_QUICKJS_COMMIT STREQUAL CGBI_QUICKJS_COMMIT)
             message(FATAL_ERROR
-                "vendor/txiki.js/deps/quickjs HEAD "
+                "vendor/quickjs-turbo HEAD "
                 "${CGBI_ACTUAL_QUICKJS_COMMIT} differs from the locked "
-                "gitlink ${CGBI_QUICKJS_COMMIT}")
+                "commit ${CGBI_QUICKJS_COMMIT}")
         endif()
         set(CGBI_STAMP "${CMAKE_CURRENT_BINARY_DIR}/vendor-overlay/txiki.js/.capsid-overlay-key")
         file(STRINGS "${CGBI_STAMP}" CGBI_STAMP_LINES)

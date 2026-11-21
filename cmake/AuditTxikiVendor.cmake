@@ -21,9 +21,16 @@ foreach(CAPSID_REQUIRED_VAR
         message(FATAL_ERROR "${CAPSID_REQUIRED_VAR} is required")
     endif()
 endforeach()
+if(NOT DEFINED CAPSID_QUICKJS_TURBO_VENDOR OR CAPSID_QUICKJS_TURBO_VENDOR STREQUAL "")
+    get_filename_component(
+        CAPSID_QUICKJS_TURBO_VENDOR
+        "${CAPSID_TXIKI_VENDOR}/../quickjs-turbo"
+        ABSOLUTE)
+endif()
 
 foreach(CAPSID_REQUIRED_FILE
         CAPSID_TXIKI_VENDOR
+        CAPSID_QUICKJS_TURBO_VENDOR
         CAPSID_TXIKI_PATCH_DIR
         CAPSID_TXIKI_PREPARE_SCRIPT)
     if(NOT EXISTS "${${CAPSID_REQUIRED_FILE}}")
@@ -196,9 +203,10 @@ list(LENGTH CAPSID_TXIKI_PATCHES CAPSID_PATCH_COUNT)
 # 0076 keeps WebAssembly bytecode, table and frame accesses aligned and releases validation buffers.
 # 0077 avoids pointer arithmetic on null storage when transfer detaches an empty typed-array view.
 # 0078 keeps compiler-probe cache keys valid identifiers across repeated configuration.
-if(NOT CAPSID_PATCH_COUNT EQUAL 78)
+# 0079 integrates quickjs-turbo's audited VM overlay into the txiki.js QuickJS build.
+if(NOT CAPSID_PATCH_COUNT EQUAL 79)
     string(APPEND CAPSID_AUDIT_FAILURES
-        "\n  expected 78 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
+        "\n  expected 79 v26.6.0 patches, found ${CAPSID_PATCH_COUNT}")
 endif()
 
 # --- overlay key via shared function -----------------------------------------
@@ -208,6 +216,7 @@ capsid_compute_txiki_overlay_key(
     OUT_KEY CAPSID_OVERLAY_KEY
     OUT_PATCHES CAPSID_KEY_PATCHES
     VENDOR_DIR "${CAPSID_TXIKI_VENDOR}"
+    QUICKJS_TURBO_DIR "${CAPSID_QUICKJS_TURBO_VENDOR}"
     PATCH_DIR "${CAPSID_TXIKI_PATCH_DIR}"
     PREPARE_SCRIPT "${CAPSID_TXIKI_PREPARE_SCRIPT}"
 )
@@ -331,7 +340,16 @@ if(CAPSID_PATCH_COUNT GREATER 0)
             CAPSID_PATCHED_PARENT "${CAPSID_PATCHED_PATH}" DIRECTORY)
         file(MAKE_DIRECTORY
             "${CAPSID_APPLY_PROBE}/${CAPSID_PATCHED_PARENT}")
-        if(EXISTS "${CAPSID_TXIKI_VENDOR}/${CAPSID_PATCHED_PATH}")
+        if(CAPSID_PATCHED_PATH MATCHES "^deps/quickjs/vm/(.+)$")
+            set(CAPSID_TURBO_SOURCE_FILE
+                "${CAPSID_QUICKJS_TURBO_VENDOR}/vm/${CMAKE_MATCH_1}")
+            if(EXISTS "${CAPSID_TURBO_SOURCE_FILE}")
+                file(COPY
+                    "${CAPSID_TURBO_SOURCE_FILE}"
+                    DESTINATION
+                    "${CAPSID_APPLY_PROBE}/${CAPSID_PATCHED_PARENT}")
+            endif()
+        elseif(EXISTS "${CAPSID_TXIKI_VENDOR}/${CAPSID_PATCHED_PATH}")
             file(COPY
                 "${CAPSID_TXIKI_VENDOR}/${CAPSID_PATCHED_PATH}"
                 DESTINATION

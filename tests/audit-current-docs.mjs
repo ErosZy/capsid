@@ -330,7 +330,7 @@ const currentStatus = JSON.parse(
 const profileV2 = JSON.parse(
   await readFile(path.join(root, 'tests/wpt/workerd-default-profile-v2.json'), 'utf8'),
 );
-assert.equal(currentStatus.developmentBranch, 'dev/v0.3.0');
+assert.equal(currentStatus.developmentBranch, 'dev/v0.3.1');
 assert.equal(currentStatus.prerelease.channel, '0.3.0-beta');
 assert.equal(currentStatus.prerelease.tag, 'v0.3.0-beta.5');
 assert.equal(currentStatus.prerelease.draft, false);
@@ -360,14 +360,15 @@ assert.equal(currentStatus.runtime.sourceCommit, currentStatus.prerelease.source
 assert.equal(currentStatus.runtime.sourceTree, currentStatus.prerelease.sourceTree);
 assert.equal(currentStatus.runtime.publicAbi, 7);
 assert.equal(currentStatus.runtime.defaultWireVersion, 3);
-assert.equal(currentStatus.checkout.kind, 'docs-successor');
+assert.equal(currentStatus.checkout.kind, 'engine-integration-successor');
 assert.equal(currentStatus.checkout.baseCommit, currentStatus.prerelease.sourceCommit);
-assert.deepEqual(currentStatus.checkout.buildInputChanges, {});
-assert.deepEqual(currentStatus.checkout.runtimeInputChanges, {});
+assert.ok(Object.keys(currentStatus.checkout.buildInputChanges).length > 0);
+assert.ok(Object.keys(currentStatus.checkout.runtimeInputChanges).length > 0);
+assert.ok(Object.keys(currentStatus.checkout.vendorPatchChanges).length > 0);
 assert.equal(
   currentStatus.checkout.releaseQualificationInherited,
   false,
-  'documentation successors do not inherit binary qualification beyond the tagged release',
+  'engine integration successors do not inherit binary qualification beyond the tagged release',
 );
 assert.match(currentStatus.runtime.sourceScope, /qualified 0\.3\.0-beta interface baseline/);
 assert.equal(currentStatus.conformance.referenceProfile, profileV2.id);

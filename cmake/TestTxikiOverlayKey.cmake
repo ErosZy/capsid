@@ -16,12 +16,19 @@ foreach(CAPSID_REQUIRED_INPUT
 endforeach()
 
 find_program(CAPSID_GIT_EXECUTABLE git REQUIRED)
+if(NOT DEFINED CAPSID_QUICKJS_TURBO_VENDOR OR CAPSID_QUICKJS_TURBO_VENDOR STREQUAL "")
+    get_filename_component(
+        CAPSID_QUICKJS_TURBO_VENDOR
+        "${CAPSID_TXIKI_VENDOR}/../quickjs-turbo"
+        ABSOLUTE)
+endif()
 
 include("${CAPSID_TXIKI_KEY_SCRIPT}")
 capsid_compute_txiki_overlay_key(
     OUT_KEY CAPSID_ACTUAL_KEY
     OUT_PATCHES CAPSID_ACTUAL_PATCHES
     VENDOR_DIR "${CAPSID_TXIKI_VENDOR}"
+    QUICKJS_TURBO_DIR "${CAPSID_QUICKJS_TURBO_VENDOR}"
     PATCH_DIR "${CAPSID_TXIKI_PATCH_DIR}"
     PREPARE_SCRIPT "${CAPSID_TXIKI_PREPARE_SCRIPT}"
 )
@@ -35,6 +42,17 @@ execute_process(
 )
 if(NOT CAPSID_VENDOR_RESULT EQUAL 0)
     message(FATAL_ERROR "cannot resolve vendor revision")
+endif()
+
+execute_process(
+    COMMAND "${CAPSID_GIT_EXECUTABLE}" -C "${CAPSID_QUICKJS_TURBO_VENDOR}"
+        rev-parse HEAD
+    OUTPUT_VARIABLE CAPSID_TURBO_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE CAPSID_TURBO_RESULT
+)
+if(NOT CAPSID_TURBO_RESULT EQUAL 0)
+    message(FATAL_ERROR "cannot resolve quickjs-turbo revision")
 endif()
 
 execute_process(
@@ -93,6 +111,8 @@ list(SORT CAPSID_PATCHES)
 set(CAPSID_CANONICAL_INPUT "schema=capsid-txiki-overlay-v1\n")
 string(APPEND CAPSID_CANONICAL_INPUT
     "vendor=${CAPSID_VENDOR_REVISION}\n")
+string(APPEND CAPSID_CANONICAL_INPUT
+    "quickjs-turbo=${CAPSID_TURBO_REVISION}\n")
 foreach(CAPSID_SORTABLE IN LISTS CAPSID_SORTABLE_SUBMODULES)
     string(REGEX REPLACE "^([^|]+)[|](.+)$" "\\1" CAPSID_PATH
         "${CAPSID_SORTABLE}")

@@ -23,6 +23,18 @@ extern "C" {
 
 namespace {
 
+#if defined(__linux__) && (defined(__GNUC__) || defined(__clang__))
+__attribute__((constructor(101))) void configure_quickjs_turbo_density_defaults() {
+    // Run before quickjs-turbo's default-priority constructor
+    // (js_linux_property_configure) so per-function inline hint tails
+    // (~634 KiB/worker across bootstrap.js) and first-touch Property IC
+    // slabs (~196 KiB/worker) are not eagerly allocated at worker startup.
+    // Leave explicit overrides intact via overwrite=0.
+    (void)setenv("QJS_DISABLE_NATIVE_OWN_BYTECODE", "1", 0);
+    (void)setenv("QJS_DISABLE_PROPERTY_IC", "1", 0);
+}
+#endif
+
 void close_unrelated_descriptors(int ipc_fd, int network_namespace_fd) {
 #if defined(__linux__) && defined(__NR_close_range)
     // Use close_range to close everything above the highest reserved fd.
@@ -133,6 +145,13 @@ int capsid_worker_main(int argc, char** argv, const CapsidWorkerIo* io) {
     if (close_stdio && !redirect_stdio_to_dev_null()) {
         return 2;
     }
+#if defined(_WIN32)
+    if (std::getenv("QJS_DISABLE_PROPERTY_IC") == nullptr) {
+        (void)_putenv_s("QJS_DISABLE_PROPERTY_IC", "1");
+    }
+#elif !defined(__linux__)
+    (void)setenv("QJS_DISABLE_PROPERTY_IC", "1", 0);
+#endif
     TJS_Initialize(argc, argv);
     return capsid_run_worker(ipc_fd, network_namespace_fd, io);
 }

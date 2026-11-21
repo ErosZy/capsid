@@ -3,7 +3,7 @@
   "observedAtUTC": "2026-11-21T04:33:52Z",
   "readOnly": true,
   "repository": "rowanellis-113/capsid",
-  "developmentBranch": "dev/v0.3.0",
+  "developmentBranch": "dev/v0.3.1",
   "stable": {
     "tag": "v0.2.2",
     "releaseId": 380229548,

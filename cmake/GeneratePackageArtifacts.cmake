@@ -159,7 +159,7 @@ string(JSON CAPSID_GPA_PKG_TXIKI SET "${CAPSID_GPA_PKG_TXIKI}"
 string(JSON CAPSID_GPA_PKG_QUICKJS SET "{}"
     "SPDXID" "\"SPDXRef-Package-QuickJS\"")
 string(JSON CAPSID_GPA_PKG_QUICKJS SET "${CAPSID_GPA_PKG_QUICKJS}"
-    "name" "\"quickjs-ng\"")
+    "name" "\"quickjs-turbo\"")
 string(JSON CAPSID_GPA_PKG_QUICKJS SET "${CAPSID_GPA_PKG_QUICKJS}"
     "versionInfo" "\"${CAPSID_SBOM_QUICKJS}\"")
 string(JSON CAPSID_GPA_PKG_QUICKJS SET "${CAPSID_GPA_PKG_QUICKJS}"
@@ -169,7 +169,7 @@ string(JSON CAPSID_GPA_PKG_QUICKJS SET "${CAPSID_GPA_PKG_QUICKJS}"
 string(JSON CAPSID_GPA_PKG_QUICKJS SET "${CAPSID_GPA_PKG_QUICKJS}"
     "copyrightText" "\"NOASSERTION\"")
 string(JSON CAPSID_GPA_PKG_QUICKJS SET "${CAPSID_GPA_PKG_QUICKJS}"
-    "comment" "\"locked quickjs commit inside the txiki.js overlay\"")
+    "comment" "\"locked quickjs-turbo commit layered over the txiki.js overlay\"")
 
 string(JSON CAPSID_GPA_PKG_LWS SET "{}"
     "SPDXID" "\"SPDXRef-Package-LibWebSockets\"")

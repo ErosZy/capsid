@@ -71,7 +71,7 @@ function(capsid_validate_package_metadata root source basename)
     endif()
     capsid_sbom_expect("${sbom}" "SPDXRef-Package-Capsid" documentDescribes 0)
 
-    set(expected_packages capsid txiki.js quickjs-ng libwebsockets)
+    set(expected_packages capsid txiki.js quickjs-turbo libwebsockets)
     set(expected_ids SPDXRef-Package-Capsid SPDXRef-Package-Txiki
         SPDXRef-Package-QuickJS SPDXRef-Package-LibWebSockets)
     set(expected_versions "${source_version}" "${txiki_version}" "${quickjs_version}" "${lws_version}")

@@ -1,6 +1,17 @@
 if(NOT DEFINED CAPSID_VENDOR_SOURCE OR NOT DEFINED CAPSID_VENDOR_OVERLAY)
     message(FATAL_ERROR "CAPSID_VENDOR_SOURCE and CAPSID_VENDOR_OVERLAY are required")
 endif()
+if(NOT DEFINED CAPSID_QUICKJS_TURBO_SOURCE)
+    get_filename_component(
+        CAPSID_QUICKJS_TURBO_SOURCE
+        "${CMAKE_CURRENT_LIST_DIR}/../vendor/quickjs-turbo"
+        ABSOLUTE
+    )
+endif()
+if(NOT EXISTS "${CAPSID_QUICKJS_TURBO_SOURCE}/vm/CMakeLists.txt")
+    message(FATAL_ERROR
+        "CAPSID_QUICKJS_TURBO_SOURCE is missing vm/CMakeLists.txt: ${CAPSID_QUICKJS_TURBO_SOURCE}")
+endif()
 
 file(REMOVE_RECURSE "${CAPSID_VENDOR_OVERLAY}")
 file(MAKE_DIRECTORY "${CAPSID_VENDOR_OVERLAY}")
@@ -54,6 +65,12 @@ file(COPY
     "${CAPSID_VENDOR_SOURCE}/deps/mbedtls"
     "${CAPSID_VENDOR_SOURCE}/deps/miniz"
     DESTINATION "${CAPSID_VENDOR_OVERLAY}/deps"
+)
+# Layer quickjs-turbo's audited VM overlay into the private overlay copy while
+# keeping vendor/txiki.js and vendor/quickjs-turbo pristine on disk.
+file(COPY
+    "${CAPSID_QUICKJS_TURBO_SOURCE}/vm"
+    DESTINATION "${CAPSID_VENDOR_OVERLAY}/deps/quickjs"
 )
 
 set(CAPSID_LWS_SOURCE "${CAPSID_VENDOR_SOURCE}/deps/libwebsockets")

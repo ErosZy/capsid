@@ -3,8 +3,49 @@ window.CAPSID_SITE_STATUS = {
   "asOfUTC": "2026-11-21T04:33:52Z",
   "checkout": {
     "baseCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
-    "buildInputChanges": {},
-    "changeScope": "documentation and verified release metadata following v0.3.0-beta.5; tagged runtime, ABI, wire, CMake and vendor inputs unchanged",
+    "buildInputChanges": {
+      "cmake/AuditTxikiVendor.cmake": {
+        "currentGitObject": "6b471da34c89fb352092f41d197b43293da1d3b2",
+        "qualifiedGitObject": "25735a0ef0cec0347445d2d7bb90d82b949d55bc"
+      },
+      "cmake/ComputeBuildIdentity.cmake": {
+        "currentGitObject": "754ea157a03a549d005a270d43231a5ea3198f55",
+        "qualifiedGitObject": "779a996b249be3258016501d2e600f5fcc437aa5"
+      },
+      "cmake/ComputeTxikiOverlayKey.cmake": {
+        "currentGitObject": "6b167aa78ab7665910d3a0cef69870f44601be70",
+        "qualifiedGitObject": "0e9685d176f999771cf39a052e181748f129f05f"
+      },
+      "cmake/GeneratePackageArtifacts.cmake": {
+        "currentGitObject": "68f120b740379eedfdcf0bf037384da5ab697b12",
+        "qualifiedGitObject": "631f6984cf3eefee775d60d110c6e6f1f6fa2e5e"
+      },
+      "cmake/PrepareTxiki.cmake": {
+        "currentGitObject": "5eaddf03f05d1004171a2faa25cdaeac9fe35482",
+        "qualifiedGitObject": "b0c739af56565bfcca9cb66155789f81b8cb0fee"
+      },
+      "cmake/TestTxikiOverlayConfigureDependencies.cmake": {
+        "currentGitObject": "4ddc5a3695fb6acb88df558caea6e5bec3e0628f",
+        "qualifiedGitObject": "59f0d6f1cead5f0c4eb912f29d9cd214c7cda2b4"
+      },
+      "cmake/TestTxikiOverlayKey.cmake": {
+        "currentGitObject": "922f01db51b96537b4f369af40bc9d721af9d9d4",
+        "qualifiedGitObject": "fc7fb138c1b7fe5b2768c0caccfd5094b2def236"
+      },
+      "cmake/ValidatePackageMetadata.cmake": {
+        "currentGitObject": "a2e1e053275147481cf224b95c7600cbe0ad25fe",
+        "qualifiedGitObject": "b9efe575c80b3e96719e48ca688c46cd329c7f25"
+      },
+      "cmake/build_tests.cmake": {
+        "currentGitObject": "2451164fc5d59cb85b2637952d5283a4bcd662b3",
+        "qualifiedGitObject": "5922883fb2ea6a77dbd41d0128e62dd710399830"
+      },
+      "cmake/build_worker.cmake": {
+        "currentGitObject": "ffec3b8c56876c0912e1df4b825291c61b8d1da4",
+        "qualifiedGitObject": "835fe8a6629217083865717108594237fc25d2ca"
+      }
+    },
+    "changeScope": "dev/v0.3.1 quickjs-turbo v0.15.1-turbo.3 integration with density defaults (QJS_DISABLE_NATIVE_OWN_BYTECODE + QJS_DISABLE_PROPERTY_IC), build/overlay/SBOM wiring, workerd_reader_scope_contract_controls timeout increase, and workflow branch transition; tagged v0.3.0-beta.5 binaries and measurements remain unchanged",
     "formatters": {
       "clang-format": "23.1.5",
       "prettier": "3.8.3",
@@ -12,10 +53,25 @@ window.CAPSID_SITE_STATUS = {
     },
     "headerSHA256": "54946a795edfd8f9dec7fdca6a66887e9140c28f473d96e4027d9ab17b5caa97",
     "inputManifest": "docs/data/runtime-source-manifest.json",
-    "kind": "docs-successor",
+    "kind": "engine-integration-successor",
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf",
     "releaseQualificationInherited": false,
-    "runtimeInputChanges": {}
+    "runtimeInputChanges": {
+      "src/worker_main.cc": {
+        "currentGitObject": "56c43ee6bb305ca37d064a1404c49f8687619a43",
+        "qualifiedGitObject": "ca11b33af2ef4c135f4ab7a26cd0268152309264"
+      }
+    },
+    "vendorPatchChanges": {
+      "patches/txiki/0079-quickjs-turbo-integration.patch": {
+        "currentGitObject": "403e7a1eebf71c969e8accdb31d3d1dbcc081568",
+        "qualifiedGitObject": null
+      },
+      "vendor/quickjs-turbo": {
+        "currentGitObject": "fb7a53b6fb06edd46a431224fdd839b71fe0b629",
+        "qualifiedGitObject": null
+      }
+    }
   },
   "conformance": {
     "executedFiles": 84,
@@ -51,7 +107,7 @@ window.CAPSID_SITE_STATUS = {
     "standardsConformanceClaimed": false,
     "wptCommit": "1985b47aa8972a970f005957f2bfa036da1787c6"
   },
-  "developmentBranch": "dev/v0.3.0",
+  "developmentBranch": "dev/v0.3.1",
   "githubLatest": {
     "prerelease": false,
     "releaseId": 450090685,
@@ -273,11 +329,11 @@ window.CAPSID_SITE_STATUS = {
     "negotiatedWireVersion": 4,
     "protocolSHA256": "2c7a5fb6eb02fafcf30df741a1be6d742c17d9a3d2a1a58c563bc35f1c438bcf",
     "publicAbi": 7,
-    "quickjsCommit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e",
-    "sdkPatchCount": 78,
+    "quickjsCommit": "fb7a53b6fb06edd46a431224fdd839b71fe0b629",
+    "sdkPatchCount": 79,
     "sourceCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
     "sourceManifest": "docs/data/runtime-source-manifest.json",
-    "sourceScope": "qualified 0.3.0-beta interface baseline (v0.3.0-beta.5); current checkout runtime inputs match",
+    "sourceScope": "qualified 0.3.0-beta interface baseline (v0.3.0-beta.5); current checkout has declared engine, build, and runtime changes",
     "sourceTree": "876e29c2792899b654310fea72aac979bd8bb48f",
     "txiki": {
       "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787",
@@ -300,7 +356,7 @@ window.CAPSID_SITE_STATUS = {
     "version": "0.3.0"
   },
   "schema": 1,
-  "sourceChangeScope": "documentation and verified release metadata following v0.3.0-beta.5; tagged runtime, ABI, wire, CMake and vendor inputs unchanged",
+  "sourceChangeScope": "dev/v0.3.1 quickjs-turbo v0.15.1-turbo.3 integration with density defaults (QJS_DISABLE_NATIVE_OWN_BYTECODE + QJS_DISABLE_PROPERTY_IC), build/overlay/SBOM wiring, workerd_reader_scope_contract_controls timeout increase, and workflow branch transition; tagged v0.3.0-beta.5 binaries and measurements remain unchanged",
   "stable": {
     "githubLatest": false,
     "prerelease": false,

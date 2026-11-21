@@ -68,6 +68,7 @@ def derive(root):
         "formatting-successor",
         "packaging-successor",
         "runtime-optimization-successor",
+        "engine-integration-successor",
     }
     assert checkout["baseCommit"] == publication["productCheckout"]
     assert checkout["releaseQualificationInherited"] is False
@@ -75,11 +76,18 @@ def derive(root):
     current_files = source_manifest["files"]
     declared_build_changes = checkout.get("buildInputChanges", {})
     declared_runtime_changes = checkout.get("runtimeInputChanges", {})
+    declared_vendor_patch_changes = checkout.get("vendorPatchChanges", {})
     if checkout["kind"] in {"docs-successor", "formatting-successor"}:
         assert not declared_build_changes, "docs/formatting cannot change build inputs"
         assert not declared_runtime_changes, "docs/formatting cannot change runtime inputs"
+        assert not declared_vendor_patch_changes, (
+            "docs/formatting cannot change vendor/patch inputs"
+        )
     elif checkout["kind"] == "runtime-optimization-successor":
         assert not declared_build_changes, "runtime JS optimization cannot change build inputs"
+        assert not declared_vendor_patch_changes, (
+            "runtime JS optimization cannot change vendor/patch inputs"
+        )
         assert declared_runtime_changes, (
             "runtime-optimization-successor requires explicit runtimeInputChanges"
         )
@@ -87,26 +95,46 @@ def derive(root):
             "runtime-optimization-successor scope is restricted to js/ hot-path files"
         )
         assert checkout.get("changeScope"), "runtime optimization scope must be described"
+    elif checkout["kind"] == "engine-integration-successor":
+        assert declared_vendor_patch_changes, (
+            "engine-integration-successor requires explicit vendorPatchChanges"
+        )
+        assert declared_build_changes, (
+            "engine-integration-successor requires explicit buildInputChanges"
+        )
+        assert checkout.get("changeScope"), "engine integration scope must be described"
     else:
         assert not declared_runtime_changes, "packaging cannot change runtime inputs"
+        assert not declared_vendor_patch_changes, "packaging cannot change vendor/patch inputs"
         assert set(declared_build_changes) == {
             "cmake/CapsidPackage.cmake",
             "cmake/CapsidPackagePlatform.cmake",
             "cmake/build_tests.cmake",
         }, "packaging changes require their explicit reviewed build-input scope"
         assert checkout.get("changeScope"), "packaging scope must be described separately"
-    added_files = (set(declared_build_changes) | set(declared_runtime_changes)) - set(
-        qualified_files
-    )
+    added_files = (
+        set(declared_build_changes)
+        | set(declared_runtime_changes)
+        | set(declared_vendor_patch_changes)
+    ) - set(qualified_files)
     assert current_files.keys() == qualified_files.keys() | added_files
     actual_build_changes = set()
     actual_runtime_changes = set()
+    actual_vendor_patch_changes = set()
     for name, current in current_files.items():
         original = qualified_files.get(name)
         if original is not None:
             assert current["mode"] == original["mode"]
         if name.startswith(("patches/", "vendor/")):
-            assert current == original, "locked vendor/patch input changed"
+            if current != original:
+                assert checkout["kind"] == "engine-integration-successor", (
+                    "locked vendor/patch input changed"
+                )
+                actual_vendor_patch_changes.add(name)
+                assert declared_vendor_patch_changes.get(name) == {
+                    "qualifiedGitObject": original["gitObject"] if original else None,
+                    "currentGitObject": current["gitObject"],
+                }, "vendor/patch input differs from its reviewed change declaration"
         elif name == "CMakeLists.txt" or name.startswith("cmake/"):
             if current != original:
                 actual_build_changes.add(name)
@@ -122,6 +150,7 @@ def derive(root):
             }, "runtime input differs from its reviewed change declaration"
     assert actual_build_changes == set(declared_build_changes)
     assert actual_runtime_changes == set(declared_runtime_changes)
+    assert actual_vendor_patch_changes == set(declared_vendor_patch_changes)
     entries = subprocess.check_output(
         ["git", "-C", str(root), "ls-files", "--stage", "-z", "--", *source_paths]
     ).decode("utf-8")
@@ -189,9 +218,13 @@ def derive(root):
         "protocolSHA256": source_manifest["qualifiedReleaseDigests"]["protocolSHA256"],
         "sourceScope": f"qualified 0.3.0-beta interface baseline ({beta['tag']}); "
         + (
-            "current checkout has declared JS runtime changes"
-            if actual_runtime_changes
-            else "current checkout runtime inputs match"
+            "current checkout has declared engine, build, and runtime changes"
+            if actual_vendor_patch_changes
+            else (
+                "current checkout has declared JS runtime changes"
+                if actual_runtime_changes
+                else "current checkout runtime inputs match"
+            )
         ),
         "sourceManifest": "docs/data/runtime-source-manifest.json",
         "appPidLimitFieldEnforced": False,

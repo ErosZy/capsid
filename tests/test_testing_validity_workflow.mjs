@@ -81,10 +81,10 @@ test('the opposite line ending preserves the same complete healthy audit', () =>
 
 for (const [name, replacement] of [
   ['retired main', '      - main'],
-  ['extra retired branch', '      - dev/v0.3.0\n      - main'],
+  ['extra retired branch', '      - dev/v0.3.1\n      - main'],
 ]) {
   test(`validity push rejects ${name}`, () => {
-    const source = workflow.replace('      - dev/v0.3.0', replacement);
+    const source = workflow.replace('      - dev/v0.3.1', replacement);
     assert.notEqual(source, workflow);
     const result = run(source);
     assert.notEqual(result.status, 0);
@@ -93,9 +93,9 @@ for (const [name, replacement] of [
     );
   });
 }
-for (const replacement of ['branches: [main]', 'branches: [dev/v0.3.0, main]']) {
+for (const replacement of ['branches: [main]', 'branches: [dev/v0.3.1, main]']) {
   test(`Pages push rejects ${replacement}`, () => {
-    const source = pages.replace('branches: [dev/v0.3.0]', replacement);
+    const source = pages.replace('branches: [dev/v0.3.1]', replacement);
     assert.notEqual(source, pages);
     const result = run(workflow, controlEol, source);
     assert.notEqual(result.status, 0);

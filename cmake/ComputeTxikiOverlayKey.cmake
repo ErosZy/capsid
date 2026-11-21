@@ -39,6 +39,7 @@ function(capsid_compute_txiki_overlay_key)
         OUT_PATCHES
         OUT_GIT_DEPENDENCIES
         VENDOR_DIR
+        QUICKJS_TURBO_DIR
         PATCH_DIR
         PREPARE_SCRIPT)
     set(MULTI_VALUE_ARGS "")
@@ -49,6 +50,12 @@ function(capsid_compute_txiki_overlay_key)
             message(FATAL_ERROR "capsid_compute_txiki_overlay_key requires ${CTOK_REQUIRED}")
         endif()
     endforeach()
+    if(NOT DEFINED CTOK_QUICKJS_TURBO_DIR OR CTOK_QUICKJS_TURBO_DIR STREQUAL "")
+        get_filename_component(
+            CTOK_QUICKJS_TURBO_DIR
+            "${CTOK_VENDOR_DIR}/../quickjs-turbo"
+            ABSOLUTE)
+    endif()
 
     find_program(CTOK_GIT git REQUIRED)
 
@@ -166,6 +173,38 @@ function(capsid_compute_txiki_overlay_key)
             "incomplete:\n  ${CTOK_VENDOR_STATUS_REPORT}")
     endif()
 
+    # --- quickjs-turbo revision & cleanliness --------------------------------
+    execute_process(
+        COMMAND "${CTOK_GIT}" -C "${CTOK_QUICKJS_TURBO_DIR}" rev-parse HEAD
+        OUTPUT_VARIABLE CTOK_TURBO_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE CTOK_TURBO_RESULT
+    )
+    if(NOT CTOK_TURBO_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "Cannot resolve quickjs-turbo HEAD revision in ${CTOK_QUICKJS_TURBO_DIR}")
+    endif()
+    execute_process(
+        COMMAND "${CTOK_GIT}" -C "${CTOK_QUICKJS_TURBO_DIR}"
+            status --porcelain=v1 --untracked-files=all
+            --ignore-submodules=none
+        OUTPUT_VARIABLE CTOK_TURBO_STATUS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE CTOK_TURBO_STATUS_ERROR
+        RESULT_VARIABLE CTOK_TURBO_STATUS_RESULT
+    )
+    if(NOT CTOK_TURBO_STATUS_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "Cannot inspect quickjs-turbo status: ${CTOK_TURBO_STATUS_ERROR}")
+    endif()
+    if(CTOK_TURBO_STATUS)
+        string(REPLACE "\n" "\n  " CTOK_TURBO_STATUS_REPORT
+            "${CTOK_TURBO_STATUS}")
+        message(FATAL_ERROR
+            "quickjs-turbo vendor checkout is dirty; the overlay key would be "
+            "incomplete:\n  ${CTOK_TURBO_STATUS_REPORT}")
+    endif()
+
     # --- prepare script hash ------------------------------------------------
     capsid_sha256_normalized("${CTOK_PREPARE_SCRIPT}" CTOK_PREPARE_HASH)
 
@@ -227,9 +266,10 @@ function(capsid_compute_txiki_overlay_key)
 # 0076 keeps WebAssembly bytecode, table and frame accesses aligned and releases validation buffers.
 # 0077 avoids pointer arithmetic on null storage when transfer detaches an empty typed-array view.
 # 0078 keeps compiler-probe cache keys valid identifiers across repeated configuration.
-    if(NOT CTOK_PATCH_COUNT EQUAL 78)
+# 0079 integrates quickjs-turbo's audited VM overlay (native Linux x86-64 / portable C, Hybrid GC, Property IC, Bellard backports, Portable RegExp).
+    if(NOT CTOK_PATCH_COUNT EQUAL 79)
         message(FATAL_ERROR
-            "expected 78 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
+            "expected 79 patches, found ${CTOK_PATCH_COUNT} in ${CTOK_PATCH_DIR}")
     endif()
 
     set(CTOK_PATCH_LINES "")
@@ -245,6 +285,7 @@ function(capsid_compute_txiki_overlay_key)
     # --- canonical input -----------------------------------------------------
     set(CTOK_CANONICAL_INPUT "schema=capsid-txiki-overlay-v1\n")
     string(APPEND CTOK_CANONICAL_INPUT "vendor=${CTOK_VENDOR_REVISION}\n")
+    string(APPEND CTOK_CANONICAL_INPUT "quickjs-turbo=${CTOK_TURBO_REVISION}\n")
     foreach(CTOK_LINE IN LISTS CTOK_SUBMOD_LINES)
         string(APPEND CTOK_CANONICAL_INPUT "submodule=${CTOK_LINE}\n")
     endforeach()
@@ -260,7 +301,7 @@ function(capsid_compute_txiki_overlay_key)
 
     if(CTOK_OUT_GIT_DEPENDENCIES)
         set(CTOK_GIT_DEPENDENCIES "")
-        set(CTOK_REPOSITORIES "${CTOK_VENDOR_DIR}")
+        set(CTOK_REPOSITORIES "${CTOK_VENDOR_DIR}" "${CTOK_QUICKJS_TURBO_DIR}")
         foreach(CTOK_SUBMOD_PATH IN LISTS CTOK_SUBMOD_PATHS)
             if(EXISTS "${CTOK_VENDOR_DIR}/${CTOK_SUBMOD_PATH}/.git")
                 list(APPEND CTOK_GIT_DEPENDENCIES
