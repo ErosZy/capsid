@@ -13,7 +13,7 @@ pinned `vendor/txiki.js` (`v26.6.0`, QuickJS-NG 0.15.1, 78 SDK patches).
 
 The current `dev/v0.3.1` checkout is an `engine-integration-successor`
 (`releaseQualificationInherited:false`) that integrates `vendor/quickjs-turbo`
-(`v0.15.1-turbo.3`, commit `fb7a53b6fb06edd46a431224fdd839b71fe0b629`) through
+(`v0.15.1-turbo.4`, commit `f0a10640033a024213fb77333e6c84367a81ab26`) through
 `patches/txiki/0079-quickjs-turbo-integration.patch` (79 SDK patches total)
 while keeping the public C ABI v7 and FetchRPC v3/v4 wire protocol unchanged.
 On Linux x86-64 (GCC 13+, non-sanitizer builds) it enables the zero-JIT native
@@ -39,7 +39,7 @@ for the five-platform archive matrix.
 | Qualified beta source | `c7a80b9bdafe36d415a440be7ed3384f7830d4f8` | Tree `876e29c2792899b654310fea72aac979bd8bb48f`; 5469 frozen git entries |
 | Public interface | C ABI v7; capability policy v2 | Existing layouts remain frozen; new interfaces are additive |
 | Protocol | FetchRPC v3 by default; explicit negotiated v4 | Never mix versions on one connection |
-| Pinned vendor (`dev/v0.3.1`) | txiki.js `v26.6.0` + quickjs-turbo `v0.15.1-turbo.3` (`fb7a53b6`), 79 SDK patches | Published `v0.3.0-beta.5` retains txiki.js `v26.6.0` (QuickJS-NG 0.15.1), 78 SDK patches |
+| Pinned vendor (`dev/v0.3.1`) | txiki.js `v26.6.0` + quickjs-turbo `v0.15.1-turbo.4` (`f0a10640`), 79 SDK patches | Published `v0.3.0-beta.5` retains txiki.js `v26.6.0` (QuickJS-NG 0.15.1), 78 SDK patches |
 
 The [read-only release capture](data/release-status.json) records its actual UTC
 observation, 11 asset IDs/sizes/digests and stable/beta flags. The

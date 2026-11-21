@@ -94,7 +94,7 @@ index 526661d..115960c 100644
      check_c_compiler_flag(${FLAG} COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
      if(COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
          add_compile_options("$<$<COMPILE_LANGUAGE:C>:${FLAG}>")
-@@ -449,7 +450,8 @@ if(QJS_FRAME_BACKEND_EFFECTIVE STREQUAL "WIN64")
+@@ -470,7 +471,8 @@ if(QJS_FRAME_BACKEND_EFFECTIVE STREQUAL "WIN64")
      endif()
  endif()
  target_include_directories(
@@ -179,6 +179,43 @@ index 95b7eae..ffec152 100644
                              } else if ((flags & JS_PROP_TMASK) == JS_PROP_AUTOINIT) {              \
                                  js_autoinit_mark(rt, &props[i], (fallback_fn_));                   \
                              }                                                                      \
+diff --git a/deps/quickjs/vm/src/common/promise/async-output.inc b/deps/quickjs/vm/src/common/promise/async-output.inc
+index c8d6a3e..5b7c2f1 100644
+--- a/deps/quickjs/vm/src/common/promise/async-output.inc
++++ b/deps/quickjs/vm/src/common/promise/async-output.inc
+@@ -4,7 +4,7 @@
+ static JSValue js_promise_settle(JSContext *, JSValueConst, JSValueConst, bool);
+ static JSValue js_promise_new(JSContext *, JSValueConst, JSValue *);
+ 
+-static JSValue js_async_output_settle(JSContext *ctx, JSAsyncFunctionData *s, JSValueConst value,
++static JSValue js_async_output_settle(JSContext *ctx, JSAsyncFunctionState *s, JSValueConst value,
+                                       bool reject)
+ {
+     JSValue promise, result;
+diff --git a/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc b/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc
+index a9c1f2e..3c4b5d6 100644
+--- a/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc
++++ b/deps/quickjs/vm/src/common/property/inline-property-ic-storage.inc
+@@ -262,7 +262,8 @@ static bool js_ic_can_transition(JSContext *ctx, JSObject *receiver, JSAtom atom
+     JSShapeProperty *prs;
+     unsigned depth = 0;
+     if (!ctx->rt->property_ic_epoch || !receiver->extensible || receiver->is_exotic ||
+-        receiver->is_prototype || !receiver->shape->is_hashed || __JS_AtomIsTaggedInt(atom))
++        receiver->is_prototype || !receiver->shape->is_hashed || !receiver->prop ||
++        __JS_AtomIsTaggedInt(atom))
+         return false;
+     while (p) {
+         p->is_prototype = true;
+@@ -300,7 +301,8 @@ int js_property_ic_put(JSContext *ctx, JSFunctionBytecode *b, const uint8_t *pc,
+             return true;
+         }
+         if ((way->kind == JS_IC_TRANSITION || way->kind == JS_IC_TRANSITION_RESIZE) &&
+-            p->extensible && !p->is_exotic && !p->is_prototype) {
++            p->extensible && !p->is_exotic && !p->is_prototype &&
++            (p->prop || way->kind == JS_IC_TRANSITION_RESIZE)) {
+             if (way->kind == JS_IC_TRANSITION_RESIZE) {
+                 JSProperty *props = qjs_inline_property_realloc(
+                     ctx, p, (size_t)way->transition->prop_size * sizeof(p->prop[0]));
 diff --git a/deps/quickjs/vm/src/common/property/property-ic.inc b/deps/quickjs/vm/src/common/property/property-ic.inc
 index 64f5b3a..16a5ca6 100644
 --- a/deps/quickjs/vm/src/common/property/property-ic.inc
@@ -345,7 +382,18 @@ index 73ff479..10e957b 100644
  UPSTREAM_FIX = "8e14a39fc5a043f44cf86394ea2b07151aed3670"
  parser = argparse.ArgumentParser(description=__doc__)
  parser.add_argument("--source-root", type=Path, required=True)
-@@ -321,11 +321,11 @@ fixes.append(
+@@ -255,9 +255,9 @@ if args.map_pointer_hash:
+     patched = patched.replace(old_float_hash, new_float_hash, 1)
+     old_add_loc_str = (
+         "                    op1 = JS_ConcatString(ctx, js_dup(*pv), op1);\n"
+-        "                    if (JS_IsException(op1))\n"
++        "                    if (js_bytecode_is_exception(&(op1)))\n"
+         "                        goto exception;\n"
+         "                    set_value(ctx, pv, op1);"
+     )
+     new_add_loc_str = (
+         "                    if (JS_VALUE_GET_TAG(op1) == JS_TAG_STRING && JS_VALUE_GET_STRING(*pv)->header.ref_count == 1 && !JS_VALUE_GET_STRING(*pv)->atom_type && JS_VALUE_GET_STRING(*pv)->kind == JS_STRING_KIND_NORMAL && JS_VALUE_GET_STRING(*pv)->is_wide_char == JS_VALUE_GET_STRING(op1)->is_wide_char && js_malloc_usable_size(ctx, JS_VALUE_GET_STRING(*pv)) >= sizeof(JSString) + (((size_t)JS_VALUE_GET_STRING(*pv)->len + (size_t)JS_VALUE_GET_STRING(op1)->len) << JS_VALUE_GET_STRING(*pv)->is_wide_char) + 1 - JS_VALUE_GET_STRING(*pv)->is_wide_char) {\n"
+@@ -418,11 +418,11 @@ fixes.append(
  )
  
  # One isolated C helper; retain original source lines and all root inputs.
@@ -444,6 +492,43 @@ index 2457063..d18c4be 100644
      if gc_part.count(gc_bit_old) != 1:
          raise ValueError("JSGCObjectHeader bitfield anchor missing")
      gc_part = gc_part.replace(gc_bit_old, gc_bit_new, 1)
+diff --git a/deps/quickjs/vm/tools/common/backports/keyed_async.py b/deps/quickjs/vm/tools/common/backports/keyed_async.py
+index 8e12a34..9b23c45 100644
+--- a/deps/quickjs/vm/tools/common/backports/keyed_async.py
++++ b/deps/quickjs/vm/tools/common/backports/keyed_async.py
+@@ -78,9 +78,9 @@ def async_output(text):
+     before_lines = text.count("\n")
+     text = replace_exact_lines(
+         text,
+-        "\n\nstatic void js_async_function_terminate(JSRuntime *rt, JSAsyncFunctionData *s)",
+-        '\n#include "src/common/promise/async-output.inc"\n'
+-        "static void js_async_function_terminate(JSRuntime *rt, JSAsyncFunctionData *s)",
++        "\nstatic int js_inherit_passive_async_await(JSContext *ctx, JSValueConst awaited, JSValueConst resolver);\n\nstatic bool js_async_function_resume(JSContext *ctx, JSAsyncFunctionState *s)",
++        "\nstatic int js_inherit_passive_async_await(JSContext *ctx, JSValueConst awaited, JSValueConst resolver);\n"
++        '#include "src/common/promise/async-output.inc"\nstatic bool js_async_function_resume(JSContext *ctx, JSAsyncFunctionState *s)',
+     )
+     for slot, arg, reject in ((1, "error", "true"), (0, "value", "false")):
+         text = replace_exact_lines(
+@@ -94,4 +94,19 @@ def async_output(text):
+         "    promise = JS_NewPromiseCapability(ctx, s->resolving_funcs);",
+         "    if (unlikely(ctx->rt->promise_hook)) { promise = JS_NewPromiseCapability(ctx, s->resolving_funcs); } else { promise = js_promise_new(ctx, JS_UNDEFINED, NULL); if (!JS_IsException(promise)) s->resolving_funcs[0] = js_dup(promise); }",
+     )
++    text = replace_exact_lines(
++        text,
++        "    if (!JS_IsObject(resolver) || JS_VALUE_GET_OBJ(resolver)->class_id != JS_CLASS_PROMISE_RESOLVE_FUNCTION)\n"
++        "        return 0;\n"
++        "    JSPromiseFunctionData *capability = JS_VALUE_GET_OBJ(resolver)->u.promise_function_data;\n"
++        "    JSPromiseData *result = JS_GetOpaque(capability->promise, JS_CLASS_PROMISE);\n"
++        "    if (result && result->promise_state == JS_PROMISE_PENDING)\n"
++        "        return JS_MarkPromiseReactionsPassive(ctx, capability->promise);",
++        "    JSValueConst target = JS_UNDEFINED;\n"
++        "    if (JS_IsObject(resolver) && JS_VALUE_GET_OBJ(resolver)->class_id == JS_CLASS_PROMISE) target = resolver;\n"
++        "    else if (JS_IsObject(resolver) && JS_VALUE_GET_OBJ(resolver)->class_id == JS_CLASS_PROMISE_RESOLVE_FUNCTION) target = JS_VALUE_GET_OBJ(resolver)->u.promise_function_data->promise;\n"
++        "    JSPromiseData *result = JS_GetOpaque(target, JS_CLASS_PROMISE);\n"
++        "    if (result && result->promise_state == JS_PROMISE_PENDING)\n"
++        "        return JS_MarkPromiseReactionsPassive(ctx, target);",
++    )
+     old_resolve_fn = """static JSValue js_promise_resolve_function_call(JSContext *ctx,
 diff --git a/deps/quickjs/vm/tools/common/c_extract/regexp_c.py b/deps/quickjs/vm/tools/common/c_extract/regexp_c.py
 index fd08487..5d1834d 100644
 --- a/deps/quickjs/vm/tools/common/c_extract/regexp_c.py
@@ -528,11 +613,11 @@ index 9c01b15..db17ab7 100644
              }
              BREAK;"""
 diff --git a/deps/quickjs/vm/tools/x86/linux/build-foundation.py b/deps/quickjs/vm/tools/x86/linux/build-foundation.py
-index 7589474..8b8fc3a 100644
+index e7da45e..8b8fc3a 100644
 --- a/deps/quickjs/vm/tools/x86/linux/build-foundation.py
 +++ b/deps/quickjs/vm/tools/x86/linux/build-foundation.py
-@@ -232,7 +232,7 @@ JSValue JS_LinuxCallPublicFallback(JSContext *ctx, JSValueConst func_obj, JSValu
-         text = generate_null_proto(source, output, text, layout)
+@@ -237,7 +237,7 @@ JSValue JS_LinuxCallPublicFallback(JSContext *ctx, JSValueConst func_obj, JSValu
+         text = core_storage(text, property_ic=layout["property_ic"])
      generated = output / "quickjs-linux-foundation.c"
      generated.write_text(text)
 -    commands = json.loads((build / "compile_commands.json").read_text())
@@ -591,6 +676,36 @@ index 76e719b..a6fa037 100644
      cache = build / "CMakeCache.txt"
      if not cache.is_file() or ("QJS_PROPERTY_IC:BOOL=ON" in cache.read_text()) != bool(
          layout["property_ic"]
+diff --git a/deps/quickjs/vm/tools/x86/linux/inline_objects.py b/deps/quickjs/vm/tools/x86/linux/inline_objects.py
+index 1a2b3c4..5d6e7f8 100644
+--- a/deps/quickjs/vm/tools/x86/linux/inline_objects.py
++++ b/deps/quickjs/vm/tools/x86/linux/inline_objects.py
+@@ -16,11 +16,11 @@ def core_storage(core, *, property_ic):
+         "Linux property storage helper types",
+     )
+     change(
+-        "    js_trigger_gc(ctx->rt, sizeof(JSObject));\n    p = js_malloc(ctx, sizeof(JSObject));",
++        "    js_trigger_gc(ctx->rt, object_size);\n    p = js_malloc(ctx, object_size);",
+         "    /* Reserve extra slots only when the caller supplies a complete payload. */\n"
+         "    size_t inline_bytes = class_id == JS_CLASS_OBJECT\n"
+         "        ? qjs_inline_property_plan(sh, 0, props ? 4u : 0u) : 0;\n"
+-        "    size_t object_bytes = inline_bytes ? inline_bytes : sizeof(JSObject);\n"
++        "    size_t object_bytes = inline_bytes ? inline_bytes : object_size;\n"
+         "    js_trigger_gc(ctx->rt, object_bytes);\n"
+         "    p = js_malloc(ctx, object_bytes);",
+         "Linux plain-object allocation",
+@@ -31,9 +31,9 @@ def core_storage(core, *, property_ic):
+         "initialize inline bit before installing GC header",
+     )
+     change(
+-        "    p->prop = js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);",
++        "    p->prop = lazy_iterator_properties ? NULL : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);",
+         "    p->prop = inline_bytes ? qjs_inline_property_initialize(p, sh, 0, inline_bytes)\n"
+-        "                           : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size);",
++        "                           : (lazy_iterator_properties ? NULL : js_malloc(ctx, sizeof(JSProperty) * sh->prop_size));",
+         "ordinary property storage owner",
+     )
+     old = "js_realloc(ctx, p->prop, sizeof(new_prop[0]) * new_size)"
 diff --git a/deps/quickjs/vm/tools/x86/linux/iterators.py b/deps/quickjs/vm/tools/x86/linux/iterators.py
 index 07a30c0..3e04ae2 100644
 --- a/deps/quickjs/vm/tools/x86/linux/iterators.py

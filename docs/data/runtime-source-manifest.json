@@ -707,7 +707,7 @@
     "patches/txiki/0079-quickjs-turbo-integration.patch": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "e609a30d65539f11fe01e8ba891cd3a2e7e6d55c"
+      "gitObject": "fdca90d423702e8ba40b52b3d0a8153947f45f2e"
     },
     "patches/web-streams/0001-workerd-byte-profile.patch": {
       "mode": "100644",
@@ -1517,7 +1517,7 @@
     "vendor/quickjs-turbo": {
       "mode": "160000",
       "kind": "commit",
-      "gitObject": "fb7a53b6fb06edd46a431224fdd839b71fe0b629"
+      "gitObject": "f0a10640033a024213fb77333e6c84367a81ab26"
     },
     "vendor/txiki.js": {
       "mode": "160000",
@@ -3110,7 +3110,7 @@
       "ruff": "0.17.5"
     },
     "releaseQualificationInherited": false,
-    "changeScope": "dev/v0.3.1 quickjs-turbo v0.15.1-turbo.3 integration with density defaults (QJS_DISABLE_NATIVE_OWN_BYTECODE + QJS_DISABLE_PROPERTY_IC), build/overlay/SBOM wiring, workerd_reader_scope_contract_controls timeout increase, and workflow branch transition; tagged v0.3.0-beta.5 binaries and measurements remain unchanged",
+    "changeScope": "dev/v0.3.1 quickjs-turbo v0.15.1-turbo.4 integration with density defaults (QJS_DISABLE_NATIVE_OWN_BYTECODE + QJS_DISABLE_PROPERTY_IC), build/overlay/SBOM wiring, workerd_reader_scope_contract_controls timeout increase, and workflow branch transition; tagged v0.3.0-beta.5 binaries and measurements remain unchanged",
     "buildInputChanges": {
       "cmake/AuditTxikiVendor.cmake": {
         "qualifiedGitObject": "25735a0ef0cec0347445d2d7bb90d82b949d55bc",
@@ -3162,11 +3162,11 @@
     "vendorPatchChanges": {
       "patches/txiki/0079-quickjs-turbo-integration.patch": {
         "qualifiedGitObject": null,
-        "currentGitObject": "e609a30d65539f11fe01e8ba891cd3a2e7e6d55c"
+        "currentGitObject": "fdca90d423702e8ba40b52b3d0a8153947f45f2e"
       },
       "vendor/quickjs-turbo": {
         "qualifiedGitObject": null,
-        "currentGitObject": "fb7a53b6fb06edd46a431224fdd839b71fe0b629"
+        "currentGitObject": "f0a10640033a024213fb77333e6c84367a81ab26"
       }
     }
   }

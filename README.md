@@ -27,7 +27,7 @@ Host owns listeners, routing, capabilities, resource limits and worker lifetime.
 > and Windows support is for trusted development and integration.
 >
 > Documentation/data reviewed **2026-11-22** for `dev/v0.3.1` (`quickjs-turbo`
-> `v0.15.1-turbo.3` integration; the published `v0.3.0-beta.5` release retains
+> `v0.15.1-turbo.4` integration; the published `v0.3.0-beta.5` release retains
 > QuickJS-NG 0.15.1).
 > [Current status and data scope](docs/current-status.md) separates the published
 > beta, current source interface, measured development snapshot and dated history.

@@ -23,7 +23,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "885fa12b67667bef72308c45afdd0a96c6c611baa341ae5000d4f506ce89fd55",
+      "sha256": "ce12a0cd5a842950f1365824f8247be77556688e262ac58fa8da05664be3a95a",
       "review": "Product, public beta.5 download, unchanged GitHub Latest and explicit stable channel, security defaults, compatibility and source-bound performance evidence."
     },
     {
@@ -143,7 +143,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "9e71aa96d2049279925c794cc3a19a772280b29b605fc89780356cb30ff067c0",
+      "sha256": "3bb16539fe3a8d8e2e5932990c3719f51c41d87aef9ed24cc7f42f3b02451cc5",
       "review": "Exact beta.5 source and five-platform release evidence, distinct GitHub Latest, non-inheritance, five raw WPT failures and source-bound measurements."
     },
     {
