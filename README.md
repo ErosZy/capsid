@@ -156,18 +156,15 @@ The ordinary suite is not represented as all-passing.
   their recorded source, build, machine and protocol. Historical v0.2.2 numbers
   are not 0.3.0-beta measurements.
 
-**Latest accepted local measurement:** `0.3.0-beta.4` development snapshot
-`82eaab9`, 2026-11-20, i5-12400F under WSL2 (`capsid-perf-lane-v3`, pure-JS
-seven-stack matrix across three reference tiers). JSON 1/16 KiB, stream 1 KiB
-and `dynamic-api` throughput: **21,770.8 / 13,952.2 / 10,756.9 / 9,974.9 QPS**;
-service-tree PSS: **14.9 MiB** trickle / **18.6 MiB** loaded (**1,170.5 QPS/MiB**
-at 1 KiB); 1 MiB bytecode cold start: **18.5 ms / 15.2 MiB**. Warm density under
-the 2048 MiB budget: **731 / 503 / 128 strict-sandbox workers** at 10/100 KiB/1 MiB
-(versus **604 / 553 / 219** `workerd` cells). These are source-bound snapshot
-results, **not benchmarks of published `v0.3.0-beta.5` or a formal
-paired improvement over archived `v1` (`485b29b`) or historical `v0.2.2`**. The
-complete sealed archives (`v3` and preserved `v1`) and provenance are linked from
-the [performance reference](docs/performance-benchmarks.md).
+**Latest accepted local measurement:** `v0.3.0-beta.5` (`c7a80b9`), rebuilt
+locally under WSL2 on an i5-12400F, 2026-11-21. In the seven-stack
+`capsid-perf-lane-v3` matrix, Capsid recorded **21,746.6 / 14,194.6 / 10,649.7 /
+9,808.1 QPS** (JSON 1/16 KiB, stream, dynamic API) and **15.0 / 18.5 MiB** PSS
+(low load / loaded). Cold-start bytecode at 1 MiB took **18.64 ms** with
+**16.0 MiB** PSS. Warm density under 2048 MiB was **729 / 503 / 128** workers
+at 10/100 KiB/1 MiB. This measures the local Release/LTO build, **not the
+distributed packages**. Earlier records remain available in the
+[performance reference](docs/performance-benchmarks.md).
 
 For pinned C/C++, JavaScript and Python formatting commands, see
 [source formatting](docs/formatting.md).

@@ -377,10 +377,15 @@ assert.deepEqual(
 );
 assert.equal(currentStatus.qualification.ordinarySuitePassed, false);
 assert.equal(currentStatus.qualification.standardsConformanceClaimed, false);
+assert.equal(currentStatus.performance.measurementBuild, 'local-rebuild');
+assert.equal(currentStatus.performance.matchesPublishedBetaSource, true);
+assert.equal(currentStatus.performance.sourceCommit, currentStatus.prerelease.sourceCommit);
+assert.equal(currentStatus.performance.sourceTag, currentStatus.prerelease.tag);
+assert.equal(currentStatus.performance.representsPublishedRelease, false);
 assert.equal(
   currentStatus.performance.publishedBetaPerformanceMeasured,
   false,
-  'the older measured snapshot is not relabeled as 0.3.0-beta',
+  'a matching source tag does not prove that the distributed binaries were measured',
 );
 assert.ok(documents.get('docs/conformance.md').includes('workerd-default-profile-v2.json'));
 assert.ok(documents.get('docs/host-integration.md').includes('capsid_worker_channel_confirm'));

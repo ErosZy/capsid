@@ -1,0 +1,288 @@
+{
+  "allNineExecutablesRehashed": true,
+  "allOriginalActualExitsZero": true,
+  "allTwelveDensityBudgetBoundaries": true,
+  "build": {
+    "cmakeGenerator": "Unix Makefiles",
+    "cmakeVersion": "3.28.3",
+    "compiler": "GCC 13.3.0",
+    "lto": true,
+    "mimalloc": false,
+    "sandboxProfile": "production",
+    "type": "Release"
+  },
+  "complete": true,
+  "contract": "capsid-perf-lane-v3",
+  "evidenceFiles": 4546,
+  "fullPlatformOrReleaseAcceptanceNotClaimed": true,
+  "lanes": {
+    "cold-start": {
+      "cells": 24,
+      "checksumSHA256": "763bbb8c770423a6b2e44340e029f66ac0379188d53e9e0c0e62077a8d7d92ef",
+      "evidenceFiles": 1213,
+      "passed": true
+    },
+    "density": {
+      "cells": 12,
+      "checksumSHA256": "a35591c6d9daabe1c25db3a3633636265938896285032bbdf44ee4913324690e",
+      "evidenceFiles": 2755,
+      "passed": true
+    },
+    "qps": {
+      "cells": 28,
+      "checksumSHA256": "e64bdc6d1e3d4187b98df47ce67afcf249c2f09afd88a0ebaf8f538b6f777d0a",
+      "evidenceFiles": 575,
+      "passed": true
+    }
+  },
+  "measuredSourceFilesVerified": 5469,
+  "measuredSourceManifest": "docs/data/performance-source-manifest-v030-beta5.json",
+  "measurementBuild": "local-rebuild",
+  "physicalWindowsHostExclusivityNotClaimed": true,
+  "pointRelease": "v0.3.0-beta.5",
+  "pointVersion": "0.3.0-beta.5",
+  "productCheckout": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
+  "productTree": "876e29c2792899b654310fea72aac979bd8bb48f",
+  "publishedReleaseAssetsMeasured": false,
+  "quietWindows": [
+    {
+      "aggregateIdle": 0.9995,
+      "attempt": 1,
+      "cpuDelta": {
+        "cpu0": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          1,
+          0
+        ],
+        "cpu1": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          0,
+          0,
+          0,
+          499,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "endedAt": "2026-11-21T06:49:28.182286+00:00",
+      "idle": {
+        "cpu0": 0.998003992015968,
+        "cpu1": 1.0,
+        "cpu2": 1.0,
+        "cpu3": 1.0
+      },
+      "phase": "before-cold",
+      "physicalHostExclusivityClaimed": false,
+      "quiet": true,
+      "startedAt": "2026-11-21T06:49:23.181894+00:00"
+    },
+    {
+      "aggregateIdle": 1.0,
+      "attempt": 1,
+      "cpuDelta": {
+        "cpu0": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          0,
+          0,
+          0,
+          499,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "endedAt": "2026-11-21T06:55:14.789050+00:00",
+      "idle": {
+        "cpu0": 1.0,
+        "cpu1": 1.0,
+        "cpu2": 1.0,
+        "cpu3": 1.0
+      },
+      "phase": "before-qps",
+      "physicalHostExclusivityClaimed": false,
+      "quiet": true,
+      "startedAt": "2026-11-21T06:55:09.788397+00:00"
+    },
+    {
+      "aggregateIdle": 1.0,
+      "attempt": 1,
+      "cpuDelta": {
+        "cpu0": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "endedAt": "2026-11-21T07:45:30.179443+00:00",
+      "idle": {
+        "cpu0": 1.0,
+        "cpu1": 1.0,
+        "cpu2": 1.0,
+        "cpu3": 1.0
+      },
+      "phase": "before-density",
+      "physicalHostExclusivityClaimed": false,
+      "quiet": true,
+      "startedAt": "2026-11-21T07:45:24.437997+00:00"
+    },
+    {
+      "aggregateIdle": 1.0,
+      "attempt": 1,
+      "cpuDelta": {
+        "cpu0": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu1": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu2": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpu3": [
+          0,
+          0,
+          0,
+          500,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "endedAt": "2026-11-21T08:40:01.744787+00:00",
+      "idle": {
+        "cpu0": 1.0,
+        "cpu1": 1.0,
+        "cpu2": 1.0,
+        "cpu3": 1.0
+      },
+      "phase": "after-density",
+      "physicalHostExclusivityClaimed": false,
+      "quiet": true,
+      "startedAt": "2026-11-21T08:39:56.744081+00:00"
+    }
+  ],
+  "referenceArchivesSHA256": {
+    "bun-linux-x64.zip": "94559b3b528995a49452f9f2404cec74f2efd7d06e0a000a8cd214b02c3666eb",
+    "deno-x86_64-unknown-linux-gnu.zip": "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609",
+    "node-v26.13.1-linux-x64.tar.xz": "5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864",
+    "workerd-linux-64.gz": "4e4bf157baff80337937b09474013f7761efcb791dd923acf50c3b995a3126d0"
+  },
+  "reviewedUTC": "2026-11-21T09:15:48.573036+00:00",
+  "session": "local-wsl-beta5-v3-20261121T064717Z-c7a80b9",
+  "sourceTag": "v0.3.0-beta.5",
+  "standalonePointSHA256": "48eddbafaf2654d814353b12c472aaef3eb59622f68dc392ab94f171c562947a",
+  "wholeLocalSessionAccepted": true
+}

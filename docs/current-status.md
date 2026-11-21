@@ -98,44 +98,35 @@ reported as complete WPT, browser or workerd conformance.
 
 ## Latest Accepted Local Performance Record
 
-The latest complete accepted local session was measured on **2026-11-20** at
-`0.3.0-beta.4` development snapshot `82eaab999cfd628dbe1529eb553f63c0ee52a9ea`,
-tree `5e61f517d5325704c8dc38e35b0c63193fb91ec1`, under `capsid-perf-lane-v3`
-(pure-JS seven-stack matrix across three reference tiers plus `dynamic-api`).
-It is **not a measurement of published `v0.3.0-beta.5`**. Its archive label is
-`v0.3.0-beta.4`, but the measured commit was untagged and `sourceTag` is empty.
+The latest accepted session was measured on **2026-11-21** using a clean local
+Release/LTO rebuild of [`v0.3.0-beta.5`](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5)
+(`c7a80b9bdafe36d415a440be7ed3384f7830d4f8`). It matches the prerelease **source**; it does not measure
+the distributed binaries. It uses `capsid-perf-lane-v3` (pure-JS seven-stack
+matrix across three reference tiers plus `dynamic-api`).
 
 | Metric | Recorded Capsid value |
 | --- | ---: |
-| JSON 1 KiB QPS | 21,770.8 |
-| JSON 16 KiB QPS | 13,952.2 |
-| Stream 1 KiB QPS | 10,756.9 |
-| Dynamic API QPS | 9,974.9 |
-| Low-load service-tree PSS | 14.9 MiB |
-| Loaded service-tree PSS | 18.6 MiB |
-| Warm workers at 10 KiB / 100 KiB / 1 MiB, 2048 MiB budget | 731 / 503 / 128 |
+| JSON 1 KiB QPS | 21,746.6 |
+| JSON 16 KiB QPS | 14,194.6 |
+| Stream 1 KiB QPS | 10,649.7 |
+| Dynamic API QPS | 9,808.1 |
+| Low-load service-tree PSS | 15.0 MiB |
+| Loaded service-tree PSS | 18.5 MiB |
+| Warm workers at 10 KiB / 100 KiB / 1 MiB, 2048 MiB budget | 729 / 503 / 128 |
 
-Session: `local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99`.
-Machine: i5-12400F, 12 logical CPUs, measured CPU set 0–3 under WSL2. All three
-lanes (`cold`, `qps`, `density`), quiet windows and independent source/binary/
-raw-record review passed (`4533` sealed evidence files). Physical Windows-host
-exclusivity is **not** claimed.
+Session: `local-wsl-beta5-v3-20261121T064717Z-c7a80b9`. Machine: i5-12400F, 12 logical CPUs, measured set 0–3
+under WSL2. Cold, QPS, density and whole-session replay all passed (`4546`
+evidence files). Physical Windows-host exclusivity is **not** claimed.
 
-The archived `v1` cross-language baseline (`485b29be6cc8d0dcdb653ee6226956ddece02948`,
-2026-11-16, session `local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
-`5123` sealed evidence files; Capsid `9341.6 / 8090.2 / 6491.7 QPS`, `14.0 / 18.0 MiB`,
-`738 / 509 / 128` warm workers) remains preserved unchanged in `perf-site/data.js`
-and `perf-site/archives/` alongside the new `v3` bundles (`9656` total verified
-evidence files across 6 compressed transports). Historical `v0.2.2` values remain
-unchanged and unverified under the current archive contract; no formal paired
-trend is inferred across different matrix contracts (`v1` vs `v3`) or unverified
-historical points.
+The untagged beta.4 `v3` snapshot (`82eaab9`) and the archived `v1` baseline
+(`485b29b`) are preserved unchanged. The historical `v0.2.2` observation
+remains unverified under the current archive contract. Different reference
+versions, different matrix contracts and unverified historical points do not
+support a formal paired trend.
 
-Read the [performance reference](performance-benchmarks.md),
-[latest accepted review](data/performance-review.json),
-[measured `v3` source manifest](data/performance-source-manifest-v030-beta4.json),
-[archived `v1` source manifest](data/performance-source-manifest.json) and
-[site/transport instructions](../perf-site/README.md).
+See the [performance reference](performance-benchmarks.md),
+[session review](data/performance-review-v030-beta5.json), [measured source manifest](data/performance-source-manifest-v030-beta5.json)
+and [site/transport instructions](../perf-site/README.md).
 
 ## Documentation Coverage and Historical Records
 

@@ -308,10 +308,11 @@ try {
   const selector = elements.get('record-select');
   assert.equal(selector.children.length, current.points.length);
   assert.equal(selector.value, String(acceptedIndex));
-  assert.match(elements.get('nav-meta').textContent, /dev snapshot/);
+  assert.equal(acceptedPoint.git.tag, 'v0.3.0-beta.5');
+  assert.match(elements.get('nav-meta').textContent, /v0\.3\.0-beta\.5 · tagged source build/);
   assert.match(
     elements.get('release-context').innerHTML,
-    /no matching complete performance measurement/,
+    /the distributed binaries were not measured/,
   );
   const packedLinks = () => elements.get('method-card').innerHTML;
   const activePrefixes = new Set(Object.values(acceptedPoint.verification?.archives || {}));
@@ -330,6 +331,13 @@ try {
   }
   assert.match(packedLinks(), /href="evidence-index.json"/);
   assert.doesNotMatch(packedLinks(), /href="evidence\/bench\/results\//);
+  const priorIndex = current.points.findIndex((point) => point.version === '0.3.0-beta.4');
+  assert.ok(priorIndex >= 0);
+  selector.value = String(priorIndex);
+  selector.onchange();
+  assert.match(elements.get('nav-meta').textContent, /0\.3\.0-beta\.4 dev snapshot/);
+  assert.match(packedLinks(), /local-wsl-v030-beta4-v3-/);
+  assert.doesNotMatch(packedLinks(), /local-wsl-beta5-v3-/);
   selector.value = String(historicalIndex);
   selector.onchange();
   assert.match(elements.get('nav-meta').textContent, /unverified/);

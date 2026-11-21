@@ -1,30 +1,29 @@
 # Performance: Current Measurements and Methodology
 
-Reviewed 2026-11-20. The latest accepted local measurement is a **development
-snapshot** (`0.3.0-beta.4`, `82eaab9`), not a published `v0.3.0-beta.5` or
-stable `v0.3.0` benchmark. The [current status](current-status.md) and
-[generated data](current-status.json) separate release identity, measured
-source, qualification and historical data.
+Reviewed 2026-11-21. The latest accepted measurement uses a **local WSL2
+Release/LTO rebuild** from the exact `v0.3.0-beta.5` tag. It measures that
+build, **not the distributed release packages**. The [current status](current-status.md)
+and [generated data](current-status.json) distinguish the measured build from
+release qualification and older records.
 
 ## Latest Accepted Record (`capsid-perf-lane-v3`)
 
 | Field | Recorded value |
 | --- | --- |
-| Measured source | `82eaab999cfd628dbe1529eb553f63c0ee52a9ea` |
-| Measured tree | `5e61f517d5325704c8dc38e35b0c63193fb91ec1` |
-| Session | `local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99` |
+| Measured source | `c7a80b9bdafe36d415a440be7ed3384f7830d4f8` (`v0.3.0-beta.5`) |
+| Measured tree | `876e29c2792899b654310fea72aac979bd8bb48f` |
+| Session | `local-wsl-beta5-v3-20261121T064717Z-c7a80b9` |
 | Contract / matrix | `capsid-perf-lane-v3` (pure-JS seven-stack across three reference tiers + `dynamic-api`) |
-| Completed measurement date | 2026-11-20 UTC |
+| Completed measurement date | 2026-11-21 UTC |
 | Machine/lane | i5-12400F; 12 logical CPUs; measured set 0–3; WSL2 Linux |
-| Runtime posture | Clean Release/LTO (`CAPSID_USE_MIMALLOC=OFF`); strict C-ABI cold workers; managed/strict serving and density |
-| Record status | All three lanes (`4533` sealed files) and whole-session independent review accepted |
-| Published `v0.3.0-beta.5` | Source `c7a80b9`; **not measured by this session** |
+| Runtime posture | Clean local Release/LTO (`CAPSID_USE_MIMALLOC=OFF`); strict C-ABI cold workers; managed/strict serving and density |
+| Reference binaries | workerd `v1.20261121.1`, Node.js `v26.13.1`, Bun `1.4.5`, Deno `2.9.8` |
+| Record status | All three lanes and whole-session replay passed (`4546` evidence files) |
+| Distributed packages | Not measured; their release checks are separate |
 
-The archive label is `v0.3.0-beta.4`, but its measured commit was untagged and
-its `sourceTag` is empty. Source-tree equality does not change a binary's
-embedded commit or make a later binary performance-equivalent. This record does
-not qualify its measured snapshot for release or close all historical runtime
-issues.
+The earlier `v0.3.0-beta.4` archive label still denotes untagged development
+snapshot `82eaab9`. It remains a separate point; it is not a measurement of
+either release tag's commit.
 
 ## Serving and Memory (Three-Tier Pure-JS Matrix)
 
@@ -37,13 +36,13 @@ checksum calculation (`x-bench-checksum`), and `JSON.stringify`.
 
 | Stack | Reference tier / isolation | JSON 1 KiB | JSON 16 KiB | Stream 1 KiB | Dynamic API | Trickle PSS MiB | Loaded PSS MiB | 1K QPS/MiB |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Capsid | T1 · Strict Linux OS sandbox (`NS+Landlock+Seccomp`) | 21,770.8 | 13,952.2 | 10,756.9 | 9,974.9 | 14.9 | 18.6 | 1,170.5 |
-| workerd | T1 · V8 Isolate (`workerd 2026-10-10`) | 27,649.5 | 20,523.0 | 16,211.3 | 20,501.0 | 46.6 | 609.7 | 45.3 |
-| Deno | T1 · Permission sandbox (`2.9.8 --allow-net=127.0.0.1`) | 142,309.0 | 45,383.6 | 85,061.8 | 55,614.0 | 41.4 | 64.2 | 2,216.7 |
-| Node `--jitless` | T2 · Single process (no sandbox, V8 no-JIT) | 9,462.8 | 9,336.6 | 8,386.0 | 7,201.7 | 56.4 | 113.9 | 83.1 |
-| Bun `--jitless` | T2 · Single process (no sandbox, `BUN_JSC_useJIT=0`) | 137,504.3 | 43,909.4 | 122,787.8 | 43,180.4 | 28.7 | 31.6 | 4,351.4 |
-| Node.js | T3 · Single process (no sandbox, V8 JIT `24.14.0`) | 67,447.5 | 38,454.2 | 44,000.9 | 33,853.1 | 58.4 | 75.4 | 894.5 |
-| Bun | T3 · Single process (no sandbox, JSC JIT `1.4.5`) | 139,067.3 | 41,295.4 | 129,431.5 | 76,186.5 | 30.6 | 40.9 | 3,400.2 |
+| Capsid | T1 · Strict Linux OS sandbox (NS+Landlock+Seccomp) | 21746.6 | 14194.6 | 10649.7 | 9808.1 | 15 | 18.5 | 1175.4918918918918 |
+| workerd | T1 · V8 Isolate | 25500.5 | 19805 | 18957.8 | 18738.9 | 56.4 | 547.9 | 46.54225223580946 |
+| Deno | T1 · Permission sandbox (`--allow-net=127.0.0.1`) | 139834.9 | 43977.2 | 84404.3 | 54278.4 | 40.8 | 62.9 | 2223.1303656597775 |
+| Node `--jitless` | T2 · Single process (no sandbox, V8 no-JIT) | 11700 | 11855.7 | 10238.2 | 8440.3 | 56.3 | 87.7 | 133.40935005701255 |
+| Bun `--jitless` | T2 · Single process (no sandbox, `BUN_JSC_useJIT=0`) | 136225.2 | 43348.8 | 121854.8 | 42833 | 33.2 | 37 | 3681.7621621621624 |
+| Node.js | T3 · Single process (no sandbox, V8 JIT) | 108021.8 | 41565.9 | 88282.2 | 49259.5 | 60.5 | 135.8 | 795.4477172312223 |
+| Bun | T3 · Single process (no sandbox, JSC JIT) | 134435.4 | 41518.9 | 127294.2 | 76649.9 | 35.5 | 46.2 | 2909.8571428571427 |
 
 Trickle is 15 seconds at 10 req/s on a fresh forest, **before** loaded traffic.
 PSS includes the complete owned service forest; rounded roles need not sum to
@@ -60,14 +59,14 @@ explicit `32 KiB` allocator page-flap tolerance while density remains exact
 
 | Runtime | 10 KiB total ms / PSS | 100 KiB total ms / PSS | 1 MiB total ms / PSS | Warm request ms |
 | --- | ---: | ---: | ---: | ---: |
-| Capsid · bytecode | 5.51 ms / 6.6 MiB | 6.94 ms / 7.5 MiB | 18.47 ms / 15.2 MiB | 0.074–0.078 |
-| Capsid · source | 6.42 ms / 6.6 MiB | 10.78 ms / 7.7 MiB | 68.83 ms / 18.7 MiB | 0.077–0.079 |
-| workerd | 14.91 ms / 49.8 MiB | 16.44 ms / 50.8 MiB | 35.82 ms / 64.9 MiB | 0.176–0.185 |
-| Deno | 30.11 ms / 39.4 MiB | 35.75 ms / 40.7 MiB | 108.04 ms / 48.1 MiB | 0.117–0.132 |
-| Bun `--jitless` | 9.00 ms / 27.5 MiB | 13.99 ms / 28.9 MiB | 61.63 ms / 38.4 MiB | 0.109–0.113 |
-| Bun | 8.80 ms / 29.3 MiB | 14.24 ms / 30.9 MiB | 60.85 ms / 39.9 MiB | 0.113–0.115 |
-| Node.js | 43.27 ms / 57.6 MiB | 48.92 ms / 57.7 MiB | 70.21 ms / 72.3 MiB | 0.211–0.227 |
-| Node `--jitless` | 74.30 ms / 80.1 MiB | 74.92 ms / 80.6 MiB | 95.28 ms / 95.5 MiB | 0.185–0.194 |
+| Capsid · bytecode | 6.94 ms / 7.2 MiB | 8.17 ms / 8.5 MiB | 18.64 ms / 16.0 MiB | 0.078–0.082 |
+| Capsid · source | 7.51 ms / 7.4 MiB | 12.13 ms / 8.7 MiB | 69.31 ms / 19.5 MiB | 0.078–0.082 |
+| workerd | 19.26 ms / 58.4 MiB | 21.01 ms / 59.9 MiB | 40.13 ms / 73.0 MiB | 0.211–0.216 |
+| Deno | 35.22 ms / 38.1 MiB | 41.09 ms / 39.0 MiB | 112.88 ms / 45.8 MiB | 0.125–0.144 |
+| Bun `--jitless` | 14.23 ms / 33.3 MiB | 19.60 ms / 33.6 MiB | 66.59 ms / 43.1 MiB | 0.112–0.113 |
+| Bun | 14.14 ms / 34.2 MiB | 19.33 ms / 35.8 MiB | 66.11 ms / 44.8 MiB | 0.114–0.115 |
+| Node.js | 48.91 ms / 60.7 MiB | 53.81 ms / 61.2 MiB | 75.85 ms / 76.4 MiB | 0.203–0.214 |
+| Node `--jitless` | 75.31 ms / 90.0 MiB | 79.41 ms / 90.5 MiB | 100.74 ms / 104.9 MiB | 0.181–0.196 |
 
 The C-ABI probe itself is excluded from cold worker PSS. Other stacks use the
 recorded HTTP client/transport rather than the IPC entry, so transport overhead
@@ -81,9 +80,9 @@ budget-limited, not arbitrary cap-limited observations.
 | Stack | Phase | 10 KiB | 100 KiB | 1 MiB |
 | --- | --- | ---: | ---: | ---: |
 | Capsid workers | Cold | 735 | 503 | 128 |
-| Capsid workers | Warm | 731 | 503 | 128 |
-| workerd cells | Cold | 1041 | 901 | 247 |
-| workerd cells | Warm | 604 | 553 | 219 |
+| Capsid workers | Warm | 729 | 503 | 128 |
+| workerd cells | Cold | 947 | 809 | 253 |
+| workerd cells | Warm | 571 | 525 | 264 |
 
 These sampled windows do not prove long-duration memory retention or universal
 maximum density. Heap diagnostics, service-tree PSS, individual worker cost and
@@ -91,19 +90,18 @@ pool counts are different metrics and must not be substituted for each other.
 
 ## Evidence and Replay
 
-The [accepted independent review](data/performance-review.json) binds the
-original exits, quiet windows, twelve density boundaries, nine executables and
-measured source closure (`5467` files in
-[performance-source-manifest-v030-beta4.json](data/performance-source-manifest-v030-beta4.json)).
+The [session review](data/performance-review-v030-beta5.json) binds the three successful
+lanes, four quiet windows, twelve density boundaries, nine executables and
+clean tagged Git tree ([source manifest](data/performance-source-manifest-v030-beta5.json)).
 Physical Windows-host exclusivity is **not** claimed.
 
-Both the new `v3` session (`4533` sealed files) and the archived `v1`
-cross-language session (`485b29be6cc8d0dcdb653ee6226956ddece02948`,
-`local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`, `5123` sealed files;
-source manifest [performance-source-manifest.json](data/performance-source-manifest.json))
-are retained together (`9656` total sealed files across 6 compressed transports)
-under `perf-site/archives/`. The [transport index](../perf-site/archive-index.json)
-records every part digest, file count and uncompressed length. Site preparation:
+Three complete records are retained: beta.5 local rebuild (`4546` evidence
+files), the earlier untagged beta.4 `v3` point (`4533` files;
+[review](data/performance-review.json)), and the archived `v1` cross-language
+point (`5123` files; [source manifest](data/performance-source-manifest.json)).
+All `14202` evidence files are replayed from 9 verified packed transports.
+The [transport index](../perf-site/archive-index.json) records every part digest,
+file count and uncompressed length. Site preparation:
 
 1. verifies part and complete transport digests;
 2. restores only bounded regular portable members into a new scratch directory;
@@ -123,10 +121,10 @@ PSS, `738 / 509 / 128` warm workers) and the historical unverified `v0.2.2` poin
 unchanged. Do not infer a formal paired gain or single-variable causal attribution
 across different matrix contracts (`v1` vs `v3`) or unverified historical points.
 
-No formal paired v0.2.2-versus-current gain, physical-host equivalence or
-engine-only causal attribution is claimed. Diagnostic ABBA percentages cannot
-be added or promoted into this whole-session result. No new measurement was
-run merely to refresh the documentation.
+Beta.4 and beta.5 are separate sessions; the reference versions changed, so the
+charts do not establish a paired optimization gain between them. Physical-host
+equivalence and engine-only attribution are not claimed. Diagnostic ABBA
+percentages cannot be added to this result.
 
 The normative protocol is [bench/SPEC.md](../bench/SPEC.md); the
 [archive contract](../bench/perf-evidence.md) defines failure and provenance

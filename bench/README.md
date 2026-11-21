@@ -61,10 +61,9 @@ reason to omit a required gate.
 
 ## Existing Accepted Data and Replay
 
-The current site includes the original three-lane record in compressed,
-hash-indexed transports rather than a 2.74 GB raw Git/Pages payload. Restoring
-those 5123 files and replaying the existing validators is distinct from running
-a SUT again. See [site replay instructions](../perf-site/README.md).
+The site preserves complete three-lane records in compressed, hash-indexed
+transports. Restoring the original files and replaying the existing validators
+does not run the SUT again. See [site replay instructions](../perf-site/README.md).
 
 ```sh
 python3 tests/test_perf_archive.py
@@ -76,11 +75,11 @@ samples, failure/search probes, discarded cold runs, exact programs, process and
 response evidence, dependency identities and checksums. No part is redacted,
 normalized or resealed to turn a failed run into success.
 
-The schema-1 collector has one active point per version and historically
-replaces an existing version. This is **not permission to rewrite published
-history**: this update adds the first 0.3.0 record and preserves the earlier
-0.2.x point exactly. Future remeasurement of an already accepted version needs
-a reviewed separate series/schema/archive plan that retains its old result.
+The schema-1 collector has one point per version and would replace an
+existing version. This is **not permission to rewrite published history**.
+Append a newly measured version only after verifying earlier points remain
+unchanged. Remeasuring an already accepted version requires a separate reviewed
+series/schema/archive plan that retains the old result.
 An archival release label with no source tag must be displayed as a development
 snapshot, never as a measured stable/prerelease artifact.
 

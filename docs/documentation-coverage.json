@@ -23,7 +23,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "b9b9d860c8868fef29dfd6cc3c5aee80c16247b022746e483e53950c46c409ad",
+      "sha256": "8bff39a54d49fb55b700e79a1f5f22c469febbec0a8ac1c7ce8ba2dfcfd82d7b",
       "review": "Product, public beta.5 download, unchanged GitHub Latest and explicit stable channel, security defaults, compatibility and source-bound performance evidence."
     },
     {
@@ -47,7 +47,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "b0a122a02355ded6c0bd8b88a9dd3886714e78439d4f8c0cc848f7fe6ac19fb6",
+      "sha256": "be665096236bb3c2cf8faadd0a5d34bb7c4d8f0753ca5beb5bb688ae4fb42055",
       "review": "Implemented producers, source prerequisites, current accepted snapshot, transport replay, legacy replacement warning and full-session obligations."
     },
     {
@@ -143,7 +143,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "771bac04e7e1f65f85a7ca06e80ff4700f70d46d7fd2e988687fd9f68754e8a3",
+      "sha256": "a9c8c19b96f2f185707fd1c9bc0772036375345a03203a5ec75fa99906d4ef33",
       "review": "Exact beta.5 source and five-platform release evidence, distinct GitHub Latest, non-inheritance, five raw WPT failures and source-bound measurements."
     },
     {
@@ -583,7 +583,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "aa51778ceae5c871094aa002cf623f52e329c73296f33cd8dec50f9d9a8dcdb6",
+      "sha256": "a70fd2b316689224431dbc38e5ead08958a27f923b72fa28dcc5007da6c089ca",
       "review": "Accepted 82eaab9 source/CPU/protocol evidence, unchanged historical records and no claim of beta.5 performance or formal paired improvement."
     },
     {
@@ -639,7 +639,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "ff5f5db9089248728493d21f13663137cf29e392aa67cfa59ea48889e88b2264",
+      "sha256": "38f36e4e34d7b7e7d67456f5205e84db1d316c21c15f1d72b3f52b9ef4b8d418",
       "review": "Published beta.5 source, CI attempt ledger, verified packages, prior unpublished beta.4 and retained historical records; no standards or performance inheritance."
     },
     {
@@ -767,7 +767,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "dce30f15cd698ae2a85957ef497f14e7476c9a01629d64773e02669edc097720",
+      "sha256": "545b2eb04f00de32e9d97304a7d7afa9d8c60ac7c8d60458b5a724fa3aee4d71",
       "review": "Generated files, verified archive replay, current prerelease versus measured source boundaries and deployment requirements."
     },
     {

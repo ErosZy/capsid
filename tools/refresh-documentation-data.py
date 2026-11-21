@@ -34,7 +34,9 @@ def derive(root):
     reference = load(root / "tests/wpt/workerd-default-profile-v2.json")
     capability = load(root / "docs/capability-manifest.json")
     baseline = load(root / "docs/txiki-upgrade-baseline.json")
-    review = load(root / "docs/data/performance-review.json")
+    review_path = "docs/data/performance-review-v030-beta5.json"
+    review = load(root / review_path)
+    measured_source = load(root / review["measuredSourceManifest"])
     header = (root / "include/capsid/runtime.h").read_text(encoding="utf-8")
     protocol = (root / "src/protocol.h").read_text(encoding="utf-8")
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
@@ -152,6 +154,20 @@ def derive(root):
         review["wholeLocalSessionAccepted"] and review["productCheckout"] == point["git"]["commit"]
     )
     assert review["session"] == point["verification"]["session"]
+    assert review["sourceTag"] == point["git"]["tag"] == measured_source["sourceTag"]
+    assert measured_source["sourceCommit"] == point["git"]["commit"]
+    assert measured_source["sourceTree"] == review["productTree"]
+    assert measured_source["checkoutClean"] is True
+    assert measured_source["gitEntries"] == review["measuredSourceFilesVerified"]
+    assert review["pointVersion"] == point["version"] and review["pointRelease"] == point["release"]
+    assert review["evidenceFiles"] == len(point["evidence"])
+    assert review["measurementBuild"] == "local-rebuild"
+    assert review["publishedReleaseAssetsMeasured"] is False
+    matches_beta_source = (
+        point["git"]["commit"] == beta["sourceCommit"]
+        and point["git"]["tag"] == beta["tag"]
+        and measured_source["sourceTree"] == beta["sourceTree"]
+    )
     assert reference["wpt"]["commit"] == wpt["commit"]
     conflicts = [
         {"path": row["path"], "subtests": row["total"], "recordedConflicts": len(row["failures"])}
@@ -226,12 +242,12 @@ def derive(root):
             "sourceTree": review["productTree"],
             "sourceTag": point["git"]["tag"],
             "archiveReleaseLabel": point["release"],
-            "displayLabel": point["version"]
-            + " development snapshot · "
-            + point["git"]["commit"][:7],
-            "representsPublishedRelease": bool(point["git"]["tag"]),
-            "publishedBetaPerformanceMeasured": point["git"]["commit"]
-            == publication["productCheckout"],
+            "displayLabel": f"{point['release']} local rebuild · {point['git']['commit'][:7]}",
+            "measurementBuild": review["measurementBuild"],
+            "matchesPublishedBetaSource": matches_beta_source,
+            "representsPublishedRelease": review["publishedReleaseAssetsMeasured"],
+            "publishedBetaPerformanceMeasured": review["publishedReleaseAssetsMeasured"]
+            and matches_beta_source,
             "session": point["verification"]["session"],
             "machine": point["machine"],
             "cpuSet": point["origins"]["cold-start"]["protocol"]["sutCpuSet"],
@@ -244,10 +260,8 @@ def derive(root):
             "lowLoadPssMiB": point["qps"]["lowLoadPssMb"]["capsid"],
             "servingPssMiB": point["qps"]["servingPssMb"]["capsid"],
             "density": point["density"]["capsid"],
-            "independentReview": "docs/data/performance-review.json",
-            "measuredSourceManifest": review.get(
-                "measuredSourceManifest", "docs/data/performance-source-manifest.json"
-            ),
+            "independentReview": review_path,
+            "measuredSourceManifest": review["measuredSourceManifest"],
         },
         "historicalPerformancePoints": [
             {

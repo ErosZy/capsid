@@ -1,13 +1,10 @@
 # Performance History Site
 
-The [performance site](https://rowanellis-113.github.io/capsid/) defaults to the latest **accepted measured
-snapshot**, not to an assumed benchmark of the latest published release. Stable
-remains `v0.2.2`; published `v0.3.0-beta.5` has no matching complete performance
-session. The latest accepted local measurement is `0.3.0-beta.4` development
-snapshot `82eaab9` (`capsid-perf-lane-v3`, pure-JS seven-stack + `dynamic-api`),
-completed 2026-11-20 under WSL2. The archived `v1` cross-language measurement
-(`485b29b`, 2026-11-16) and historical unverified `v0.2.2` observation remain
-preserved and selectable in the top record switcher.
+The [performance site](https://rowanellis-113.github.io/capsid/) defaults to the
+latest verified point: a local WSL2 Release/LTO rebuild of the exact
+`v0.3.0-beta.5` tag (`c7a80b9`, 2026-11-21). Its results do **not** measure the
+distributed packages. The earlier untagged beta.4 `v3` point, archived `v1`
+cross-language point and unverified `v0.2.2` observation remain selectable.
 See [current status](../docs/current-status.md) and
 [performance methodology/data](../docs/performance-benchmarks.md).
 
@@ -16,18 +13,16 @@ See [current status](../docs/current-status.md) and
 | Path | Role |
 | --- | --- |
 | `index.html` | Self-contained SVG charts, three-tier reference UX, scenario guide, and explicit source/verification labels |
-| `data.js` | Collector-generated immutable historical points plus verified `v1` (`485b29b`) and `v3` (`82eaab9`) points |
+| `data.js` | Collector-generated points: two verified `v3` points, archived verified `v1`, and one unverified historical observation |
 | `status.js` | Generated release/source/measurement context from `tools/refresh-documentation-data.py` |
 | `archive-index.json` / generated `archive-index.js` | Hashed compressed transport/part index and its UI projection for complete sealed evidence |
-| `archives/` | Full original lane bytes for both `v3` and archived `v1` in deterministic gzip/TAR transports, split `<= 40 MiB` |
+| `archives/` | Full original lane bytes in deterministic gzip/TAR transports, split `<= 40 MiB` |
 
-The latest point's archive label is `v0.3.0-beta.4`, with an empty `sourceTag`
-and measured commit `82eaab999cfd628dbe1529eb553f63c0ee52a9ea`. The UI labels it
-as a development snapshot; later releases do not change that identity. The
-archived `v1` point (`485b29be6cc8d0dcdb653ee6226956ddece02948`) and historical
-`v0.2.2` point remain unchanged. Do not draw a qualified release trend or paired
-optimization claim across different matrix contracts (`v1` vs `v3`) or
-unverified historical records.
+Beta.5 has a matching Git source tag; beta.4 development snapshot `82eaab9`
+has archive label `v0.3.0-beta.4` and an empty `sourceTag`. Neither represents
+a measurement of the distributed binaries. Do not draw a paired trend from
+separate sessions with different reference versions, contracts or unverified
+historical records.
 
 ## Prepare the Site
 
@@ -39,10 +34,10 @@ python3 tests/test_perf_archive.py
 python3 bench/prepare-perf-site.py --repo . --output /path/to/new-site-output
 ```
 
-The output must be new and outside `perf-site`. Allow at least 8 GiB of scratch
-space: the combined dual-version evidence contains `9656` files (`4533` `v3` +
-`5123` `v1`) and about `5.49 GiB` of raw bytes, transported in about `310 MiB`
-across 6 compressed bundles. The compressed records are not reduced samples.
+The output must be new and outside `perf-site`. Allow at least 10 GiB of scratch:
+replaying `14202` evidence files plus 9 checksum manifests takes about
+`7.76 GiB` of raw bytes, transported in about `472 MiB` across 9 bundles.
+Compression does not reduce the number of samples.
 The stager restores the original portable namespace and invokes the ordinary
 complete lane/point validators for every verified point. It checks
 source/binary/session identity, posture, raw rounds, responses,
@@ -66,15 +61,17 @@ This is **replay**, not a new measurement:
 ```sh
 python3 bench/perf_archive.py --repo . --output /path/to/new-archive-root
 ARCHIVES=/path/to/new-archive-root
-SESSION=local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99
+SESSION=local-wsl-beta5-v3-20261121T064717Z-c7a80b9
 GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 python3 bench/collect-perf-point.py --repo "$ARCHIVES" \
   --cold-start "$ARCHIVES/bench/results/${SESSION}-cold" \
   --qps "$ARCHIVES/bench/results/${SESSION}-qps" \
   --density "$ARCHIVES/bench/results/${SESSION}-density" \
-  --version 0.3.0-beta.4 --release v0.3.0-beta.4 --generated-at "$GENERATED_AT" --check
+  --version 0.3.0-beta.5 --release v0.3.0-beta.5 --generated-at "$GENERATED_AT" --check
 ```
 
+For the earlier `v3` point, use `SESSION=local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99`,
+`--version 0.3.0-beta.4` and `--release v0.3.0-beta.4`.
 To replay the archived `v1` cross-language point, pass
 `SESSION=local-wsl-v030-headers-ready-20261115T235007Z-7368b4ec`,
 `--version 0.3.0`, and `--release v0.3.0` (matching its original frozen archive
@@ -92,8 +89,7 @@ and binary provenance, exact responses, original budgets, quiet windows,
 strict Linux posture and owned cleanup. A short observation, synthetic archive,
 metadata file or selected CTest success is not a publishable point.
 
-No new benchmark was run for this documentation refresh. A later code/build
-needs its own complete session; it cannot inherit the snapshot's performance
+A later build needs its own complete session; it cannot inherit these results
 through a version string, source-tree equality or release CI.
 
 ## Publishing

@@ -69,40 +69,46 @@
       "release": "v0.3.0",
       "status": "verified",
       "version": "0.3.0"
+    },
+    {
+      "date": "2026-11-20",
+      "release": "v0.3.0-beta.4",
+      "status": "verified",
+      "version": "0.3.0-beta.4"
     }
   ],
   "performance": {
-    "archiveReleaseLabel": "v0.3.0-beta.4",
+    "archiveReleaseLabel": "v0.3.0-beta.5",
     "contract": "capsid-perf-lane-v3",
     "cpuSet": "0-3",
-    "date": "2026-11-20",
+    "date": "2026-11-21",
     "density": {
       "cold@100k": {
         "count": 503,
         "limit": "budget",
-        "pssMb": 2044.3,
+        "pssMb": 2043.4,
         "unit": "workers"
       },
       "cold@10k": {
         "count": 735,
         "limit": "budget",
-        "pssMb": 2045.6,
+        "pssMb": 2047.3,
         "unit": "workers"
       },
       "cold@1m": {
         "count": 128,
         "limit": "budget",
-        "pssMb": 2043.3,
+        "pssMb": 2042.4,
         "unit": "workers"
       },
       "warm@100k": {
         "count": 503,
         "limit": "budget",
-        "pssMb": 2046.8,
+        "pssMb": 2046.7,
         "unit": "workers"
       },
       "warm@10k": {
-        "count": 731,
+        "count": 729,
         "limit": "budget",
         "pssMb": 2045.2,
         "unit": "workers"
@@ -110,14 +116,14 @@
       "warm@1m": {
         "count": 128,
         "limit": "budget",
-        "pssMb": 2043.8,
+        "pssMb": 2043.0,
         "unit": "workers"
       }
     },
-    "displayLabel": "0.3.0-beta.4 development snapshot · 82eaab9",
-    "evidenceFiles": 4533,
-    "independentReview": "docs/data/performance-review.json",
-    "lowLoadPssMiB": 14.9,
+    "displayLabel": "v0.3.0-beta.5 local rebuild · c7a80b9",
+    "evidenceFiles": 4546,
+    "independentReview": "docs/data/performance-review-v030-beta5.json",
+    "lowLoadPssMiB": 15.0,
     "machine": {
       "architecture": "x86_64",
       "bun": "1.4.5",
@@ -126,26 +132,28 @@
       "hostId": "f0385d0aeb8b4fc7e7f699e5a5dfc535e1a6aabf262f2c0ba5b773204ea2c51b",
       "kernel": "6.18.40.1-microsoft-standard-WSL2",
       "logicalCpus": 12,
-      "node": "24.14.0",
+      "node": "26.13.1",
       "nproc": 12,
       "uname": "6.18.40.1-microsoft-standard-WSL2",
-      "workerd_version": "workerd 2026-10-10"
+      "workerd_version": "workerd 2026-11-21"
     },
-    "measuredSourceManifest": "docs/data/performance-source-manifest-v030-beta4.json",
+    "matchesPublishedBetaSource": true,
+    "measuredSourceManifest": "docs/data/performance-source-manifest-v030-beta5.json",
+    "measurementBuild": "local-rebuild",
     "physicalHostExclusivityClaimed": false,
     "publishedBetaPerformanceMeasured": false,
     "qps": {
-      "dynamic-api": 9974.9,
-      "matrix-json-16k": 13952.2,
-      "matrix-json-1k": 21770.8,
-      "stream": 10756.9
+      "dynamic-api": 9808.1,
+      "matrix-json-16k": 14194.6,
+      "matrix-json-1k": 21746.6,
+      "stream": 10649.7
     },
     "representsPublishedRelease": false,
-    "servingPssMiB": 18.6,
-    "session": "local-wsl-v030-beta4-v3-20261120T052109Z-82eaab99",
-    "sourceCommit": "82eaab999cfd628dbe1529eb553f63c0ee52a9ea",
-    "sourceTag": "",
-    "sourceTree": "5e61f517d5325704c8dc38e35b0c63193fb91ec1"
+    "servingPssMiB": 18.5,
+    "session": "local-wsl-beta5-v3-20261121T064717Z-c7a80b9",
+    "sourceCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
+    "sourceTag": "v0.3.0-beta.5",
+    "sourceTree": "876e29c2792899b654310fea72aac979bd8bb48f"
   },
   "prerelease": {
     "assets": [

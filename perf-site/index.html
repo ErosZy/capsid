@@ -535,9 +535,8 @@
         <h1>Fast cold starts.<br>Tiny footprint.<br><em>Strict OS isolation.</em></h1>
         <p>Capsid pairs a compact JavaScript runtime with mandatory Linux
            <b>Namespaces, Landlock, and Seccomp</b> per tenant worker.
-           Every benchmark below measures the complete isolated serving path
-           under a frozen, replay-verified protocol. The latest accepted data
-           is a development snapshot, not a benchmark of the published prerelease.</p>
+           Each accepted record uses a frozen, replay-verified protocol and
+           applies to its measured build, not to every binary with the same version.</p>
         <div class="hero-tags" id="hero-tags"></div>
       </div>
       <div class="kpis" id="kpis"></div>
@@ -887,9 +886,11 @@ function isVerified(point) {
      point.verification.contract === "capsid-perf-lane-v3"));
 }
 function pointLabel(point) {
-  if (isVerified(point) && !(point.git && point.git.tag))
+  if (isVerified(point)) {
+    if (point.git && point.git.tag) return point.git.tag + " · tagged source build";
     return point.version + " dev snapshot · " + String(point.git && point.git.commit || "").slice(0, 8);
-  return point.release + (isVerified(point) ? "" : " · historical / unverified");
+  }
+  return point.release + " · historical / unverified";
 }
 
 /* ============ helpers ============ */
@@ -947,7 +948,8 @@ function renderReleaseContext() {
     '<a href="' + esc(s.stable.url) + '">' + esc(s.stable.tag) + "</a>; experimental prerelease " +
     '<a href="' + esc(s.prerelease.url) + '">' + esc(s.prerelease.tag) + "</a>." +
     " Latest accepted local measurement: <b>" + esc(s.performance.displayLabel) + "</b>, " + esc(s.performance.date) + "." +
-    (s.performance.publishedBetaPerformanceMeasured ? "" :
+    (s.performance.publishedBetaPerformanceMeasured ? "" : s.performance.matchesPublishedBetaSource ?
+      " <b>The prerelease source was rebuilt locally; the distributed binaries were not measured.</b>" :
       " <b>Published " + esc(s.prerelease.tag) + " has no matching complete performance measurement.</b>") +
     " The archival v0.3.0 label is not a stable-release claim. " +
     '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/current-status.md">Sources and limits</a>' +

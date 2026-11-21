@@ -1,0 +1,62 @@
+{
+  "checkoutClean": true,
+  "gitEntries": 5469,
+  "schema": 1,
+  "sourceCommit": "c7a80b9bdafe36d415a440be7ed3384f7830d4f8",
+  "sourceTag": "v0.3.0-beta.5",
+  "sourceTree": "876e29c2792899b654310fea72aac979bd8bb48f",
+  "submodules": [
+    {
+      "commit": "1a230d31183f062fae7a6c4fd2cff466cecc1787",
+      "initialized": true,
+      "path": "vendor/txiki.js"
+    },
+    {
+      "commit": "aabb7651de73ec2f1a74361ca3430eed1a62e402",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/libuv"
+    },
+    {
+      "commit": "d32905645845a7ee1556b5baf35cdd462334f9ef",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/libwebsockets"
+    },
+    {
+      "commit": "da52cd936b3e34dac7ac12aa8066fc57676af106",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/libwebsockets/minimal-examples-lowlevel/api-tests/api-test-qpack/qifs"
+    },
+    {
+      "commit": "0bebf8b8c7f07abe3571ded48a11aa907a1ffb20",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/mbedtls"
+    },
+    {
+      "commit": "dff9da04438d712f7647fd995bc90fadd0c0e2ce",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/mbedtls/framework"
+    },
+    {
+      "commit": "a5969c54000f44cd45968e830f6482592373cb0e",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/mimalloc"
+    },
+    {
+      "commit": "bf8988fc401e737f9946cd10a3463b48aab0fd7e",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/quickjs"
+    },
+    {
+      "commit": "de8e621cdba4f40cff3cf244e6cfb8cb48746b4a",
+      "initialized": false,
+      "path": "vendor/txiki.js/deps/quickjs/test262"
+    },
+    {
+      "commit": "8c18e3f68b16c4bcaf05996b2636f6ed2b4cf629",
+      "initialized": true,
+      "path": "vendor/txiki.js/deps/wamr"
+    }
+  ],
+  "treeListingCommand": "git ls-tree -r --full-tree v0.3.0-beta.5",
+  "treeListingSHA256": "e3a34bd149cbc486701de4535599e0e9eac3b122fe34209cd1e21a459473c4ee"
+}
