@@ -63,7 +63,7 @@
     },
     "vendorPatchChanges": {
       "patches/txiki/0079-quickjs-turbo-integration.patch": {
-        "currentGitObject": "403e7a1eebf71c969e8accdb31d3d1dbcc081568",
+        "currentGitObject": "e609a30d65539f11fe01e8ba891cd3a2e7e6d55c",
         "qualifiedGitObject": null
       },
       "vendor/quickjs-turbo": {

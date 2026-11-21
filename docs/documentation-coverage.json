@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewedDate": "2026-11-20",
+  "reviewedDate": "2026-11-22",
   "sourceBaseline": "af8acc1a7710b6344bdf85d1f6b0b067e0fabe89",
   "meaning": "Reviewed means current maintained claims or explicit historical disposition reviewed; not every page rewritten, every command executed, or historical result requalified.",
   "counts": {
@@ -23,7 +23,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "ca7d7300f7bb484be7404c98d14be8c47052fe71cc45c59e43614be7e6b8c42c",
+      "sha256": "885fa12b67667bef72308c45afdd0a96c6c611baa341ae5000d4f506ce89fd55",
       "review": "Product, public beta.5 download, unchanged GitHub Latest and explicit stable channel, security defaults, compatibility and source-bound performance evidence."
     },
     {
@@ -55,7 +55,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "390fff32c7b3600c93a8ca8161de2334d9d6cc8851be57f77a3f27d58093d14e",
+      "sha256": "07c9088c51b8acf851681747ac08202a06c7ec4384d6e7cd9041fb592dc4b8a5",
       "review": "Normative protocol constants/budgets retained; status/current acceptance/transport and same-version history caveat corrected."
     },
     {
@@ -87,7 +87,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "89136daa1b5af729595dfd30c94c814ea3708cc3900c77a1ed298aa5f8044f51",
+      "sha256": "e3007cb7f7c9d6e69b34f90461db2d476b1a16fc1cd7c72bf124bc2e4bc5aaf9",
       "review": "Library/distribution/Host split, ABI7, default v3/explicit v4, bounded Host-owned channels and native/strict boundaries."
     },
     {
@@ -111,7 +111,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "8f98a34a1e3d40e09fd1e047ce740e06c93d174e73858a45302960933765a660",
+      "sha256": "0906177f8c0cf153e34abddf71886fe60d91794a5e8e6f3415112639fd8ba78e",
       "review": "Pinned beta.5 source checkout, native toolchains, development versus clean Release builds, package CPU distinctions and installed SDK targets."
     },
     {
@@ -143,7 +143,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "a9c8c19b96f2f185707fd1c9bc0772036375345a03203a5ec75fa99906d4ef33",
+      "sha256": "9e71aa96d2049279925c794cc3a19a772280b29b605fc89780356cb30ff067c0",
       "review": "Exact beta.5 source and five-platform release evidence, distinct GitHub Latest, non-inheritance, five raw WPT failures and source-bound measurements."
     },
     {
@@ -767,7 +767,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "2328d5d1a908bbcadd6eece4a801ece46920e352a4f1b02c66d640b40bd3e2d7",
+      "sha256": "c0d71a12dc03a2e7e95448f8d513cd01250fa96e7d589249b2c6d7b41eb8777b",
       "review": "Generated files, verified archive replay, current prerelease versus measured source boundaries and deployment requirements."
     },
     {

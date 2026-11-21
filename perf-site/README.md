@@ -96,7 +96,7 @@ through a version string, source-tree equality or release CI.
 ## Publishing
 
 `.github/workflows/perf-pages.yml` publishes an Actions artifact, not a
-`gh-pages` branch. Its push filter follows **`dev/v0.3.0`** and includes the
+`gh-pages` branch. Its push filter follows **`dev/v0.3.1`** and includes the
 site, data, archive/staging and status-generation inputs. It checks generated
 status, restores/revalidates evidence, uploads the staged site and deploys it.
 GitHub Pages must use **GitHub Actions** as its source; environment protection

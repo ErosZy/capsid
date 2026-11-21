@@ -8,8 +8,8 @@
 **A secure, embeddable, high-density JavaScript runtime for untrusted AI code.**
 Capsid runs self-contained ESM applications exporting a Web-standard
 `fetch(request)` handler behind a Host-controlled boundary. Applications execute
-in separate QuickJS-NG worker processes; the Host owns listeners, routing,
-capabilities, resource limits and worker lifetime.
+in separate `quickjs-turbo` (QuickJS-NG 0.15.1-derived) worker processes; the
+Host owns listeners, routing, capabilities, resource limits and worker lifetime.
 
 - **Hard Linux OS isolation**: per-worker Linux Namespaces, Landlock and Seccomp
   with default-deny egress (`egress_policy == NULL`) and zero JIT RWX pages.
@@ -26,7 +26,9 @@ capabilities, resource limits and worker lifetime.
 > strict sandboxing provides the production isolation boundary; native macOS
 > and Windows support is for trusted development and integration.
 >
-> Documentation/data reviewed **2026-11-21** for `dev/v0.3.0`.
+> Documentation/data reviewed **2026-11-22** for `dev/v0.3.1` (`quickjs-turbo`
+> `v0.15.1-turbo.3` integration; the published `v0.3.0-beta.5` release retains
+> QuickJS-NG 0.15.1).
 > [Current status and data scope](docs/current-status.md) separates the published
 > beta, current source interface, measured development snapshot and dated history.
 

@@ -1,38 +1,45 @@
 # Current Status and Data Scope
 
-Reviewed 2026-11-21. This is the current reader-facing status, not another
+Reviewed 2026-11-22. This is the current reader-facing status, not another
 execution diary. The [machine-readable status](current-status.json) is generated
 from committed source locks, the captured GitHub release metadata and validated
 measurement archives. Historical reviews retain their original dates and values.
 
 ## Development Checkout
 
-The published prerelease `v0.3.0-beta.5` includes the pure-JS hot-path changes
-in `js/bootstrap.js`, `js/fetch.js` and `js/url.js`, including isolated Fetch
-body buffers and a single snapshot when cloning a fixed byte body. These
-changes leave the public C ABI v7, FetchRPC wire protocol, C/C++ runtime,
-CMake build inputs and pinned `vendor/txiki.js` (QuickJS-NG 0.15.1) unchanged.
+The published prerelease `v0.3.0-beta.5` (`c7a80b9`) includes the pure-JS
+hot-path changes in `js/bootstrap.js`, `js/fetch.js` and `js/url.js` on top of
+pinned `vendor/txiki.js` (`v26.6.0`, QuickJS-NG 0.15.1, 78 SDK patches).
 
-The current docs-only checkout retains the qualified runtime input hashes
-for `v0.3.0-beta.5` but sets `releaseQualificationInherited:false`: the derived
-status describes the actual tagged release, not new qualification for later
-commits. See [source formatting](formatting.md) for exact-byte exclusions
-and [package architecture](releases.md#development-package-matrix) for the
-five-platform archive matrix.
+The current `dev/v0.3.1` checkout is an `engine-integration-successor`
+(`releaseQualificationInherited:false`) that integrates `vendor/quickjs-turbo`
+(`v0.15.1-turbo.3`, commit `fb7a53b6fb06edd46a431224fdd839b71fe0b629`) through
+`patches/txiki/0079-quickjs-turbo-integration.patch` (79 SDK patches total)
+while keeping the public C ABI v7 and FetchRPC v3/v4 wire protocol unchanged.
+On Linux x86-64 (GCC 13+, non-sanitizer builds) it enables the zero-JIT native
+register-frame interpreter (`LINUX_X86_64`) with a portable C fallback on
+sanitizers and other platforms, and sets process-startup density defaults
+(`QJS_DISABLE_NATIVE_OWN_BYTECODE=1`, `QJS_DISABLE_PROPERTY_IC=1`, overridable
+via environment) in `src/worker_main.cc` to preserve high-density worker
+packing. The derived release qualification and sealed benchmark records below
+describe the tagged `v0.3.0-beta.5` release, not new qualification for
+`dev/v0.3.1` commits. See [source formatting](formatting.md) for exact-byte
+exclusions and [package architecture](releases.md#development-package-matrix)
+for the five-platform archive matrix.
 
 ## Release and Development Channels
 
 | Item | Current recorded value | Boundary |
 | --- | --- | --- |
-| Development branch | `dev/v0.3.0` | Documentation/data changes do not requalify a binary |
-| Experimental prerelease | [v0.3.0-beta.5](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5) | Current beta; install by tag |
+| Development branch | `dev/v0.3.1` | Engine-integration successor; does not inherit `v0.3.0-beta.5` binary qualification |
+| Experimental prerelease | [v0.3.0-beta.5](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5) | Current beta (QuickJS-NG 0.15.1); install by tag |
 | GitHub Latest (recorded default) | [v0.3.0-beta.3](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.3) | Earlier release, not the current beta or stable line |
 | Stable `0.2.x` release | [v0.2.2](https://github.com/rowanellis-113/capsid/releases/tag/v0.2.2) | Install by tag |
 | Beta runtime version | `0.3.0` | An archive/runtime string, not a stable-channel claim |
 | Qualified beta source | `c7a80b9bdafe36d415a440be7ed3384f7830d4f8` | Tree `876e29c2792899b654310fea72aac979bd8bb48f`; 5469 frozen git entries |
 | Public interface | C ABI v7; capability policy v2 | Existing layouts remain frozen; new interfaces are additive |
 | Protocol | FetchRPC v3 by default; explicit negotiated v4 | Never mix versions on one connection |
-| Pinned vendor | txiki.js `v26.6.0`, 78 SDK patches | No vendor upgrade is implied by this documentation refresh |
+| Pinned vendor (`dev/v0.3.1`) | txiki.js `v26.6.0` + quickjs-turbo `v0.15.1-turbo.3` (`fb7a53b6`), 79 SDK patches | Published `v0.3.0-beta.5` retains txiki.js `v26.6.0` (QuickJS-NG 0.15.1), 78 SDK patches |
 
 The [read-only release capture](data/release-status.json) records its actual UTC
 observation, 11 asset IDs/sizes/digests and stable/beta flags. The

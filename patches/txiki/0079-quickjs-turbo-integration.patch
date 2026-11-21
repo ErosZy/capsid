@@ -2,7 +2,7 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 53cc1ea..96220e3 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -246,7 +246,37 @@ add_executable(tjsc EXCLUDE_FROM_ALL
+@@ -246,7 +246,39 @@ add_executable(tjsc EXCLUDE_FROM_ALL
  ### Dependencies
  ###
  
@@ -21,6 +21,8 @@ index 53cc1ea..96220e3 100644
 +set(QJS_PROPERTY_IC ON CACHE BOOL "" FORCE)
 +set(QJS_HYBRID_GC ON CACHE BOOL "" FORCE)
 +if(BUILD_WITH_ASAN OR BUILD_WITH_UBSAN OR CAPSID_ENABLE_ASAN OR CAPSID_ENABLE_UBSAN OR CAPSID_ENABLE_TSAN)
++    set(QJS_FRAME_BACKEND "PORTABLE" CACHE STRING "" FORCE)
++elseif(NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$"))
 +    set(QJS_FRAME_BACKEND "PORTABLE" CACHE STRING "" FORCE)
 +elseif(NOT DEFINED QJS_FRAME_BACKEND)
 +    set(QJS_FRAME_BACKEND "AUTO" CACHE STRING "" FORCE)
@@ -92,6 +94,16 @@ index 526661d..115960c 100644
      check_c_compiler_flag(${FLAG} COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
      if(COMPILER_SUPPORTS_${FLAG_NO_HYPHEN})
          add_compile_options("$<$<COMPILE_LANGUAGE:C>:${FLAG}>")
+@@ -449,7 +450,8 @@ if(QJS_FRAME_BACKEND_EFFECTIVE STREQUAL "WIN64")
+     endif()
+ endif()
+ target_include_directories(
+     qjs
+-    PUBLIC $<BUILD_INTERFACE:${QJS_UPSTREAM_DIR}> $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
++    PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
++    PUBLIC $<BUILD_INTERFACE:${QJS_UPSTREAM_DIR}>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+ target_link_libraries(qjs PUBLIC ${qjs_libs})
 diff --git a/deps/quickjs/vm/cmake/QuickJSUpstreamPin.cmake b/deps/quickjs/vm/cmake/QuickJSUpstreamPin.cmake
 index b5fb006..23c1841 100644
 --- a/deps/quickjs/vm/cmake/QuickJSUpstreamPin.cmake
@@ -419,6 +431,19 @@ index 3859b88..401390f 100644
      )
      functions = {match[2]: match for match in adapter.FUNCTION.finditer(core)}
      first = core.index("/* object list */")
+diff --git a/deps/quickjs/vm/tools/common/backports/hybrid_gc.py b/deps/quickjs/vm/tools/common/backports/hybrid_gc.py
+index 2457063..d18c4be 100644
+--- a/deps/quickjs/vm/tools/common/backports/hybrid_gc.py
++++ b/deps/quickjs/vm/tools/common/backports/hybrid_gc.py
+@@ -47,7 +47,7 @@ def core_overlay(text):
+     rt_part = rt_final_re.sub(r"\1" + rt_fields + r"\n\2", rt_part, count=1)
+ 
+     gc_bit_old = "    JSGCObjectTypeEnum gc_obj_type : 4;"
+-    gc_bit_new = "    JSGCObjectTypeEnum gc_obj_type : 3; uint8_t hybrid_young : 1;"
++    gc_bit_new = "    uint8_t gc_obj_type : 3; uint8_t hybrid_young : 1;"
+     if gc_part.count(gc_bit_old) != 1:
+         raise ValueError("JSGCObjectHeader bitfield anchor missing")
+     gc_part = gc_part.replace(gc_bit_old, gc_bit_new, 1)
 diff --git a/deps/quickjs/vm/tools/common/c_extract/regexp_c.py b/deps/quickjs/vm/tools/common/c_extract/regexp_c.py
 index fd08487..5d1834d 100644
 --- a/deps/quickjs/vm/tools/common/c_extract/regexp_c.py

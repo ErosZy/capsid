@@ -371,7 +371,7 @@ Earlier missing-contract points remain unverified historical observations.
   "not measured"; the protocol copy must match the lanes as actually
   run (rounds, warm phases, sandbox posture).
 - Deployment: GitHub Actions, pinned action SHAs, artifact upload + deploy-pages;
-  the retained `dev/v0.3.0` push branch and the actual site/data/tool paths in
+  the retained `dev/v0.3.1` push branch and the actual site/data/tool paths in
   `.github/workflows/perf-pages.yml` trigger validation and publication.
 
 ## 6. Release procedure

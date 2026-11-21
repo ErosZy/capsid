@@ -1479,7 +1479,7 @@ $sourceName = ([System.Uri]$bundle).AbsoluteUri
           <p>Apps with TypeScript or npm dependencies (Hono, itty-router) bundle ahead of time into one ESM file.
              For sub-20&nbsp;ms cold starts on large bundles, precompile trusted QuickJS bytecode with the matching
              release's <span class="mono">capsid-bytecode-compile</span> and sign <span class="mono">message.bin</span>
-             offline (see <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/host-config.md" target="_blank" rel="noopener">Host configuration</a>).</p>
+             offline (see <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/docs/host-config.md" target="_blank" rel="noopener">Host configuration</a>).</p>
           <div class="qs-meta"><span>Sub-20 ms 1 MiB cold start</span><span>Signed attestation</span></div>
         </div>
         <div class="qs-term">
@@ -1511,9 +1511,9 @@ $sourceName = ([System.Uri]$bundle).AbsoluteUri
     </div>
 
     <div class="quick-links">
-      <a class="btn-primary" href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/getting-started.md" target="_blank" rel="noopener">Getting Started Guide &rarr;</a>
-      <a class="btn-ghost" href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/host-integration.md" target="_blank" rel="noopener">Embed C/C++ SDK</a>
-      <a class="btn-ghost" href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/linux-sandbox.md" target="_blank" rel="noopener">Linux Strict Sandbox</a>
+      <a class="btn-primary" href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/docs/getting-started.md" target="_blank" rel="noopener">Getting Started Guide &rarr;</a>
+      <a class="btn-ghost" href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/docs/host-integration.md" target="_blank" rel="noopener">Embed C/C++ SDK</a>
+      <a class="btn-ghost" href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/docs/linux-sandbox.md" target="_blank" rel="noopener">Linux Strict Sandbox</a>
       <a class="btn-ghost" href="https://github.com/rowanellis-113/capsid/releases" target="_blank" rel="noopener">All Releases &amp; SHA-256</a>
     </div>
   </section>
@@ -1554,10 +1554,10 @@ $sourceName = ([System.Uri]$bundle).AbsoluteUri
     </div>
     <div class="foot-links">
       <a href="https://github.com/rowanellis-113/capsid" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/README.md" target="_blank" rel="noopener">Docs</a>
-      <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/SECURITY.md" target="_blank" rel="noopener">Security</a>
+      <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/docs/README.md" target="_blank" rel="noopener">Docs</a>
+      <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/SECURITY.md" target="_blank" rel="noopener">Security</a>
       <a href="https://github.com/rowanellis-113/capsid/releases" target="_blank" rel="noopener">Releases</a>
-      <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/LICENSE" target="_blank" rel="noopener">Apache-2.0</a>
+      <a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/LICENSE" target="_blank" rel="noopener">Apache-2.0</a>
     </div>
   </footer>
 </div>
@@ -1951,7 +1951,7 @@ function renderReleaseContext() {
       " <b>The prerelease source was rebuilt locally; the distributed binaries were not measured.</b>" :
       " <b>Published " + esc(s.prerelease.tag) + " has no matching complete performance measurement.</b>") +
     " The archival v0.3.0 label is not a stable-release claim. " +
-    '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/docs/current-status.md">Sources and limits</a>' +
+    '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/docs/current-status.md">Sources and limits</a>' +
     " · status captured " + esc(s.asOfUTC.slice(0, 10)) + ".";
 }
 function renderRecordSelector() {
@@ -3654,7 +3654,7 @@ function renderMethod() {
       ' archived files rehashed before staging. Binary identities are recorded in each lane manifest.</div>' +
       (packed ? '<p class="footnote">Complete compressed transport; restore into a new scratch root, then replay the ordinary validators. ' +
         '<a href="evidence-index.json">Full original file/digest index</a> · <a href="archive-index.json">Transport/part index</a> · ' +
-        '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.0/perf-site/README.md">Replay instructions</a></p>' : "") +
+        '<a href="https://github.com/rowanellis-113/capsid/blob/dev/v0.3.1/perf-site/README.md">Replay instructions</a></p>' : "") +
       '<details style="margin-top:12px"><summary>Archive downloads and SHA-256</summary>' +
       '<ul class="archive-list">' + links + "</ul></details>" :
       '<div class="footnote" style="margin-top:20px">Historical observation: the current provenance and ' +

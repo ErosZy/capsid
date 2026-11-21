@@ -707,7 +707,7 @@
     "patches/txiki/0079-quickjs-turbo-integration.patch": {
       "mode": "100644",
       "kind": "blob",
-      "gitObject": "403e7a1eebf71c969e8accdb31d3d1dbcc081568"
+      "gitObject": "e609a30d65539f11fe01e8ba891cd3a2e7e6d55c"
     },
     "patches/web-streams/0001-workerd-byte-profile.patch": {
       "mode": "100644",
@@ -3162,7 +3162,7 @@
     "vendorPatchChanges": {
       "patches/txiki/0079-quickjs-turbo-integration.patch": {
         "qualifiedGitObject": null,
-        "currentGitObject": "403e7a1eebf71c969e8accdb31d3d1dbcc081568"
+        "currentGitObject": "e609a30d65539f11fe01e8ba891cd3a2e7e6d55c"
       },
       "vendor/quickjs-turbo": {
         "qualifiedGitObject": null,
