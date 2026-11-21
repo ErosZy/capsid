@@ -2,12 +2,23 @@
 
 [![Testing validity](https://github.com/rowanellis-113/capsid/actions/workflows/testing-validity.yml/badge.svg)](https://github.com/rowanellis-113/capsid/actions/workflows/testing-validity.yml)
 [![Prerelease v0.3.0-beta.5](https://img.shields.io/badge/prerelease-v0.3.0--beta.5-orange)](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5)
+[![Site & Benchmarks](https://img.shields.io/badge/site%20%26%20benchmarks-live-00b4e6)](https://rowanellis-113.github.io/capsid/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Run generated JavaScript behind a Host-controlled boundary.** Capsid is an
-embeddable runtime for self-contained ESM applications exporting a Web-standard
-`fetch(request)` handler. Applications run in worker processes; the Host owns
-listeners, routing, capabilities, resource limits and worker lifetime.
+**A secure, embeddable, high-density JavaScript runtime for untrusted AI code.**
+Capsid runs self-contained ESM applications exporting a Web-standard
+`fetch(request)` handler behind a Host-controlled boundary. Applications execute
+in separate QuickJS-NG worker processes; the Host owns listeners, routing,
+capabilities, resource limits and worker lifetime.
+
+- **Hard Linux OS isolation**: per-worker Linux Namespaces, Landlock and Seccomp
+  with default-deny egress (`egress_policy == NULL`) and zero JIT RWX pages.
+- **Micro-container density**: **729** warmed 10 KiB strict-sandbox workers in
+  2 GiB RAM and **18.5 MiB** total host + worker PSS under 64-connection load.
+- **Sub-20 ms cold starts**: **6.9 ms** (10 KiB) / **18.6 ms** (1 MiB) with
+  precompiled trusted bytecode.
+- **Embeddable C11 / C++11 SDK**: stable `<capsid/runtime.h>` (ABI v7) with
+  non-blocking IPC, streaming, WebSocket v4 and trusted Host Bindings.
 
 > **Prerelease**: [`v0.3.0-beta.5`](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5).
 > **Stable**: [`v0.2.2`](https://github.com/rowanellis-113/capsid/releases/tag/v0.2.2). Public C ABI v7.
@@ -21,24 +32,41 @@ listeners, routing, capabilities, resource limits and worker lifetime.
 
 ## Start Here
 
+- **Explore the product & verified benchmarks:** [Capsid Site & Benchmark Hub](https://rowanellis-113.github.io/capsid/).
 - **Run a local application:** [Getting started](docs/getting-started.md).
 - **Choose or verify a package:** [Releases and installation](docs/releases.md).
 - **Build the runtime or SDK:** [Building from source](docs/building.md).
 - **Embed in your own C/C++ Host:** [Host integration](docs/host-integration.md).
 - **Find a reference or design record:** [Documentation index](docs/README.md).
 
-On Linux or macOS, select the beta by tag rather than using GitHub's default
-release download:
+Select `v0.3.0-beta.5` explicitly rather than relying on GitHub's default
+`latest` download.
+
+**Linux or macOS** (installer script):
 
 ```sh
 curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5/install.sh \
   | CAPSID_REPO=rowanellis-113/capsid bash -s -- v0.3.0-beta.5
 ```
 
-This prerelease provides native packages for Linux musl (`x86_64` and `arm64`),
-macOS (`arm64` and `x86_64`) and Windows (`x86_64`).
-See the [installation guide](docs/releases.md) for channel selection, architecture
-matching, SHA-256 verification, Windows extraction and package contents.
+**Windows PowerShell** (`x86_64` archive + SHA-256 verification):
+
+```powershell
+$base = 'https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5'
+$zip  = '.\capsid-0.3.0-windows-x86_64.zip'
+Invoke-WebRequest "$base/capsid-0.3.0-windows-x86_64.zip" -OutFile $zip
+Invoke-WebRequest "$base/capsid-0.3.0-windows-x86_64.zip.sha256" -OutFile "$zip.sha256"
+$exp = ((Get-Content "$zip.sha256" -Raw).Trim() -split '\s+')[0]
+if ((Get-FileHash $zip -Algorithm SHA256).Hash -ine $exp) { throw 'SHA-256 mismatch' }
+Expand-Archive -LiteralPath $zip -DestinationPath "$HOME\capsid-beta" -Force
+```
+
+**Direct archives (no `curl | bash` / `wget` / offline)**: download any native
+`.tar.gz` or `.zip` and its `.sha256` sidecar directly from the
+[`v0.3.0-beta.5` Release](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5)
+for Linux musl (`x86_64`, `arm64`), macOS (`arm64`, `x86_64`) or Windows
+(`x86_64`). See the [installation guide](docs/releases.md) for `wget` / manual
+tarball verification, channel selection and package contents.
 
 ## Application Model
 
@@ -157,14 +185,20 @@ The ordinary suite is not represented as all-passing.
   are not 0.3.0-beta measurements.
 
 **Latest accepted local measurement:** `v0.3.0-beta.5` (`c7a80b9`), rebuilt
-locally under WSL2 on an i5-12400F, 2026-11-21. In the seven-stack
-`capsid-perf-lane-v3` matrix, Capsid recorded **21,746.6 / 14,194.6 / 10,649.7 /
-9,808.1 QPS** (JSON 1/16 KiB, stream, dynamic API) and **15.0 / 18.5 MiB** PSS
-(low load / loaded). Cold-start bytecode at 1 MiB took **18.64 ms** with
-**16.0 MiB** PSS. Warm density under 2048 MiB was **729 / 503 / 128** workers
-at 10/100 KiB/1 MiB. This measures the local Release/LTO build, **not the
-distributed packages**. Earlier records remain available in the
-[performance reference](docs/performance-benchmarks.md).
+locally under WSL2 on an i5-12400F, 2026-11-21 (`capsid-perf-lane-v3` seven-stack
+pure-JS matrix). This measures the local Release/LTO build, **not the
+distributed packages**.
+
+| Dimension | Capsid (Strict Linux Sandbox) | Notes |
+| --- | --- | --- |
+| **2 GiB warmed pool** | **729 / 503 / 128** workers | 10 KiB / 100 KiB / 1 MiB (100 req/worker) |
+| **Cold start (1 MiB bytecode)** | **18.64 ms** (`16.0 MiB` PSS) | **6.9 ms** at 10 KiB bytecode |
+| **Serving memory (PSS)** | **15.0 MiB** (10 req/s) · **18.5 MiB** (64-conn) | Complete host + strict worker tree |
+| **Sustained throughput** | **21,746.6 / 14,194.6 / 10,649.7 / 9,808.1** QPS | JSON 1 KiB / 16 KiB / stream / dynamic API (**1,175 QPS/MiB** on 1 KiB) |
+
+Interactive charts, three-tier peer comparisons and SHA-256 replayable archives
+are published at the [Capsid Site & Benchmark Hub](https://rowanellis-113.github.io/capsid/);
+earlier records remain in the [performance reference](docs/performance-benchmarks.md).
 
 For pinned C/C++, JavaScript and Python formatting commands, see
 [source formatting](docs/formatting.md).

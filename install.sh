@@ -13,11 +13,11 @@
 #   ./install.sh --prefix "$HOME/opt" v0.2.2
 #
 # Environment:
-#   CAPSID_REPO   GitHub repository (default: ErosZy/capsid)
+#   CAPSID_REPO   GitHub repository (default: rowanellis-113/capsid)
 #   PREFIX        installation prefix (default: $HOME/.local)
 set -euo pipefail
 
-CAPSID_REPO="${CAPSID_REPO:-ErosZy/capsid}"
+CAPSID_REPO="${CAPSID_REPO:-rowanellis-113/capsid}"
 PREFIX="${PREFIX:-$HOME/.local}"
 VERSION=""
 

@@ -110,7 +110,17 @@ curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.2.2/ins
 ```
 
 You can download and inspect `install.sh` before running it instead of piping it
-to Bash. The checksum sidecar detects archive mismatch; it is not a separate
+to Bash, or download a platform `.tar.gz` and its `.sha256` sidecar directly
+without `curl | bash` (for example with `wget` or a browser):
+
+```sh
+# Example: Linux musl x86_64 manual download and verification
+wget -q https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5/capsid-0.3.0-linux-musl-x86_64.tar.gz{,.sha256}
+sha256sum -c capsid-0.3.0-linux-musl-x86_64.tar.gz.sha256
+tar -xzf capsid-0.3.0-linux-musl-x86_64.tar.gz
+```
+
+The checksum sidecar detects archive mismatch; it is not a separate
 publisher signature. Do not bypass TLS or checksum verification.
 
 Use the installed prefix's `bin` directory in the [quick start](getting-started.md),
@@ -119,17 +129,19 @@ need stable and beta side by side.
 
 ## Install on Windows
 
-Download the ZIP and its `.sha256` file from the chosen Release. Verify them in
-PowerShell before extracting; the following assumes both files are in the
-current directory:
+Download the ZIP and its `.sha256` sidecar from the chosen Release, verify the
+SHA-256 digest in PowerShell and extract into a new destination:
 
 ```powershell
+$base = 'https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5'
 $archive = '.\capsid-0.3.0-windows-x86_64.zip'
 $sidecar = "$archive.sha256"
+Invoke-WebRequest "$base/capsid-0.3.0-windows-x86_64.zip" -OutFile $archive
+Invoke-WebRequest "$base/capsid-0.3.0-windows-x86_64.zip.sha256" -OutFile $sidecar
 $expected = ((Get-Content -LiteralPath $sidecar -Encoding UTF8 -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actual -ne $expected.ToLowerInvariant()) { throw 'SHA-256 mismatch' }
-Expand-Archive -LiteralPath $archive -DestinationPath '.\capsid-beta'
+$actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+if ($actual -ine $expected) { throw 'SHA-256 mismatch' }
+Expand-Archive -LiteralPath $archive -DestinationPath "$HOME\capsid-beta" -Force
 ```
 
 Choose a new destination instead of overwriting another installation. Use the

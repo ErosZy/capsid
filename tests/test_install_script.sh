@@ -86,15 +86,19 @@ run_fixture() {
 
 # A relative prefix must produce runnable top-level commands, and a later
 # version must atomically replace all three commands rather than preserving
-# symlinks into the old archive.
+# symlinks into the old archive. Also assert the default CAPSID_REPO targets
+# rowanellis-113/capsid rather than any historical owner.
 linux_one="$work/capsid-0.2.0-linux-musl.tar.gz"
 linux_two="$work/capsid-0.2.1-linux-musl.tar.gz"
 make_package one "$linux_one" ""
 make_package two "$linux_two" ""
+default_repo_log="$work/default-repo.log"
 (
     cd "$work"
-    run_fixture Linux x86_64 "$linux_one" relative-prefix v0.2.0-rc.06
+    CAPSID_FAKE_REQUEST_LOG="$default_repo_log" \
+        run_fixture Linux x86_64 "$linux_one" relative-prefix v0.2.0-rc.06
 )
+grep -q '^https://api\.github\.com/repos/rowanellis-113/capsid/releases/tags/v0\.2\.0-rc\.06$' "$default_repo_log"
 [[ -x "$work/relative-prefix/bin/capsid-host" ]]
 [[ "$($work/relative-prefix/bin/capsid-host)" == "one-capsid-host" ]]
 (

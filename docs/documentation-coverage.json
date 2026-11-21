@@ -23,7 +23,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "8bff39a54d49fb55b700e79a1f5f22c469febbec0a8ac1c7ce8ba2dfcfd82d7b",
+      "sha256": "ca7d7300f7bb484be7404c98d14be8c47052fe71cc45c59e43614be7e6b8c42c",
       "review": "Product, public beta.5 download, unchanged GitHub Latest and explicit stable channel, security defaults, compatibility and source-bound performance evidence."
     },
     {
@@ -455,7 +455,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "d931e13e265457a1b0d168fe160d73672c29d68db290738f5d4c2e75ef54eee6",
+      "sha256": "012b1ce658de87ce5be2e0da7587519285b5c476e6a315aefeeb8e3ad5ba8267",
       "review": "Complete trusted-local CLI/app/policy/READY/request; unchanged commands match prior actual Windows/Linux published-binary smoke, not macOS execution."
     },
     {
@@ -599,7 +599,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "409bca639d06b2778a61aea434a40fcd0225e1404cf7d6040fab36d60b1d2d30",
+      "sha256": "52ba4d72f3a0b0dfa69f879068d654974e02665d8117b7803e06a336961efe82",
       "review": "Public beta.5 with unchanged GitHub Latest and stable channel, exact asset inventory, explicit installer tag, checksums and build identity limits."
     },
     {
@@ -767,7 +767,7 @@
       "kind": "current-reference",
       "reviewed": true,
       "hashMode": "canonical-lf-text",
-      "sha256": "545b2eb04f00de32e9d97304a7d7afa9d8c60ac7c8d60458b5a724fa3aee4d71",
+      "sha256": "2328d5d1a908bbcadd6eece4a801ece46920e352a4f1b02c66d640b40bd3e2d7",
       "review": "Generated files, verified archive replay, current prerelease versus measured source boundaries and deployment requirements."
     },
     {

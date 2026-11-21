@@ -16,6 +16,30 @@ via the [releases and installation](releases.md) guide or follow
 [building from source](building.md). Stable `v0.2.2` remains
 available as an explicit tag; this tutorial does not requalify `v0.2.2`.
 
+Linux or macOS:
+
+```sh
+curl -fsSL https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5/install.sh \
+  | CAPSID_REPO=rowanellis-113/capsid bash -s -- v0.3.0-beta.5
+```
+
+Windows PowerShell (`x86_64`):
+
+```powershell
+$base = 'https://github.com/rowanellis-113/capsid/releases/download/v0.3.0-beta.5'
+$zip  = '.\capsid-0.3.0-windows-x86_64.zip'
+Invoke-WebRequest "$base/capsid-0.3.0-windows-x86_64.zip" -OutFile $zip
+Invoke-WebRequest "$base/capsid-0.3.0-windows-x86_64.zip.sha256" -OutFile "$zip.sha256"
+$exp = ((Get-Content "$zip.sha256" -Raw).Trim() -split '\s+')[0]
+if ((Get-FileHash $zip -Algorithm SHA256).Hash -ine $exp) { throw 'SHA-256 mismatch' }
+Expand-Archive -LiteralPath $zip -DestinationPath "$HOME\capsid-beta" -Force
+```
+
+Or download any `.tar.gz` / `.zip` archive and its `.sha256` sidecar directly
+from the [`v0.3.0-beta.5` Release](https://github.com/rowanellis-113/capsid/releases/tag/v0.3.0-beta.5)
+(for example with `wget` or a browser; see [releases and installation](releases.md)
+for manual SHA-256 verification).
+
 Keep `capsid-host` and `capsid-worker` from the same build together. A runtime
 version string alone does not establish build or bytecode compatibility.
 
@@ -161,6 +185,9 @@ Ctrl+C. This example does not install a system service or expose a public port.
 
 - [Application configuration](capsid-json.md): modules, egress, resources and
   entry points.
-- [Host modes and options](host-config.md): static pools and Linux managed mode.
+- [Host modes and options](host-config.md): static pools, Linux managed mode and
+  trusted bytecode precompilation (`capsid-bytecode-compile` + offline signing).
+- [Framework guides](framework-compatibility/README.md): bundling TypeScript or
+  npm dependencies (e.g. with `esbuild`) into a self-contained ESM.
 - [Host integration](host-integration.md): embedding the C/C++ runtime.
 - [Testing guide](testing-guide.md): what a local smoke test does—and does not—prove.
